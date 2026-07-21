@@ -305,6 +305,30 @@ button { cursor: pointer; border: none; background: none; }
 .ai-preview img { width: 100%; max-height: 170px; object-fit: cover; display: block; border: 1px solid var(--line); border-radius: var(--r-md); }
 .ai-preview .ai-x { position: absolute; top: 7px; inset-inline-end: 7px; width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: var(--bg); font-size: 17px; line-height: 1; box-shadow: var(--shadow-1); }
 
+/* ============ TEXT TOOL EDITOR ============ */
+.text-editor {
+  position: fixed; z-index: 220; width: 250px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-md); box-shadow: var(--shadow-3); padding: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+  animation: pop .2s var(--ease);
+}
+.text-editor .row { display: flex; align-items: center; gap: 6px; }
+.text-editor .tbtn {
+  height: 30px; min-width: 30px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel-2); font-weight: 800; font-size: 12.5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all var(--fast) var(--ease);
+}
+.text-editor .tbtn:hover { border-color: var(--brand); }
+.text-editor .tbtn.active { background: var(--brand); color: var(--brand-ink); border-color: transparent; }
+.text-editor .te-col { width: 34px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); padding: 2px; }
+
+/* Layer properties popover */
+.layer-props { width: 252px; padding: 12px; }
+.layer-props .field { margin-bottom: 9px; }
+.layer-props .field > label { display: block; font-size: 11px; font-weight: 700; color: var(--ink-2); margin-bottom: 4px; }
+
 /* ============ TOOLTIP ============ */
 .tt { position: fixed; z-index: 9999; pointer-events: none; max-width: 240px; background: var(--ink); color: var(--bg); padding: 8px 11px; border-radius: var(--r-sm); font-size: 11.5px; line-height: 1.45; box-shadow: var(--shadow-2); opacity: 0; transform: translateY(4px); transition: opacity var(--fast), transform var(--fast); }
 .tt.show { opacity: 1; transform: none; }

@@ -34,7 +34,9 @@ install it. After the first load it works **fully offline**.
 | Vector tools: Select, Pen, Line, **Arc (curved, 3-click)**, Freehand, Move, Measure | ✅ Working (draw & edit) |
 | Transform tools: Rotate, Scale, Knife (split), Symmetry (mirror), Notch, Grainline | ✅ Fully working on real geometry |
 | Selection **control points + handles** (drag anchors, corner scale, rotate knob) | ✅ Fully working, with snap-to-point |
-| Layers: per-piece **colour picker**, **lock/unlock**, show/hide | ✅ Working (locked pieces are non-interactive) |
+| Layers: **add / delete / rename (EN+AR)**, per-layer **properties** (colour, own fill opacity), **lock/unlock**, show/hide | ✅ Working (locked pieces are non-interactive) |
+| **Text tool** — place formatted labels (size, bold, italic, colour), drag to move, double-click to edit; included in SVG export & project files | ✅ Working |
+| **Help** — ? button with quick start, all tools explained, keyboard shortcuts (bilingual) | ✅ Working |
 | **Fabric & material**: 8 material presets + adjustable fill transparency | ✅ Working (per-piece or all) |
 | **Size & Grading engine** XXS→6XL, Intl/Egyptian/Saudi, Kids, Custom | ✅ Proportion-perfect, live |
 | Category switcher (Women/Men/Girls/Boys) with matching avatar | ✅ Working |
@@ -60,9 +62,11 @@ install it. After the first load it works **fully offline**.
 - **Projects** round-trip losslessly via `Save Project (.json)` → `Import Project`.
 - **3D avatars** are high-quality *procedural stylised* characters (not photoreal
   humans — that needs sculpted, rigged GLB models an in-browser script can't
-  synthesise). For photorealism, drop `avatars/women.glb`, `men.glb`, `girl.glb`,
-  `boy.glb` into the repo and call `View3D.setAvatarURL("women","avatars/women.glb")`
-  (per category) — the loader scales them to the live measurements automatically.
+  synthesise). For photorealism, open **Settings → 3D avatar models (GLB)** and
+  paste a model URL per category (e.g. a Ready Player Me link ending in `.glb`) —
+  no code needed. The loader auto-scales the model to the live measurements and
+  falls back to the built-in body if the URL fails. Local files work too: drop
+  them in the repo (e.g. `avatars/women.glb`) and paste that relative path.
 - Three.js + OrbitControls load from a CDN (via an import map) on first visit,
   then are cached for offline use.
 

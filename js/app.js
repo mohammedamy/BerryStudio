@@ -15,6 +15,7 @@
     kids: null, custom: {}, unitsCm: true,
     hoverHelp: true, highContrast: false, reduceMotion: false, cloudSync: false,
     onboarded: false, mine: [], aiEndpoint: "", fabric3d: "cotton",
+    avatarGLB: { women: "", men: "", girls: "", boys: "" },
   };
   const state = Object.assign({}, DEF, JSON.parse(localStorage.getItem("pps") || "{}"));
   const save = () => localStorage.setItem("pps", JSON.stringify(state));
@@ -63,6 +64,10 @@
     lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
     unlock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>',
     drop:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>',
+    text:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg>',
+    trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+    dots:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
+    question:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.8 2.8 0 1 1 4.3 2.4c-.9.6-1.5 1.1-1.5 2.1"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg>',
     ruler:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18"/></svg>',
     spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>',
     eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -78,7 +83,7 @@
     { id:"select", i:"select" }, { id:"pen", i:"pen" }, { id:"line", i:"line" },
     { id:"arc", i:"arc" }, { id:"free", i:"free" }, { id:"symmetry", i:"symmetry" },
     { id:"knife", i:"knife" }, "sep", { id:"move", i:"move" }, { id:"rotate", i:"rotate" },
-    { id:"scale", i:"scale" }, { id:"measure", i:"measure" }, "sep",
+    { id:"scale", i:"scale" }, { id:"measure", i:"measure" }, { id:"text", i:"text" }, "sep",
     { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"grain", i:"grain" },
   ];
 
@@ -193,9 +198,42 @@
     sync3DFabric();
     renderLayersPane();
   }
+  // Per-layer properties popover: rename (EN/AR), colour, own opacity, delete.
+  function openLayerProps(i, anchor){
+    closeAnyMenu();
+    const p = Canvas.getPieces()[i]; if(!p) return;
+    const m = el("div","menu layer-props");
+    const curOp = Math.round((p.opacity!=null ? p.opacity : Canvas.getOpt("fillOpacity"))*100);
+    m.innerHTML = `
+      <div class="field"><label>${T("nameEn")}</label><input class="input lp-en" dir="ltr" value="${escAttr(p.name.en)}"></div>
+      <div class="field"><label>${T("nameAr")}</label><input class="input lp-ar" dir="rtl" value="${escAttr(p.name.ar)}"></div>
+      <div class="field"><label>${T("pieceColor")}</label><input class="lp-col" type="color" value="${rgbToHex(p.color)}" style="width:100%;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)"></div>
+      <div class="field"><label>${T("opacityLbl")} · <b class="lp-opv">${curOp}%</b></label><input class="range lp-op" type="range" min="4" max="90" value="${curOp}"></div>
+      <div class="menu-sep"></div>
+      <button class="menu-item lp-del" style="color:var(--danger)">${IC.trash}<span>${T("removeLayer")}</span></button>`;
+    document.body.appendChild(m);
+    const r = anchor.getBoundingClientRect(), mr = m.getBoundingClientRect();
+    m.style.top = Math.min(r.bottom+6, innerHeight-mr.height-8)+"px";
+    if(document.documentElement.dir==="rtl") m.style.left = Math.max(8, r.left-mr.width+r.width)+"px";
+    else m.style.left = Math.max(8, Math.min(r.left, innerWidth-mr.width-8))+"px";
+    requestAnimationFrame(()=>m.classList.add("show"));
+    const q = s => m.querySelector(s);
+    q(".lp-en").onchange = () => { Canvas.renamePiece(i,{en:q(".lp-en").value.trim()||p.name.en}); renderLayersPane(); };
+    q(".lp-ar").onchange = () => { Canvas.renamePiece(i,{ar:q(".lp-ar").value.trim()||p.name.ar}); renderLayersPane(); };
+    q(".lp-col").oninput = () => { Canvas.setColor(i,q(".lp-col").value); sync3DFabric(); renderLayersPane(); };
+    q(".lp-op").oninput = () => { const v=+q(".lp-op").value; q(".lp-opv").textContent=v+"%"; Canvas.setPieceProps(i,{opacity:v/100}); };
+    q(".lp-del").onclick = () => { Canvas.removePiece(i); closeAnyMenu(); sync3DVisibility(); renderLayersPane(); toast("✓ "+T("removeLayer")); };
+    setTimeout(()=>document.addEventListener("pointerdown",onDocDown),0);
+  }
+
   function renderLayersPane() {
     const c = $(".rail-pane[data-pane=layers]"); c.innerHTML="";
     c.appendChild(el("div","section-title",IC.layers+T("layersPanel")));
+    // add-layer is always available (even on an empty canvas)
+    const addB = el("button","big-btn ghost",IC.layers+T("addLayer"));
+    addB.style.marginBottom="10px";
+    addB.onclick=()=>{ Canvas.addPiece({ en:I18N.en.newLayer, ar:I18N.ar.newLayer }); hideEmpty(); renderLayersPane(); toast("✓ "+T("newLayer")); };
+    c.appendChild(addB);
     const pieces = Canvas.getPieces();
     if(!pieces.length){ c.appendChild(el("div","help-note",T("empty2d"))); return; }
     const sel = Canvas.getSelected();
@@ -207,7 +245,12 @@
       ci.style.cssText="position:absolute;width:0;height:0;opacity:0;pointer-events:none";
       ci.oninput=()=>{ Canvas.setColor(i,ci.value); sw.style.background=ci.value; sync3DFabric(); };
       sw.appendChild(ci); row.appendChild(sw);
-      row.appendChild(el("span","lname",`${L(p.name)}<small>${p.name[state.lang==="ar"?"en":"ar"]}</small>`));
+      const nameEl = el("span","lname",`${L(p.name)}<small>${p.name[state.lang==="ar"?"en":"ar"]}</small>`);
+      nameEl.ondblclick=(e)=>{ e.stopPropagation(); openLayerProps(i, row); };
+      row.appendChild(nameEl);
+      const props = el("button", null, IC.dots); props.title=T("layerProps");
+      props.onclick=(e)=>{ e.stopPropagation(); openLayerProps(i, props); };
+      row.appendChild(props);
       const lock = el("button", null, p.locked?IC.lock:IC.unlock); lock.title=T(p.locked?"unlock":"lock");
       if(p.locked) lock.style.color="var(--brand)";
       lock.onclick=(e)=>{ e.stopPropagation(); Canvas.toggleLock(i); renderLayersPane(); };
@@ -368,7 +411,7 @@
     if(F==="SVG")      download("berrystudio-pattern.svg","image/svg+xml",Canvas.exportSVG());
     else if(F==="DXF") download("berrystudio-pattern.dxf","application/dxf",Canvas.exportDXF());
     else if(F==="PDF"){ const p=Canvas.exportPDF(); if(!p){toast(T("empty2d"));return;} download("berrystudio-pattern.pdf","application/pdf",p); }
-    else if(F==="JSON")download("berrystudio-project.json","application/json",JSON.stringify({app:"BerryStudio",version:1,pieces:Canvas.getPieces()},null,0));
+    else if(F==="JSON")download("berrystudio-project.json","application/json",JSON.stringify({app:"BerryStudio",version:1,pieces:Canvas.getPieces(),texts:Canvas.getTexts()},null,0));
     else               download(`berrystudio-pattern.${F.toLowerCase()}`,"image/svg+xml",Canvas.exportSVG()); // PNG/JPEG/AI/HPGL → vector fallback
     toast(T("exported")+" · "+F);
   }
@@ -388,7 +431,7 @@
       r.onload=()=>{ try{
         const data=JSON.parse(r.result);
         const pieces=Array.isArray(data)?data:data.pieces;
-        if(Canvas.loadPieces(pieces)){ state.loaded=null; hideEmpty(); renderLayersPane();
+        if(Canvas.loadPieces(pieces, data.texts)){ state.loaded=null; hideEmpty(); renderLayersPane();
           if(state.view==="3d") build3D(); save(); toast(T("imported")); }
         else toast(T("importFail"));
       }catch(e){ toast(T("importFail")); } };
@@ -436,6 +479,66 @@
   }
   function onDocDown(e){ if(!e.target.closest(".menu")&&!e.target.closest("#projectBtn")) closeAnyMenu(); }
   function closeAnyMenu(){ $$(".menu").forEach(m=>m.remove()); document.removeEventListener("pointerdown",onDocDown); }
+  const escAttr = s => String(s??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+
+  // ================= TEXT TOOL EDITOR =================
+  // Floating formatting panel opened by the canvas (new or edit mode).
+  function openTextEditor(req){
+    closeTextEditor();
+    const it = req.item || { text:"", size:4, bold:false, italic:false, color:rgbToHex(getComputedStyle(document.body).getPropertyValue("--ink").trim()) };
+    const box = el("div","text-editor");
+    box.innerHTML = `
+      <input class="input te-text" placeholder="${T("typeText")}" value="${escAttr(it.text)}">
+      <div class="row">
+        <label style="font-size:11px;font-weight:700;color:var(--ink-2)">${T("fontSize")}</label>
+        <input class="input te-size" type="number" min="1" max="30" value="${it.size||4}" style="width:60px">
+        <button class="tbtn te-b ${it.bold?"active":""}" title="${T("boldLbl")}">B</button>
+        <button class="tbtn te-i ${it.italic?"active":""}" title="${T("italicLbl")}" style="font-style:italic">I</button>
+        <input class="te-col" type="color" value="${rgbToHex(it.color)}" title="${T("pieceColor")}">
+      </div>
+      <div class="row" style="justify-content:flex-end;gap:8px">
+        ${req.item?`<button class="tbtn te-del" title="${T("deleteLbl")}" style="width:auto;padding:0 10px;color:var(--danger)">${T("deleteLbl")}</button>`:""}
+        <button class="tbtn te-cancel" style="width:auto;padding:0 10px">${T("cancel")}</button>
+        <button class="tbtn te-ok active" style="width:auto;padding:0 14px">${T("okLbl")}</button>
+      </div>`;
+    document.body.appendChild(box);
+    // position near the click, clamped to the viewport
+    const r = box.getBoundingClientRect();
+    box.style.left = Math.min(Math.max(8, req.cx), innerWidth - r.width - 8) + "px";
+    box.style.top  = Math.min(Math.max(8, req.cy + 10), innerHeight - r.height - 8) + "px";
+    const q = s => box.querySelector(s);
+    let bold = !!it.bold, italic = !!it.italic;
+    q(".te-b").onclick = () => { bold = !bold; q(".te-b").classList.toggle("active", bold); };
+    q(".te-i").onclick = () => { italic = !italic; q(".te-i").classList.toggle("active", italic); };
+    const commit = () => {
+      const txt = q(".te-text").value.trim();
+      if (!txt) { closeTextEditor(); return; }
+      const props = { text: txt, size: Math.max(1, +q(".te-size").value || 4), bold, italic, color: q(".te-col").value };
+      if (req.item) Canvas.updateText(req.item.id, props);
+      else Canvas.addText({ x: req.wx, y: req.wy, ...props });
+      closeTextEditor();
+    };
+    q(".te-ok").onclick = commit;
+    q(".te-cancel").onclick = closeTextEditor;
+    if (req.item) q(".te-del").onclick = () => { Canvas.removeText(req.item.id); closeTextEditor(); };
+    q(".te-text").addEventListener("keydown", e => { if (e.key === "Enter") commit(); if (e.key === "Escape") closeTextEditor(); });
+    q(".te-text").focus(); q(".te-text").select();
+  }
+  function closeTextEditor(){ $$(".text-editor").forEach(x=>x.remove()); }
+
+  // ================= HELP =================
+  function openHelp(){
+    const tools = ["select","pen","line","arc","free","symmetry","knife","move","rotate","scale","measure","text","seam","notch","grain"];
+    let html = `<h3 style="margin-bottom:8px">${T("helpQuick")}</h3><ol style="padding-inline-start:20px;font-size:13px;line-height:1.7;color:var(--ink-2)">`;
+    html += `<li>${T("helpQ1")}</li><li>${T("helpQ2")}</li><li>${T("helpQ3")}</li></ol>`;
+    html += `<h3 style="margin:18px 0 8px">${T("helpTools")}</h3><table style="width:100%;border-collapse:collapse;font-size:12.5px">`;
+    tools.forEach(k=>{ html += `<tr><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);font-weight:700;white-space:nowrap">${T("t_"+k)}</td><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--ink-2)">${T("tt_"+k)}</td></tr>`; });
+    html += `</table><h3 style="margin:18px 0 8px">${T("helpShortcuts")}</h3><table style="width:100%;border-collapse:collapse;font-size:12.5px">`;
+    [["V P L A M R S T", T("sc_tools")], ["Ctrl+Z / Ctrl+Shift+Z", T("sc_undo")], ["Ctrl+K", T("sc_cmd")], ["Esc", T("sc_esc")]]
+      .forEach(([k,d])=>{ html += `<tr><td style="padding:6px 8px;border-bottom:1px solid var(--line-2)"><code style="background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-weight:700">${k}</code></td><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--ink-2)">${d}</td></tr>`; });
+    html += "</table>";
+    openModal(T("helpTitle"), html, true);
+  }
   function techPack(){
     const pieces=Canvas.getPieces(); if(!pieces.length){toast(T("empty2d"));return;}
     const m=currentMeas();
@@ -593,6 +696,26 @@
     const aiin=el("input","input"); aiin.type="url"; aiin.placeholder="https://your-proxy.example/generate";
     aiin.value=state.aiEndpoint||""; aiin.oninput=()=>{ state.aiEndpoint=aiin.value.trim(); save(); };
     aif.appendChild(aiin); aif.appendChild(el("div","help-note",T("aiEndpointD"))); body.appendChild(aif);
+    // 3D avatar models — paste a GLB URL per category (e.g. Ready Player Me)
+    const av = el("div","field"); av.style.marginTop="14px";
+    av.innerHTML = `<label>${T("avatarModels")}</label>`;
+    ["women","men","girls","boys"].forEach(cat=>{
+      const wrap = el("div"); wrap.style.cssText="display:flex;align-items:center;gap:8px;margin-bottom:6px";
+      wrap.appendChild(el("span",null,T(cat))).style.cssText="font-size:12px;font-weight:700;min-width:52px";
+      const inp = el("input","input"); inp.type="url"; inp.dir="ltr";
+      inp.placeholder="https://models.readyplayer.me/….glb";
+      inp.value = (state.avatarGLB && state.avatarGLB[cat]) || "";
+      inp.onchange = () => {
+        state.avatarGLB = state.avatarGLB || {};
+        state.avatarGLB[cat] = inp.value.trim(); save();
+        View3D.setAvatarURL(cat, inp.value.trim() || null);
+        if (state.view === "3d" && state.category === cat) build3D();
+        toast("✓ " + T(cat));
+      };
+      wrap.appendChild(inp); av.appendChild(wrap);
+    });
+    av.appendChild(el("div","help-note",T("avatarModelsD")));
+    body.appendChild(av);
     const rb=el("button","big-btn ghost",T("resetOnb")); rb.style.marginTop="16px"; rb.onclick=()=>{closeModal("#settingsModal");startOnboarding();}; body.appendChild(rb);
     const ib=el("button","big-btn",IC.download+T("installApp")); ib.style.marginTop="8px"; ib.onclick=installApp; body.appendChild(ib);
     $("#settingsModal").classList.add("show");
@@ -601,6 +724,8 @@
   // ================= COMMAND PALETTE =================
   let cmdSel=0, cmdItems=[];
   function commands(){ return [
+    {t:T("helpTitle"),i:IC.question,run:openHelp},
+    {t:T("addLayer"),i:IC.layers,run:()=>{Canvas.addPiece({en:I18N.en.newLayer,ar:I18N.ar.newLayer});hideEmpty();renderLayersPane();showPane("layers");}},
     {t:T("newProject"),i:IC.newdoc,run:newProject},
     {t:T("importProject"),i:IC.importf,run:importProject},
     {t:T("savePDF"),i:IC.pdf,run:()=>exportAs("PDF")},
@@ -664,9 +789,9 @@
       if(e.key==="Escape")closeModal("#cmdModal");
       return;
     }
-    if(e.key==="Escape"){ $$(".overlay.show").forEach(o=>o.classList.remove("show")); closeAnyMenu(); }
+    if(e.key==="Escape"){ $$(".overlay.show").forEach(o=>o.classList.remove("show")); closeAnyMenu(); closeTextEditor(); }
     // tool shortcuts
-    const map={v:"select",p:"pen",l:"line",a:"arc",m:"measure",r:"rotate",s:"scale"};
+    const map={v:"select",p:"pen",l:"line",a:"arc",m:"measure",r:"rotate",s:"scale",t:"text"};
     if(!meta&&map[e.key]&&document.activeElement.tagName!=="INPUT"&&document.activeElement.tagName!=="TEXTAREA")setTool(map[e.key]);
   }
   function hiCmd(){ $$("#cmdList .cmd-item").forEach((x,i)=>x.classList.toggle("sel",i===cmdSel)); const s=$$("#cmdList .cmd-item")[cmdSel]; if(s)s.scrollIntoView({block:"nearest"}); }
@@ -684,6 +809,7 @@
     $("#langBtn").onclick=toggleLang; tip($("#langBtn"),T("language"),T("tt_lang"));
     $("#modeBtn").onclick=toggleMode; tip($("#modeBtn"),T("appearance"),T("tt_mode"));
     $("#settingsBtn").onclick=openSettings; tip($("#settingsBtn"),T("settings"),T("tt_settings"));
+    $("#helpBtn").onclick=openHelp; tip($("#helpBtn"),T("help"),T("helpTitle"));
     $("#installBtn").onclick=installApp;
     $("#unitsPill").onclick=()=>{state.unitsCm=!state.unitsCm;Canvas.setOpt("unitsCm",state.unitsCm);save();updateUnitsPill();updateStageChips();};
     tip($("#unitsPill"),T("tab_measure"),T("tt_units"));
@@ -721,6 +847,9 @@
     Canvas.onZoomChange(()=>{ $("#zval").textContent=Canvas.getZoom()+"%"; });
     View3D.init($("#canvas3d"));
     View3D.setLoadingCallback(v => { const o=$("#v3dLoading"); if(o) o.classList.toggle("show", v); });
+    // photoreal GLB avatars saved in Settings (per category)
+    Object.entries(state.avatarGLB || {}).forEach(([cat,url]) => { if(url) View3D.setAvatarURL(cat, url); });
+    Canvas.onTextRequest(openTextEditor);
     buildToolRail(); buildRail(); wire();
     applyTheme(); applyLang();
     updateUnitsPill(); updateStageChips();

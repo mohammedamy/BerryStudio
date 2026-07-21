@@ -21,6 +21,10 @@ const Canvas = (() => {
   const SHOW_HANDLES = new Set(["select","move","rotate","scale","pen"]);
   let userAdjusted = false;          // true once the user zooms/pans manually
   const undo = [], redo = [];
+  let texts = [];                     // text annotations {id,x,y,text,size,bold,italic,color}
+  let textSeq = 1;
+  let dragText = null;                // active text drag {i, ox, oy}
+  let onText = () => {};              // app callback to open the text editor
   let onPick = () => {};
   let getT = k => k;                            // translator injected
 
@@ -78,16 +82,16 @@ const Canvas = (() => {
     pushUndo();
     pieces = layoutPieces(rawPieces);
     pieces.forEach((p, i) => p.color = colors[i % colors.length]);
-    selected = -1; sketch = [];
+    selected = -1; sketch = []; texts = [];
     fit();
   }
   function getPieces(){ return pieces; }
 
   // ---- undo / redo ----
-  function snapshot(){ return JSON.stringify({ pieces, sketch }); }
+  function snapshot(){ return JSON.stringify({ pieces, sketch, texts }); }
   function pushUndo(){ undo.push(snapshot()); if (undo.length>60) undo.shift(); redo.length=0; }
-  function doUndo(){ if(!undo.length) return; redo.push(snapshot()); const s=JSON.parse(undo.pop()); pieces=s.pieces; sketch=s.sketch; selected=-1; render(); }
-  function doRedo(){ if(!redo.length) return; undo.push(snapshot()); const s=JSON.parse(redo.pop()); pieces=s.pieces; sketch=s.sketch; render(); }
+  function doUndo(){ if(!undo.length) return; redo.push(snapshot()); const s=JSON.parse(undo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; selected=-1; render(); }
+  function doRedo(){ if(!redo.length) return; undo.push(snapshot()); const s=JSON.parse(redo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; render(); }
 
   // ---- seam allowance offset (outward polygon offset) ----
   function offsetPoly(poly, d) {
@@ -224,9 +228,31 @@ const Canvas = (() => {
     pieces.forEach((p,i)=>drawPiece(p,i));
     if (selected>=0 && pieces[selected] && pieces[selected].visible && SHOW_HANDLES.has(tool)) drawHandles(pieces[selected]);
     drawSketch();
+    drawTexts();
     drawMeasure();
     drawClickPreview();
     drawSnapMark();
+  }
+
+  // ---- text annotations ----
+  function drawTexts(){
+    texts.forEach(tx=>{
+      const [sx,sy]=toScreen(tx.x,tx.y);
+      const px = Math.max(4, (tx.size||4)*view.scale);
+      ctx.font = `${tx.italic?"italic ":""}${tx.bold?"700":"400"} ${px}px Inter, Cairo, sans-serif`;
+      ctx.textAlign = "start"; ctx.fillStyle = tx.color || CSS("--ink");
+      ctx.fillText(tx.text, sx, sy);
+      // cache the screen bbox for hit-testing / dragging
+      tx._sx = sx; tx._sy = sy; tx._w = ctx.measureText(tx.text).width; tx._h = px;
+    });
+  }
+  function hitText(sx, sy){
+    for (let i = texts.length-1; i >= 0; i--){
+      const t = texts[i];
+      if (t._w == null) continue;
+      if (sx >= t._sx-4 && sx <= t._sx+t._w+4 && sy >= t._sy-t._h-4 && sy <= t._sy+6) return i;
+    }
+    return -1;
   }
 
   // Draw the selection bounding box, corner scale handles, rotate knob and anchor points.
@@ -310,8 +336,10 @@ const Canvas = (() => {
       path(off); ctx.stroke(); ctx.setLineDash([]);
     }
     // fill (cutting area) — fabric colour + adjustable transparency
+    // (a piece may carry its own opacity override from Layer properties)
+    const baseOp = p.opacity != null ? p.opacity : opts.fillOpacity;
     path(p.outline);
-    ctx.fillStyle = hexA(col, sel ? Math.min(0.85, opts.fillOpacity*1.9) : opts.fillOpacity); ctx.fill();
+    ctx.fillStyle = hexA(col, sel ? Math.min(0.85, baseOp*1.9) : baseOp); ctx.fill();
     // cutting line
     ctx.lineWidth = sel?3:2; ctx.strokeStyle = col;
     if (p.locked) ctx.setLineDash([2,3]);
@@ -436,6 +464,14 @@ const Canvas = (() => {
       if (tool==="notch"){ if(addNotch(wx,wy) && selected>=0) onPick(pieces[selected], e.clientX, e.clientY); render(); return; }
       if (tool==="symmetry"){ const h=hitPiece(wx,wy); if(h>=0){ doMirror(h); onPick(pieces[selected], e.clientX, e.clientY); } render(); return; }
 
+      // text: click empty space to place, click existing text to edit
+      if (tool==="text"){
+        const ti = hitText(e.offsetX, e.offsetY);
+        if (ti>=0) onText({ mode:"edit", item:texts[ti], cx:e.clientX, cy:e.clientY });
+        else onText({ mode:"new", wx, wy, cx:e.clientX, cy:e.clientY });
+        return;
+      }
+
       if (tool==="measure"){ if(measurePts.length>=2)measurePts=[]; measurePts.push([wx,wy]); render(); return; }
       if (tool==="line"){ drawing={tool:"line",pts:[[snap(wx),snap(wy)]]}; return; }
       if (tool==="arc"){
@@ -456,7 +492,11 @@ const Canvas = (() => {
         return;
       }
 
-      // (5) select / move
+      // (5) select / move — text labels are draggable too
+      if (tool==="select" || tool==="move"){
+        const ti = hitText(e.offsetX, e.offsetY);
+        if (ti>=0){ pushUndo(); dragText={ i:ti, ox:wx, oy:wy }; return; }
+      }
       const hit = hitPiece(wx,wy);
       if (hit>=0){ selected=hit; onPick(pieces[hit], e.clientX, e.clientY);
         if(tool==="select"||tool==="move"){ dragPiece={i:hit,ox:wx,oy:wy}; pushUndo(); } }
@@ -479,6 +519,7 @@ const Canvas = (() => {
       }
       snapMark=null;
 
+      if (dragText){ const t=texts[dragText.i]; t.x+=wx-dragText.ox; t.y+=wy-dragText.oy; dragText.ox=wx; dragText.oy=wy; render(); return; }
       if (dragPiece){ const dx=wx-dragPiece.ox, dy=wy-dragPiece.oy; movePiece(dragPiece.i,dx,dy); dragPiece.ox=wx; dragPiece.oy=wy; render(); return; }
       if (drawing && drawing.tool==="line"){ drawing.pts[1]=[snap(wx),snap(wy)]; render(); return; }
       if (drawing && drawing.tool==="arc"){ if(drawing.phase===1) drawing.pts[1]=[snap(wx),snap(wy)]; else drawing.ctrl=[wx,wy]; render(); return; }
@@ -496,9 +537,13 @@ const Canvas = (() => {
       if (edit){ edit=null; snapMark=null; render(); }
       // line & freehand commit on release; arc & pen are click-driven
       if (drawing && (drawing.tool==="line"||drawing.tool==="free")){ if(drawing.pts.length>1){ pushUndo(); sketch.push(drawing);} drawing=null; render(); }
-      pan=null; dragPiece=null;
+      pan=null; dragPiece=null; dragText=null;
     });
-    cv.addEventListener("dblclick", ()=>{ if(drawing&&drawing.tool==="pen"){ if(drawing.pts.length>1){pushUndo(); sketch.push(drawing);} drawing=null; render(); }});
+    cv.addEventListener("dblclick", (e)=>{
+      if(drawing&&drawing.tool==="pen"){ if(drawing.pts.length>1){pushUndo(); sketch.push(drawing);} drawing=null; render(); return; }
+      const ti=hitText(e.offsetX,e.offsetY);
+      if(ti>=0) onText({ mode:"edit", item:texts[ti], cx:e.clientX, cy:e.clientY });
+    });
   }
 
   function movePiece(i,dx,dy){ const p=pieces[i];
@@ -545,7 +590,7 @@ const Canvas = (() => {
     if(t!=="measure")measurePts=[];
     if(t!=="pen"&&drawing&&drawing.tool==="pen"){sketch.push(drawing);drawing=null;}
     if(drawing&&drawing.tool==="arc"&&t!=="arc"){ drawing=null; }   // drop an unfinished arc
-    cv.style.cursor = (t==="pan")?"grab":(t==="select"||t==="move")?"default":(t==="rotate")?"grab":"crosshair";
+    cv.style.cursor = (t==="pan")?"grab":(t==="select"||t==="move")?"default":(t==="rotate")?"grab":(t==="text")?"text":"crosshair";
     render();
   }
   function setOpt(k,v){ opts[k]=v; render(); }
@@ -565,8 +610,40 @@ const Canvas = (() => {
     let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${w} ${h}" width="${w}cm" height="${h}cm">`;
     pieces.forEach(p=>{ s+=`<polygon points="${p.outline.map(pt=>pt.join(',')).join(' ')}" fill="none" stroke="#222" stroke-width="0.2"/>`;
       if(p.grain?.length===2) s+=`<line x1="${p.grain[0][0]}" y1="${p.grain[0][1]}" x2="${p.grain[1][0]}" y2="${p.grain[1][1]}" stroke="#222" stroke-width="0.15"/>`; });
+    const escXML = t => String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    texts.forEach(tx=>{ s+=`<text x="${tx.x}" y="${tx.y}" font-size="${tx.size||4}" fill="${tx.color||"#222"}"${tx.bold?' font-weight="700"':""}${tx.italic?' font-style="italic"':""} font-family="Inter, sans-serif">${escXML(tx.text)}</text>`; });
     return s+"</svg>";
   }
+
+  // ---- text annotation API ----
+  function addText(props){ pushUndo(); const t={ id:textSeq++, size:4, bold:false, italic:false, ...props }; texts.push(t); render(); return t.id; }
+  function updateText(id, props){ const t=texts.find(x=>x.id===id); if(!t) return false; pushUndo(); Object.assign(t, props); render(); return true; }
+  function removeText(id){ const i=texts.findIndex(x=>x.id===id); if(i<0) return false; pushUndo(); texts.splice(i,1); render(); return true; }
+  function getTexts(){ return texts; }
+  function onTextRequest(cb){ onText = cb || (()=>{}); }
+
+  // ---- layer management API ----
+  function addPiece(name){
+    pushUndo();
+    // place the new block in free space to the right of existing content
+    let ox=8, oy=8;
+    if(pieces.length){
+      const xs=pieces.flatMap(p=>p.outline.map(pt=>pt[0]));
+      const ys=pieces.flatMap(p=>p.outline.map(pt=>pt[1]));
+      ox=Math.max(...xs)+12; oy=Math.min(...ys);
+    }
+    const w=30, h=30;
+    pieces.push({
+      name: name || { en:"New Layer", ar:"طبقة جديدة" }, desc:{ en:"", ar:"" },
+      outline:[[ox,oy],[ox+w,oy],[ox+w,oy+h],[ox,oy+h]], darts:[], notches:[],
+      grain:[[ox+w/2,oy+4],[ox+w/2,oy+h-4]], visible:true, locked:false,
+      color:["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][pieces.length%6],
+    });
+    selected=pieces.length-1; render(); return selected;
+  }
+  function removePiece(i){ if(!pieces[i]) return false; pushUndo(); pieces.splice(i,1); if(selected>=pieces.length) selected=-1; render(); return true; }
+  function renamePiece(i, name){ if(!pieces[i]) return false; pushUndo(); pieces[i].name={ ...pieces[i].name, ...name }; render(); return true; }
+  function setPieceProps(i, props){ if(!pieces[i]) return false; Object.assign(pieces[i], props); render(); return true; }
 
   // ---- DXF export (AutoCAD R12 ENTITIES; cm units, y-up) ----
   function exportDXF(){
@@ -625,18 +702,19 @@ const Canvas = (() => {
   }
 
   // ---- project round-trip: load already-positioned pieces / clear all ----
-  function loadPieces(arr){
+  function loadPieces(arr, txts){
     if(!Array.isArray(arr) || !arr.length) return false;
     pushUndo();
     pieces = arr.map((p,i)=>({
       name:p.name, desc:p.desc||{en:"",ar:""},
       outline:p.outline||[], darts:p.darts||[], notches:p.notches||[], grain:p.grain||[],
-      visible:p.visible!==false, locked:!!p.locked,
+      visible:p.visible!==false, locked:!!p.locked, opacity:p.opacity,
       color:p.color||["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][i%6],
     }));
+    texts = Array.isArray(txts) ? txts.map(t=>({ ...t, id: t.id || textSeq++ })) : [];
     selected=-1; sketch=[]; fit(); return true;
   }
-  function clearAll(){ pushUndo(); pieces=[]; sketch=[]; selected=-1; measurePts=[]; clickBuf=[]; userAdjusted=false; render(); }
+  function clearAll(){ pushUndo(); pieces=[]; sketch=[]; texts=[]; selected=-1; measurePts=[]; clickBuf=[]; userAdjusted=false; render(); }
 
   // Convert a world (cm) point to canvas CSS pixels — handy for hit-tests/tests.
   function screenOf(x,y){ return toScreen(x,y); }
@@ -644,5 +722,7 @@ const Canvas = (() => {
   return { init, setTranslator, setPattern, getPieces, setTool, setOpt, getOpt, zoom, fit,
            doUndo, doRedo, getZoom, toggleVisible, toggleLock, setColor, getSelected,
            selectPiece, clearSketch, render,
+           addText, updateText, removeText, getTexts, onTextRequest,
+           addPiece, removePiece, renamePiece, setPieceProps,
            onZoomChange, exportSVG, exportDXF, exportPDF, loadPieces, clearAll, screenOf };
 })();
