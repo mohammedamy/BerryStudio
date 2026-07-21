@@ -13,7 +13,7 @@ framework runtime — pure HTML/CSS/JS so it opens and runs anywhere.
 Because it registers a service worker, serve it over `http://` (not `file://`):
 
 ```bash
-cd patternpro-studio
+# from the repository root
 python3 -m http.server 8791
 # open http://localhost:8791
 ```
@@ -58,7 +58,7 @@ install it. After the first load it works **fully offline**.
 ## Structure
 
 ```
-patternpro-studio/
+BerryStudio/                (repository root)
 ├── index.html            App shell
 ├── manifest.webmanifest  PWA manifest
 ├── sw.js                 Service worker (offline-first)
