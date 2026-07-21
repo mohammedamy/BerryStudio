@@ -1,4 +1,4 @@
-# PatternPro Studio · استوديو باترن برو
+# BerryStudio · بيري ستوديو
 
 A bilingual (Arabic + English), installable **Progressive Web App** for fashion
 pattern **drafting, grading, 3D preview, and print/export**. No build step, no

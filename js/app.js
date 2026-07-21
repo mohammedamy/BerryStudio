@@ -1,5 +1,5 @@
 /* ============================================================
-   PatternPro Studio — application controller.
+   BerryStudio — application controller.
    Wires i18n, themes, RTL, panels, grading, 3D, export, etc.
    ============================================================ */
 (() => {
@@ -267,7 +267,7 @@
   function doExport(){
     const fmt=($("#fg .opt.active")||{}).dataset?.fmt||"SVG";
     if(fmt==="SVG"){ const svg=Canvas.exportSVG(); if(!svg){toast(T("empty2d"));return;} download("pattern.svg","image/svg+xml",svg); }
-    else { const svg=Canvas.exportSVG(); download(`pattern.${fmt.toLowerCase()}`,"text/plain",svg||"PatternPro export"); }
+    else { const svg=Canvas.exportSVG(); download(`pattern.${fmt.toLowerCase()}`,"text/plain",svg||"BerryStudio export"); }
     toast(T("exported")+" · "+fmt);
   }
   function download(name,type,data){ const b=new Blob([data],{type}); const u=URL.createObjectURL(b); const a=el("a");a.href=u;a.download=name;a.click();URL.revokeObjectURL(u); }

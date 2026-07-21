@@ -1,13 +1,51 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#6d5efc"/>
-      <stop offset="1" stop-color="#00c2a8"/>
+    <linearGradient id="orange" x1="0.1" y1="0.05" x2="0.7" y2="1">
+      <stop offset="0"   stop-color="#FFD15C"/>
+      <stop offset="0.45" stop-color="#F7941D"/>
+      <stop offset="1"   stop-color="#F15A24"/>
     </linearGradient>
+    <linearGradient id="berry" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0"   stop-color="#9C1C8E"/>
+      <stop offset="0.4" stop-color="#E6117E"/>
+      <stop offset="1"   stop-color="#F5476A"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="bg" cx="0.5" cy="0.4" r="0.75">
+      <stop offset="0" stop-color="#1b1020"/>
+      <stop offset="1" stop-color="#080509"/>
+    </radialGradient>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#g)"/>
-  <g fill="none" stroke="#ffffff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M160 128 L96 160 L160 288 L160 400 L352 400 L352 288 L416 160 L352 128 L256 176 Z"/>
-    <path d="M160 128 L256 176 L352 128"/>
-  </g>
+
+  <!-- dark rounded backdrop, matching the brand mark on black -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- Orange ribbon: big open spiral wrapping the mark -->
+  <path d="M300 112
+           C 178 92, 96 168, 96 264
+           C 96 368, 176 432, 286 430
+           C 372 428, 430 372, 424 300"
+        fill="none" stroke="url(#orange)" stroke-width="46"
+        stroke-linecap="round"/>
+  <!-- gloss highlight on the orange ribbon -->
+  <path d="M300 112 C 200 96, 128 150, 110 232"
+        fill="none" stroke="url(#gloss)" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- Berry flame: pink to purple petal forming the B's belly, tapering to a point -->
+  <path d="M262 108
+           C 356 112, 424 168, 416 244
+           C 410 300, 356 322, 300 320
+           C 372 340, 404 392, 320 452
+           C 356 372, 300 336, 300 288
+           C 246 280, 236 176, 262 108 Z"
+        fill="url(#berry)"/>
+  <!-- purple rim light on the flame -->
+  <path d="M262 108 C 356 112, 424 168, 416 244"
+        fill="none" stroke="#7B1FA2" stroke-width="12" stroke-linecap="round" opacity=".75"/>
+  <!-- gloss on the flame -->
+  <path d="M286 130 C 344 138, 388 176, 392 226"
+        fill="none" stroke="url(#gloss)" stroke-width="10" stroke-linecap="round"/>
 </svg>

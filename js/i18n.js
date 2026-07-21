@@ -5,7 +5,7 @@
 const I18N = {
   en: {
     dir: "ltr",
-    appName: "PatternPro Studio",
+    appName: "BerryStudio",
     tagline: "Fashion Pattern Design & Grading",
     // categories
     women: "Women", men: "Men", girls: "Girls", boys: "Boys",
@@ -82,7 +82,7 @@ const I18N = {
     resetOnb: "Show onboarding again", installApp: "Install App",
     language: "Language", appearance: "Appearance", theme: "Theme",
     // onboarding
-    onbTitle1: "Welcome to PatternPro Studio", onbBody1: "The joyful, professional way to draft and grade fashion patterns — fully bilingual, offline-ready.",
+    onbTitle1: "Welcome to BerryStudio", onbBody1: "The joyful, professional way to draft and grade fashion patterns — fully bilingual, offline-ready.",
     onbTitle2: "Draft with pro vector tools", onbBody2: "Pen, arc, symmetry, seam allowance, notches and grainlines — with smart snapping and unlimited undo.",
     onbTitle3: "Grade to any size instantly", onbBody3: "From XXS to 6XL, kids and custom measurements, across International, Egyptian and Gulf standards.",
     onbTitle4: "See it in 3D & export anywhere", onbBody4: "Preview on a body avatar, then export print-ready PDF, DXF, SVG and more.",
@@ -99,7 +99,7 @@ const I18N = {
   },
   ar: {
     dir: "rtl",
-    appName: "استوديو باترن برو",
+    appName: "بيري ستوديو",
     tagline: "تصميم وتدريج باترونات الأزياء",
     women: "حريمي", men: "رجالي", girls: "بناتي", boys: "ولادي",
     view2d: "الباترون ٢D", view3d: "معاينة ٣D",
@@ -162,7 +162,7 @@ const I18N = {
     cloudSync: "المزامنة السحابية", cloudSyncD: "نسخ احتياطي للباترونات (اختياري)",
     resetOnb: "إظهار الترحيب مجددًا", installApp: "تثبيت التطبيق",
     language: "اللغة", appearance: "المظهر", theme: "الطابع",
-    onbTitle1: "أهلًا بك في استوديو باترن برو", onbBody1: "الطريقة الممتعة والاحترافية لرسم وتدريج باترونات الأزياء — ثنائي اللغة ويعمل دون إنترنت.",
+    onbTitle1: "أهلًا بك في بيري ستوديو", onbBody1: "الطريقة الممتعة والاحترافية لرسم وتدريج باترونات الأزياء — ثنائي اللغة ويعمل دون إنترنت.",
     onbTitle2: "ارسم بأدوات فيكتور احترافية", onbBody2: "قلم، قوس، تماثل، سماح حياكة، علامات تطابق واتجاه القماش — مع التقاط ذكي وتراجع لا نهائي.",
     onbTitle3: "درّج لأي مقاس فورًا", onbBody3: "من XXS إلى 6XL، أطفال وقياسات مخصصة، عبر المعايير العالمية والمصرية والخليجية.",
     onbTitle4: "شاهدها ثلاثية الأبعاد وصدّرها", onbBody4: "عاينها على مجسم للجسم ثم صدّر PDF جاهز للطباعة وDXF وSVG وأكثر.",
