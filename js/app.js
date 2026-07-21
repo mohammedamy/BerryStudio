@@ -96,10 +96,16 @@
   }
 
   // ---- right rail panes ----
-  const PANES = ["size","measure","layers","library","ai","export"];
+  // Rail panes in a task-flow order: get a base → fit it → edit → output.
+  const PANES = ["library","ai","size","measure","layers","export"];
+  const PANE_ICON = { size:IC.scale, measure:IC.measure, layers:IC.layers, library:IC.shirt, ai:IC.spark, export:IC.download };
   function buildRail() {
     const tabs = $("#railTabs"); tabs.innerHTML = "";
-    PANES.forEach(p => { const b = el("button", state.pane===p?"active":"", T("tab_"+p)); b.onclick = () => showPane(p); b.dataset.pane=p; tabs.appendChild(b); });
+    PANES.forEach(p => {
+      const b = el("button", state.pane===p?"active":"", `${PANE_ICON[p]||""}<span>${T("tab_"+p)}</span>`);
+      b.dataset.pane = p; b.onclick = () => showPane(p);
+      tabs.appendChild(b);
+    });
     renderSizePane(); renderMeasurePane(); renderLayersPane(); renderLibraryPane(); renderAIPane(); renderExportPane();
     showPane(state.pane || "size");
   }
@@ -112,7 +118,7 @@
 
   // SIZE PANE
   function renderSizePane() {
-    const c = $("[data-pane=size]"); c.innerHTML = "";
+    const c = $(".rail-pane[data-pane=size]"); c.innerHTML = "";
     c.appendChild(el("div","section-title",IC.ruler+T("sizeGrading")));
     // standard select
     const f1 = el("div","field",`<label>${T("standard")}</label>`);
@@ -139,7 +145,7 @@
   // MEASURE PANE
   const MEAS_KEYS = ["chest","waist","hips","shoulder","backLen","sleeve","neck","bicep","inseam","thigh","height"];
   function renderMeasurePane() {
-    const c = $("[data-pane=measure]"); c.innerHTML="";
+    const c = $(".rail-pane[data-pane=measure]"); c.innerHTML="";
     c.appendChild(el("div","section-title",IC.measure+T("customMeas")));
     c.appendChild(el("div","help-note",T("liveUpdate")));
     const m = currentMeas();
@@ -157,7 +163,7 @@
 
   // LAYERS PANE
   function renderLayersPane() {
-    const c = $("[data-pane=layers]"); c.innerHTML="";
+    const c = $(".rail-pane[data-pane=layers]"); c.innerHTML="";
     c.appendChild(el("div","section-title",IC.layers+T("layersPanel")));
     const pieces = Canvas.getPieces();
     if(!pieces.length){ c.appendChild(el("div","help-note",T("empty2d"))); return; }
@@ -176,7 +182,7 @@
 
   // LIBRARY PANE
   function renderLibraryPane() {
-    const c = $("[data-pane=library]"); c.innerHTML="";
+    const c = $(".rail-pane[data-pane=library]"); c.innerHTML="";
     c.appendChild(el("div","section-title",IC.shirt+T("libraryTitle")));
     const sb = el("div","field",`<div style="position:relative"><span style="position:absolute;inset-inline-start:10px;top:9px;color:var(--ink-2)">${IC.search}</span></div>`);
     const inp = el("input","input"); inp.placeholder=T("searchLib"); inp.style.paddingInlineStart="34px"; sb.firstChild.appendChild(inp); c.appendChild(sb);
@@ -204,7 +210,7 @@
 
   // AI PANE
   function renderAIPane() {
-    const c = $("[data-pane=ai]"); c.innerHTML="";
+    const c = $(".rail-pane[data-pane=ai]"); c.innerHTML="";
     c.appendChild(el("div","section-title",IC.spark+T("aiTitle")));
     c.appendChild(el("div","help-note",T("aiDesc")));
     const f=el("div","field"); f.style.marginTop="12px";
@@ -234,7 +240,7 @@
   const PAPERS=["A0","A1","A2","A3","A4","Letter","Plotter","Custom"];
   const FORMATS=["PDF","DXF","SVG","AI","PNG","JPEG","HPGL"];
   function renderExportPane() {
-    const c = $("[data-pane=export]"); c.innerHTML="";
+    const c = $(".rail-pane[data-pane=export]"); c.innerHTML="";
     c.appendChild(el("div","section-title",IC.download+T("exportTitle")));
     c.appendChild(el("div",null,`<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("paperSize")}</label>`));
     const pg=el("div","opt-grid"); pg.style.margin="8px 0 4px";
