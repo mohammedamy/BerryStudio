@@ -9,7 +9,7 @@ const Canvas = (() => {
   let pieces = [];                              // current pattern pieces (cm space, positioned)
   let selected = -1;
   let tool = "select";
-  let opts = { grid: true, snap: true, seam: true, unitsCm: true, seamCm: 1 };
+  let opts = { grid: true, snap: true, seam: true, unitsCm: true, seamCm: 1, fillOpacity: 0.12 };
   let sketch = [];                              // user-drawn strokes {tool, pts:[[cm,cm]]}
   let drawing = null;                           // active stroke
   let measurePts = [];
@@ -309,11 +309,13 @@ const Canvas = (() => {
       ctx.setLineDash([6,4]); ctx.lineWidth=1.5; ctx.strokeStyle=CSS("--ink-2");
       path(off); ctx.stroke(); ctx.setLineDash([]);
     }
-    // fill (cutting area)
+    // fill (cutting area) — fabric colour + adjustable transparency
     path(p.outline);
-    ctx.fillStyle = hexA(col, sel?0.20:0.10); ctx.fill();
+    ctx.fillStyle = hexA(col, sel ? Math.min(0.85, opts.fillOpacity*1.9) : opts.fillOpacity); ctx.fill();
     // cutting line
-    ctx.lineWidth = sel?3:2; ctx.strokeStyle = col; ctx.stroke();
+    ctx.lineWidth = sel?3:2; ctx.strokeStyle = col;
+    if (p.locked) ctx.setLineDash([2,3]);
+    ctx.stroke(); ctx.setLineDash([]);
 
     // darts
     ctx.lineWidth=1.4; ctx.strokeStyle=col;
@@ -339,6 +341,13 @@ const Canvas = (() => {
     ctx.font="600 10px "+(lang==="ar"?"Inter":"Cairo")+", sans-serif";
     ctx.fillStyle=col;
     ctx.fillText(p.name[lang==="ar"?"en":"ar"], lx, ly+10);
+    if (p.locked) drawLock(lx, ly-20);
+  }
+  // small padlock glyph (piece is locked)
+  function drawLock(cx, cy){
+    ctx.strokeStyle=CSS("--ink-2"); ctx.fillStyle=CSS("--ink-2"); ctx.lineWidth=1.6;
+    ctx.beginPath(); ctx.arc(cx, cy-2, 2.6, Math.PI, 0); ctx.stroke();   // shackle
+    ctx.beginPath(); ctx.rect(cx-3.5, cy, 7, 6); ctx.fill();             // body
   }
 
   function arrow(from,to){ const a=Math.atan2(to[1]-from[1],to[0]-from[0]); const L=7; ctx.beginPath(); ctx.moveTo(to[0],to[1]); ctx.lineTo(to[0]-L*Math.cos(a-0.4),to[1]-L*Math.sin(a-0.4)); ctx.moveTo(to[0],to[1]); ctx.lineTo(to[0]-L*Math.cos(a+0.4),to[1]-L*Math.sin(a+0.4)); ctx.stroke(); }
@@ -352,8 +361,25 @@ const Canvas = (() => {
   function drawSketch(){
     ctx.strokeStyle=CSS("--accent"); ctx.lineWidth=2; ctx.lineJoin="round"; ctx.lineCap="round";
     const all = drawing? sketch.concat([drawing]) : sketch;
-    all.forEach(st=>{ if(st.pts.length<2 && st!==drawing) return; ctx.beginPath(); st.pts.forEach((p,i)=>{const[x,y]=toScreen(p[0],p[1]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);}); ctx.stroke();
-      if(st.tool==="pen"){ st.pts.forEach(p=>{const[x,y]=toScreen(p[0],p[1]); ctx.fillStyle=CSS("--accent"); ctx.beginPath(); ctx.arc(x,y,3,0,7); ctx.fill();});}});
+    all.forEach(st=>{
+      // Arc: quadratic curve bowing through the bulge point (ctrl). While the
+      // bulge isn't set yet it previews as the straight chord.
+      if(st.tool==="arc"){
+        if(st.pts.length<2) return;
+        const [a,b]=st.pts.map(p=>toScreen(p[0],p[1]));
+        ctx.beginPath(); ctx.moveTo(a[0],a[1]);
+        if(st.ctrl){ const bl=toScreen(st.ctrl[0],st.ctrl[1]);
+          // control so the curve passes through the bulge at its midpoint
+          ctx.quadraticCurveTo(2*bl[0]-(a[0]+b[0])/2, 2*bl[1]-(a[1]+b[1])/2, b[0],b[1]); }
+        else ctx.lineTo(b[0],b[1]);
+        ctx.stroke();
+        [a,b].forEach(p=>{ctx.fillStyle=CSS("--accent");ctx.beginPath();ctx.arc(p[0],p[1],3,0,7);ctx.fill();});
+        return;
+      }
+      if(st.pts.length<2 && st!==drawing) return;
+      ctx.beginPath(); st.pts.forEach((p,i)=>{const[x,y]=toScreen(p[0],p[1]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);}); ctx.stroke();
+      if(st.tool==="pen"){ st.pts.forEach(p=>{const[x,y]=toScreen(p[0],p[1]); ctx.fillStyle=CSS("--accent"); ctx.beginPath(); ctx.arc(x,y,3,0,7); ctx.fill();});}
+    });
   }
 
   function drawMeasure(){
@@ -390,7 +416,7 @@ const Canvas = (() => {
       if (e.button===1 || e.spaceKey || tool==="pan"){ pan={x:e.offsetX,y:e.offsetY,vx:view.x,vy:view.y}; userAdjusted=true; return; }
 
       // (1) grab a selection handle (rotate / scale corner / anchor point)
-      if (selected>=0 && pieces[selected] && SHOW_HANDLES.has(tool)){
+      if (selected>=0 && pieces[selected] && !pieces[selected].locked && SHOW_HANDLES.has(tool)){
         const hh=handleHit(pieces[selected], e.offsetX, e.offsetY);
         if (hh){ beginEdit(hh, wx, wy); return; }
       }
@@ -411,7 +437,14 @@ const Canvas = (() => {
       if (tool==="symmetry"){ const h=hitPiece(wx,wy); if(h>=0){ doMirror(h); onPick(pieces[selected], e.clientX, e.clientY); } render(); return; }
 
       if (tool==="measure"){ if(measurePts.length>=2)measurePts=[]; measurePts.push([wx,wy]); render(); return; }
-      if (tool==="line"||tool==="arc"){ drawing={tool,pts:[[snap(wx),snap(wy)]]}; return; }
+      if (tool==="line"){ drawing={tool:"line",pts:[[snap(wx),snap(wy)]]}; return; }
+      if (tool==="arc"){
+        // 3 clicks: start → end → bulge
+        if(!drawing || drawing.tool!=="arc"){ drawing={tool:"arc",phase:1,pts:[[snap(wx),snap(wy)],[snap(wx),snap(wy)]],ctrl:null}; }
+        else if(drawing.phase===1){ drawing.pts[1]=[snap(wx),snap(wy)]; drawing.phase=2; }
+        else { drawing.ctrl=[wx,wy]; pushUndo(); sketch.push(drawing); drawing=null; }
+        render(); return;
+      }
       if (tool==="pen"){ if(!drawing)drawing={tool:"pen",pts:[]}; drawing.pts.push([snap(wx),snap(wy)]); render(); return; }
       if (tool==="free"||tool==="freehand"){ drawing={tool:"free",pts:[[wx,wy]]}; return; }
 
@@ -447,7 +480,8 @@ const Canvas = (() => {
       snapMark=null;
 
       if (dragPiece){ const dx=wx-dragPiece.ox, dy=wy-dragPiece.oy; movePiece(dragPiece.i,dx,dy); dragPiece.ox=wx; dragPiece.oy=wy; render(); return; }
-      if (drawing && (drawing.tool==="line"||drawing.tool==="arc")){ drawing.pts[1]=[snap(wx),snap(wy)]; render(); return; }
+      if (drawing && drawing.tool==="line"){ drawing.pts[1]=[snap(wx),snap(wy)]; render(); return; }
+      if (drawing && drawing.tool==="arc"){ if(drawing.phase===1) drawing.pts[1]=[snap(wx),snap(wy)]; else drawing.ctrl=[wx,wy]; render(); return; }
       if (drawing && drawing.tool==="free"){ drawing.pts.push([wx,wy]); render(); return; }
       if (clickBuf.length && (tool==="knife"||tool==="grain")){ render(); return; }
 
@@ -460,7 +494,8 @@ const Canvas = (() => {
 
     cv.addEventListener("pointerup", ()=>{
       if (edit){ edit=null; snapMark=null; render(); }
-      if (drawing && drawing.tool!=="pen"){ if(drawing.pts.length>1){ pushUndo(); sketch.push(drawing);} drawing=null; render(); }
+      // line & freehand commit on release; arc & pen are click-driven
+      if (drawing && (drawing.tool==="line"||drawing.tool==="free")){ if(drawing.pts.length>1){ pushUndo(); sketch.push(drawing);} drawing=null; render(); }
       pan=null; dragPiece=null;
     });
     cv.addEventListener("dblclick", ()=>{ if(drawing&&drawing.tool==="pen"){ if(drawing.pts.length>1){pushUndo(); sketch.push(drawing);} drawing=null; render(); }});
@@ -485,7 +520,7 @@ const Canvas = (() => {
     pushUndo(); pieces[i].grain=[[a[0],a[1]],[b[0],b[1]]]; selected=i; return true;
   }
   function hitPiece(x,y){
-    for(let i=pieces.length-1;i>=0;i--){ if(pieces[i].visible && inPoly(x,y,pieces[i].outline)) return i; }
+    for(let i=pieces.length-1;i>=0;i--){ if(pieces[i].visible && !pieces[i].locked && inPoly(x,y,pieces[i].outline)) return i; }
     return -1;
   }
   function inPoly(x,y,poly){ let c=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const[xi,yi]=poly[i],[xj,yj]=poly[j]; if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))c=!c; } return c; }
@@ -509,6 +544,7 @@ const Canvas = (() => {
     tool=t; clickBuf=[]; edit=null; snapMark=null;
     if(t!=="measure")measurePts=[];
     if(t!=="pen"&&drawing&&drawing.tool==="pen"){sketch.push(drawing);drawing=null;}
+    if(drawing&&drawing.tool==="arc"&&t!=="arc"){ drawing=null; }   // drop an unfinished arc
     cv.style.cursor = (t==="pan")?"grab":(t==="select"||t==="move")?"default":(t==="rotate")?"grab":"crosshair";
     render();
   }
@@ -516,7 +552,10 @@ const Canvas = (() => {
   function getOpt(k){ return opts[k]; }
   function getZoom(){ return Math.round(view.scale/3.2*100); }
   function toggleVisible(i){ pieces[i].visible=!pieces[i].visible; render(); }
-  function selectPiece(i){ selected=i; render(); }
+  function toggleLock(i){ pieces[i].locked=!pieces[i].locked; if(pieces[i].locked && selected===i) selected=-1; render(); }
+  function setColor(i,color){ if(pieces[i]){ pieces[i].color=color; render(); } }
+  function getSelected(){ return selected; }
+  function selectPiece(i){ if(pieces[i] && !pieces[i].locked){ selected=i; render(); } }
   function clearSketch(){ pushUndo(); sketch=[]; render(); }
   function onZoomChange(cb){ onZoom=cb; }
   function exportSVG(){
@@ -592,7 +631,8 @@ const Canvas = (() => {
     pieces = arr.map((p,i)=>({
       name:p.name, desc:p.desc||{en:"",ar:""},
       outline:p.outline||[], darts:p.darts||[], notches:p.notches||[], grain:p.grain||[],
-      visible:p.visible!==false, color:p.color||["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][i%6],
+      visible:p.visible!==false, locked:!!p.locked,
+      color:p.color||["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][i%6],
     }));
     selected=-1; sketch=[]; fit(); return true;
   }
@@ -602,6 +642,7 @@ const Canvas = (() => {
   function screenOf(x,y){ return toScreen(x,y); }
 
   return { init, setTranslator, setPattern, getPieces, setTool, setOpt, getOpt, zoom, fit,
-           doUndo, doRedo, getZoom, toggleVisible, selectPiece, clearSketch, render,
+           doUndo, doRedo, getZoom, toggleVisible, toggleLock, setColor, getSelected,
+           selectPiece, clearSketch, render,
            onZoomChange, exportSVG, exportDXF, exportPDF, loadPieces, clearAll, screenOf };
 })();

@@ -31,9 +31,11 @@ install it. After the first load it works **fully offline**.
 | 3 themes (Egyptian · Saudi · International) × Light/Dark | ✅ Fully working |
 | Pattern canvas: zoom/pan, grid, rulers (cm/inch), snap | ✅ Fully working |
 | Seam allowance, notches, grainlines, darts, bilingual piece labels | ✅ Fully working |
-| Vector tools: Select, Pen, Line, Arc, Freehand, Move, Measure | ✅ Working (draw & edit) |
+| Vector tools: Select, Pen, Line, **Arc (curved, 3-click)**, Freehand, Move, Measure | ✅ Working (draw & edit) |
 | Transform tools: Rotate, Scale, Knife (split), Symmetry (mirror), Notch, Grainline | ✅ Fully working on real geometry |
 | Selection **control points + handles** (drag anchors, corner scale, rotate knob) | ✅ Fully working, with snap-to-point |
+| Layers: per-piece **colour picker**, **lock/unlock**, show/hide | ✅ Working (locked pieces are non-interactive) |
+| **Fabric & material**: 8 material presets + adjustable fill transparency | ✅ Working (per-piece or all) |
 | **Size & Grading engine** XXS→6XL, Intl/Egyptian/Saudi, Kids, Custom | ✅ Proportion-perfect, live |
 | Category switcher (Women/Men/Girls/Boys) with matching avatar | ✅ Working |
 | Real multi-piece patterns w/ bilingual names + explanations | ✅ 6 patterns (dress, shirt, abaya, thobe, girls' dress, boys' trousers) |

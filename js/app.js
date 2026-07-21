@@ -14,7 +14,7 @@
     category: "women", size: "M", standard: "intl",
     kids: null, custom: {}, unitsCm: true,
     hoverHelp: true, highContrast: false, reduceMotion: false, cloudSync: false,
-    onboarded: false, mine: [],
+    onboarded: false, mine: [], aiEndpoint: "",
   };
   const state = Object.assign({}, DEF, JSON.parse(localStorage.getItem("pps") || "{}"));
   const save = () => localStorage.setItem("pps", JSON.stringify(state));
@@ -60,6 +60,9 @@
     printer:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="6" y="13" width="12" height="8" rx="1"/></svg>',
     image:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>',
     folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+    lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+    unlock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>',
+    drop:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>',
     ruler:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18"/></svg>',
     spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>',
     eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -169,22 +172,66 @@
   }
 
   // LAYERS PANE
+  const FABRICS = [
+    { key:"cotton",  color:"#e7dcc4" }, { key:"denim",   color:"#3f5f86" },
+    { key:"silk",    color:"#e6a8bd" }, { key:"linen",   color:"#cbbb98" },
+    { key:"wool",    color:"#8a7a63" }, { key:"satin",   color:"#a878d6" },
+    { key:"leather", color:"#6f4526" }, { key:"chiffon", color:"#bfe0da" },
+  ];
+  const rgbToHex = (c) => {
+    if(!c) return "#6d5efc";
+    if(c[0]==="#") return c.length===4 ? "#"+[...c.slice(1)].map(x=>x+x).join("") : c;
+    const m=/(\d+)\D+(\d+)\D+(\d+)/.exec(c);
+    return m ? "#"+[m[1],m[2],m[3]].map(v=>(+v).toString(16).padStart(2,"0")).join("") : "#6d5efc";
+  };
+  function applyFabric(color){
+    const pieces=Canvas.getPieces(); if(!pieces.length){ toast(T("empty2d")); return; }
+    const sel=Canvas.getSelected();
+    if(sel>=0) Canvas.setColor(sel,color);
+    else pieces.forEach((_,i)=>Canvas.setColor(i,color));
+    renderLayersPane();
+  }
   function renderLayersPane() {
     const c = $(".rail-pane[data-pane=layers]"); c.innerHTML="";
     c.appendChild(el("div","section-title",IC.layers+T("layersPanel")));
     const pieces = Canvas.getPieces();
     if(!pieces.length){ c.appendChild(el("div","help-note",T("empty2d"))); return; }
+    const sel = Canvas.getSelected();
     pieces.forEach((p,i)=>{
-      const row = el("div","layer");
-      const sw = el("span","swatch"); sw.style.background=p.color; row.appendChild(sw);
+      const row = el("div","layer"+(p.locked?" locked":"")+(i===sel?" active":""));
+      // colour swatch — opens a native colour picker
+      const sw = el("label","swatch"); sw.style.background=p.color; sw.title=T("pieceColor");
+      const ci = el("input"); ci.type="color"; ci.value=rgbToHex(p.color);
+      ci.style.cssText="position:absolute;width:0;height:0;opacity:0;pointer-events:none";
+      ci.oninput=()=>{ Canvas.setColor(i,ci.value); sw.style.background=ci.value; };
+      sw.appendChild(ci); row.appendChild(sw);
       row.appendChild(el("span","lname",`${L(p.name)}<small>${p.name[state.lang==="ar"?"en":"ar"]}</small>`));
+      const lock = el("button", null, p.locked?IC.lock:IC.unlock); lock.title=T(p.locked?"unlock":"lock");
+      if(p.locked) lock.style.color="var(--brand)";
+      lock.onclick=(e)=>{ e.stopPropagation(); Canvas.toggleLock(i); renderLayersPane(); };
+      row.appendChild(lock);
       const eye = el("button", null, p.visible?IC.eye:IC.eyeoff);
-      eye.onclick=()=>{Canvas.toggleVisible(i);renderLayersPane();};
+      eye.onclick=(e)=>{ e.stopPropagation(); Canvas.toggleVisible(i); renderLayersPane(); };
       row.appendChild(eye);
-      row.onclick=(e)=>{ if(e.target.closest("button"))return; Canvas.selectPiece(i); showPieceInfo(p); };
+      row.onclick=(e)=>{ if(e.target.closest("button")||e.target.closest(".swatch"))return;
+        if(!p.locked){ Canvas.selectPiece(i); showPieceInfo(p); renderLayersPane(); } };
       c.appendChild(row);
     });
-    const clr=el("button","big-btn ghost",T("cancel")+" ✎"); clr.style.marginTop="12px"; clr.onclick=()=>{Canvas.clearSketch();toast("✓");}; c.appendChild(clr);
+
+    // Fabric & material
+    c.appendChild(el("div","section-title",IC.drop+T("fabricSection")));
+    c.appendChild(el("div","help-note", sel>=0 ? L(pieces[sel].name) : T("applyAll")));
+    const grid=el("div","mat-grid"); grid.style.marginTop="8px";
+    FABRICS.forEach(f=>{ const m=el("button","mat",`<span>${T("fab_"+f.key)}</span>`);
+      m.style.background=f.color; m.onclick=()=>applyFabric(f.color); grid.appendChild(m); });
+    c.appendChild(grid);
+
+    // Fabric transparency
+    const tr=el("div","field"); tr.style.marginTop="14px";
+    tr.innerHTML=`<label>${T("transparency")} · <b id="opVal">${Math.round(Canvas.getOpt("fillOpacity")*100)}%</b></label>`;
+    const sl=el("input","range"); sl.type="range"; sl.min="4"; sl.max="70"; sl.value=Math.round(Canvas.getOpt("fillOpacity")*100);
+    sl.oninput=()=>{ Canvas.setOpt("fillOpacity",+sl.value/100); const v=$("#opVal"); if(v)v.textContent=sl.value+"%"; };
+    tr.appendChild(sl); c.appendChild(tr);
   }
 
   // LIBRARY PANE
@@ -247,26 +294,31 @@
 
     c.appendChild(preview); c.appendChild(f); c.appendChild(file); c.appendChild(up); c.appendChild(gen);
   }
-  function runAI(txt, btn){
+  async function runAI(txt, btn){
     const prompt=(txt||"").trim();
     if(!prompt && !aiImage){ toast(T("aiNeedInput")); return; }
     const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7"; btn.disabled=true;
-    // Heuristic local "AI": map the description (or category) to a base block.
-    setTimeout(()=>{
-      const t=prompt.toLowerCase();
-      let id=null;
-      if(/shirt|قميص/.test(t)) id="mens_shirt";
-      else if(/abaya|عباية/.test(t)) id="abaya";
-      else if(/thobe|ثوب/.test(t)) id="thobe";
-      else if(/trouser|pant|بنطلون/.test(t)) id="boys_trousers";
-      else if(/girl|بنات|puff|party/.test(t)) id="girls_dress";
-      else if(/dress|فستان|gown|skirt/.test(t)) id="womens_dress";
-      else id={women:"womens_dress",men:"mens_shirt",girls:"girls_dress",boys:"boys_trousers"}[state.category]||"womens_dress";
-      loadPattern(id);
-      showPane("layers");                       // reveal the generated pieces
-      btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false;
+    try {
+      // Image-driven parametric generation: silhouette analysis (offline) or
+      // a configured Claude-vision endpoint. The image genuinely shapes output.
+      const res = await AIGen.generate({
+        prompt, imageDataURL: aiImage, category: state.category,
+        measurements: currentMeas(), endpoint: (state.aiEndpoint||"").trim(), lang: state.lang,
+      });
+      state.loaded = null;
+      Canvas.setPattern(res.pieces, res.colors);
+      hideEmpty(); renderLayersPane();
+      if(state.view==="3d") build3D(res.colorInt);
+      showPane("layers");                        // reveal the generated pieces
+      // show what was detected so the user sees the image/prompt mattered
+      const note=$(".rail-pane[data-pane=ai] .help-note");
+      if(note && res.summary){
+        const src = res.source==="remote" ? " · Claude" : (res.usedImage ? " · "+T("usedImageNote") : "");
+        note.textContent = `${T("detected")}: ${res.summary}${src}`;
+      }
       toast(T("generated"));
-    }, 850);
+    } catch(e){ toast(T("importFail")); }
+    finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
   }
 
   // EXPORT PANE
@@ -411,7 +463,7 @@
   }
 
   // ================= 3D =================
-  function build3D(){ const m=currentMeas(); View3D.build(state.category, m, cssHex("--brand")); }
+  function build3D(colorInt){ const m=currentMeas(); View3D.build(state.category, m, colorInt!=null?colorInt:cssHex("--brand")); }
   function cssHex(k){ const t=document.createElement("canvas").getContext("2d");t.fillStyle=getComputedStyle(document.body).getPropertyValue(k).trim();return parseInt(t.fillStyle.slice(1),16);}
   function setView(v){
     state.view=v;
@@ -515,6 +567,12 @@
     seg.children[0].onclick=()=>{state.unitsCm=true;Canvas.setOpt("unitsCm",true);save();openSettings();updateStageChips();};
     seg.children[1].onclick=()=>{state.unitsCm=false;Canvas.setOpt("unitsCm",false);save();openSettings();updateStageChips();};
     units.appendChild(seg); body.appendChild(units);
+    // AI endpoint (optional Claude-vision proxy)
+    const aif=el("div","field"); aif.style.marginTop="14px";
+    aif.innerHTML=`<label>${T("aiEndpoint")}</label>`;
+    const aiin=el("input","input"); aiin.type="url"; aiin.placeholder="https://your-proxy.example/generate";
+    aiin.value=state.aiEndpoint||""; aiin.oninput=()=>{ state.aiEndpoint=aiin.value.trim(); save(); };
+    aif.appendChild(aiin); aif.appendChild(el("div","help-note",T("aiEndpointD"))); body.appendChild(aif);
     const rb=el("button","big-btn ghost",T("resetOnb")); rb.style.marginTop="16px"; rb.onclick=()=>{closeModal("#settingsModal");startOnboarding();}; body.appendChild(rb);
     const ib=el("button","big-btn",IC.download+T("installApp")); ib.style.marginTop="8px"; ib.onclick=installApp; body.appendChild(ib);
     $("#settingsModal").classList.add("show");

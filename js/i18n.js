@@ -57,6 +57,10 @@ const I18N = {
     applyMeas: "Apply Measurements",
     // layers
     layersPanel: "Layers", addLayer: "Add layer",
+    lock: "Lock layer", unlock: "Unlock layer", pieceColor: "Piece colour",
+    fabricSection: "Fabric & Material", transparency: "Fabric transparency", applyAll: "Apply to all pieces",
+    fab_cotton:"Cotton", fab_denim:"Denim", fab_silk:"Silk", fab_linen:"Linen",
+    fab_wool:"Wool", fab_satin:"Satin", fab_leather:"Leather", fab_chiffon:"Chiffon",
     // library
     libraryTitle: "Pattern Library", searchLib: "Search patterns…",
     allCat: "All", saveMine: "Save current to My Patterns",
@@ -80,6 +84,8 @@ const I18N = {
     newDone: "New blank project started", imported: "Project imported",
     importFail: "Couldn't read that file", aiImageAdded: "Inspiration image added",
     aiNeedInput: "Add a description or an image first", removeImg: "Remove image",
+    detected: "Detected", usedImageNote: "Pattern shaped from your image",
+    aiEndpoint: "AI endpoint (Claude)", aiEndpointD: "Optional URL of your Claude-vision proxy — leave blank to use offline analysis",
     // pieces panel
     pieces: "Pattern Pieces",
     // settings
@@ -151,6 +157,10 @@ const I18N = {
     m_inseam: "طول الساق الداخلي", m_thigh: "الفخذ", m_height: "الطول",
     applyMeas: "تطبيق القياسات",
     layersPanel: "الطبقات", addLayer: "إضافة طبقة",
+    lock: "قفل الطبقة", unlock: "فتح الطبقة", pieceColor: "لون القطعة",
+    fabricSection: "القماش والخامة", transparency: "شفافية القماش", applyAll: "تطبيق على كل القطع",
+    fab_cotton:"قطن", fab_denim:"جينز", fab_silk:"حرير", fab_linen:"كتان",
+    fab_wool:"صوف", fab_satin:"ساتان", fab_leather:"جلد", fab_chiffon:"شيفون",
     libraryTitle: "مكتبة الباترونات", searchLib: "ابحث عن باترون…",
     allCat: "الكل", saveMine: "حفظ الحالي في باتروناتي",
     aiTitle: "مولّد الباترون بالذكاء الاصطناعي",
@@ -171,6 +181,8 @@ const I18N = {
     newDone: "تم بدء مشروع جديد فارغ", imported: "تم استيراد المشروع",
     importFail: "تعذّرت قراءة الملف", aiImageAdded: "تمت إضافة الصورة المرجعية",
     aiNeedInput: "أضف وصفًا أو صورة أولًا", removeImg: "إزالة الصورة",
+    detected: "اكتُشِف", usedImageNote: "تم تشكيل الباترون من صورتك",
+    aiEndpoint: "نقطة الذكاء الاصطناعي (Claude)", aiEndpointD: "رابط اختياري لوسيط Claude للرؤية — اتركه فارغًا لاستخدام التحليل دون إنترنت",
     pieces: "قطع الباترون",
     settings: "الإعدادات", hoverHelp: "مساعدة عند المرور", hoverHelpD: "إظهار تلميحات تفصيلية عند مرور الماوس",
     highContrast: "تباين عالٍ", highContrastD: "حدود ونصوص أوضح",
