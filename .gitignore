@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+._*
+
+# Local editor / assistant config
+.claude/
+
+# Logs & temp
+*.log
+node_modules/
