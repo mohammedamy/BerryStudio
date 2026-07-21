@@ -39,7 +39,7 @@ install it. After the first load it works **fully offline**.
 | **Size & Grading engine** XXS→6XL, Intl/Egyptian/Saudi, Kids, Custom | ✅ Proportion-perfect, live |
 | Category switcher (Women/Men/Girls/Boys) with matching avatar | ✅ Working |
 | Real multi-piece patterns w/ bilingual names + explanations | ✅ 6 patterns (dress, shirt, abaya, thobe, girls' dress, boys' trousers) |
-| 3D body preview (Three.js) — avatar reacts to size, 360° + walk | ✅ Working |
+| **3D preview** — 4 distinct anatomical avatars (women/men/girl/boy), studio lighting + soft shadow, OrbitControls (orbit/zoom/pan, touch), auto-spin, walk cycle, live fabric material/colour/transparency, per-piece show/hide, size grading, loading state | ✅ Working (stylised character; drop-in GLB path for photoreal) |
 | **Project menu**: New · Import (.json) · Export SVG/DXF · Save PDF · Save Project · Print | ✅ Working (real SVG, DXF, PDF & print) |
 | Print & Export: A0–A4/Letter/Plotter, PDF/DXF/SVG/AI/PNG/JPEG/HPGL | ✅ SVG, DXF, PDF are native; PNG/JPEG/AI/HPGL fall back to vector |
 | Fabric consumption + cost estimator + Tech Pack + BOM | ✅ Working |
@@ -58,7 +58,13 @@ install it. After the first load it works **fully offline**.
   hand-built, valid PDF-1.4 with vector cutting lines). PNG/JPEG/AI/HPGL still
   fall back to the vector output — the natural next integration points.
 - **Projects** round-trip losslessly via `Save Project (.json)` → `Import Project`.
-- Three.js loads from a CDN on first visit, then is cached for offline use.
+- **3D avatars** are high-quality *procedural stylised* characters (not photoreal
+  humans — that needs sculpted, rigged GLB models an in-browser script can't
+  synthesise). For photorealism, drop `avatars/women.glb`, `men.glb`, `girl.glb`,
+  `boy.glb` into the repo and call `View3D.setAvatarURL("women","avatars/women.glb")`
+  (per category) — the loader scales them to the live measurements automatically.
+- Three.js + OrbitControls load from a CDN (via an import map) on first visit,
+  then are cached for offline use.
 
 ---
 

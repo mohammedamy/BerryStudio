@@ -14,7 +14,7 @@
     category: "women", size: "M", standard: "intl",
     kids: null, custom: {}, unitsCm: true,
     hoverHelp: true, highContrast: false, reduceMotion: false, cloudSync: false,
-    onboarded: false, mine: [], aiEndpoint: "",
+    onboarded: false, mine: [], aiEndpoint: "", fabric3d: "cotton",
   };
   const state = Object.assign({}, DEF, JSON.parse(localStorage.getItem("pps") || "{}"));
   const save = () => localStorage.setItem("pps", JSON.stringify(state));
@@ -184,11 +184,13 @@
     const m=/(\d+)\D+(\d+)\D+(\d+)/.exec(c);
     return m ? "#"+[m[1],m[2],m[3]].map(v=>(+v).toString(16).padStart(2,"0")).join("") : "#6d5efc";
   };
-  function applyFabric(color){
+  function applyFabric(color, matKey){
     const pieces=Canvas.getPieces(); if(!pieces.length){ toast(T("empty2d")); return; }
     const sel=Canvas.getSelected();
     if(sel>=0) Canvas.setColor(sel,color);
     else pieces.forEach((_,i)=>Canvas.setColor(i,color));
+    if(matKey){ state.fabric3d=matKey; save(); }
+    sync3DFabric();
     renderLayersPane();
   }
   function renderLayersPane() {
@@ -203,7 +205,7 @@
       const sw = el("label","swatch"); sw.style.background=p.color; sw.title=T("pieceColor");
       const ci = el("input"); ci.type="color"; ci.value=rgbToHex(p.color);
       ci.style.cssText="position:absolute;width:0;height:0;opacity:0;pointer-events:none";
-      ci.oninput=()=>{ Canvas.setColor(i,ci.value); sw.style.background=ci.value; };
+      ci.oninput=()=>{ Canvas.setColor(i,ci.value); sw.style.background=ci.value; sync3DFabric(); };
       sw.appendChild(ci); row.appendChild(sw);
       row.appendChild(el("span","lname",`${L(p.name)}<small>${p.name[state.lang==="ar"?"en":"ar"]}</small>`));
       const lock = el("button", null, p.locked?IC.lock:IC.unlock); lock.title=T(p.locked?"unlock":"lock");
@@ -211,7 +213,7 @@
       lock.onclick=(e)=>{ e.stopPropagation(); Canvas.toggleLock(i); renderLayersPane(); };
       row.appendChild(lock);
       const eye = el("button", null, p.visible?IC.eye:IC.eyeoff);
-      eye.onclick=(e)=>{ e.stopPropagation(); Canvas.toggleVisible(i); renderLayersPane(); };
+      eye.onclick=(e)=>{ e.stopPropagation(); Canvas.toggleVisible(i); sync3DVisibility(); renderLayersPane(); };
       row.appendChild(eye);
       row.onclick=(e)=>{ if(e.target.closest("button")||e.target.closest(".swatch"))return;
         if(!p.locked){ Canvas.selectPiece(i); showPieceInfo(p); renderLayersPane(); } };
@@ -222,15 +224,15 @@
     c.appendChild(el("div","section-title",IC.drop+T("fabricSection")));
     c.appendChild(el("div","help-note", sel>=0 ? L(pieces[sel].name) : T("applyAll")));
     const grid=el("div","mat-grid"); grid.style.marginTop="8px";
-    FABRICS.forEach(f=>{ const m=el("button","mat",`<span>${T("fab_"+f.key)}</span>`);
-      m.style.background=f.color; m.onclick=()=>applyFabric(f.color); grid.appendChild(m); });
+    FABRICS.forEach(f=>{ const m=el("button","mat"+(state.fabric3d===f.key?" active":""),`<span>${T("fab_"+f.key)}</span>`);
+      m.style.background=f.color; m.onclick=()=>applyFabric(f.color, f.key); grid.appendChild(m); });
     c.appendChild(grid);
 
     // Fabric transparency
     const tr=el("div","field"); tr.style.marginTop="14px";
     tr.innerHTML=`<label>${T("transparency")} · <b id="opVal">${Math.round(Canvas.getOpt("fillOpacity")*100)}%</b></label>`;
     const sl=el("input","range"); sl.type="range"; sl.min="4"; sl.max="70"; sl.value=Math.round(Canvas.getOpt("fillOpacity")*100);
-    sl.oninput=()=>{ Canvas.setOpt("fillOpacity",+sl.value/100); const v=$("#opVal"); if(v)v.textContent=sl.value+"%"; };
+    sl.oninput=()=>{ Canvas.setOpt("fillOpacity",+sl.value/100); const v=$("#opVal"); if(v)v.textContent=sl.value+"%"; sync3DFabric(); };
     tr.appendChild(sl); c.appendChild(tr);
   }
 
@@ -463,7 +465,25 @@
   }
 
   // ================= 3D =================
-  function build3D(colorInt){ const m=currentMeas(); View3D.build(state.category, m, colorInt!=null?colorInt:cssHex("--brand")); }
+  function colorToInt(c){
+    if(!c) return cssHex("--brand");
+    if(c[0]==="#"){ const h=c.length===4 ? c.slice(1).split("").map(x=>x+x).join("") : c.slice(1); return parseInt(h,16); }
+    const m=/(\d+)\D+(\d+)\D+(\d+)/.exec(c); return m ? (+m[1]<<16)|(+m[2]<<8)|+m[3] : cssHex("--brand");
+  }
+  const fabricOpacity3D = () => Math.max(0.5, Math.min(1, 0.62 + Canvas.getOpt("fillOpacity")*0.6));
+  function pieceVisMap(){ return Canvas.getPieces().map(p=>({ key:(p.name&&p.name.en)||"", visible:p.visible!==false })); }
+  function build3D(colorInt){
+    const m=currentMeas(); const pieces=Canvas.getPieces();
+    const fv=pieces.find(p=>p.visible!==false);
+    View3D.build(state.category, m, {
+      color: colorInt!=null ? colorInt : (fv ? colorToInt(fv.color) : cssHex("--brand")),
+      material: state.fabric3d || "cotton", opacity: fabricOpacity3D(), pieces: pieceVisMap(),
+    });
+  }
+  // live 3D updates (no full rebuild)
+  function sync3DFabric(){ if(state.view!=="3d") return; const fv=Canvas.getPieces().find(p=>p.visible!==false);
+    View3D.setFabric({ color: fv?colorToInt(fv.color):undefined, material: state.fabric3d, opacity: fabricOpacity3D() }); }
+  function sync3DVisibility(){ if(state.view!=="3d") return; View3D.setPieceVisibility(pieceVisMap()); }
   function cssHex(k){ const t=document.createElement("canvas").getContext("2d");t.fillStyle=getComputedStyle(document.body).getPropertyValue(k).trim();return parseInt(t.fillStyle.slice(1),16);}
   function setView(v){
     state.view=v;
@@ -700,6 +720,7 @@
     Canvas.setOpt("unitsCm",state.unitsCm);
     Canvas.onZoomChange(()=>{ $("#zval").textContent=Canvas.getZoom()+"%"; });
     View3D.init($("#canvas3d"));
+    View3D.setLoadingCallback(v => { const o=$("#v3dLoading"); if(o) o.classList.toggle("show", v); });
     buildToolRail(); buildRail(); wire();
     applyTheme(); applyLang();
     updateUnitsPill(); updateStageChips();
