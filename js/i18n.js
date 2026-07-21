@@ -72,6 +72,14 @@ const I18N = {
     fabric: "Fabric", trims: "Trims", labor: "Labor", total: "Total",
     techPack: "Generate Tech Pack", bom: "Bill of Materials", exportNow: "Export",
     printNow: "Print",
+    // project menu
+    project: "Project", projectMenu: "Project menu — new, import, export, print",
+    newProject: "New Project", importProject: "Import Project…",
+    exportSVG: "Export SVG", exportDXF: "Export DXF", savePDF: "Save as PDF",
+    saveProject: "Save Project (.json)", printProject: "Print",
+    newDone: "New blank project started", imported: "Project imported",
+    importFail: "Couldn't read that file", aiImageAdded: "Inspiration image added",
+    aiNeedInput: "Add a description or an image first", removeImg: "Remove image",
     // pieces panel
     pieces: "Pattern Pieces",
     // settings
@@ -155,6 +163,14 @@ const I18N = {
     fabric: "قماش", trims: "إكسسوارات", labor: "مصنعية", total: "الإجمالي",
     techPack: "توليد الحقيبة الفنية", bom: "قائمة الخامات", exportNow: "تصدير",
     printNow: "طباعة",
+    // project menu
+    project: "المشروع", projectMenu: "قائمة المشروع — جديد، استيراد، تصدير، طباعة",
+    newProject: "مشروع جديد", importProject: "استيراد مشروع…",
+    exportSVG: "تصدير SVG", exportDXF: "تصدير DXF", savePDF: "حفظ كملف PDF",
+    saveProject: "حفظ المشروع (.json)", printProject: "طباعة",
+    newDone: "تم بدء مشروع جديد فارغ", imported: "تم استيراد المشروع",
+    importFail: "تعذّرت قراءة الملف", aiImageAdded: "تمت إضافة الصورة المرجعية",
+    aiNeedInput: "أضف وصفًا أو صورة أولًا", removeImg: "إزالة الصورة",
     pieces: "قطع الباترون",
     settings: "الإعدادات", hoverHelp: "مساعدة عند المرور", hoverHelpD: "إظهار تلميحات تفصيلية عند مرور الماوس",
     highContrast: "تباين عالٍ", highContrastD: "حدود ونصوص أوضح",

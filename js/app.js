@@ -22,6 +22,7 @@
   const L = o => (o ? (o[state.lang] ?? o.en) : "");
 
   const PALETTE = ["#6d5efc", "#00c2a8", "#ff5d8f", "#e2a52b", "#4c8dff", "#c1492e"];
+  let aiImage = null;   // data-URL of the uploaded AI inspiration image
 
   // ---------------- ICONS (inline SVG) ----------------
   const IC = {
@@ -53,6 +54,12 @@
     moon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>',
     gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5c.1-.3.1-.6.1-1z"/></svg>',
     download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>',
+    newdoc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v6M9 15h6"/></svg>',
+    importf:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M12 3v12M8 11l4 4 4-4"/></svg>',
+    pdf:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 13h1a1 1 0 0 1 0 2h-1zM8.5 13v4"/></svg>',
+    printer:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="6" y="13" width="12" height="8" rx="1"/></svg>',
+    image:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>',
+    folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
     ruler:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18"/></svg>',
     spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>',
     eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -213,27 +220,53 @@
     const c = $(".rail-pane[data-pane=ai]"); c.innerHTML="";
     c.appendChild(el("div","section-title",IC.spark+T("aiTitle")));
     c.appendChild(el("div","help-note",T("aiDesc")));
+
+    // inspiration image preview (restored from state if present)
+    const preview=el("div","ai-preview"+(aiImage?" show":""));
+    if(aiImage) preview.innerHTML=`<img src="${aiImage}" alt=""><button class="ai-x" title="${T('removeImg')}">×</button>`;
+    const bindRemove=()=>{ const x=preview.querySelector(".ai-x"); if(x) x.onclick=()=>{ aiImage=null; preview.classList.remove("show"); preview.innerHTML=""; }; };
+    bindRemove();
+
     const f=el("div","field"); f.style.marginTop="12px";
-    const ta=el("textarea","textarea"); ta.placeholder=T("aiPlaceholder"); ta.id="aiPrompt"; f.appendChild(ta); c.appendChild(f);
-    const up=el("button","big-btn ghost",IC.download+T("aiUpload")); up.style.marginBottom="10px"; up.onclick=()=>toast(T("aiUpload")+" ✓"); c.appendChild(up);
+    const ta=el("textarea","textarea"); ta.placeholder=T("aiPlaceholder"); ta.id="aiPrompt"; f.appendChild(ta);
+
+    // hidden file input — the upload button opens a real image picker
+    const file=el("input"); file.type="file"; file.accept="image/*"; file.style.display="none";
+    file.onchange=()=>{ const im=file.files&&file.files[0]; if(!im) return;
+      const r=new FileReader();
+      r.onload=()=>{ aiImage=r.result;
+        preview.innerHTML=`<img src="${aiImage}" alt=""><button class="ai-x" title="${T('removeImg')}">×</button>`;
+        preview.classList.add("show"); bindRemove(); toast(T("aiImageAdded")); };
+      r.readAsDataURL(im);
+    };
+    const up=el("button","big-btn ghost",IC.image+T("aiUpload")); up.style.marginBottom="10px";
+    up.onclick=()=>file.click();
+
     const gen=el("button","big-btn",IC.spark+T("generate"));
-    gen.onclick=()=>runAI(ta.value,gen); c.appendChild(gen);
+    gen.onclick=()=>runAI(ta.value,gen);
+
+    c.appendChild(preview); c.appendChild(f); c.appendChild(file); c.appendChild(up); c.appendChild(gen);
   }
   function runAI(txt, btn){
-    const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7";
-    // Heuristic local "AI": map keywords -> known pattern, else compose generic block.
+    const prompt=(txt||"").trim();
+    if(!prompt && !aiImage){ toast(T("aiNeedInput")); return; }
+    const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7"; btn.disabled=true;
+    // Heuristic local "AI": map the description (or category) to a base block.
     setTimeout(()=>{
-      const t=(txt||"").toLowerCase();
-      let id="womens_dress";
+      const t=prompt.toLowerCase();
+      let id=null;
       if(/shirt|قميص/.test(t)) id="mens_shirt";
       else if(/abaya|عباية/.test(t)) id="abaya";
       else if(/thobe|ثوب/.test(t)) id="thobe";
       else if(/trouser|pant|بنطلون/.test(t)) id="boys_trousers";
       else if(/girl|بنات|puff|party/.test(t)) id="girls_dress";
-      else if(/dress|فستان|gown/.test(t)) id="womens_dress";
+      else if(/dress|فستان|gown|skirt/.test(t)) id="womens_dress";
+      else id={women:"womens_dress",men:"mens_shirt",girls:"girls_dress",boys:"boys_trousers"}[state.category]||"womens_dress";
       loadPattern(id);
-      btn.innerHTML=orig; btn.style.opacity="1"; toast(T("generated"));
-    }, 900);
+      showPane("layers");                       // reveal the generated pieces
+      btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false;
+      toast(T("generated"));
+    }, 850);
   }
 
   // EXPORT PANE
@@ -272,11 +305,83 @@
 
   function doExport(){
     const fmt=($("#fg .opt.active")||{}).dataset?.fmt||"SVG";
-    if(fmt==="SVG"){ const svg=Canvas.exportSVG(); if(!svg){toast(T("empty2d"));return;} download("pattern.svg","image/svg+xml",svg); }
-    else { const svg=Canvas.exportSVG(); download(`pattern.${fmt.toLowerCase()}`,"text/plain",svg||"BerryStudio export"); }
-    toast(T("exported")+" · "+fmt);
+    exportAs(fmt);
   }
-  function download(name,type,data){ const b=new Blob([data],{type}); const u=URL.createObjectURL(b); const a=el("a");a.href=u;a.download=name;a.click();URL.revokeObjectURL(u); }
+  // Central exporter used by both the Export pane and the Project menu.
+  function exportAs(fmt){
+    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
+    const F=(fmt||"SVG").toUpperCase();
+    if(F==="SVG")      download("berrystudio-pattern.svg","image/svg+xml",Canvas.exportSVG());
+    else if(F==="DXF") download("berrystudio-pattern.dxf","application/dxf",Canvas.exportDXF());
+    else if(F==="PDF"){ const p=Canvas.exportPDF(); if(!p){toast(T("empty2d"));return;} download("berrystudio-pattern.pdf","application/pdf",p); }
+    else if(F==="JSON")download("berrystudio-project.json","application/json",JSON.stringify({app:"BerryStudio",version:1,pieces:Canvas.getPieces()},null,0));
+    else               download(`berrystudio-pattern.${F.toLowerCase()}`,"image/svg+xml",Canvas.exportSVG()); // PNG/JPEG/AI/HPGL → vector fallback
+    toast(T("exported")+" · "+F);
+  }
+  function download(name,type,data){ const b=new Blob([data],{type}); const u=URL.createObjectURL(b); const a=el("a");a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000); }
+
+  // ---- Project menu actions ----
+  function newProject(){
+    Canvas.clearAll(); state.loaded=null; aiImage=null;
+    showEmpty(); renderLayersPane(); renderAIPane();
+    if(state.view==="3d") build3D();
+    save(); toast(T("newDone"));
+  }
+  function importProject(){
+    const inp=el("input"); inp.type="file"; inp.accept=".json,application/json";
+    inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(!f) return;
+      const r=new FileReader();
+      r.onload=()=>{ try{
+        const data=JSON.parse(r.result);
+        const pieces=Array.isArray(data)?data:data.pieces;
+        if(Canvas.loadPieces(pieces)){ state.loaded=null; hideEmpty(); renderLayersPane();
+          if(state.view==="3d") build3D(); save(); toast(T("imported")); }
+        else toast(T("importFail"));
+      }catch(e){ toast(T("importFail")); } };
+      r.readAsText(f);
+    };
+    inp.click();
+  }
+  function printPattern(){
+    const svg=Canvas.exportSVG(); if(!svg){ toast(T("empty2d")); return; }
+    const w=window.open("","_blank");
+    if(!w){ toast(T("printProject")+": allow pop-ups"); return; }
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>BerryStudio — ${state.loaded?L(PATTERNS[state.loaded].name):"Pattern"}</title>
+      <style>@page{margin:12mm}body{margin:0;font-family:Inter,sans-serif}svg{width:100%;height:auto}h1{font-size:16px}</style></head>
+      <body><h1>BerryStudio</h1>${svg}<script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`);
+    w.document.close();
+  }
+  // ---- lightweight dropdown menu ----
+  function projectMenuItems(){ return [
+    { icon:IC.newdoc,  label:T("newProject"),    run:newProject },
+    { icon:IC.importf, label:T("importProject"), run:importProject },
+    "sep",
+    { icon:IC.download,label:T("exportSVG"),     run:()=>exportAs("SVG") },
+    { icon:IC.download,label:T("exportDXF"),     run:()=>exportAs("DXF") },
+    { icon:IC.pdf,     label:T("savePDF"),       run:()=>exportAs("PDF") },
+    { icon:IC.folder,  label:T("saveProject"),   run:()=>exportAs("JSON") },
+    "sep",
+    { icon:IC.printer, label:T("printProject"),  run:printPattern },
+  ]; }
+  function openMenu(btn, items){
+    closeAnyMenu();
+    const m=el("div","menu");
+    items.forEach(it=>{
+      if(it==="sep"){ m.appendChild(el("div","menu-sep")); return; }
+      const mi=el("button","menu-item",`${it.icon||""}<span>${it.label}</span>`);
+      mi.onclick=()=>{ closeAnyMenu(); it.run(); };
+      m.appendChild(mi);
+    });
+    document.body.appendChild(m);
+    const r=btn.getBoundingClientRect();
+    m.style.top=(r.bottom+6)+"px";
+    if(document.documentElement.dir==="rtl") m.style.right=(innerWidth-r.right)+"px";
+    else m.style.left=r.left+"px";
+    requestAnimationFrame(()=>m.classList.add("show"));
+    setTimeout(()=>document.addEventListener("pointerdown",onDocDown),0);
+  }
+  function onDocDown(e){ if(!e.target.closest(".menu")&&!e.target.closest("#projectBtn")) closeAnyMenu(); }
+  function closeAnyMenu(){ $$(".menu").forEach(m=>m.remove()); document.removeEventListener("pointerdown",onDocDown); }
   function techPack(){
     const pieces=Canvas.getPieces(); if(!pieces.length){toast(T("empty2d"));return;}
     const m=currentMeas();
@@ -418,6 +523,11 @@
   // ================= COMMAND PALETTE =================
   let cmdSel=0, cmdItems=[];
   function commands(){ return [
+    {t:T("newProject"),i:IC.newdoc,run:newProject},
+    {t:T("importProject"),i:IC.importf,run:importProject},
+    {t:T("savePDF"),i:IC.pdf,run:()=>exportAs("PDF")},
+    {t:T("exportDXF"),i:IC.download,run:()=>exportAs("DXF")},
+    {t:T("printProject"),i:IC.printer,run:printPattern},
     {t:T("view2d"),i:IC.grid,run:()=>setView("2d")},
     {t:T("view3d"),i:IC.cube,run:()=>setView("3d")},
     {t:T("autoGrade"),i:IC.spark,run:()=>{grade();toast(T("graded"));}},
@@ -476,7 +586,7 @@
       if(e.key==="Escape")closeModal("#cmdModal");
       return;
     }
-    if(e.key==="Escape")$$(".overlay.show").forEach(o=>o.classList.remove("show"));
+    if(e.key==="Escape"){ $$(".overlay.show").forEach(o=>o.classList.remove("show")); closeAnyMenu(); }
     // tool shortcuts
     const map={v:"select",p:"pen",l:"line",a:"arc",m:"measure",r:"rotate",s:"scale"};
     if(!meta&&map[e.key]&&document.activeElement.tagName!=="INPUT"&&document.activeElement.tagName!=="TEXTAREA")setTool(map[e.key]);
@@ -490,6 +600,7 @@
     // view toggle
     $$("#viewToggle button").forEach(b=>{ b.onclick=()=>setView(b.dataset.v); });
     // header buttons
+    $("#projectBtn").onclick=(e)=>{ e.stopPropagation(); openMenu($("#projectBtn"), projectMenuItems()); }; tip($("#projectBtn"),T("project"),T("projectMenu"));
     $("#cmdBtn").onclick=openCmd; tip($("#cmdBtn"),T("cmd")||"⌘K",T("tt_cmd"));
     $("#themeBtn").onclick=openThemePicker; tip($("#themeBtn"),T("theme"),T("tt_theme"));
     $("#langBtn").onclick=toggleLang; tip($("#langBtn"),T("language"),T("tt_lang"));

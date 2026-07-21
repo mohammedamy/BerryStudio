@@ -529,10 +529,79 @@ const Canvas = (() => {
     return s+"</svg>";
   }
 
+  // ---- DXF export (AutoCAD R12 ENTITIES; cm units, y-up) ----
+  function exportDXF(){
+    if(!pieces.length) return "";
+    const out=["0","SECTION","2","ENTITIES"];
+    const push=(...l)=>out.push(...l);
+    pieces.forEach(p=>{
+      push("0","LWPOLYLINE","8","CUT","90",String(p.outline.length),"70","1","43","0");
+      p.outline.forEach(pt=>push("10",pt[0].toFixed(3),"20",(-pt[1]).toFixed(3)));
+      if(p.grain && p.grain.length===2)
+        push("0","LINE","8","GRAIN","10",p.grain[0][0].toFixed(3),"20",(-p.grain[0][1]).toFixed(3),
+             "11",p.grain[1][0].toFixed(3),"21",(-p.grain[1][1]).toFixed(3));
+      (p.darts||[]).forEach(d=>{ for(let i=0;i<d.length-1;i++)
+        push("0","LINE","8","DART","10",d[i][0].toFixed(3),"20",(-d[i][1]).toFixed(3),
+             "11",d[i+1][0].toFixed(3),"21",(-d[i+1][1]).toFixed(3)); });
+    });
+    push("0","ENDSEC","0","EOF");
+    return out.join("\n");
+  }
+
+  // ---- PDF export (hand-built, valid PDF 1.4; vector cutting lines) ----
+  function exportPDF(){
+    if(!pieces.length) return null;
+    const PT = 28.3465;                 // points per cm
+    const all=pieces.flatMap(p=>p.outline);
+    const xs=all.map(p=>p[0]), ys=all.map(p=>p[1]);
+    const minX=Math.min(...xs), minY=Math.min(...ys), maxX=Math.max(...xs), maxY=Math.max(...ys);
+    const margin=28;
+    const W=(maxX-minX)*PT+margin*2, H=(maxY-minY)*PT+margin*2;
+    const Xn=x=>(x-minX)*PT+margin, Yn=y=>H-((y-minY)*PT+margin);
+    const X=x=>Xn(x).toFixed(2), Y=y=>Yn(y).toFixed(2);
+    let cs="0.75 w 0 0 0 RG 0 0 0 rg\n";
+    pieces.forEach(p=>{
+      p.outline.forEach((pt,i)=>{ cs+=`${X(pt[0])} ${Y(pt[1])} ${i?'l':'m'}\n`; });
+      cs+="h S\n";
+      if(p.grain && p.grain.length===2)
+        cs+=`${X(p.grain[0][0])} ${Y(p.grain[0][1])} m ${X(p.grain[1][0])} ${Y(p.grain[1][1])} l S\n`;
+      (p.darts||[]).forEach(d=>{ d.forEach((pt,i)=>cs+=`${X(pt[0])} ${Y(pt[1])} ${i?'l':'m'}\n`); cs+="S\n"; });
+      const cx=avg(p.outline.map(q=>q[0])), cy=avg(p.outline.map(q=>q[1]));
+      const label=String((p.name&&p.name.en)||"").replace(/[()\\]/g,"").replace(/[^\x20-\x7E]/g,"");
+      cs+=`BT /F1 9 Tf ${(Xn(cx)-label.length*2.4).toFixed(2)} ${Yn(cy).toFixed(2)} Td (${label}) Tj ET\n`;
+    });
+    const objs=[null,
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W.toFixed(2)} ${H.toFixed(2)}] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>`,
+      `<< /Length ${cs.length} >>\nstream\n${cs}endstream`,
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+    let pdf="%PDF-1.4\n"; const off=[];
+    for(let i=1;i<=5;i++){ off[i]=pdf.length; pdf+=`${i} 0 obj\n${objs[i]}\nendobj\n`; }
+    const xref=pdf.length;
+    pdf+="xref\n0 6\n0000000000 65535 f \n";
+    for(let i=1;i<=5;i++) pdf+=String(off[i]).padStart(10,"0")+" 00000 n \n";
+    pdf+=`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    return pdf;
+  }
+
+  // ---- project round-trip: load already-positioned pieces / clear all ----
+  function loadPieces(arr){
+    if(!Array.isArray(arr) || !arr.length) return false;
+    pushUndo();
+    pieces = arr.map((p,i)=>({
+      name:p.name, desc:p.desc||{en:"",ar:""},
+      outline:p.outline||[], darts:p.darts||[], notches:p.notches||[], grain:p.grain||[],
+      visible:p.visible!==false, color:p.color||["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][i%6],
+    }));
+    selected=-1; sketch=[]; fit(); return true;
+  }
+  function clearAll(){ pushUndo(); pieces=[]; sketch=[]; selected=-1; measurePts=[]; clickBuf=[]; userAdjusted=false; render(); }
+
   // Convert a world (cm) point to canvas CSS pixels — handy for hit-tests/tests.
   function screenOf(x,y){ return toScreen(x,y); }
 
   return { init, setTranslator, setPattern, getPieces, setTool, setOpt, getOpt, zoom, fit,
            doUndo, doRedo, getZoom, toggleVisible, selectPiece, clearSketch, render,
-           onZoomChange, exportSVG, screenOf };
+           onZoomChange, exportSVG, exportDXF, exportPDF, loadPieces, clearAll, screenOf };
 })();
