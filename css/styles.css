@@ -305,6 +305,24 @@ button { cursor: pointer; border: none; background: none; }
 .ai-preview img { width: 100%; max-height: 170px; object-fit: cover; display: block; border: 1px solid var(--line); border-radius: var(--r-md); }
 .ai-preview .ai-x { position: absolute; top: 7px; inset-inline-end: 7px; width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: var(--bg); font-size: 17px; line-height: 1; box-shadow: var(--shadow-1); }
 
+/* AI "thinking" stage checklist */
+.ai-status { display: none; margin-top: 10px; border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px; background: var(--panel-2); }
+.ai-status.show { display: block; animation: fade .2s var(--ease); }
+.ai-stage { display: flex; align-items: center; gap: 9px; padding: 5px 0; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.ai-stage .dot { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; transition: all var(--fast) var(--ease); }
+.ai-stage.active .dot { border-color: var(--brand); border-top-color: transparent; animation: v3dspin .7s linear infinite; }
+.ai-stage.done .dot { border-color: var(--ok); background: var(--ok); }
+.ai-stage.done .dot::after { content: ""; width: 4px; height: 7px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-1px,-1px); }
+.ai-stage.done, .ai-stage.active { color: var(--ink); }
+
+/* AI "detected" attributes panel */
+.ai-attrs { margin-top: 10px; border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.ai-attrs .aa-head { padding: 8px 12px; background: var(--panel-2); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-2); display: flex; align-items: center; justify-content: space-between; }
+.ai-attrs .aa-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; border-top: 1px solid var(--line-2); font-size: 12.5px; }
+.ai-attrs .aa-row b { font-weight: 600; color: var(--ink-2); }
+.ai-attrs .aa-row .aa-val { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+.ai-attrs .aa-swatch { width: 13px; height: 13px; border-radius: 4px; border: 1px solid rgba(0,0,0,.15); flex: none; }
+
 /* ============ TEXT TOOL EDITOR ============ */
 .text-editor {
   position: fixed; z-index: 220; width: 250px;

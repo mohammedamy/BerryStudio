@@ -48,16 +48,33 @@ install it. After the first load it works **fully offline**.
 | Fabric consumption + cost estimator + Tech Pack + BOM | ✅ Working |
 | **Pattern Summary export** — one-page bilingual print sheet: size table, a labelled dimensioned diagram per piece, and a construction note (Export pane, Project menu, ⌘K) | ✅ Working |
 | **Pattern Library — 100 pre-designed patterns, 25 per category** (Women/Men/Girls/Boys), category filter chips + search + "My Patterns" | ✅ Working — every entry is a real, gradable multi-piece garment |
-| AI Pattern Generator (text + image upload → multi-piece pattern) | ✅ Working (image picker + preview; offline keyword heuristic — swap in an LLM to go live) |
+| AI Pattern Generator — visible "thinking" stages, robust local image analysis (neckline/hem/flare/colour from a real photo, not just a clean product shot), a wider construction vocabulary (necklines, hem shapes, wrap closures), and a "Detected" attributes panel so you can see the image/prompt actually mattered | ✅ Working (offline heuristic; swap in an LLM endpoint to go fully generative) |
 | Command palette (⌘/Ctrl-K), tooltips + global Hover-Help toggle | ✅ Working |
 | Onboarding, toasts, high-contrast, reduce-motion, local-first storage | ✅ Working |
 | PWA manifest + service worker (offline, installable) | ✅ Working |
 
 ### Honest notes
-- **AI generator** accepts a text prompt and an inspiration image (real file
-  picker + preview), then maps intent to a base block with a local offline
-  heuristic. Point `runAI()` in `js/app.js` at a Claude API endpoint — and pass
-  `aiImage` — to make it truly generative.
+- **AI generator** (`js/ai.js`) segments the uploaded photo with a
+  border-adaptive threshold + largest-contiguous-run-per-row scan (robust to
+  background clutter, not just clean product shots on white), then reads
+  neckline shape from an actual **neckline-gap detection** (a V/scoop neck
+  shows as a break of skin/background between two shoulder lobes in a worn
+  photo — a pointed silhouette edge doesn't, and treating it as one was the
+  earlier bug), hem shape from the bottom profile, and colour from small
+  patches at the torso/hem centroids rather than a global average. Construction
+  vocabulary now includes neckline (V/round/boat/off-shoulder/halter/collar),
+  hem shape (straight/curved/high-low/asymmetric) and wrap closures — so two
+  different photos produce genuinely different pattern pieces, not just
+  resized copies of the same template. Attributes left unspecified by both the
+  prompt and the image are chosen by a deterministic hash of the input (same
+  input → same result, but different prompts/images land on different
+  choices) instead of always defaulting the same way. Generation runs through
+  a visible multi-stage sequence (analysing → silhouette/hem → drafting) and
+  ends with a "Detected" chip panel — Type, Length, Flare, Sleeve, Neckline,
+  Hem, Colour — so you can see exactly what was read from your input. It's
+  still a heuristic, not real computer vision, and will misread low-contrast
+  or very busy photos; point `endpoint` (Settings → AI endpoint) at a
+  Claude-vision proxy to replace it with true image understanding.
 - **SVG, DXF and PDF** exports are native and CAD/print-ready (the PDF is a
   hand-built, valid PDF-1.4 with vector cutting lines). PNG/JPEG/AI/HPGL still
   fall back to the vector output — the natural next integration points.

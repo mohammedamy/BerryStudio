@@ -92,6 +92,8 @@ const I18N = {
     aiDesc: "Describe a garment in plain words and generate a complete, multi-piece pattern with named pieces.",
     aiPlaceholder: "e.g. A-line summer dress with cap sleeves and a boat neckline…",
     aiUpload: "Upload inspiration image", generate: "Generate Pattern", generating: "Generating pattern…",
+    aiStageAnalyzing: "Analysing your image…", aiStageReadingText: "Reading your description…",
+    aiStageSilhouette: "Reading neckline, hem & silhouette…", aiStageDrafting: "Drafting pattern pieces…",
     // export
     exportTitle: "Print & Export", paperSize: "Paper Size", format: "Export Format",
     tiled: "Tiled home printing", regMarks: "Registration marks + assembly guide",
@@ -213,6 +215,8 @@ const I18N = {
     aiDesc: "اوصف القطعة بكلمات بسيطة وسيولّد باترونًا كاملًا متعدد القطع بأسماء واضحة.",
     aiPlaceholder: "مثال: فستان صيفي واسع بأكمام قصيرة وفتحة رقبة قارب…",
     aiUpload: "رفع صورة مرجعية", generate: "توليد الباترون", generating: "جارٍ توليد الباترون…",
+    aiStageAnalyzing: "جارٍ تحليل صورتك…", aiStageReadingText: "جارٍ قراءة وصفك…",
+    aiStageSilhouette: "قراءة فتحة الرقبة والحاشية والقصّة…", aiStageDrafting: "رسم قطع الباترون…",
     exportTitle: "الطباعة والتصدير", paperSize: "مقاس الورق", format: "صيغة التصدير",
     tiled: "طباعة منزلية مقسّمة", regMarks: "علامات المحاذاة + دليل التجميع",
     fabricCalc: "استهلاك القماش", costEst: "تقدير التكلفة",

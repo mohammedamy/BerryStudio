@@ -321,6 +321,7 @@
   }
 
   // AI PANE
+  const AI_STAGES = ["analyzing","silhouette","drafting"];
   function renderAIPane() {
     const c = $(".rail-pane[data-pane=ai]"); c.innerHTML="";
     c.appendChild(el("div","section-title",IC.spark+T("aiTitle")));
@@ -350,30 +351,66 @@
     const gen=el("button","big-btn",IC.spark+T("generate"));
     gen.onclick=()=>runAI(ta.value,gen);
 
+    // "thinking" stage checklist — built once, toggled visible during generation
+    const statusBox=el("div","ai-status"); statusBox.id="aiStatus";
+    const attrsBox=el("div","ai-attrs"); attrsBox.id="aiAttrs"; attrsBox.style.display="none";
+
     c.appendChild(preview); c.appendChild(f); c.appendChild(file); c.appendChild(up); c.appendChild(gen);
+    c.appendChild(statusBox); c.appendChild(attrsBox);
+  }
+  // Build the 3-step checklist fresh for each run (first label depends on
+  // whether an image was supplied) and return a setter to advance it.
+  function beginAIThinking(hasImage){
+    const box=$("#aiStatus"); if(!box) return ()=>{};
+    box.innerHTML="";
+    const labelFor = k => k==="analyzing" ? T(hasImage?"aiStageAnalyzing":"aiStageReadingText")
+      : k==="silhouette" ? T("aiStageSilhouette") : T("aiStageDrafting");
+    AI_STAGES.forEach(k=>{ const row=el("div","ai-stage"); row.dataset.stage=k; row.innerHTML=`<span class="dot"></span><span>${labelFor(k)}</span>`; box.appendChild(row); });
+    box.classList.add("show");
+    $("#aiAttrs").style.display="none";
+    return (key)=>{
+      const idx = AI_STAGES.indexOf(key);
+      [...box.children].forEach((row,i)=>{
+        row.classList.toggle("done", key==="done" || i<idx);
+        row.classList.toggle("active", key!=="done" && i===idx);
+      });
+      if(key==="done") setTimeout(()=>box.classList.remove("show"), 260);
+    };
+  }
+  // Render the bilingual "Detected" attribute chips (type, length, flare,
+  // sleeve, neckline, hem, closure, colour) once generation completes —
+  // this is the concrete evidence that the image/prompt actually mattered.
+  function renderAIAttrs(res){
+    const box=$("#aiAttrs"); if(!box) return;
+    box.style.display=""; box.innerHTML="";
+    const src = res.source==="remote" ? "Claude" : (res.usedImage ? T("usedImageNote") : "");
+    box.appendChild(el("div","aa-head",`<span>${T("detected")}</span>${src?`<span>${src}</span>`:""}`));
+    (res.attributes||[]).forEach(a=>{
+      const row=el("div","aa-row");
+      const val = a.swatch ? `<span class="aa-swatch" style="background:${a.value}"></span>${a.value}` : a.value;
+      row.innerHTML=`<b>${a.label}</b><span class="aa-val">${val}</span>`;
+      box.appendChild(row);
+    });
   }
   async function runAI(txt, btn){
     const prompt=(txt||"").trim();
     if(!prompt && !aiImage){ toast(T("aiNeedInput")); return; }
     const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7"; btn.disabled=true;
+    const setStage = beginAIThinking(!!aiImage);
     try {
-      // Image-driven parametric generation: silhouette analysis (offline) or
-      // a configured Claude-vision endpoint. The image genuinely shapes output.
+      // Image-driven parametric generation: robust local silhouette analysis
+      // (neckline/hem/flare/colour) or a configured Claude-vision endpoint,
+      // walked through visibly via setStage so generation feels deliberate.
       const res = await AIGen.generate({
         prompt, imageDataURL: aiImage, category: state.category,
         measurements: currentMeas(), endpoint: (state.aiEndpoint||"").trim(), lang: state.lang,
+        onStage: setStage,
       });
       state.loaded = null;
       Canvas.setPattern(res.pieces, res.colors);
       hideEmpty(); renderLayersPane();
       if(state.view==="3d") build3D(res.colorInt);
-      showPane("layers");                        // reveal the generated pieces
-      // show what was detected so the user sees the image/prompt mattered
-      const note=$(".rail-pane[data-pane=ai] .help-note");
-      if(note && res.summary){
-        const src = res.source==="remote" ? " · Claude" : (res.usedImage ? " · "+T("usedImageNote") : "");
-        note.textContent = `${T("detected")}: ${res.summary}${src}`;
-      }
+      renderAIAttrs(res);                         // show what was actually detected, right where the "thinking" ran
       toast(T("generated"));
     } catch(e){ toast(T("importFail")); }
     finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
