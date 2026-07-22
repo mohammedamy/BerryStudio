@@ -749,8 +749,26 @@
   let onbStep=0;
   const ONB=[["onbTitle1","onbBody1"],["onbTitle2","onbBody2"],["onbTitle3","onbBody3"],["onbTitle4","onbBody4"]];
   function startOnboarding(){ onbStep=0; $("#onbModal").classList.add("show"); renderOnb(); }
+  // default gradient hero (shirt mark) used on tutorial steps 2-4
+  const ONB_HERO_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2l4 3 4-3 5 4-3 4v11H6V10L3 6z"/></svg>';
+  function setOnbHero(){
+    const hero=$("#onbHero"); if(!hero) return;
+    if(onbStep===0){
+      // Intro tutorial screen → Berry Academy photo. Prefers a real photo
+      // (icons/intro.png / .jpg) if one is dropped in; otherwise uses the
+      // bundled branded recreation (icons/intro.svg).
+      hero.classList.add("photo"); hero.innerHTML="";
+      const img=el("img","onb-photo"); img.alt="Berry Academy";
+      const sources=["icons/intro.png","icons/intro.jpg","icons/intro.svg"];
+      let si=0;
+      const tryNext=()=>{ if(si>=sources.length){ hero.classList.remove("photo"); hero.innerHTML=ONB_HERO_SVG; return; } img.src=sources[si++]+"?v=1"; };
+      img.onerror=tryNext; tryNext();
+      hero.appendChild(img);
+    } else { hero.classList.remove("photo"); hero.innerHTML=ONB_HERO_SVG; }
+  }
   function renderOnb(){
     const [t,b]=ONB[onbStep];
+    setOnbHero();
     $("#onbTitle").textContent=T(t); $("#onbBody").textContent=T(b);
     $("#onbDots").innerHTML=ONB.map((_,i)=>`<span class="onb-dot ${i===onbStep?"active":""}"></span>`).join("");
     $("#onbNext").textContent = onbStep===ONB.length-1?T("getStarted"):T("next");

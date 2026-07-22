@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 700" width="600" height="700">
+  <defs>
+    <linearGradient id="io" x1="0.1" y1="0.05" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#FFD15C"/><stop offset="0.45" stop-color="#F7941D"/><stop offset="1" stop-color="#F15A24"/>
+    </linearGradient>
+    <linearGradient id="ib" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#9C1C8E"/><stop offset="0.4" stop-color="#E6117E"/><stop offset="1" stop-color="#F5476A"/>
+    </linearGradient>
+    <linearGradient id="ig" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".55"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="600" height="700" fill="#000000"/>
+
+  <!-- swirl B mark -->
+  <g transform="translate(154,26) scale(0.57)">
+    <path d="M300 112 C 178 92, 96 168, 96 264 C 96 368, 176 432, 286 430 C 372 428, 430 372, 424 300"
+          fill="none" stroke="url(#io)" stroke-width="46" stroke-linecap="round"/>
+    <path d="M300 112 C 200 96, 128 150, 110 232" fill="none" stroke="url(#ig)" stroke-width="14" stroke-linecap="round"/>
+    <path d="M262 108 C 356 112, 424 168, 416 244 C 410 300, 356 322, 300 320 C 372 340, 404 392, 320 452 C 356 372, 300 336, 300 288 C 246 280, 236 176, 262 108 Z"
+          fill="url(#ib)"/>
+    <path d="M262 108 C 356 112, 424 168, 416 244" fill="none" stroke="#7B1FA2" stroke-width="12" stroke-linecap="round" opacity=".75"/>
+    <path d="M286 130 C 344 138, 388 176, 392 226" fill="none" stroke="url(#ig)" stroke-width="10" stroke-linecap="round"/>
+  </g>
+
+  <!-- wordmark (sized to stay within the 600px canvas) -->
+  <g font-family="'Segoe UI', Inter, Arial, sans-serif" font-weight="800" font-style="italic" text-anchor="middle">
+    <text x="300" y="452" font-size="44" letter-spacing="0.5">
+      <tspan fill="#E6117E">B</tspan><tspan fill="#ffffff">ERRY </tspan><tspan fill="#F0B419">A</tspan><tspan fill="#ffffff">CADEMY</tspan>
+    </text>
+  </g>
+
+  <!-- Arabic subtitle + phone numbers -->
+  <g font-family="'Cairo','Segoe UI', Arial, sans-serif" text-anchor="middle" fill="#e9e9e9">
+    <text x="300" y="536" font-size="34" font-weight="700" direction="rtl">اكاديميه بيري للكورسات</text>
+    <text x="300" y="592" font-size="34" font-family="Inter, Arial, sans-serif" letter-spacing="2">01005592393</text>
+    <text x="300" y="638" font-size="34" font-family="Inter, Arial, sans-serif" letter-spacing="2">01110644477</text>
+  </g>
+</svg>
