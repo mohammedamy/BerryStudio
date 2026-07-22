@@ -28,6 +28,22 @@ const Canvas = (() => {
   let onPick = () => {};
   let getT = k => k;                            // translator injected
 
+  // ---- construction geometry: points, referential lines/arcs/circles,
+  // custom parametric variables, "promote to pattern piece", trace image ----
+  let points = [];                    // {id,name,x,y,xExpr,yExpr}
+  let pointSeq = 1;
+  let cons = [];                      // {id,kind:'line'|'arc'|'circle', a, b, ctrl?} — a/b/ctrl are {pid} or {x,y}
+  let consSeq = 1;
+  let dragPoint = null;                // {id, ox, oy}
+  let promoteBuf = [];                 // ordered point ids while using the Create Pattern Piece tool
+  let pendingPromoteOutline = null;
+  let onPromoteReq = () => {};         // app callback: (outlinePts) => opens the name prompt
+  let onPointReq = () => {};           // app callback: ({point,cx,cy}) => opens the point rename/formula editor
+  let variables = {};                  // name -> formula string
+  let measureProvider = () => ({});    // app-injected: () => current measurement object
+  let bg = null;                       // trace image {img, dataURL, x, y, scale, opacity, visible}
+  let onCalibReq = () => {};           // app callback: (measuredDistCm) => prompts for the true distance
+
   const CSS = k => getComputedStyle(document.body).getPropertyValue(k).trim();
 
   function init(canvasEl, translator, pickCb) {
@@ -88,10 +104,10 @@ const Canvas = (() => {
   function getPieces(){ return pieces; }
 
   // ---- undo / redo ----
-  function snapshot(){ return JSON.stringify({ pieces, sketch, texts }); }
+  function snapshot(){ return JSON.stringify({ pieces, sketch, texts, points, cons }); }
   function pushUndo(){ undo.push(snapshot()); if (undo.length>60) undo.shift(); redo.length=0; }
-  function doUndo(){ if(!undo.length) return; redo.push(snapshot()); const s=JSON.parse(undo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; selected=-1; render(); }
-  function doRedo(){ if(!redo.length) return; undo.push(snapshot()); const s=JSON.parse(redo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; render(); }
+  function doUndo(){ if(!undo.length) return; redo.push(snapshot()); const s=JSON.parse(undo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; promoteBuf=[]; render(); }
+  function doRedo(){ if(!redo.length) return; undo.push(snapshot()); const s=JSON.parse(redo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; promoteBuf=[]; render(); }
 
   // ---- seam allowance offset (outward polygon offset) ----
   function offsetPoly(poly, d) {
@@ -223,15 +239,69 @@ const Canvas = (() => {
     if (!ctx) return;
     const W = cv.width/dpr, H = cv.height/dpr;
     ctx.clearRect(0,0,W,H);
+    drawBackground();
     if (opts.grid) drawGrid(W,H);
     drawRulers(W,H);
     pieces.forEach((p,i)=>drawPiece(p,i));
     if (selected>=0 && pieces[selected] && pieces[selected].visible && SHOW_HANDLES.has(tool)) drawHandles(pieces[selected]);
+    drawConstruction();
     drawSketch();
     drawTexts();
     drawMeasure();
     drawClickPreview();
     drawSnapMark();
+  }
+
+  // ---- trace-over background reference image ----
+  function drawBackground(){
+    if (!bg || !bg.visible || !bg.img) return;
+    const w = bg.img.naturalWidth*bg.scale, h = bg.img.naturalHeight*bg.scale;
+    const [sx,sy] = toScreen(bg.x, bg.y);
+    ctx.save(); ctx.globalAlpha = bg.opacity;
+    ctx.drawImage(bg.img, sx, sy, w*view.scale, h*view.scale);
+    ctx.restore();
+  }
+
+  // ---- construction geometry: referential points + lines/arcs/circles ----
+  function resolveRef(ref){
+    if (!ref) return [0,0];
+    if (ref.pid!=null){ const p=getPointById(ref.pid); return p ? [p.x,p.y] : [0,0]; }
+    return [ref.x, ref.y];
+  }
+  function drawConstruction(){
+    const brand = CSS("--brand"), ok = CSS("--ok");
+    cons.forEach(c=>{
+      const A=resolveRef(c.a), B=resolveRef(c.b);
+      const sa=toScreen(A[0],A[1]), sb=toScreen(B[0],B[1]);
+      ctx.strokeStyle=brand; ctx.lineWidth=1.4; ctx.setLineDash(c.kind==="circle"?[]:[]);
+      if (c.kind==="line"){ ctx.beginPath(); ctx.moveTo(sa[0],sa[1]); ctx.lineTo(sb[0],sb[1]); ctx.stroke(); }
+      else if (c.kind==="arc"){
+        ctx.beginPath(); ctx.moveTo(sa[0],sa[1]);
+        if (c.ctrl){ const C=resolveRef(c.ctrl); const sc=toScreen(C[0],C[1]);
+          ctx.quadraticCurveTo(2*sc[0]-(sa[0]+sb[0])/2, 2*sc[1]-(sa[1]+sb[1])/2, sb[0],sb[1]); }
+        else ctx.lineTo(sb[0],sb[1]);
+        ctx.stroke();
+      } else if (c.kind==="circle"){
+        const r = Math.hypot(B[0]-A[0], B[1]-A[1]) * view.scale;
+        ctx.beginPath(); ctx.arc(sa[0],sa[1], r, 0, Math.PI*2); ctx.stroke();
+      }
+    });
+    points.forEach(p=>{
+      const [x,y] = toScreen(p.x,p.y);
+      const inBuf = promoteBuf.includes(p.id);
+      ctx.fillStyle = inBuf ? ok : brand;
+      ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fill();
+      ctx.lineWidth=1.5; ctx.strokeStyle=CSS("--panel"); ctx.stroke();
+      ctx.fillStyle=CSS("--ink"); ctx.font="600 10px Inter, sans-serif"; ctx.textAlign="start";
+      ctx.fillText(p.name, x+6, y-5);
+    });
+    // rubber-band preview for the in-progress circle tool
+    if (drawing && drawing.tool==="circle"){
+      const sc=toScreen(drawing.center[0],drawing.center[1]);
+      const r=Math.hypot(drawing.rim[0]-drawing.center[0], drawing.rim[1]-drawing.center[1])*view.scale;
+      ctx.strokeStyle=brand; ctx.setLineDash([5,4]); ctx.lineWidth=1.4;
+      ctx.beginPath(); ctx.arc(sc[0],sc[1],r,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+    }
   }
 
   // ---- text annotations ----
@@ -391,17 +461,28 @@ const Canvas = (() => {
     const all = drawing? sketch.concat([drawing]) : sketch;
     all.forEach(st=>{
       // Arc: quadratic curve bowing through the bulge point (ctrl). While the
-      // bulge isn't set yet it previews as the straight chord.
-      if(st.tool==="arc"){
+      // bulge isn't set yet it previews as the straight chord. "conarc" is the
+      // point-aware construction-arc tool sharing this same preview logic.
+      if(st.tool==="arc" || st.tool==="conarc"){
         if(st.pts.length<2) return;
+        const isCon = st.tool==="conarc";
         const [a,b]=st.pts.map(p=>toScreen(p[0],p[1]));
+        ctx.strokeStyle = isCon ? CSS("--brand") : CSS("--accent");
         ctx.beginPath(); ctx.moveTo(a[0],a[1]);
         if(st.ctrl){ const bl=toScreen(st.ctrl[0],st.ctrl[1]);
           // control so the curve passes through the bulge at its midpoint
           ctx.quadraticCurveTo(2*bl[0]-(a[0]+b[0])/2, 2*bl[1]-(a[1]+b[1])/2, b[0],b[1]); }
         else ctx.lineTo(b[0],b[1]);
         ctx.stroke();
-        [a,b].forEach(p=>{ctx.fillStyle=CSS("--accent");ctx.beginPath();ctx.arc(p[0],p[1],3,0,7);ctx.fill();});
+        [a,b].forEach(p=>{ctx.fillStyle=isCon?CSS("--brand"):CSS("--accent");ctx.beginPath();ctx.arc(p[0],p[1],3,0,7);ctx.fill();});
+        return;
+      }
+      // Construction line preview (point-aware Line tool) — brand-coloured
+      // to visually distinguish real construction geometry from sketch marks.
+      if(st.tool==="conline"){
+        if(st.pts.length<2) return;
+        const [a,b]=st.pts.map(p=>toScreen(p[0],p[1]));
+        ctx.strokeStyle=CSS("--brand"); ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke();
         return;
       }
       // Filled polygon: closed shape, filled while drawn and once committed.
@@ -457,6 +538,62 @@ const Canvas = (() => {
       cv.setPointerCapture(e.pointerId);
       const [wx,wy]=toWorld(e.offsetX,e.offsetY);
       if (e.button===1 || e.spaceKey || tool==="pan"){ pan={x:e.offsetX,y:e.offsetY,vx:view.x,vy:view.y}; userAdjusted=true; return; }
+
+      // (0) construction points take priority when dragging with Select/Move
+      if (tool==="select" || tool==="move"){
+        const pid = hitPointScreen(e.offsetX, e.offsetY);
+        if (pid!=null){ pushUndo(); dragPoint={id:pid, ox:wx, oy:wy}; return; }
+      }
+
+      // construction tools: point / line / arc / circle / promote-to-piece / calibrate
+      if (tool==="point"){ const s=snapConstruction(wx,wy); if(s.pid==null) addPoint(s.x,s.y); render(); return; }
+      if (tool==="conline"){
+        const s=snapConstruction(wx,wy);
+        drawing={tool:"conline", pts:[[s.x,s.y],[s.x,s.y]], refs:[refFromSnap(s), null]};
+        return;
+      }
+      if (tool==="conarc"){
+        if (!drawing || drawing.tool!=="conarc"){
+          const s=snapConstruction(wx,wy);
+          drawing={tool:"conarc", phase:1, pts:[[s.x,s.y],[s.x,s.y]], refs:[refFromSnap(s), null], ctrl:null, ctrlRef:null};
+        } else if (drawing.phase===1){
+          const s=snapConstruction(wx,wy);
+          drawing.pts[1]=[s.x,s.y]; drawing.refs[1]=refFromSnap(s); drawing.phase=2;
+        } else {
+          const pid=nearestPointId(wx,wy); drawing.ctrl=[wx,wy];
+          drawing.ctrlRef = pid!=null ? {pid} : {x:wx,y:wy};
+          pushUndo(); cons.push({id:consSeq++, kind:"arc", a:drawing.refs[0], b:drawing.refs[1], ctrl:drawing.ctrlRef});
+          drawing=null;
+        }
+        render(); return;
+      }
+      if (tool==="circle"){
+        if (!drawing || drawing.tool!=="circle"){
+          const s=snapConstruction(wx,wy);
+          drawing={tool:"circle", center:[s.x,s.y], centerRef:refFromSnap(s), rim:[s.x,s.y]};
+        } else {
+          const s=snapConstruction(wx,wy);
+          pushUndo(); cons.push({id:consSeq++, kind:"circle", a:drawing.centerRef, b:refFromSnap(s)});
+          drawing=null;
+        }
+        render(); return;
+      }
+      if (tool==="promote"){
+        const pid = hitPointScreen(e.offsetX, e.offsetY);
+        if (pid==null) return;
+        if (promoteBuf.length>=3 && pid===promoteBuf[0]){
+          pendingPromoteOutline = promoteBuf.map(id=>{ const p=getPointById(id); return [p.x,p.y]; });
+          onPromoteReq(pendingPromoteOutline.slice());
+          promoteBuf=[];
+        } else if (!promoteBuf.includes(pid)) promoteBuf.push(pid);
+        render(); return;
+      }
+      if (tool==="calib"){
+        if (!bg) return;
+        clickBuf.push([wx,wy]);
+        if (clickBuf.length===2){ onCalibReq(Math.hypot(clickBuf[1][0]-clickBuf[0][0], clickBuf[1][1]-clickBuf[0][1])); clickBuf=[]; }
+        render(); return;
+      }
 
       // (1) grab a selection handle (rotate / scale corner / anchor point)
       if (selected>=0 && pieces[selected] && !pieces[selected].locked && SHOW_HANDLES.has(tool)){
@@ -544,11 +681,20 @@ const Canvas = (() => {
       snapMark=null;
 
       if (dragText){ const t=texts[dragText.i]; t.x+=wx-dragText.ox; t.y+=wy-dragText.oy; dragText.ox=wx; dragText.oy=wy; render(); return; }
+      if (dragPoint){ const p=getPointById(dragPoint.id); if(p){ p.x+=wx-dragPoint.ox; p.y+=wy-dragPoint.oy; p.xExpr=null; p.yExpr=null; } dragPoint.ox=wx; dragPoint.oy=wy; render(); return; }
       if (dragPiece){ const dx=wx-dragPiece.ox, dy=wy-dragPiece.oy; movePiece(dragPiece.i,dx,dy); dragPiece.ox=wx; dragPiece.oy=wy; render(); return; }
       if (drawing && drawing.tool==="line"){ drawing.pts[1]=[snap(wx),snap(wy)]; render(); return; }
       if (drawing && drawing.tool==="arc"){ if(drawing.phase===1) drawing.pts[1]=[snap(wx),snap(wy)]; else drawing.ctrl=[wx,wy]; render(); return; }
+      if (drawing && drawing.tool==="conline"){ const s=snapConstruction(wx,wy); drawing.pts[1]=[s.x,s.y]; drawing.refs[1]=refFromSnap(s); render(); return; }
+      if (drawing && drawing.tool==="conarc"){
+        if(drawing.phase===1){ const s=snapConstruction(wx,wy); drawing.pts[1]=[s.x,s.y]; drawing.refs[1]=refFromSnap(s); }
+        else { drawing.ctrl=[wx,wy]; const pid=nearestPointId(wx,wy); snapMark = pid!=null ? [getPointById(pid).x,getPointById(pid).y] : null; }
+        render(); return;
+      }
+      if (drawing && drawing.tool==="circle"){ const s=snapConstruction(wx,wy); drawing.rim=[s.x,s.y]; render(); return; }
+      if (tool==="point"){ snapConstruction(wx,wy); render(); return; }
       if (drawing && drawing.tool==="free"){ drawing.pts.push([wx,wy]); render(); return; }
-      if (clickBuf.length && (tool==="knife"||tool==="grain")){ render(); return; }
+      if (clickBuf.length && (tool==="knife"||tool==="grain"||tool==="calib")){ render(); return; }
       if (drawing && drawing.tool==="polygon"){ render(); return; }
 
       // hover cursor feedback over handles
@@ -562,11 +708,19 @@ const Canvas = (() => {
       if (edit){ edit=null; snapMark=null; render(); }
       // line & freehand commit on release; arc & pen are click-driven
       if (drawing && (drawing.tool==="line"||drawing.tool==="free")){ if(drawing.pts.length>1){ pushUndo(); sketch.push(drawing);} drawing=null; render(); }
-      pan=null; dragPiece=null; dragText=null;
+      // construction line commits on release too (a single drag, like the sketch Line tool)
+      if (drawing && drawing.tool==="conline"){
+        const [a,b]=drawing.pts;
+        if (Math.hypot(b[0]-a[0], b[1]-a[1]) > 0.25){ pushUndo(); cons.push({id:consSeq++, kind:"line", a:drawing.refs[0], b:drawing.refs[1]}); }
+        drawing=null; render();
+      }
+      pan=null; dragPiece=null; dragText=null; dragPoint=null;
     });
     cv.addEventListener("dblclick", (e)=>{
       if(drawing&&drawing.tool==="pen"){ if(drawing.pts.length>1){pushUndo(); sketch.push(drawing);} drawing=null; render(); return; }
       if(drawing&&drawing.tool==="polygon"){ if(drawing.pts.length>=3){pushUndo(); sketch.push(drawing);} drawing=null; render(); return; }
+      const pid=hitPointScreen(e.offsetX,e.offsetY);
+      if(pid!=null){ onPointReq({ point:getPointById(pid), cx:e.clientX, cy:e.clientY }); return; }
       const ti=hitText(e.offsetX,e.offsetY);
       if(ti>=0) onText({ mode:"edit", item:texts[ti], cx:e.clientX, cy:e.clientY });
     });
@@ -614,9 +768,13 @@ const Canvas = (() => {
   function setTool(t){
     tool=t; clickBuf=[]; edit=null; snapMark=null;
     if(t!=="measure")measurePts=[];
+    if(t!=="promote"){ promoteBuf=[]; pendingPromoteOutline=null; }
     if(t!=="pen"&&drawing&&drawing.tool==="pen"){sketch.push(drawing);drawing=null;}
     if(t!=="polygon"&&drawing&&drawing.tool==="polygon"){ if(drawing.pts.length>=3)sketch.push(drawing); drawing=null; }
     if(drawing&&drawing.tool==="arc"&&t!=="arc"){ drawing=null; }   // drop an unfinished arc
+    if(drawing&&drawing.tool==="conarc"&&t!=="conarc"){ drawing=null; }
+    if(drawing&&drawing.tool==="conline"&&t!=="conline"){ drawing=null; }
+    if(drawing&&drawing.tool==="circle"&&t!=="circle"){ drawing=null; }
     cv.style.cursor = (t==="pan")?"grab":(t==="select"||t==="move")?"default":(t==="rotate")?"grab":(t==="text")?"text":"crosshair";
     render();
   }
@@ -671,6 +829,180 @@ const Canvas = (() => {
   function removePiece(i){ if(!pieces[i]) return false; pushUndo(); pieces.splice(i,1); if(selected>=pieces.length) selected=-1; render(); return true; }
   function renamePiece(i, name){ if(!pieces[i]) return false; pushUndo(); pieces[i].name={ ...pieces[i].name, ...name }; render(); return true; }
   function setPieceProps(i, props){ if(!pieces[i]) return false; Object.assign(pieces[i], props); render(); return true; }
+
+  // ============================================================
+  // CONSTRUCTION GEOMETRY — points, referential lines/arcs/circles,
+  // custom parametric variables, "promote to pattern piece", trace image.
+  //
+  // Points are named, draggable anchors. Lines/arcs/circles reference a
+  // point by id (not a frozen coordinate) when drawn starting/ending near
+  // one, so dragging a point updates every segment attached to it — real
+  // associative (parametric) geometry, not a static sketch.
+  //
+  // "Create Pattern Piece" walks a closed loop of existing points and
+  // SNAPSHOTS their current resolved coordinates into a normal, independent
+  // pattern piece (colourable, lockable, exportable, gradable like any other
+  // layer). It is a one-time promotion, not a live link — once a piece is
+  // created, moving the source points no longer reshapes it, the same way
+  // cutting fabric from a paper draft doesn't un-cut if you redraw the draft.
+  // ============================================================
+
+  // ---- tiny safe formula evaluator (+,-,*,/, parens, named lookups) ----
+  // Deliberately not eval()/Function() — user formulas never run as code.
+  function tokenizeExpr(src){
+    const re = /\s*([A-Za-z_][A-Za-z0-9_]*|\d+\.?\d*|\.\d+|[()+\-*/])/g;
+    const toks=[]; let m;
+    while((m = re.exec(src))) toks.push(m[1]);
+    return toks;
+  }
+  function evalExpr(src, lookup){
+    const toks=tokenizeExpr(String(src)); let pos=0;
+    const peek=()=>toks[pos]; const next=()=>toks[pos++];
+    function parseExpr(){ let v=parseTerm(); while(peek()==="+"||peek()==="-"){ const op=next(); const r=parseTerm(); v = op==="+"?v+r:v-r; } return v; }
+    function parseTerm(){ let v=parseUnary(); while(peek()==="*"||peek()==="/"){ const op=next(); const r=parseUnary(); v = op==="*"?v*r:v/r; } return v; }
+    function parseUnary(){ if(peek()==="-"){ next(); return -parseUnary(); } if(peek()==="+"){ next(); return parseUnary(); } return parseAtom(); }
+    function parseAtom(){
+      const t=next();
+      if(t===undefined) throw new Error("unexpected end of formula");
+      if(t==="("){ const v=parseExpr(); if(next()!==")") throw new Error("expected )"); return v; }
+      if(/^[0-9.]/.test(t)) return parseFloat(t);
+      const v=lookup(t);
+      if(v==null || isNaN(v)) throw new Error("unknown name: "+t);
+      return v;
+    }
+    if(!toks.length) throw new Error("empty formula");
+    const result=parseExpr();
+    if(pos<toks.length) throw new Error("unexpected token: "+toks[pos]);
+    if(!isFinite(result)) throw new Error("invalid result");
+    return result;
+  }
+
+  // ---- custom parametric variables (name -> formula string) ----
+  function resolveVar(name, seen){
+    seen = seen || new Set();
+    if(seen.has(name)) throw new Error("circular reference: "+name);
+    if(!(name in variables)) return null;
+    seen.add(name);
+    return evalExpr(variables[name], n => lookupCtx(n, seen));
+  }
+  function lookupCtx(n, seen){
+    if(n in variables) return resolveVar(n, seen);
+    const m = measureProvider() || {};
+    if(n in m) return +m[n];
+    return null;
+  }
+  function setVariable(name, formula){
+    if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error("invalid variable name");
+    const prev = variables[name];
+    variables[name] = formula;
+    try { resolveVar(name); }
+    catch(e){ if(prev!=null) variables[name]=prev; else delete variables[name]; throw e; }
+    recomputeConstruction(); return true;
+  }
+  function removeVariable(name){ delete variables[name]; recomputeConstruction(); }
+  function getVariables(){ return { ...variables }; }
+  function setMeasureProvider(fn){ measureProvider = fn || (()=>({})); }
+  function recomputeConstruction(){
+    points.forEach(p=>{
+      try{ if(p.xExpr) p.x = evalExpr(p.xExpr, n=>lookupCtx(n)); }catch(e){}
+      try{ if(p.yExpr) p.y = evalExpr(p.yExpr, n=>lookupCtx(n)); }catch(e){}
+    });
+    render();
+  }
+
+  // ---- construction points ----
+  function addPoint(wx,wy,name){
+    pushUndo();
+    const id = pointSeq++;
+    points.push({ id, name: name||("P"+id), x:wx, y:wy, xExpr:null, yExpr:null });
+    render(); return id;
+  }
+  function removePoint(id){
+    pushUndo();
+    points = points.filter(p=>p.id!==id);
+    cons = cons.filter(c=> !(c.a&&c.a.pid===id) && !(c.b&&c.b.pid===id) && !(c.ctrl&&c.ctrl.pid===id));
+    render();
+  }
+  function getPointById(id){ return points.find(p=>p.id===id); }
+  function getPoints(){ return points; }
+  function setPointName(id,name){ const p=getPointById(id); if(!p) return false; pushUndo(); p.name=name; render(); return true; }
+  function setPointXY(id,x,y){ const p=getPointById(id); if(!p) return false; pushUndo(); p.x=+x; p.y=+y; p.xExpr=null; p.yExpr=null; render(); return true; }
+  // Returns {ok,error} — formulas may reference other variables (by name) and
+  // the live measurement set (chest, waist, hips, shoulder, backLen, sleeve,
+  // neck, bicep, inseam, thigh, height), e.g. "chest/8 + 2".
+  function onPointRequest(cb){ onPointReq = cb || (()=>{}); }
+  function setPointFormula(id, xExpr, yExpr){
+    const p=getPointById(id); if(!p) return {ok:false,error:"no such point"};
+    try{
+      const nx = xExpr ? evalExpr(xExpr, n=>lookupCtx(n)) : p.x;
+      const ny = yExpr ? evalExpr(yExpr, n=>lookupCtx(n)) : p.y;
+      pushUndo(); p.xExpr=xExpr||null; p.yExpr=yExpr||null; p.x=nx; p.y=ny; render();
+      return {ok:true};
+    } catch(e){ return {ok:false, error:e.message}; }
+  }
+  function nearestPointId(wx,wy,thrPx=10){
+    if(!opts.snap) return null;
+    const thr=thrPx/view.scale; let best=null,bd=thr;
+    points.forEach(p=>{ const d=Math.hypot(p.x-wx,p.y-wy); if(d<bd){bd=d;best=p.id;} });
+    return best;
+  }
+  function hitPointScreen(sx,sy,thr=10){
+    for(let i=points.length-1;i>=0;i--){ const [x,y]=toScreen(points[i].x,points[i].y); if(Math.hypot(x-sx,y-sy)<=thr) return points[i].id; }
+    return null;
+  }
+  // Snap a raw world point to a nearby construction point (for the drafting
+  // tools below); falls back to grid snap. Reuses the shared snap-ring mark.
+  function snapConstruction(wx,wy){
+    const pid=nearestPointId(wx,wy);
+    if(pid!=null){ const p=getPointById(pid); snapMark=[p.x,p.y]; return {x:p.x,y:p.y,pid}; }
+    snapMark=null;
+    return {x:snap(wx), y:snap(wy), pid:null};
+  }
+  const refFromSnap = s => s.pid!=null ? {pid:s.pid} : {x:s.x, y:s.y};
+
+  // ---- construction lines / arcs / circles (referential) ----
+  function getCons(){ return cons; }
+  function removeCons(id){ pushUndo(); cons=cons.filter(c=>c.id!==id); render(); }
+
+  // ---- "Create Pattern Piece": promote a closed loop of points ----
+  function onPromoteRequest(cb){ onPromoteReq = cb || (()=>{}); }
+  function finishPromotePiece(nameEn, nameAr){
+    if(!pendingPromoteOutline || pendingPromoteOutline.length<3) return false;
+    pushUndo();
+    const outline = pendingPromoteOutline; pendingPromoteOutline=null;
+    const cx=avg(outline.map(p=>p[0])), yTop=Math.min(...outline.map(p=>p[1])), yBot=Math.max(...outline.map(p=>p[1]));
+    pieces.push({
+      name:{ en:nameEn||"New Piece", ar:nameAr||"قطعة جديدة" },
+      desc:{ en:"Created from construction geometry.", ar:"تم إنشاؤها من هندسة الإنشاء." },
+      outline, darts:[], notches:[], grain:[[cx,yTop+2],[cx,yBot-2]],
+      visible:true, locked:false,
+      color:["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][pieces.length%6],
+    });
+    selected=pieces.length-1; render(); return true;
+  }
+  function cancelPromote(){ pendingPromoteOutline=null; promoteBuf=[]; render(); }
+
+  // ---- trace-over background reference image ----
+  function setBackgroundImage(dataURL){
+    return new Promise(resolve=>{
+      const img = new Image();
+      img.onload = () => {
+        const scale = 60/(img.naturalWidth||800);   // default: image ≈ 60cm wide
+        bg = { img, dataURL, x:0, y:0, scale, opacity:0.55, visible:true };
+        render(); resolve(true);
+      };
+      img.onerror = () => resolve(false);
+      img.src = dataURL;
+    });
+  }
+  function setBgOpacity(v){ if(bg) bg.opacity=v; render(); }
+  function setBgVisible(v){ if(bg) bg.visible=v; render(); }
+  function removeBackground(){ bg=null; render(); }
+  function hasBackground(){ return !!bg; }
+  function getBgOpacity(){ return bg?bg.opacity:0.55; }
+  function moveBackground(dx,dy){ if(bg){ bg.x+=dx; bg.y+=dy; render(); } }
+  function onCalibrationRequest(cb){ onCalibReq = cb || (()=>{}); }
+  function applyCalibration(realCm, measuredDist){ if(!bg || !measuredDist) return; bg.scale *= realCm/measuredDist; render(); }
 
   // ---- DXF export (AutoCAD R12 ENTITIES; cm units, y-up) ----
   function exportDXF(){
@@ -729,7 +1061,7 @@ const Canvas = (() => {
   }
 
   // ---- project round-trip: load already-positioned pieces / clear all ----
-  function loadPieces(arr, txts){
+  function loadPieces(arr, txts, pts, consArr){
     if(!Array.isArray(arr) || !arr.length) return false;
     pushUndo();
     pieces = arr.map((p,i)=>({
@@ -739,9 +1071,16 @@ const Canvas = (() => {
       color:p.color||["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][i%6],
     }));
     texts = Array.isArray(txts) ? txts.map(t=>({ ...t, id: t.id || textSeq++ })) : [];
-    selected=-1; sketch=[]; fit(); return true;
+    points = Array.isArray(pts) ? pts.map(p=>({ xExpr:null, yExpr:null, ...p, id: p.id || pointSeq++ })) : [];
+    cons = Array.isArray(consArr) ? consArr.map(c=>({ ...c, id: c.id || consSeq++ })) : [];
+    variables = {};
+    selected=-1; sketch=[]; promoteBuf=[]; pendingPromoteOutline=null; fit(); return true;
   }
-  function clearAll(){ pushUndo(); pieces=[]; sketch=[]; texts=[]; selected=-1; measurePts=[]; clickBuf=[]; userAdjusted=false; render(); }
+  function clearAll(){
+    pushUndo(); pieces=[]; sketch=[]; texts=[]; points=[]; cons=[]; bg=null; variables={};
+    selected=-1; measurePts=[]; clickBuf=[]; promoteBuf=[]; pendingPromoteOutline=null;
+    userAdjusted=false; render();
+  }
 
   // Convert a world (cm) point to canvas CSS pixels — handy for hit-tests/tests.
   function screenOf(x,y){ return toScreen(x,y); }
@@ -751,5 +1090,11 @@ const Canvas = (() => {
            selectPiece, clearSketch, render,
            addText, updateText, removeText, getTexts, onTextRequest,
            addPiece, removePiece, renamePiece, setPieceProps,
-           onZoomChange, exportSVG, exportDXF, exportPDF, loadPieces, clearAll, screenOf };
+           onZoomChange, exportSVG, exportDXF, exportPDF, loadPieces, clearAll, screenOf,
+           // construction geometry
+           addPoint, removePoint, getPointById, getPoints, setPointName, setPointXY, setPointFormula, onPointRequest,
+           getCons, removeCons, onPromoteRequest, finishPromotePiece, cancelPromote,
+           setVariable, removeVariable, getVariables, setMeasureProvider, recomputeConstruction, evalExpr,
+           setBackgroundImage, setBgOpacity, setBgVisible, removeBackground, hasBackground, getBgOpacity,
+           moveBackground, onCalibrationRequest, applyCalibration };
 })();

@@ -48,6 +48,7 @@ install it. After the first load it works **fully offline**.
 | Fabric consumption + cost estimator + Tech Pack + BOM | ✅ Working |
 | **Pattern Summary export** — one-page bilingual print sheet: size table, a labelled dimensioned diagram per piece, and a construction note (Export pane, Project menu, ⌘K) | ✅ Working |
 | **Pattern Library — 100 pre-designed patterns, 25 per category** (Women/Men/Girls/Boys), category filter chips + search + "My Patterns" | ✅ Working — every entry is a real, gradable multi-piece garment |
+| **Construction tools** — real drafting Point/Line/Arc/Circle tools that snap to and stay live-linked to named points, "Create Pattern Piece" to promote a closed point loop into a real piece, custom parametric **Variables** (named formulas referencing other variables and body measurements, reusable in any point's X/Y), and a trace-over **background reference image** with two-point calibration | ✅ Working — points/lines/arcs re-resolve automatically when you grade/resize |
 | AI Pattern Generator — visible "thinking" stages, robust local image analysis (neckline/hem/flare/colour from a real photo, not just a clean product shot), a wider construction vocabulary (necklines, hem shapes, wrap closures), and a "Detected" attributes panel so you can see the image/prompt actually mattered | ✅ Working (offline heuristic; swap in an LLM endpoint to go fully generative) |
 | Command palette (⌘/Ctrl-K), tooltips + global Hover-Help toggle | ✅ Working |
 | Onboarding, toasts, high-contrast, reduce-motion, local-first storage | ✅ Working |
@@ -75,6 +76,20 @@ install it. After the first load it works **fully offline**.
   still a heuristic, not real computer vision, and will misread low-contrast
   or very busy photos; point `endpoint` (Settings → AI endpoint) at a
   Claude-vision proxy to replace it with true image understanding.
+- **Construction tools** are real associative CAD drafting: lines/arcs/circles
+  reference points by ID, not frozen coordinates, so dragging a point (or
+  changing it to a formula that references a Variable or a body measurement)
+  updates everything built on it — including after Auto Grade. **"Create
+  Pattern Piece" is a one-time snapshot**, not a live link: once you promote a
+  closed point loop into a piece, it becomes an independent, editable shape —
+  moving the original construction points afterwards no longer reshapes it
+  (the same way cutting fabric from a paper draft freezes the shape at that
+  moment). Points, lines, arcs, circles, Variables and the background trace
+  image are drafting scaffolding: they render on the 2D canvas and round-trip
+  through Undo/Redo, but are intentionally excluded from SVG/DXF/PDF export
+  and from the 3D preview — only promoted pattern pieces (and text labels)
+  export, matching how a real patternmaker's construction lines never leave
+  the drafting table.
 - **SVG, DXF and PDF** exports are native and CAD/print-ready (the PDF is a
   hand-built, valid PDF-1.4 with vector cutting lines). PNG/JPEG/AI/HPGL still
   fall back to the vector output — the natural next integration points.

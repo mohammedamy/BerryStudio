@@ -79,13 +79,22 @@
     dress:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 2l3 3 3-3 2 5-3 3 4 12H6l4-12-3-3z"/></svg>',
     skirtIcon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 3h6l1 4h-8z"/><path d="M8 7h8l3 13H5z"/></svg>',
     trousersIcon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M7 2h10l1 8-1 2 1 10h-4l-1-11-1 11H8L9 12l-1-2z"/></svg>',
+    point:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/></svg>',
+    conline:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 18L18 6"/><circle cx="6" cy="18" r="2.2" fill="currentColor" stroke="none"/><circle cx="18" cy="6" r="2.2" fill="currentColor" stroke="none"/></svg>',
+    conarc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 19a15 15 0 0 1 15-15"/><circle cx="5" cy="19" r="2.1" fill="currentColor" stroke="none"/><circle cx="20" cy="4" r="2.1" fill="currentColor" stroke="none"/></svg>',
+    circleTool:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
+    promote:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 9l4-4 8 1 4 6-2 9H7z" stroke-dasharray="2.5 2"/><path d="M8.5 12.5l2.2 2.2 4.8-4.8"/></svg>',
+    calib:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h16M4 12v-3M20 12v-3M9 12v-3M15 12v-3"/></svg>',
   };
 
   // ---------------- TOOLS ----------------
   const TOOLS = [
     { id:"select", i:"select" }, { id:"pen", i:"pen" }, { id:"line", i:"line" },
     { id:"arc", i:"arc" }, { id:"free", i:"free" }, { id:"polygon", i:"polyfill" }, { id:"symmetry", i:"symmetry" },
-    { id:"knife", i:"knife" }, "sep", { id:"move", i:"move" }, { id:"rotate", i:"rotate" },
+    { id:"knife", i:"knife" }, "sep",
+    { id:"point", i:"point" }, { id:"conline", i:"conline" }, { id:"conarc", i:"conarc" },
+    { id:"circle", i:"circleTool" }, { id:"promote", i:"promote" }, "sep",
+    { id:"move", i:"move" }, { id:"rotate", i:"rotate" },
     { id:"scale", i:"scale" }, { id:"measure", i:"measure" }, { id:"text", i:"text" }, "sep",
     { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"grain", i:"grain" },
   ];
@@ -177,6 +186,35 @@
     c.appendChild(box);
     const b=el("button","big-btn",IC.check+T("applyMeas")); b.style.marginTop="14px"; b.onclick=()=>{grade();toast(T("graded"));}; c.appendChild(b);
     const r=el("button","big-btn ghost",T("cancel")); r.style.marginTop="8px"; r.onclick=()=>{state.custom={};grade();renderMeasurePane();}; c.appendChild(r);
+
+    // Custom Variables — named formulas usable in any construction point's X/Y.
+    c.appendChild(el("div","section-title",IC.measure+T("varsTitle")));
+    c.appendChild(el("div","help-note",T("varsHint")));
+    const vbox = el("div"); vbox.style.marginTop="10px";
+    const vars = Canvas.getVariables();
+    const names = Object.keys(vars);
+    if (!names.length) vbox.appendChild(el("div","help-note",T("varsNone")));
+    names.forEach(name=>{
+      const row = el("div","row",`<label style="flex:0 0 34%;font-size:12.5px;font-weight:600">${escAttr(name)}</label>`);
+      row.style.cssText="display:flex;gap:6px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line-2)";
+      const inp = el("input","input"); inp.type="text"; inp.value=vars[name]; inp.style.flex="1";
+      inp.onchange=()=>{ try{ Canvas.setVariable(name, inp.value.trim()); } catch(e){ toast(T("invalidFormula")); inp.value=vars[name]; } };
+      const del = el("button","tbtn",IC.trash); del.style.cssText="width:30px;height:30px;flex:0 0 auto";
+      del.onclick=()=>{ Canvas.removeVariable(name); renderMeasurePane(); };
+      row.appendChild(inp); row.appendChild(del); vbox.appendChild(row);
+    });
+    c.appendChild(vbox);
+    const vAdd = el("div","row"); vAdd.style.cssText="display:flex;margin-top:8px;gap:6px";
+    const vName = el("input","input"); vName.placeholder=T("varName"); vName.style.flex="1";
+    const vForm = el("input","input"); vForm.placeholder=T("varFormula"); vForm.style.flex="1";
+    vAdd.appendChild(vName); vAdd.appendChild(vForm); c.appendChild(vAdd);
+    const vBtn = el("button","big-btn ghost",T("varAdd")); vBtn.style.marginTop="8px";
+    vBtn.onclick=()=>{
+      const name=vName.value.trim(); if(!name) return;
+      try{ Canvas.setVariable(name, vForm.value.trim()); renderMeasurePane(); }
+      catch(e){ toast(T("invalidFormula")); }
+    };
+    c.appendChild(vBtn);
   }
 
   // LAYERS PANE
@@ -463,7 +501,7 @@
     if(F==="SVG")      download("berrystudio-pattern.svg","image/svg+xml",Canvas.exportSVG());
     else if(F==="DXF") download("berrystudio-pattern.dxf","application/dxf",Canvas.exportDXF());
     else if(F==="PDF"){ const p=Canvas.exportPDF(); if(!p){toast(T("empty2d"));return;} download("berrystudio-pattern.pdf","application/pdf",p); }
-    else if(F==="JSON")download("berrystudio-project.json","application/json",JSON.stringify({app:"BerryStudio",version:1,pieces:Canvas.getPieces(),texts:Canvas.getTexts()},null,0));
+    else if(F==="JSON")download("berrystudio-project.json","application/json",JSON.stringify({app:"BerryStudio",version:1,pieces:Canvas.getPieces(),texts:Canvas.getTexts(),points:Canvas.getPoints(),cons:Canvas.getCons(),variables:Canvas.getVariables()},null,0));
     else               download(`berrystudio-pattern.${F.toLowerCase()}`,"image/svg+xml",Canvas.exportSVG()); // PNG/JPEG/AI/HPGL → vector fallback
     toast(T("exported")+" · "+F);
   }
@@ -483,7 +521,8 @@
       r.onload=()=>{ try{
         const data=JSON.parse(r.result);
         const pieces=Array.isArray(data)?data:data.pieces;
-        if(Canvas.loadPieces(pieces, data.texts)){ state.loaded=null; hideEmpty(); renderLayersPane();
+        if(Canvas.loadPieces(pieces, data.texts, data.points, data.cons)){ state.loaded=null; hideEmpty(); renderLayersPane();
+          Object.entries(data.variables||{}).forEach(([name,formula])=>{ try{ Canvas.setVariable(name, formula); }catch(e){} });
           if(state.view==="3d") build3D(); save(); toast(T("imported")); }
         else toast(T("importFail"));
       }catch(e){ toast(T("importFail")); } };
@@ -578,6 +617,139 @@
     q(".te-text").focus(); q(".te-text").select();
   }
   function closeTextEditor(){ $$(".text-editor").forEach(x=>x.remove()); }
+
+  // ================= CONSTRUCTION POPOVERS =================
+  // Position any floating panel near a click point, clamped to the viewport.
+  function placeFloating(box, cx, cy){
+    document.body.appendChild(box);
+    const r = box.getBoundingClientRect();
+    box.style.left = Math.min(Math.max(8, cx), innerWidth - r.width - 8) + "px";
+    box.style.top  = Math.min(Math.max(8, cy + 10), innerHeight - r.height - 8) + "px";
+  }
+
+  // Rename a construction point and/or give it a live formula for X/Y.
+  function openPointEditor(req){
+    closeTextEditor();
+    const p = req.point;
+    const box = el("div","text-editor");
+    box.innerHTML = `
+      <input class="input pe-name" placeholder="${T("pointName")}" value="${escAttr(p.name)}">
+      <div class="row">
+        <input class="input pe-x" placeholder="${T("pointX")}" value="${escAttr(p.xExpr||(+p.x.toFixed(2)))}" style="width:50%">
+        <input class="input pe-y" placeholder="${T("pointY")}" value="${escAttr(p.yExpr||(+p.y.toFixed(2)))}" style="width:50%">
+      </div>
+      <div class="help-note" style="margin:0">${T("formulaHint")}</div>
+      <div class="row" style="justify-content:flex-end;gap:8px">
+        <button class="tbtn pe-del" title="${T("deletePoint")}" style="width:auto;padding:0 10px;color:var(--danger)">${T("deleteLbl")}</button>
+        <button class="tbtn pe-cancel" style="width:auto;padding:0 10px">${T("cancel")}</button>
+        <button class="tbtn pe-ok active" style="width:auto;padding:0 14px">${T("okLbl")}</button>
+      </div>`;
+    placeFloating(box, req.cx, req.cy);
+    const q = s => box.querySelector(s);
+    const commit = () => {
+      const name = q(".pe-name").value.trim() || p.name;
+      Canvas.setPointName(p.id, name);
+      const r = Canvas.setPointFormula(p.id, q(".pe-x").value.trim(), q(".pe-y").value.trim());
+      if (!r.ok){ toast(T("invalidFormula")+": "+r.error); return; }
+      closeTextEditor(); renderMeasurePane();
+    };
+    q(".pe-ok").onclick = commit;
+    q(".pe-cancel").onclick = closeTextEditor;
+    q(".pe-del").onclick = () => { Canvas.removePoint(p.id); closeTextEditor(); };
+    box.addEventListener("keydown", e => { if (e.key==="Enter") commit(); if (e.key==="Escape") closeTextEditor(); });
+    q(".pe-name").focus(); q(".pe-name").select();
+  }
+
+  // Name prompt shown when a construction-point loop is closed with the
+  // "Create Pattern Piece" tool — confirming snapshots it into a real piece.
+  function openPromotePrompt(outlinePts){
+    closeTextEditor();
+    const box = el("div","text-editor");
+    box.innerHTML = `
+      <div class="help-note" style="margin:0">${T("promoteHint").replace("{n}", outlinePts.length)}</div>
+      <input class="input pp-en" dir="ltr" placeholder="${T("nameEn")}">
+      <input class="input pp-ar" dir="rtl" placeholder="${T("nameAr")}">
+      <div class="row" style="justify-content:flex-end;gap:8px">
+        <button class="tbtn pp-cancel" style="width:auto;padding:0 10px">${T("cancel")}</button>
+        <button class="tbtn pp-ok active" style="width:auto;padding:0 14px">${T("promoteBtn")}</button>
+      </div>`;
+    placeFloating(box, innerWidth/2 - 130, innerHeight/3);
+    const q = s => box.querySelector(s);
+    const cancel = () => { Canvas.cancelPromote(); closeTextEditor(); };
+    const commit = () => {
+      const en = q(".pp-en").value.trim() || "New Piece", ar = q(".pp-ar").value.trim() || "قطعة جديدة";
+      Canvas.finishPromotePiece(en, ar); closeTextEditor(); hideEmpty(); renderLayersPane();
+      toast(T("promoted")+" · "+en);
+    };
+    q(".pp-ok").onclick = commit; q(".pp-cancel").onclick = cancel;
+    box.addEventListener("keydown", e => { if (e.key==="Enter") commit(); if (e.key==="Escape") cancel(); });
+    q(".pp-en").focus();
+  }
+
+  // Two-point calibration for the trace-over background image: asks for the
+  // real-world distance (cm) between the two points the user just clicked.
+  function openCalibPrompt(measuredDist){
+    closeTextEditor();
+    const box = el("div","text-editor");
+    box.innerHTML = `
+      <div class="help-note" style="margin:0">${T("calibHint")}</div>
+      <input class="input cb-dist" type="number" min="0.1" step="0.1" placeholder="${T("realDistance")}">
+      <div class="row" style="justify-content:flex-end;gap:8px">
+        <button class="tbtn cb-cancel" style="width:auto;padding:0 10px">${T("cancel")}</button>
+        <button class="tbtn cb-ok active" style="width:auto;padding:0 14px">${T("applyCalib")}</button>
+      </div>`;
+    placeFloating(box, innerWidth/2 - 130, innerHeight/3);
+    const q = s => box.querySelector(s);
+    const commit = () => {
+      const cm = +q(".cb-dist").value;
+      if (cm>0){ Canvas.applyCalibration(cm, measuredDist); toast(T("calibDone")); }
+      closeTextEditor(); setTool("select");
+    };
+    q(".cb-ok").onclick = commit; q(".cb-cancel").onclick = ()=>{ closeTextEditor(); setTool("select"); };
+    box.addEventListener("keydown", e => { if (e.key==="Enter") commit(); if (e.key==="Escape") closeTextEditor(); });
+    q(".cb-dist").focus();
+  }
+
+  // Trace-over background image: import / opacity / show-hide / calibrate / remove.
+  let bgVisible = true;
+  function openBgPanel(){
+    closeTextEditor();
+    const has = Canvas.hasBackground();
+    const box = el("div","text-editor");
+    if (!has){
+      box.innerHTML = `
+        <div class="help-note" style="margin:0">${T("bgImage")}</div>
+        <button class="tbtn bg-import active" style="width:auto;padding:0 14px">${T("bgImport")}</button>
+        <div class="row" style="justify-content:flex-end">
+          <button class="tbtn bg-close" style="width:auto;padding:0 10px">${T("close")}</button>
+        </div>`;
+      placeFloating(box, innerWidth/2 - 130, 90);
+      const file=el("input"); file.type="file"; file.accept="image/*"; file.style.display="none";
+      file.onchange=()=>{ const im=file.files&&file.files[0]; if(!im) return;
+        const r=new FileReader();
+        r.onload=async ()=>{ const ok=await Canvas.setBackgroundImage(r.result); if(ok){ bgVisible=true; $("#bgBtn").classList.add("active"); closeTextEditor(); openBgPanel(); } };
+        r.readAsDataURL(im);
+      };
+      box.appendChild(file);
+      box.querySelector(".bg-import").onclick=()=>file.click();
+      box.querySelector(".bg-close").onclick=closeTextEditor;
+      return;
+    }
+    box.innerHTML = `
+      <div class="row"><label style="flex:1">${T("bgOpacity")}</label><input class="range bg-op" type="range" min="0.1" max="1" step="0.05" value="${Canvas.getBgOpacity()}" style="flex:2"></div>
+      <div class="row"><label style="flex:1">${T("bgShow")}</label><input class="bg-show" type="checkbox" ${bgVisible?"checked":""}></div>
+      <div class="row" style="justify-content:flex-end;gap:8px">
+        <button class="tbtn bg-remove" style="width:auto;padding:0 10px;color:var(--danger)">${T("bgRemove")}</button>
+        <button class="tbtn bg-calib active" style="width:auto;padding:0 12px">${T("bgCalibrate")}</button>
+        <button class="tbtn bg-close" style="width:auto;padding:0 10px">${T("close")}</button>
+      </div>`;
+    placeFloating(box, innerWidth/2 - 130, 90);
+    box.querySelector(".bg-op").oninput = e => Canvas.setBgOpacity(+e.target.value);
+    box.querySelector(".bg-show").onchange = e => { bgVisible=e.target.checked; Canvas.setBgVisible(bgVisible); };
+    box.querySelector(".bg-remove").onclick = () => { Canvas.removeBackground(); $("#bgBtn").classList.remove("active"); closeTextEditor(); };
+    box.querySelector(".bg-calib").onclick = () => { closeTextEditor(); setTool("calib"); toast(T("calibHint")); };
+    box.querySelector(".bg-close").onclick = closeTextEditor;
+  }
 
   // ================= HELP =================
   function openHelp(){
@@ -717,6 +889,7 @@
   function afterLoad(name){ hideEmpty(); renderLayersPane(); toast(T("patternLoaded")+" · "+name); if(state.view==="3d") build3D(); save(); }
   function grade(){
     if(state.loaded){ const p=PATTERNS[state.loaded]; Canvas.setPattern(p.pieces(currentMeas()), PALETTE); renderLayersPane(); if(state.view==="3d") build3D(); }
+    Canvas.recomputeConstruction();   // re-resolve any formula-driven construction points to the new measurements
     updateGradeLbl(); updateStageChips(); save();
   }
 
@@ -955,7 +1128,7 @@
     const meta=e.ctrlKey||e.metaKey;
     if(meta&&e.key==="k"){e.preventDefault();openCmd();return;}
     if(meta&&e.key==="z"&&!e.shiftKey){e.preventDefault();Canvas.doUndo();renderLayersPane();return;}
-    if(meta&&(e.key==="y"||(e.shiftKey&&e.key.toLowerCase()==="z"))){e.preventDefault();Canvas.doRedo();return;}
+    if(meta&&(e.key==="y"||(e.shiftKey&&e.key.toLowerCase()==="z"))){e.preventDefault();Canvas.doRedo();renderLayersPane();return;}
     if($("#cmdModal").classList.contains("show")){
       if(e.key==="ArrowDown"){e.preventDefault();cmdSel=Math.min(cmdItems.length-1,cmdSel+1);hiCmd();}
       if(e.key==="ArrowUp"){e.preventDefault();cmdSel=Math.max(0,cmdSel-1);hiCmd();}
@@ -992,6 +1165,8 @@
     $("#redoBtn").onclick=()=>{Canvas.doRedo();renderLayersPane();sync3DVisibility();}; tip($("#redoBtn"),T("redoLbl"),T("tt_redo"));
     $("#gridBtn").onclick=()=>{const v=!Canvas.getOpt("grid");Canvas.setOpt("grid",v);$("#gridBtn").classList.toggle("active",v);}; tip($("#gridBtn"),T("t_line"),T("tt_grid"));
     $("#snapBtn").onclick=()=>{const v=!Canvas.getOpt("snap");Canvas.setOpt("snap",v);$("#snapBtn").classList.toggle("active",v);}; tip($("#snapBtn"),"Snap",T("tt_snap"));
+    $("#bgBtn").onclick=()=>openBgPanel(); tip($("#bgBtn"),T("bgImage"),T("tt_bgImage"));
+    $("#bgBtn").classList.toggle("active",Canvas.hasBackground());
     // zoom
     $("#zin").onclick=()=>Canvas.zoom(1.2); tip($("#zin"),"+",T("tt_zoomin"));
     $("#zout").onclick=()=>Canvas.zoom(0.83); tip($("#zout"),"−",T("tt_zoomout"));
@@ -1026,6 +1201,10 @@
     // photoreal GLB avatars saved in Settings (per category)
     Object.entries(state.avatarGLB || {}).forEach(([cat,url]) => { if(url) View3D.setAvatarURL(cat, url); });
     Canvas.onTextRequest(openTextEditor);
+    Canvas.setMeasureProvider(()=>currentMeas());
+    Canvas.onPointRequest(openPointEditor);
+    Canvas.onPromoteRequest(openPromotePrompt);
+    Canvas.onCalibrationRequest(openCalibPrompt);
     buildToolRail(); buildRail(); wire();
     applyTheme(); applyLang();
     updateUnitsPill(); updateStageChips();
