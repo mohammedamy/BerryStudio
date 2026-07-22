@@ -77,6 +77,8 @@
     search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>',
     shirt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2l4 3 4-3 5 4-3 4v11H6V10L3 6z"/></svg>',
     dress:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 2l3 3 3-3 2 5-3 3 4 12H6l4-12-3-3z"/></svg>',
+    skirtIcon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 3h6l1 4h-8z"/><path d="M8 7h8l3 13H5z"/></svg>',
+    trousersIcon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M7 2h10l1 8-1 2 1 10h-4l-1-11-1 11H8L9 12l-1-2z"/></svg>',
   };
 
   // ---------------- TOOLS ----------------
@@ -281,25 +283,35 @@
   }
 
   // LIBRARY PANE
+  const LIB_THUMB = { dress:"dress", robe:"dress", top:"shirt", shirt:"shirt", skirt:"skirtIcon", trousers:"trousersIcon" };
   function renderLibraryPane() {
     const c = $(".rail-pane[data-pane=library]"); c.innerHTML="";
-    c.appendChild(el("div","section-title",IC.shirt+T("libraryTitle")));
+    c.appendChild(el("div","section-title",IC.shirt+T("libraryTitle")+` <small style="font-weight:600;color:var(--ink-2);margin-inline-start:4px">(${LIBRARY.length})</small>`));
     const sb = el("div","field",`<div style="position:relative"><span style="position:absolute;inset-inline-start:10px;top:9px;color:var(--ink-2)">${IC.search}</span></div>`);
     const inp = el("input","input"); inp.placeholder=T("searchLib"); inp.style.paddingInlineStart="34px"; sb.firstChild.appendChild(inp); c.appendChild(sb);
+    // category quick-filter — defaults to the active working category, with an "All" option
+    let libCat = state.category;
+    const catSeg = el("div","seg"); catSeg.style.cssText="margin-bottom:10px;flex-wrap:wrap";
+    const catOpts = [["all",T("allCat")],["women",T("women")],["men",T("men")],["girls",T("girls")],["boys",T("boys")]];
+    catOpts.forEach(([val,label])=>{ const b=el("button",val===libCat?"active":"",label); b.onclick=()=>{ libCat=val; [...catSeg.children].forEach(x=>x.classList.toggle("active",x===b)); draw(inp.value); }; catSeg.appendChild(b); });
+    c.appendChild(catSeg);
     const grid = el("div","lib-grid");
     const draw = (filter="") => {
       grid.innerHTML="";
-      LIBRARY.filter(x=>{const p=PATTERNS[x.id]; return L(p.name).toLowerCase().includes(filter.toLowerCase());})
-        .forEach(x=>{
+      LIBRARY.filter(x=>{
+        if(libCat!=="all" && x.cat!==libCat) return false;
+        const p=PATTERNS[x.id]; return L(p.name).toLowerCase().includes(filter.toLowerCase());
+      }).forEach(x=>{
           const p=PATTERNS[x.id];
           const card=el("div","lib-card");
-          card.appendChild(el("div","lib-thumb", x.cat==="men"?IC.shirt:IC.dress));
+          card.appendChild(el("div","lib-thumb", IC[LIB_THUMB[x.type]] || (x.cat==="men"?IC.shirt:IC.dress)));
           card.appendChild(el("div","lib-meta",`<div class="t">${L(p.name)}</div><div class="s">${L(x.tag)} · ${T(x.cat)}</div>`));
           card.onclick=()=>loadPattern(x.id);
           grid.appendChild(card);
         });
       // my patterns
       state.mine.forEach((mp,idx)=>{ const card=el("div","lib-card"); card.appendChild(el("div","lib-thumb",IC.dress)); card.appendChild(el("div","lib-meta",`<div class="t">${mp.name}</div><div class="s">★ ${T("saveMine").split(" ")[0]}</div>`)); card.onclick=()=>{Canvas.setPattern(mp.pieces,PALETTE);afterLoad(mp.name);}; grid.appendChild(card); });
+      if(!grid.children.length) grid.appendChild(el("div","help-note",T("noResults")));
     };
     inp.oninput=()=>draw(inp.value); draw();
     c.appendChild(grid);

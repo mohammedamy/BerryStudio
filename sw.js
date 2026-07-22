@@ -1,9 +1,9 @@
 /* BerryStudio — service worker (offline-capable, update-friendly) */
-const CACHE = "berrystudio-v12";
+const CACHE = "berrystudio-v13";
 const ASSETS = [
   "./", "./index.html",
   "./css/styles.css",
-  "./js/i18n.js", "./js/data.js", "./js/canvas.js", "./js/three-view.js", "./js/ai.js", "./js/app.js",
+  "./js/i18n.js", "./js/data.js", "./js/canvas.js", "./js/three-view.js", "./js/ai.js", "./js/library.js", "./js/app.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",
 ];

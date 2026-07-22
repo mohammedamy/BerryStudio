@@ -47,7 +47,7 @@ install it. After the first load it works **fully offline**.
 | Print & Export: A0–A4/Letter/Plotter, PDF/DXF/SVG/AI/PNG/JPEG/HPGL | ✅ SVG, DXF, PDF are native; PNG/JPEG/AI/HPGL fall back to vector |
 | Fabric consumption + cost estimator + Tech Pack + BOM | ✅ Working |
 | **Pattern Summary export** — one-page bilingual print sheet: size table, a labelled dimensioned diagram per piece, and a construction note (Export pane, Project menu, ⌘K) | ✅ Working |
-| Pattern Library w/ search + "My Patterns" | ✅ Working |
+| **Pattern Library — 100 pre-designed patterns, 25 per category** (Women/Men/Girls/Boys), category filter chips + search + "My Patterns" | ✅ Working — every entry is a real, gradable multi-piece garment |
 | AI Pattern Generator (text + image upload → multi-piece pattern) | ✅ Working (image picker + preview; offline keyword heuristic — swap in an LLM to go live) |
 | Command palette (⌘/Ctrl-K), tooltips + global Hover-Help toggle | ✅ Working |
 | Onboarding, toasts, high-contrast, reduce-motion, local-first storage | ✅ Working |
@@ -87,13 +87,20 @@ BerryStudio/                (repository root)
 │   ├── data.js           Measurement standards + grading engine + patterns
 │   ├── canvas.js         2D drafting engine (Canvas 2D)
 │   ├── three-view.js     3D parametric avatar (Three.js)
+│   ├── ai.js             Image/prompt → style params + parametric garment builder
+│   ├── library.js        100-pattern catalog (25/category), built on ai.js's builder
 │   └── app.js            Application controller (wires everything)
 └── icons/                App icons (SVG + PNG 192/512)
 ```
 
 ## Extending
 
-- **Add a pattern:** add a parametric entry to `PATTERNS` in `js/data.js`
-  (each piece is a function of the measurement set) and list it in `LIBRARY`.
+- **Add a hand-crafted pattern:** add a parametric entry to `PATTERNS` in
+  `js/data.js` (each piece is a function of the measurement set) and list it
+  in `LIBRARY`.
+- **Add a library pattern:** add one `entry(id, category, nameEn, nameAr, style)`
+  line to the matching catalog array in `js/library.js` — `style` is the same
+  `{type, lengthF, flareF, fitF, sleeveLenF, sleeveWideF}` shape the AI
+  generator uses, so geometry comes for free from `AIGen.build()`.
 - **Add a language:** add a dictionary to `I18N` in `js/i18n.js`.
 - **Tune grading:** edit `BASE`, `GRADE`, and `STANDARDS` in `js/data.js`.

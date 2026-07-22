@@ -86,7 +86,7 @@ const I18N = {
     fab_wool:"Wool", fab_satin:"Satin", fab_leather:"Leather", fab_chiffon:"Chiffon",
     // library
     libraryTitle: "Pattern Library", searchLib: "Search patterns…",
-    allCat: "All", saveMine: "Save current to My Patterns",
+    allCat: "All", saveMine: "Save current to My Patterns", noResults: "No patterns match your search.",
     // ai
     aiTitle: "AI Pattern Generator",
     aiDesc: "Describe a garment in plain words and generate a complete, multi-piece pattern with named pieces.",
@@ -208,7 +208,7 @@ const I18N = {
     fab_cotton:"قطن", fab_denim:"جينز", fab_silk:"حرير", fab_linen:"كتان",
     fab_wool:"صوف", fab_satin:"ساتان", fab_leather:"جلد", fab_chiffon:"شيفون",
     libraryTitle: "مكتبة الباترونات", searchLib: "ابحث عن باترون…",
-    allCat: "الكل", saveMine: "حفظ الحالي في باتروناتي",
+    allCat: "الكل", saveMine: "حفظ الحالي في باتروناتي", noResults: "لا توجد باترونات مطابقة لبحثك.",
     aiTitle: "مولّد الباترون بالذكاء الاصطناعي",
     aiDesc: "اوصف القطعة بكلمات بسيطة وسيولّد باترونًا كاملًا متعدد القطع بأسماء واضحة.",
     aiPlaceholder: "مثال: فستان صيفي واسع بأكمام قصيرة وفتحة رقبة قارب…",

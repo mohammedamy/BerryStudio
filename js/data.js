@@ -258,10 +258,10 @@ const PATTERNS = {
 
 /* Library card list (order + tags for filtering). */
 const LIBRARY = [
-  { id:"womens_dress", cat:"women",  tag:{en:"Dress",ar:"فستان"} },
-  { id:"abaya",        cat:"women",  tag:{en:"Abaya",ar:"عباية"} },
-  { id:"mens_shirt",   cat:"men",    tag:{en:"Shirt",ar:"قميص"} },
-  { id:"thobe",        cat:"men",    tag:{en:"Thobe",ar:"ثوب"} },
-  { id:"girls_dress",  cat:"girls",  tag:{en:"Dress",ar:"فستان"} },
-  { id:"boys_trousers",cat:"boys",   tag:{en:"Trousers",ar:"بنطلون"} },
+  { id:"womens_dress", cat:"women",  tag:{en:"Dress",ar:"فستان"},   type:"dress" },
+  { id:"abaya",        cat:"women",  tag:{en:"Abaya",ar:"عباية"},   type:"robe" },
+  { id:"mens_shirt",   cat:"men",    tag:{en:"Shirt",ar:"قميص"},    type:"shirt" },
+  { id:"thobe",        cat:"men",    tag:{en:"Thobe",ar:"ثوب"},     type:"robe" },
+  { id:"girls_dress",  cat:"girls",  tag:{en:"Dress",ar:"فستان"},   type:"dress" },
+  { id:"boys_trousers",cat:"boys",   tag:{en:"Trousers",ar:"بنطلون"},type:"trousers" },
 ];
