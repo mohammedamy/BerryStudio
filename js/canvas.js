@@ -404,6 +404,21 @@ const Canvas = (() => {
         [a,b].forEach(p=>{ctx.fillStyle=CSS("--accent");ctx.beginPath();ctx.arc(p[0],p[1],3,0,7);ctx.fill();});
         return;
       }
+      // Filled polygon: closed shape, filled while drawn and once committed.
+      if(st.tool==="polygon"){
+        if(!st.pts.length) return;
+        ctx.beginPath();
+        st.pts.forEach((p,i)=>{const[x,y]=toScreen(p[0],p[1]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+        if(st.pts.length>2){ ctx.closePath(); ctx.fillStyle=hexA(CSS("--accent"),0.22); ctx.fill(); }
+        ctx.strokeStyle=CSS("--accent"); ctx.lineWidth=2; ctx.stroke();
+        if(st===drawing){
+          st.pts.forEach(p=>{const[x,y]=toScreen(p[0],p[1]); ctx.fillStyle=CSS("--accent"); ctx.beginPath(); ctx.arc(x,y,3,0,7); ctx.fill();});
+          // rubber-band from the last vertex to the cursor
+          if(cursorWorld){ const last=toScreen(st.pts[st.pts.length-1][0],st.pts[st.pts.length-1][1]); const cur=toScreen(cursorWorld[0],cursorWorld[1]);
+            ctx.setLineDash([4,3]); ctx.beginPath(); ctx.moveTo(last[0],last[1]); ctx.lineTo(cur[0],cur[1]); ctx.stroke(); ctx.setLineDash([]); }
+        }
+        return;
+      }
       if(st.pts.length<2 && st!==drawing) return;
       ctx.beginPath(); st.pts.forEach((p,i)=>{const[x,y]=toScreen(p[0],p[1]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);}); ctx.stroke();
       if(st.tool==="pen"){ st.pts.forEach(p=>{const[x,y]=toScreen(p[0],p[1]); ctx.fillStyle=CSS("--accent"); ctx.beginPath(); ctx.arc(x,y,3,0,7); ctx.fill();});}
@@ -482,6 +497,15 @@ const Canvas = (() => {
         render(); return;
       }
       if (tool==="pen"){ if(!drawing)drawing={tool:"pen",pts:[]}; drawing.pts.push([snap(wx),snap(wy)]); render(); return; }
+      if (tool==="polygon"){
+        // click to add vertices; click near the start point (or double-click) closes the shape
+        if (!drawing || drawing.tool!=="polygon"){ drawing={tool:"polygon",pts:[[snap(wx),snap(wy)]]}; render(); return; }
+        const first=toScreen(drawing.pts[0][0],drawing.pts[0][1]);
+        if (drawing.pts.length>=3 && Math.hypot(first[0]-e.offsetX, first[1]-e.offsetY)<=10){
+          pushUndo(); sketch.push(drawing); drawing=null; render(); return;
+        }
+        drawing.pts.push([snap(wx),snap(wy)]); render(); return;
+      }
       if (tool==="free"||tool==="freehand"){ drawing={tool:"free",pts:[[wx,wy]]}; return; }
 
       // (4) rotate / scale by dragging anywhere on a piece body
@@ -525,6 +549,7 @@ const Canvas = (() => {
       if (drawing && drawing.tool==="arc"){ if(drawing.phase===1) drawing.pts[1]=[snap(wx),snap(wy)]; else drawing.ctrl=[wx,wy]; render(); return; }
       if (drawing && drawing.tool==="free"){ drawing.pts.push([wx,wy]); render(); return; }
       if (clickBuf.length && (tool==="knife"||tool==="grain")){ render(); return; }
+      if (drawing && drawing.tool==="polygon"){ render(); return; }
 
       // hover cursor feedback over handles
       if (selected>=0 && pieces[selected] && SHOW_HANDLES.has(tool)){
@@ -541,6 +566,7 @@ const Canvas = (() => {
     });
     cv.addEventListener("dblclick", (e)=>{
       if(drawing&&drawing.tool==="pen"){ if(drawing.pts.length>1){pushUndo(); sketch.push(drawing);} drawing=null; render(); return; }
+      if(drawing&&drawing.tool==="polygon"){ if(drawing.pts.length>=3){pushUndo(); sketch.push(drawing);} drawing=null; render(); return; }
       const ti=hitText(e.offsetX,e.offsetY);
       if(ti>=0) onText({ mode:"edit", item:texts[ti], cx:e.clientX, cy:e.clientY });
     });
@@ -589,6 +615,7 @@ const Canvas = (() => {
     tool=t; clickBuf=[]; edit=null; snapMark=null;
     if(t!=="measure")measurePts=[];
     if(t!=="pen"&&drawing&&drawing.tool==="pen"){sketch.push(drawing);drawing=null;}
+    if(t!=="polygon"&&drawing&&drawing.tool==="polygon"){ if(drawing.pts.length>=3)sketch.push(drawing); drawing=null; }
     if(drawing&&drawing.tool==="arc"&&t!=="arc"){ drawing=null; }   // drop an unfinished arc
     cv.style.cursor = (t==="pan")?"grab":(t==="select"||t==="move")?"default":(t==="rotate")?"grab":(t==="text")?"text":"crosshair";
     render();

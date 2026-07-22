@@ -65,6 +65,7 @@
     unlock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>',
     drop:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>',
     text:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg>',
+    polyfill:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M12 2l8 6-3 10H7L4 8z" fill-opacity="0.28"/></svg>',
     trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
     dots:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
     question:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.8 2.8 0 1 1 4.3 2.4c-.9.6-1.5 1.1-1.5 2.1"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg>',
@@ -81,7 +82,7 @@
   // ---------------- TOOLS ----------------
   const TOOLS = [
     { id:"select", i:"select" }, { id:"pen", i:"pen" }, { id:"line", i:"line" },
-    { id:"arc", i:"arc" }, { id:"free", i:"free" }, { id:"symmetry", i:"symmetry" },
+    { id:"arc", i:"arc" }, { id:"free", i:"free" }, { id:"polygon", i:"polyfill" }, { id:"symmetry", i:"symmetry" },
     { id:"knife", i:"knife" }, "sep", { id:"move", i:"move" }, { id:"rotate", i:"rotate" },
     { id:"scale", i:"scale" }, { id:"measure", i:"measure" }, { id:"text", i:"text" }, "sep",
     { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"grain", i:"grain" },
@@ -397,7 +398,9 @@
     c.appendChild(cost);
     const ex=el("button","big-btn",IC.download+T("exportNow")); ex.style.marginTop="14px"; ex.onclick=doExport; c.appendChild(ex);
     const tp=el("button","big-btn ghost",T("techPack")); tp.style.marginTop="8px"; tp.onclick=()=>techPack(); c.appendChild(tp);
-    const bo=el("button","big-btn ghost",T("bom")); bo.style.marginTop="8px"; bo.onclick=()=>toast(T("bom")+" ✓"); c.appendChild(bo);
+    const ps=el("button","big-btn ghost",IC.printer+T("patternSummary")); ps.style.marginTop="8px"; ps.onclick=()=>exportSummary(); c.appendChild(ps);
+    c.appendChild(el("div","help-note",T("patternSummaryD"))).style.marginTop="6px";
+    const bo=el("button","big-btn ghost",T("bom")); bo.style.marginTop="10px"; bo.onclick=()=>toast(T("bom")+" ✓"); c.appendChild(bo);
   }
 
   function doExport(){
@@ -457,6 +460,7 @@
     { icon:IC.download,label:T("exportDXF"),     run:()=>exportAs("DXF") },
     { icon:IC.pdf,     label:T("savePDF"),       run:()=>exportAs("PDF") },
     { icon:IC.folder,  label:T("saveProject"),   run:()=>exportAs("JSON") },
+    { icon:IC.printer, label:T("patternSummary"),run:exportSummary },
     "sep",
     { icon:IC.printer, label:T("printProject"),  run:printPattern },
   ]; }
@@ -550,6 +554,106 @@
     MEAS_KEYS.forEach(k=>html+=`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line-2)"><span>${T("m_"+k)}</span><b>${m[k]} cm</b></div>`);
     html+="</div>";
     openModal("Tech Pack", html, true);
+  }
+
+  // ================= PATTERN SUMMARY (one-page, print-ready) =================
+  // A condensed bilingual sheet — size table + a small labelled diagram per
+  // piece with width/height call-outs + a construction note. Distinct from
+  // the full Tech Pack: this is meant to be printed or saved as a single PDF.
+  function pieceBBox(outline){
+    const xs=outline.map(p=>p[0]), ys=outline.map(p=>p[1]);
+    return { minX:Math.min(...xs), minY:Math.min(...ys), maxX:Math.max(...xs), maxY:Math.max(...ys) };
+  }
+  function dimLineH(x1,x2,y,val,fs,sw){
+    const a=fs*0.6, mid=(x1+x2)/2;
+    return `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="#333" stroke-width="${sw}"/>
+      <line x1="${x1}" y1="${y-a}" x2="${x1}" y2="${y+a}" stroke="#333" stroke-width="${sw}"/>
+      <line x1="${x2}" y1="${y-a}" x2="${x2}" y2="${y+a}" stroke="#333" stroke-width="${sw}"/>
+      <rect x="${mid-fs*1.6}" y="${y+fs*0.35}" width="${fs*3.2}" height="${fs*1.15}" fill="#fff" opacity="0.85"/>
+      <text x="${mid}" y="${y+fs*1.25}" font-size="${fs}" text-anchor="middle" fill="#222">${val.toFixed(1)}cm</text>`;
+  }
+  function dimLineV(y1,y2,x,val,fs,sw){
+    const a=fs*0.6, mid=(y1+y2)/2;
+    return `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="#333" stroke-width="${sw}"/>
+      <line x1="${x-a}" y1="${y1}" x2="${x+a}" y2="${y1}" stroke="#333" stroke-width="${sw}"/>
+      <line x1="${x-a}" y1="${y2}" x2="${x+a}" y2="${y2}" stroke="#333" stroke-width="${sw}"/>
+      <text x="${x+fs*1.3}" y="${mid}" font-size="${fs}" text-anchor="middle" fill="#222" transform="rotate(-90 ${x+fs*1.3} ${mid})">${val.toFixed(1)}cm</text>`;
+  }
+  function pieceDiagramSVG(p){
+    const b=pieceBBox(p.outline), w=b.maxX-b.minX||1, h=b.maxY-b.minY||1;
+    const pad=Math.max(w,h)*0.14+2, rp=pad+Math.max(w,h)*0.22, bp=pad+Math.max(w,h)*0.16;
+    const vbX=b.minX-pad, vbY=b.minY-pad, vbW=w+pad+rp, vbH=h+pad+bp;
+    const pts=p.outline.map(pt=>pt.join(",")).join(" ");
+    const col=p.color||"#6d5efc", fs=Math.max(w,h)*0.055, sw=Math.max(w,h)*0.01;
+    let s=`<svg viewBox="${vbX} ${vbY} ${vbW} ${vbH}" width="100%" height="168" preserveAspectRatio="xMidYMid meet">`;
+    s+=`<polygon points="${pts}" fill="${col}" fill-opacity="0.14" stroke="${col}" stroke-width="${sw}"/>`;
+    (p.grain&&p.grain.length===2? [p.grain] : []).forEach(g=>{
+      s+=`<line x1="${g[0][0]}" y1="${g[0][1]}" x2="${g[1][0]}" y2="${g[1][1]}" stroke="${col}" stroke-width="${sw*0.8}" stroke-dasharray="${sw*2},${sw}"/>`;
+    });
+    s+=dimLineH(b.minX,b.maxX,b.maxY+pad*0.55,w,fs,sw);
+    s+=dimLineV(b.maxY,b.minY,b.maxX+pad*0.55,h,fs,sw);
+    return s+"</svg>";
+  }
+  function buildSummaryHTML(){
+    const pieces=Canvas.getPieces(); const m=currentMeas();
+    const nameObj = state.loaded ? PATTERNS[state.loaded].name : { en:T("customPattern"), ar:T("customPattern") };
+    const descObj = state.loaded ? PATTERNS[state.loaded].desc : null;
+    const sizeLbl = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids).label) : state.size;
+    const seamCm = Canvas.getOpt("seamCm");
+    const rows=[["m_chest","chest"],["m_waist","waist"],["m_hips","hips"],["m_shoulder","shoulder"],["m_sleeve","sleeve"]];
+    const rtl = state.lang==="ar";
+    const piecesHTML = pieces.map((p,i)=>`
+      <div class="sp-box">
+        <div class="sp-head"><span class="sp-num">${i+1}</span><span class="sp-name">${p.name.en}</span><span class="sp-name-ar">${p.name.ar}</span></div>
+        ${pieceDiagramSVG(p)}
+      </div>`).join("");
+    return `<!doctype html><html lang="${state.lang}" dir="${rtl?"rtl":"ltr"}"><head><meta charset="utf-8">
+<title>BerryStudio — ${nameObj.en} · ${T("patternSummary")}</title>
+<style>
+  @page{margin:14mm}
+  *{box-sizing:border-box}
+  body{font-family:${rtl?"'Cairo','Segoe UI'":"'Segoe UI'"},Tahoma,Arial,sans-serif;color:#1a1a1a;margin:0;padding:22px;background:#fff}
+  h1{font-size:21px;margin:0 0 3px}
+  h1 span{color:#8a8a8a;font-weight:600;font-size:16px}
+  .sub{font-size:13px;color:#666;margin:0 0 16px}
+  .top{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;margin-bottom:20px;align-items:start}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border:1px solid #ddd;padding:7px 10px;text-align:center}
+  th{background:#f1eeff;font-weight:700}
+  .refbox{font-size:12.5px;color:#444;line-height:1.7;border:1px solid #eee;border-radius:10px;padding:12px;background:#fafafa;height:100%}
+  .refbox b{display:block;font-size:13.5px;margin-bottom:4px;color:#111}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+  .sp-box{border:1px solid #ddd;border-radius:10px;padding:10px;background:#fcfcfc}
+  .sp-head{display:flex;align-items:center;gap:7px;margin-bottom:6px;font-weight:700;font-size:12.5px;flex-wrap:wrap}
+  .sp-num{width:20px;height:20px;flex:none;border-radius:50%;background:#6d5efc;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px}
+  .sp-name-ar{color:#6d5efc;font-weight:600}
+  .note{margin-top:20px;border:1px dashed #c9a94a;background:#fff8e6;padding:11px 15px;border-radius:9px;font-size:12.5px;color:#7a5c00;line-height:1.6}
+  .pbar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px}
+  .pbar button{font-family:inherit;font-size:13px;font-weight:700;padding:9px 16px;border-radius:8px;border:1px solid #ccc;background:#f5f5f5;cursor:pointer}
+  .pbar button.primary{background:#6d5efc;color:#fff;border-color:#6d5efc}
+  @media print{.pbar{display:none}}
+</style></head>
+<body>
+  <div class="pbar"><button onclick="window.close()">${T("close")}</button><button class="primary" onclick="window.print()">${T("printNow")}</button></div>
+  <h1>${nameObj.en} <span>/ ${nameObj.ar}</span></h1>
+  <p class="sub">BerryStudio · ${T("gradedTo")}: ${sizeLbl} · ${T("std_"+state.standard)}</p>
+  <div class="top">
+    <table>
+      <tr><th>${T("tab_measure")}</th><th>cm</th></tr>
+      ${rows.map(([lk,mk])=>`<tr><td>${T(lk)}</td><td>${m[mk]}</td></tr>`).join("")}
+    </table>
+    <div class="refbox"><b>${nameObj.en} / ${nameObj.ar}</b>${descObj?L(descObj):""}</div>
+  </div>
+  <div class="grid">${piecesHTML}</div>
+  <div class="note">${T("summaryNote").replace("{n}",seamCm)}</div>
+</body></html>`;
+  }
+  function exportSummary(){
+    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
+    const w=window.open("","_blank");
+    if(!w){ toast(T("patternSummary")+": allow pop-ups"); return; }
+    w.document.write(buildSummaryHTML()); w.document.close();
+    toast(T("exported")+" · "+T("patternSummary"));
   }
 
   // ================= PATTERNS =================
@@ -731,6 +835,9 @@
     {t:T("savePDF"),i:IC.pdf,run:()=>exportAs("PDF")},
     {t:T("exportDXF"),i:IC.download,run:()=>exportAs("DXF")},
     {t:T("printProject"),i:IC.printer,run:printPattern},
+    {t:T("patternSummary"),i:IC.printer,run:exportSummary},
+    {t:T("undoLbl"),i:IC.undo,run:()=>{Canvas.doUndo();renderLayersPane();sync3DVisibility();}},
+    {t:T("redoLbl"),i:IC.redo,run:()=>{Canvas.doRedo();renderLayersPane();sync3DVisibility();}},
     {t:T("view2d"),i:IC.grid,run:()=>setView("2d")},
     {t:T("view3d"),i:IC.cube,run:()=>setView("3d")},
     {t:T("autoGrade"),i:IC.spark,run:()=>{grade();toast(T("graded"));}},
@@ -832,6 +939,8 @@
     $("#unitsPill").onclick=()=>{state.unitsCm=!state.unitsCm;Canvas.setOpt("unitsCm",state.unitsCm);save();updateUnitsPill();updateStageChips();};
     tip($("#unitsPill"),T("tab_measure"),T("tt_units"));
     // grid/snap in stage toolbar
+    $("#undoBtn").onclick=()=>{Canvas.doUndo();renderLayersPane();sync3DVisibility();}; tip($("#undoBtn"),T("undoLbl"),T("tt_undo"));
+    $("#redoBtn").onclick=()=>{Canvas.doRedo();renderLayersPane();sync3DVisibility();}; tip($("#redoBtn"),T("redoLbl"),T("tt_redo"));
     $("#gridBtn").onclick=()=>{const v=!Canvas.getOpt("grid");Canvas.setOpt("grid",v);$("#gridBtn").classList.toggle("active",v);}; tip($("#gridBtn"),T("t_line"),T("tt_grid"));
     $("#snapBtn").onclick=()=>{const v=!Canvas.getOpt("snap");Canvas.setOpt("snap",v);$("#snapBtn").classList.toggle("active",v);}; tip($("#snapBtn"),"Snap",T("tt_snap"));
     // zoom

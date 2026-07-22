@@ -31,8 +31,9 @@ install it. After the first load it works **fully offline**.
 | 3 themes (Egyptian · Saudi · International) × Light/Dark | ✅ Fully working |
 | Pattern canvas: zoom/pan, grid, rulers (cm/inch), snap | ✅ Fully working |
 | Seam allowance, notches, grainlines, darts, bilingual piece labels | ✅ Fully working |
-| Vector tools: Select, Pen, Line, **Arc (curved, 3-click)**, Freehand, Move, Measure | ✅ Working (draw & edit) |
+| Vector tools: Select, Pen, Line, **Arc (curved, 3-click)**, Freehand, **Filled Shape (closed polygon)**, Move, Measure | ✅ Working (draw & edit) |
 | Transform tools: Rotate, Scale, Knife (split), Symmetry (mirror), Notch, Grainline | ✅ Fully working on real geometry |
+| **Undo / Redo buttons** on the stage toolbar (above the canvas), synced with Layers & 3D | ✅ Working |
 | Selection **control points + handles** (drag anchors, corner scale, rotate knob) | ✅ Fully working, with snap-to-point |
 | Layers: **add / delete / rename (EN+AR)**, per-layer **properties** (colour, own fill opacity), **lock/unlock**, show/hide | ✅ Working (locked pieces are non-interactive) |
 | **Text tool** — place formatted labels (size, bold, italic, colour), drag to move, double-click to edit; included in SVG export & project files | ✅ Working |
@@ -45,6 +46,7 @@ install it. After the first load it works **fully offline**.
 | **Project menu**: New · Import (.json) · Export SVG/DXF · Save PDF · Save Project · Print | ✅ Working (real SVG, DXF, PDF & print) |
 | Print & Export: A0–A4/Letter/Plotter, PDF/DXF/SVG/AI/PNG/JPEG/HPGL | ✅ SVG, DXF, PDF are native; PNG/JPEG/AI/HPGL fall back to vector |
 | Fabric consumption + cost estimator + Tech Pack + BOM | ✅ Working |
+| **Pattern Summary export** — one-page bilingual print sheet: size table, a labelled dimensioned diagram per piece, and a construction note (Export pane, Project menu, ⌘K) | ✅ Working |
 | Pattern Library w/ search + "My Patterns" | ✅ Working |
 | AI Pattern Generator (text + image upload → multi-piece pattern) | ✅ Working (image picker + preview; offline keyword heuristic — swap in an LLM to go live) |
 | Command palette (⌘/Ctrl-K), tooltips + global Hover-Help toggle | ✅ Working |
