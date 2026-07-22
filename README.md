@@ -38,18 +38,22 @@ install it. After the first load it works **fully offline**.
 | Layers: **add / delete / rename (EN+AR)**, per-layer **properties** (colour, own fill opacity), **lock/unlock**, show/hide | ✅ Working (locked pieces are non-interactive) |
 | **Text tool** — place formatted labels (size, bold, italic, colour), drag to move, double-click to edit; included in SVG export & project files | ✅ Working |
 | **Help** — ? button with quick start, all tools explained, keyboard shortcuts (bilingual) | ✅ Working |
-| **Fabric & material**: 8 material presets + adjustable fill transparency | ✅ Working (per-piece or all) |
+| **Fabric & material**: 8 material presets, per-piece colour, **per-part 3D material** (bodice/sleeve/skirt/trousers) + adjustable fill transparency | ✅ Working |
+| **Illustrated body-measurement diagram** — a numbered reference figure in the Measures pane showing where each of the 11 measurements is taken | ✅ Working (collapsible, EN/AR) |
+| **Create Marker** — client-side bounding-box nesting of pattern pieces onto a virtual fabric roll (width/length/rotation/min-spacing), with a layout preview and real computed yardage | ✅ Working (simplified box-packing, not true polygon nesting — see Honest notes) |
 | **Size & Grading engine** XXS→6XL, Intl/Egyptian/Saudi, Kids, Custom | ✅ Proportion-perfect, live |
 | Category switcher (Women/Men/Girls/Boys) with matching avatar | ✅ Working |
 | Real multi-piece patterns w/ bilingual names + explanations | ✅ 6 patterns (dress, shirt, abaya, thobe, girls' dress, boys' trousers) |
 | **3D preview** — 4 distinct anatomical avatars (women/men/girl/boy), studio lighting + soft shadow, OrbitControls (orbit/zoom/pan, touch), auto-spin, walk cycle, live fabric material/colour/transparency, per-piece show/hide, size grading, loading state | ✅ Working (stylised character; drop-in GLB path for photoreal) |
 | **Project menu**: New · Import (.json) · Export SVG/DXF · Save PDF · Save Project · Print | ✅ Working (real SVG, DXF, PDF & print) |
 | Print & Export: A0–A4/Letter/Plotter, PDF/DXF/SVG/AI/PNG/JPEG/HPGL | ✅ SVG, DXF, PDF are native; PNG/JPEG/AI/HPGL fall back to vector |
-| Fabric consumption + cost estimator + Tech Pack + BOM | ✅ Working |
+| Fabric consumption + cost estimator + Tech Pack + BOM | ✅ Working (uses your last Create Marker nest if you've made one, else a height-based estimate) |
 | **Pattern Summary export** — one-page bilingual print sheet: size table, a labelled dimensioned diagram per piece, and a construction note (Export pane, Project menu, ⌘K) | ✅ Working |
 | **Pattern Library — 100 pre-designed patterns, 25 per category** (Women/Men/Girls/Boys), category filter chips + search + "My Patterns" | ✅ Working — every entry is a real, gradable multi-piece garment |
 | **Construction tools** — real drafting Point/Line/Arc/Circle tools that snap to and stay live-linked to named points, "Create Pattern Piece" to promote a closed point loop into a real piece, custom parametric **Variables** (named formulas referencing other variables and body measurements, reusable in any point's X/Y), and a trace-over **background reference image** with two-point calibration | ✅ Working — points/lines/arcs re-resolve automatically when you grade/resize |
 | AI Pattern Generator — visible "thinking" stages, robust local image analysis (neckline/hem/flare/colour from a real photo, not just a clean product shot), a wider construction vocabulary (necklines, hem shapes, wrap closures), and a "Detected" attributes panel so you can see the image/prompt actually mattered | ✅ Working (offline heuristic; swap in an LLM endpoint to go fully generative) |
+| **Object Browser** — a docked panel listing every Point/Construction Line/Arc/Circle/Piece/Text with live counts and a name filter; click a row to jump the canvas to it | ✅ Working |
+| **Snapshot** — freeze the pattern's current state as a translucent ghost layer (opacity/show/remove) to visually compare later edits against | ✅ Working |
 | Command palette (⌘/Ctrl-K), tooltips + global Hover-Help toggle | ✅ Working |
 | Onboarding, toasts, high-contrast, reduce-motion, local-first storage | ✅ Working |
 | PWA manifest + service worker (offline, installable) | ✅ Working |
@@ -90,6 +94,24 @@ install it. After the first load it works **fully offline**.
   and from the 3D preview — only promoted pattern pieces (and text labels)
   export, matching how a real patternmaker's construction lines never leave
   the drafting table.
+- **Per-part 3D material** assigns a material to a 2D piece (Layers → piece properties →
+  Material), but the procedural 3D avatar only has 4 mesh groups — bodice, sleeve, skirt,
+  trousers — so two 2D pieces that map to the same part (e.g. Front Bodice and Back
+  Bodice) share one 3D material (whichever visible piece for that part was set last
+  wins). The 2D canvas itself still shows true per-piece colour and material.
+- **Create Marker** packs each piece's rectangular bounding box onto shelves (a
+  shelf/first-fit-decreasing-height heuristic), rotating by 0°/90° when "Any" rotation
+  is allowed — it does **not** slide and interlock the true cut outlines the way
+  professional nesting software does, so the yardage is a good real estimate, not a
+  millimetre-exact cutting layout. The preview is explicitly labelled as a simplified
+  box approximation for this reason.
+- **Snapshot** is a single frozen ghost, not a multi-version history — freezing again
+  replaces the previous ghost. It's meant for "compare my current edit against the
+  version I started from," not an undo tree (Undo/Redo already covers step-by-step
+  history within a session).
+- **Object Browser** is a read-only inspection + jump-to-focus panel in this release —
+  it doesn't rename/delete objects itself (use the existing point editor, Layers pane,
+  or text editor for that).
 - **SVG, DXF and PDF** exports are native and CAD/print-ready (the PDF is a
   hand-built, valid PDF-1.4 with vector cutting lines). PNG/JPEG/AI/HPGL still
   fall back to the vector output — the natural next integration points.

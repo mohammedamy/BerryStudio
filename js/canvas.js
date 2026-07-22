@@ -43,6 +43,8 @@ const Canvas = (() => {
   let measureProvider = () => ({});    // app-injected: () => current measurement object
   let bg = null;                       // trace image {img, dataURL, x, y, scale, opacity, visible}
   let onCalibReq = () => {};           // app callback: (measuredDistCm) => prompts for the true distance
+  let hlPoint = null, hlCons = null;   // id of a point/construction-line highlighted from the Object Browser
+  let ghostSnap = null;                 // frozen ghost overlay {pieces, opacity, visible}
 
   const CSS = k => getComputedStyle(document.body).getPropertyValue(k).trim();
 
@@ -240,6 +242,7 @@ const Canvas = (() => {
     const W = cv.width/dpr, H = cv.height/dpr;
     ctx.clearRect(0,0,W,H);
     drawBackground();
+    if (ghostSnap && ghostSnap.visible) drawSnapshot();
     if (opts.grid) drawGrid(W,H);
     drawRulers(W,H);
     pieces.forEach((p,i)=>drawPiece(p,i));
@@ -259,6 +262,19 @@ const Canvas = (() => {
     const [sx,sy] = toScreen(bg.x, bg.y);
     ctx.save(); ctx.globalAlpha = bg.opacity;
     ctx.drawImage(bg.img, sx, sy, w*view.scale, h*view.scale);
+    ctx.restore();
+  }
+
+  // ---- frozen snapshot ghost overlay (compare current edits against a past state) ----
+  function drawSnapshot(){
+    ctx.save(); ctx.globalAlpha = ghostSnap.opacity;
+    ghostSnap.pieces.forEach(p=>{
+      path(p.outline);
+      ctx.fillStyle = hexA(p.color||CSS("--brand"), 0.5);
+      ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = p.color||CSS("--brand"); ctx.setLineDash([3,3]);
+      ctx.stroke(); ctx.setLineDash([]);
+    });
     ctx.restore();
   }
 
@@ -285,10 +301,30 @@ const Canvas = (() => {
         const r = Math.hypot(B[0]-A[0], B[1]-A[1]) * view.scale;
         ctx.beginPath(); ctx.arc(sa[0],sa[1], r, 0, Math.PI*2); ctx.stroke();
       }
+      // Object Browser highlight — a thicker halo redrawn on top of the selected line/arc/circle.
+      if (c.id===hlCons){
+        ctx.save(); ctx.strokeStyle=ok; ctx.lineWidth=4; ctx.globalAlpha=0.55; ctx.setLineDash([]);
+        if (c.kind==="line"){ ctx.beginPath(); ctx.moveTo(sa[0],sa[1]); ctx.lineTo(sb[0],sb[1]); ctx.stroke(); }
+        else if (c.kind==="arc"){
+          ctx.beginPath(); ctx.moveTo(sa[0],sa[1]);
+          if (c.ctrl){ const C=resolveRef(c.ctrl); const sc=toScreen(C[0],C[1]);
+            ctx.quadraticCurveTo(2*sc[0]-(sa[0]+sb[0])/2, 2*sc[1]-(sa[1]+sb[1])/2, sb[0],sb[1]); }
+          else ctx.lineTo(sb[0],sb[1]);
+          ctx.stroke();
+        } else if (c.kind==="circle"){
+          const r = Math.hypot(B[0]-A[0], B[1]-A[1]) * view.scale;
+          ctx.beginPath(); ctx.arc(sa[0],sa[1], r, 0, Math.PI*2); ctx.stroke();
+        }
+        ctx.restore();
+      }
     });
     points.forEach(p=>{
       const [x,y] = toScreen(p.x,p.y);
       const inBuf = promoteBuf.includes(p.id);
+      if (p.id===hlPoint){
+        ctx.save(); ctx.strokeStyle=ok; ctx.lineWidth=2.5; ctx.globalAlpha=0.85;
+        ctx.beginPath(); ctx.arc(x,y,9,0,Math.PI*2); ctx.stroke(); ctx.restore();
+      }
       ctx.fillStyle = inBuf ? ok : brand;
       ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fill();
       ctx.lineWidth=1.5; ctx.strokeStyle=CSS("--panel"); ctx.stroke();
@@ -765,6 +801,28 @@ const Canvas = (() => {
   }
   function zoom(f){ userAdjusted=true; const W=cv.width/dpr/2,H=cv.height/dpr/2; const[wx,wy]=toWorld(W,H); view.scale=Math.min(20,Math.max(0.6,view.scale*f)); const[sx,sy]=toScreen(wx,wy); view.x+=W-sx; view.y+=H-sy; render(); onZoom(); }
   let onZoom=()=>{};
+  // Pan (no zoom change) so world point (wx,wy) lands at the viewport center — used
+  // by the Object Browser to bring a clicked point/line/arc/circle into view.
+  function centerOn(wx,wy){
+    userAdjusted=true;
+    const W=cv.width/dpr/2, H=cv.height/dpr/2;
+    const [sx,sy]=toScreen(wx,wy);
+    view.x+=W-sx; view.y+=H-sy;
+    render();
+  }
+  function selectPoint(id){
+    const p=getPointById(id); if(!p) return false;
+    hlPoint=id; hlCons=null; centerOn(p.x,p.y); return true;
+  }
+  function selectCons(id){
+    const c=cons.find(x=>x.id===id); if(!c) return false;
+    hlCons=id; hlPoint=null;
+    const A=resolveRef(c.a);
+    if(c.kind==="circle"){ centerOn(A[0],A[1]); }
+    else{ const B=resolveRef(c.b); centerOn((A[0]+B[0])/2,(A[1]+B[1])/2); }
+    return true;
+  }
+  function clearHighlight(){ hlPoint=null; hlCons=null; render(); }
   function setTool(t){
     tool=t; clickBuf=[]; edit=null; snapMark=null;
     if(t!=="measure")measurePts=[];
@@ -784,6 +842,7 @@ const Canvas = (() => {
   function toggleVisible(i){ pieces[i].visible=!pieces[i].visible; render(); }
   function toggleLock(i){ pieces[i].locked=!pieces[i].locked; if(pieces[i].locked && selected===i) selected=-1; render(); }
   function setColor(i,color){ if(pieces[i]){ pieces[i].color=color; render(); } }
+  function setMaterial(i,matKey){ if(pieces[i]){ pieces[i].material=matKey||null; render(); } }
   function getSelected(){ return selected; }
   function selectPiece(i){ if(pieces[i] && !pieces[i].locked){ selected=i; render(); } }
   function clearSketch(){ pushUndo(); sketch=[]; render(); }
@@ -1004,6 +1063,17 @@ const Canvas = (() => {
   function onCalibrationRequest(cb){ onCalibReq = cb || (()=>{}); }
   function applyCalibration(realCm, measuredDist){ if(!bg || !measuredDist) return; bg.scale *= realCm/measuredDist; render(); }
 
+  // ---- frozen snapshot ghost overlay ----
+  function freezeSnapshot(){
+    ghostSnap = { pieces: pieces.map(p=>({ outline:p.outline.map(pt=>pt.slice()), color:p.color })), opacity:0.35, visible:true };
+    render();
+  }
+  function showSnapshot(v){ if(ghostSnap) ghostSnap.visible=v; render(); }
+  function setSnapshotOpacity(v){ if(ghostSnap) ghostSnap.opacity=v; render(); }
+  function removeSnapshot(){ ghostSnap=null; render(); }
+  function hasSnapshot(){ return !!ghostSnap; }
+  function getSnapshotOpacity(){ return ghostSnap?ghostSnap.opacity:0.35; }
+
   // ---- DXF export (AutoCAD R12 ENTITIES; cm units, y-up) ----
   function exportDXF(){
     if(!pieces.length) return "";
@@ -1069,6 +1139,7 @@ const Canvas = (() => {
       outline:p.outline||[], darts:p.darts||[], notches:p.notches||[], grain:p.grain||[],
       visible:p.visible!==false, locked:!!p.locked, opacity:p.opacity,
       color:p.color||["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][i%6],
+      material:p.material||null,
     }));
     texts = Array.isArray(txts) ? txts.map(t=>({ ...t, id: t.id || textSeq++ })) : [];
     points = Array.isArray(pts) ? pts.map(p=>({ xExpr:null, yExpr:null, ...p, id: p.id || pointSeq++ })) : [];
@@ -1077,7 +1148,7 @@ const Canvas = (() => {
     selected=-1; sketch=[]; promoteBuf=[]; pendingPromoteOutline=null; fit(); return true;
   }
   function clearAll(){
-    pushUndo(); pieces=[]; sketch=[]; texts=[]; points=[]; cons=[]; bg=null; variables={};
+    pushUndo(); pieces=[]; sketch=[]; texts=[]; points=[]; cons=[]; bg=null; variables={}; ghostSnap=null;
     selected=-1; measurePts=[]; clickBuf=[]; promoteBuf=[]; pendingPromoteOutline=null;
     userAdjusted=false; render();
   }
@@ -1086,7 +1157,7 @@ const Canvas = (() => {
   function screenOf(x,y){ return toScreen(x,y); }
 
   return { init, setTranslator, setPattern, getPieces, setTool, setOpt, getOpt, zoom, fit,
-           doUndo, doRedo, getZoom, toggleVisible, toggleLock, setColor, getSelected,
+           doUndo, doRedo, getZoom, toggleVisible, toggleLock, setColor, setMaterial, getSelected,
            selectPiece, clearSketch, render,
            addText, updateText, removeText, getTexts, onTextRequest,
            addPiece, removePiece, renamePiece, setPieceProps,
@@ -1096,5 +1167,7 @@ const Canvas = (() => {
            getCons, removeCons, onPromoteRequest, finishPromotePiece, cancelPromote,
            setVariable, removeVariable, getVariables, setMeasureProvider, recomputeConstruction, evalExpr,
            setBackgroundImage, setBgOpacity, setBgVisible, removeBackground, hasBackground, getBgOpacity,
-           moveBackground, onCalibrationRequest, applyCalibration };
+           moveBackground, onCalibrationRequest, applyCalibration,
+           centerOn, selectPoint, selectCons, clearHighlight,
+           freezeSnapshot, showSnapshot, setSnapshotOpacity, removeSnapshot, hasSnapshot, getSnapshotOpacity };
 })();

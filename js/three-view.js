@@ -148,12 +148,17 @@ const View3D = (() => {
     linen:   { rough: 0.82, metal: 0.0,  sheen: 0.15,clear: 0.0,  om: 1 },
     leather: { rough: 0.4,  metal: 0.2,  sheen: 0.2, clear: 0.35, om: 1 },
   };
-  let fabricState = { color: 0x6d5efc, material: "cotton", opacity: 0.85 };
-  function fabricMat() {
-    const f = FABRIC[fabricState.material] || FABRIC.cotton;
-    const op = Math.max(0.25, Math.min(1, fabricState.opacity * f.om));
+  // One fabric slot per garment part — the procedural body only has 4 named mesh
+  // groups (bodice/sleeve/skirt/trousers), so material assignment is per-part, not
+  // per-arbitrary-2D-piece (the 2D canvas itself still supports true per-piece material).
+  const defaultFabricSlot = () => ({ color: 0x6d5efc, material: "cotton", opacity: 0.85 });
+  let fabricState = { bodice: defaultFabricSlot(), sleeve: defaultFabricSlot(), skirt: defaultFabricSlot(), trousers: defaultFabricSlot() };
+  function fabricMat(part) {
+    const st = fabricState[part] || fabricState.bodice;
+    const f = FABRIC[st.material] || FABRIC.cotton;
+    const op = Math.max(0.25, Math.min(1, st.opacity * f.om));
     return new THREE.MeshPhysicalMaterial({
-      color: fabricState.color, roughness: f.rough, metalness: f.metal,
+      color: st.color, roughness: f.rough, metalness: f.metal,
       sheen: f.sheen, sheenRoughness: 0.5, clearcoat: f.clear, clearcoatRoughness: 0.4,
       transparent: op < 0.99, opacity: op, side: THREE.DoubleSide,
     });
@@ -324,7 +329,6 @@ const View3D = (() => {
   function buildGarment(category, m, d) {
     garmentGroup = new THREE.Group(); root.add(garmentGroup);
     const female = category === "women" || category === "girls";
-    const mkMat = () => fabricMat();
 
     // bodice — a slightly larger torso shell from waist to shoulders
     const t = 0.014; // ease / thickness
@@ -335,7 +339,7 @@ const View3D = (() => {
       [d.waistR + t, waistYY],
       [d.chestR * (female ? 1.08 : 1.05) + t, d.hipY + d.span * 0.76],
       [d.chestR * (female ? 0.98 : 1.08) + t, topY],
-    ], mkMat(), 32);
+    ], fabricMat("bodice"), 32);
     bodice.scale.z = female ? 0.82 : 0.82; bodice.name = "bodice"; garmentGroup.add(bodice);
 
     // skirt / lower — dress for women & girls, trousers for men & boys
@@ -347,7 +351,7 @@ const View3D = (() => {
         [d.hipR + t, d.hipY],
         [d.hipR * 1.25, (d.hipY + hemY) / 2],
         [d.hipR * flare, hemY],
-      ], mkMat(), 40);
+      ], fabricMat("skirt"), 40);
       skirt.name = "skirt"; garmentGroup.add(skirt);
     } else {
       const hemY = category === "boys" ? d.H * 0.30 : d.H * 0.02;
@@ -356,7 +360,7 @@ const View3D = (() => {
         [d.waistR * 1.02 + t, waistYY],
         [d.hipR * 1.12 + t, d.hipY],
         [d.hipR * 1.08 + t, d.hipY - d.span * 0.16],
-      ], mkMat(), 26);
+      ], fabricMat("trousers"), 26);
       seat.scale.z = 0.86; seat.name = "trousers"; garmentGroup.add(seat);
       [-1, 1].forEach(s => {
         const leg = lathe([
@@ -364,7 +368,7 @@ const View3D = (() => {
           [d.thighR * 1.28, d.hipY - d.span * 0.05],
           [d.thighR * 1.12, (d.hipY + hemY) * 0.5],
           [d.thighR * 1.02, hemY],
-        ], mkMat(), 22);
+        ], fabricMat("trousers"), 22);
         leg.position.x = s * d.hipR * 0.5; leg.name = "trousers"; garmentGroup.add(leg);
       });
     }
@@ -374,7 +378,7 @@ const View3D = (() => {
     const slLen = d.armLen * (longSleeve ? 0.9 : (category === "girls" ? 0.34 : 0.45));
     const slR = category === "girls" ? 1.4 : category === "boys" ? 1.15 : 1.03;
     [-1, 1].forEach(s => {
-      const sl = capsule(d.upperR * slR + t, slLen, mkMat());
+      const sl = capsule(d.upperR * slR + t, slLen, fabricMat("sleeve"));
       sl.position.y = -slLen * 0.5 - d.armLen * 0.02;
       sl.name = "sleeve";
       (limbs["arm" + s] || garmentGroup).add(sl);
@@ -403,9 +407,19 @@ const View3D = (() => {
     if (!ready) return;
     opts = opts || {};
     if (typeof opts === "number") opts = { color: opts };   // back-compat
-    if (opts.color != null) fabricState.color = opts.color;
-    if (opts.material) fabricState.material = opts.material;
-    if (opts.opacity != null) fabricState.opacity = opts.opacity;
+    if (opts.parts) {
+      Object.entries(opts.parts).forEach(([part, v]) => {
+        if (!fabricState[part] || !v) return;
+        if (v.color != null) fabricState[part].color = v.color;
+        if (v.material) fabricState[part].material = v.material;
+      });
+    } else {
+      Object.values(fabricState).forEach(st => {
+        if (opts.color != null) st.color = opts.color;
+        if (opts.material) st.material = opts.material;
+      });
+    }
+    if (opts.opacity != null) Object.values(fabricState).forEach(st => st.opacity = opts.opacity);
     lastPieceVis = opts.pieces || lastPieceVis;
 
     const token = ++buildToken;
@@ -429,17 +443,30 @@ const View3D = (() => {
   }
 
   // ---------- live fabric / visibility ----------
-  function setFabric({ color, material, opacity } = {}) {
-    if (color != null) fabricState.color = color;
-    if (material) fabricState.material = material;
-    if (opacity != null) fabricState.opacity = opacity;
+  // parts: { bodice:{color,material}, sleeve:{...}, skirt:{...}, trousers:{...} } — any
+  // subset; opacity applies to all 4 slots (there's no per-part transparency control).
+  function setFabric({ parts, color, material, opacity } = {}) {
+    if (opacity != null) Object.values(fabricState).forEach(st => st.opacity = opacity);
+    // back-compat: a flat {color,material} with no `parts` applies to every part
+    if (parts) {
+      Object.entries(parts).forEach(([part, v]) => {
+        if (!fabricState[part] || !v) return;
+        if (v.color != null) fabricState[part].color = v.color;
+        if (v.material) fabricState[part].material = v.material;
+      });
+    } else if (color != null || material) {
+      Object.values(fabricState).forEach(st => {
+        if (color != null) st.color = color;
+        if (material) st.material = material;
+      });
+    }
     applyFabric();
   }
   function applyFabric() {
     if (!garmentGroup) return;
-    garmentGroup.traverse(o => { if (o.isMesh) o.material = fabricMat(); });
+    garmentGroup.traverse(o => { if (o.isMesh && fabricState[o.name]) o.material = fabricMat(o.name); });
     // sleeves live under the arm groups
-    Object.values(limbs).forEach(g => g.traverse(o => { if (o.isMesh && o.name === "sleeve") o.material = fabricMat(); }));
+    Object.values(limbs).forEach(g => g.traverse(o => { if (o.isMesh && o.name === "sleeve") o.material = fabricMat("sleeve"); }));
   }
   let lastPieceVis = null;
   function setPieceVisibility(pieces) { lastPieceVis = pieces; applyPieceVisibility(); }

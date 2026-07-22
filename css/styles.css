@@ -235,6 +235,15 @@ button { cursor: pointer; border: none; background: none; }
 .meas-row input { width: 100%; padding: 8px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--panel-2); text-align: center; font-weight: 700; font-size: 13px; transition: border var(--fast); }
 .meas-row input:focus { outline: none; border-color: var(--brand); }
 
+/* Illustrated measurement diagram (collapsible reference figure) */
+.meas-diagram { display: none; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel-2); }
+.meas-diagram.show { display: block; }
+.meas-diagram svg { width: 100%; height: auto; color: var(--ink-2); }
+.meas-diagram .callout-num circle { fill: var(--brand); stroke: none; }
+.meas-diagram .callout-num text { fill: #fff; }
+.meas-diagram-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin-top: 10px; font-size: 11px; color: var(--ink-2); }
+.meas-diagram-legend b { color: var(--brand); }
+
 /* Layers */
 .layer { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--panel-2); margin-bottom: 6px; transition: all var(--fast); }
 .layer:hover { border-color: var(--brand); }
@@ -341,6 +350,26 @@ button { cursor: pointer; border: none; background: none; }
 .text-editor .tbtn:hover { border-color: var(--brand); }
 .text-editor .tbtn.active { background: var(--brand); color: var(--brand-ink); border-color: transparent; }
 .text-editor .te-col { width: 34px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); padding: 2px; }
+
+/* Object Browser — docked, non-auto-closing panel (unlike .text-editor popovers) */
+.obj-browser {
+  position: fixed; z-index: 200; top: 84px; inset-inline-end: 16px; width: 260px; max-height: 60vh;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-md);
+  box-shadow: var(--shadow-3); padding: 10px; display: flex; flex-direction: column; gap: 8px;
+  animation: pop .2s var(--ease);
+}
+.obj-browser .ob-head { display: flex; align-items: center; justify-content: space-between; }
+.obj-browser .ob-head-btns { display: flex; gap: 6px; }
+.obj-browser .ob-head-btns .tbtn { height: 26px; min-width: 26px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2); display: inline-flex; align-items: center; justify-content: center; }
+.obj-browser .ob-head-btns .tbtn svg { width: 13px; height: 13px; }
+.obj-browser .ob-search { padding: 7px 9px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--panel-2); font-size: 12px; }
+.obj-browser .ob-list { overflow-y: auto; }
+.obj-browser details { margin-bottom: 4px; }
+.obj-browser summary { font-size: 11.5px; font-weight: 700; color: var(--ink-2); cursor: pointer; padding: 4px 2px; list-style: none; }
+.obj-browser summary::-webkit-details-marker { display: none; }
+.obj-browser .ob-rows { display: flex; flex-direction: column; }
+.obj-browser .ob-row { font-size: 12.5px; padding: 5px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.obj-browser .ob-row:hover { background: var(--panel-2); }
 
 /* Layer properties popover */
 .layer-props { width: 252px; padding: 12px; }

@@ -14,7 +14,8 @@
     category: "women", size: "M", standard: "intl",
     kids: null, custom: {}, unitsCm: true,
     hoverHelp: true, highContrast: false, reduceMotion: false, cloudSync: false,
-    onboarded: false, mine: [], aiEndpoint: "", fabric3d: "cotton",
+    onboarded: false, mine: [], aiEndpoint: "", fabric3d: "cotton", showMeasDiagram: false,
+    lastMarkerYards: null, lastMarkerWidth: null,
     avatarGLB: { women: "", men: "", girls: "", boys: "" },
   };
   const state = Object.assign({}, DEF, JSON.parse(localStorage.getItem("pps") || "{}"));
@@ -171,10 +172,56 @@
 
   // MEASURE PANE
   const MEAS_KEYS = ["chest","waist","hips","shoulder","backLen","sleeve","neck","bicep","inseam","thigh","height"];
+  // Generic front-view croquis with numbered callouts (1-11, matching MEAS_KEYS order)
+  // showing where each measurement is taken. Reference only — inputs stay numeric.
+  const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 220 360" xmlns="http://www.w3.org/2000/svg">
+    <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="110" cy="26" r="15"/>
+      <line x1="103" y1="41" x2="103" y2="52"/><line x1="117" y1="41" x2="117" y2="52"/>
+      <path d="M68,54 L152,54"/>
+      <path d="M68,54 L62,92 L70,148 L64,188 L110,196 L156,188 L150,148 L158,92 L152,54"/>
+      <path d="M68,54 L48,120 L40,195"/><path d="M152,54 L172,120 L180,195"/>
+      <path d="M64,188 L95,265 L90,335"/><path d="M156,188 L125,265 L130,335"/>
+    </g>
+    <g stroke="currentColor" stroke-width="1.1" stroke-dasharray="3,2" fill="none">
+      <line x1="40" y1="92" x2="158" y2="92"/>
+      <line x1="45" y1="148" x2="150" y2="148"/>
+      <line x1="40" y1="188" x2="156" y2="188"/>
+      <line x1="110" y1="54" x2="110" y2="148"/>
+      <line x1="66" y1="54" x2="42" y2="195"/>
+      <line x1="160" y1="90" x2="184" y2="110"/>
+      <line x1="96" y1="35" x2="96" y2="52"/>
+      <line x1="110" y1="196" x2="90" y2="335"/>
+      <line x1="140" y1="225" x2="172" y2="225"/>
+    </g>
+    <g class="callout-num" font-family="Inter, sans-serif" font-size="11" font-weight="700" text-anchor="middle">
+      <g><circle cx="26" cy="92" r="10"/><text x="26" y="96">1</text><line x1="36" y1="92" x2="40" y2="92" stroke="currentColor" stroke-width="1"/></g>
+      <g><circle cx="26" cy="148" r="10"/><text x="26" y="152">2</text><line x1="36" y1="148" x2="45" y2="148" stroke="currentColor" stroke-width="1"/></g>
+      <g><circle cx="26" cy="188" r="10"/><text x="26" y="192">3</text><line x1="36" y1="188" x2="40" y2="188" stroke="currentColor" stroke-width="1"/></g>
+      <g><circle cx="110" cy="20" r="10"/><text x="110" y="24">4</text><line x1="110" y1="30" x2="110" y2="54" stroke="currentColor" stroke-width="1"/></g>
+      <g><circle cx="130" cy="100" r="10"/><text x="130" y="104">5</text><line x1="122" y1="100" x2="110" y2="100" stroke="currentColor" stroke-width="1"/></g>
+      <g><circle cx="18" cy="120" r="10"/><text x="18" y="124">6</text><line x1="28" y1="120" x2="42" y2="130" stroke="currentColor" stroke-width="1"/></g>
+      <g><circle cx="146" cy="30" r="10"/><text x="146" y="34">7</text><line x1="138" y1="34" x2="117" y2="44" stroke="currentColor" stroke-width="1"/></g>
+      <g><circle cx="196" cy="105" r="10"/><text x="196" y="109">8</text><line x1="186" y1="105" x2="172" y2="105" stroke="currentColor" stroke-width="1"/></g>
+      <g><circle cx="18" cy="265" r="10"/><text x="18" y="269">9</text><line x1="28" y1="265" x2="85" y2="265" stroke="currentColor" stroke-width="1"/></g>
+      <g><circle cx="196" cy="225" r="10"/><text x="196" y="229">10</text><line x1="184" y1="225" x2="172" y2="225" stroke="currentColor" stroke-width="1"/></g>
+      <g><circle cx="205" cy="170" r="10"/><text x="205" y="174">11</text><line x1="205" y1="180" x2="205" y2="335" stroke="currentColor" stroke-width="1"/><line x1="205" y1="11" x2="205" y2="160" stroke="currentColor" stroke-width="1"/></g>
+    </g>
+  </svg>`;
   function renderMeasurePane() {
     const c = $(".rail-pane[data-pane=measure]"); c.innerHTML="";
     c.appendChild(el("div","section-title",IC.measure+T("customMeas")));
     c.appendChild(el("div","help-note",T("liveUpdate")));
+
+    // Illustrated measurement diagram — collapsed by default, reference only.
+    const diagToggle = el("button","big-btn ghost",IC.measure+T("measDiagramToggle"));
+    diagToggle.style.marginTop="8px";
+    const diagWrap = el("div","meas-diagram"+(state.showMeasDiagram?" show":""));
+    diagWrap.innerHTML = MEAS_DIAGRAM_SVG + `<div class="meas-diagram-legend">` +
+      MEAS_KEYS.map((k,i)=>`<span><b>${i+1}.</b> ${T("m_"+k)}</span>`).join("") + `</div>`;
+    diagToggle.onclick = () => { state.showMeasDiagram=!state.showMeasDiagram; save(); diagWrap.classList.toggle("show",state.showMeasDiagram); };
+    c.appendChild(diagToggle); c.appendChild(diagWrap);
+
     const m = currentMeas();
     const box = el("div"); box.style.marginTop="10px";
     MEAS_KEYS.forEach(k=>{
@@ -233,9 +280,8 @@
   function applyFabric(color, matKey){
     const pieces=Canvas.getPieces(); if(!pieces.length){ toast(T("empty2d")); return; }
     const sel=Canvas.getSelected();
-    if(sel>=0) Canvas.setColor(sel,color);
-    else pieces.forEach((_,i)=>Canvas.setColor(i,color));
-    if(matKey){ state.fabric3d=matKey; save(); }
+    if(sel>=0){ Canvas.setColor(sel,color); if(matKey) Canvas.setMaterial(sel,matKey); }
+    else{ pieces.forEach((_,i)=>Canvas.setColor(i,color)); if(matKey){ state.fabric3d=matKey; save(); } }
     sync3DFabric();
     renderLayersPane();
   }
@@ -249,6 +295,12 @@
       <div class="field"><label>${T("nameEn")}</label><input class="input lp-en" dir="ltr" value="${escAttr(p.name.en)}"></div>
       <div class="field"><label>${T("nameAr")}</label><input class="input lp-ar" dir="rtl" value="${escAttr(p.name.ar)}"></div>
       <div class="field"><label>${T("pieceColor")}</label><input class="lp-col" type="color" value="${rgbToHex(p.color)}" style="width:100%;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)"></div>
+      <div class="field"><label>${T("pieceMaterial")}</label>
+        <select class="lp-mat" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2)">
+          <option value="">${T("pieceMaterialDefault")}</option>
+          ${FABRICS.map(f=>`<option value="${f.key}"${p.material===f.key?" selected":""}>${T("fab_"+f.key)}</option>`).join("")}
+        </select>
+      </div>
       <div class="field"><label>${T("opacityLbl")} · <b class="lp-opv">${curOp}%</b></label><input class="range lp-op" type="range" min="4" max="90" value="${curOp}"></div>
       <div class="menu-sep"></div>
       <button class="menu-item lp-del" style="color:var(--danger)">${IC.trash}<span>${T("removeLayer")}</span></button>`;
@@ -262,6 +314,7 @@
     q(".lp-en").onchange = () => { Canvas.renamePiece(i,{en:q(".lp-en").value.trim()||p.name.en}); renderLayersPane(); };
     q(".lp-ar").onchange = () => { Canvas.renamePiece(i,{ar:q(".lp-ar").value.trim()||p.name.ar}); renderLayersPane(); };
     q(".lp-col").oninput = () => { Canvas.setColor(i,q(".lp-col").value); sync3DFabric(); renderLayersPane(); };
+    q(".lp-mat").onchange = () => { Canvas.setMaterial(i,q(".lp-mat").value||null); sync3DFabric(); };
     q(".lp-op").oninput = () => { const v=+q(".lp-op").value; q(".lp-opv").textContent=v+"%"; Canvas.setPieceProps(i,{opacity:v/100}); };
     q(".lp-del").onclick = () => { Canvas.removePiece(i); closeAnyMenu(); sync3DVisibility(); renderLayersPane(); toast("✓ "+T("removeLayer")); };
     setTimeout(()=>document.addEventListener("pointerdown",onDocDown),0);
@@ -473,8 +526,15 @@
     });
     // fabric + cost
     c.appendChild(el("div","section-title",null)).textContent=T("fabricCalc");
-    const meas=currentMeas(); const yards=((meas.height/100)* (state.category==="women"?1.8:1.5)).toFixed(2);
-    c.appendChild(el("div","help-note",`${T("fabric")}: <b>${yards} m</b> @ 150cm`));
+    const meas=currentMeas();
+    const yards = state.lastMarkerYards!=null
+      ? state.lastMarkerYards.toFixed(2)
+      : ((meas.height/100)* (state.category==="women"?1.8:1.5)).toFixed(2);
+    c.appendChild(el("div","help-note",
+      state.lastMarkerYards!=null
+        ? `${T("fabric")}: <b>${yards} m</b> @ ${state.lastMarkerWidth||160}cm — ${T("markerYardageSrc")}`
+        : `${T("fabric")}: <b>${yards} m</b> @ 150cm`));
+    const mkBtn=el("button","big-btn ghost",IC.cube+T("createMarker")); mkBtn.style.marginTop="8px"; mkBtn.onclick=openMarkerModal; c.appendChild(mkBtn);
     c.appendChild(el("div","section-title",null)).textContent=T("costEst");
     const fabricCost=+(yards*8).toFixed(2), trims=6.5, labor=15;
     const cost=el("div");
@@ -549,6 +609,8 @@
     { icon:IC.pdf,     label:T("savePDF"),       run:()=>exportAs("PDF") },
     { icon:IC.folder,  label:T("saveProject"),   run:()=>exportAs("JSON") },
     { icon:IC.printer, label:T("patternSummary"),run:exportSummary },
+    { icon:IC.cube,    label:T("createMarker"),  run:openMarkerModal },
+    { icon:IC.magnet,  label:T("snapshotMenu"),  run:openSnapshotPanel },
     "sep",
     { icon:IC.printer, label:T("printProject"),  run:printPattern },
   ]; }
@@ -751,6 +813,103 @@
     box.querySelector(".bg-close").onclick = closeTextEditor;
   }
 
+  // Frozen snapshot ghost overlay — a single translucent reference of the pattern's
+  // current state to compare later edits against. Mirrors openBgPanel() exactly.
+  function openSnapshotPanel(){
+    closeTextEditor();
+    const has = Canvas.hasSnapshot();
+    const box = el("div","text-editor");
+    if (!has){
+      if (!Canvas.getPieces().length){ toast(T("empty2d")); return; }
+      box.innerHTML = `
+        <div class="help-note" style="margin:0">${T("snapshotHint")}</div>
+        <button class="tbtn snap-freeze active" style="width:auto;padding:0 14px">${T("freezeSnapshot")}</button>
+        <div class="row" style="justify-content:flex-end">
+          <button class="tbtn snap-close" style="width:auto;padding:0 10px">${T("close")}</button>
+        </div>`;
+      placeFloating(box, innerWidth/2 - 130, 90);
+      box.querySelector(".snap-freeze").onclick = () => { Canvas.freezeSnapshot(); $("#snapshotBtn").classList.add("active"); closeTextEditor(); openSnapshotPanel(); toast(T("freezeSnapshot")+" ✓"); };
+      box.querySelector(".snap-close").onclick = closeTextEditor;
+      return;
+    }
+    box.innerHTML = `
+      <div class="row"><label style="flex:1">${T("snapshotOpacity")}</label><input class="range snap-op" type="range" min="0.1" max="1" step="0.05" value="${Canvas.getSnapshotOpacity()}" style="flex:2"></div>
+      <div class="row"><label style="flex:1">${T("snapshotShow")}</label><input class="snap-show" type="checkbox" checked></div>
+      <div class="row" style="justify-content:flex-end;gap:8px">
+        <button class="tbtn snap-remove" style="width:auto;padding:0 10px;color:var(--danger)">${T("snapshotRemove")}</button>
+        <button class="tbtn snap-close" style="width:auto;padding:0 10px">${T("close")}</button>
+      </div>`;
+    placeFloating(box, innerWidth/2 - 130, 90);
+    box.querySelector(".snap-op").oninput = e => Canvas.setSnapshotOpacity(+e.target.value);
+    box.querySelector(".snap-show").onchange = e => Canvas.showSnapshot(e.target.checked);
+    box.querySelector(".snap-remove").onclick = () => { Canvas.removeSnapshot(); $("#snapshotBtn").classList.remove("active"); closeTextEditor(); };
+    box.querySelector(".snap-close").onclick = closeTextEditor;
+  }
+
+  // ================= OBJECT BROWSER =================
+  // A docked, non-auto-closing panel (unlike the .text-editor popovers, which all get
+  // swept by closeTextEditor()) listing every construction/finished entity grouped by
+  // type, with a name filter and click-to-select/focus. Read-only inspection + focus —
+  // it doesn't edit anything itself (use the existing point/piece editors for that).
+  let objBrowserOpen = false;
+  function toggleObjectBrowser(){
+    objBrowserOpen = !objBrowserOpen;
+    $("#objBrowserBtn").classList.toggle("active", objBrowserOpen);
+    if (objBrowserOpen) renderObjectBrowser();
+    else { const p=$("#objBrowserPanel"); if(p) p.remove(); }
+  }
+  function renderObjectBrowser(){
+    if (!objBrowserOpen) return;
+    let panel = $("#objBrowserPanel");
+    const query = panel ? panel.querySelector(".ob-search")?.value.trim().toLowerCase() : "";
+    if (!panel){ panel = el("div","obj-browser"); panel.id="objBrowserPanel"; document.body.appendChild(panel); }
+    panel.innerHTML = `
+      <div class="ob-head">
+        <b>${T("objBrowser")}</b>
+        <div class="ob-head-btns">
+          <button class="tbtn ob-refresh" title="${T("refresh")}">${IC.redo}</button>
+          <button class="tbtn ob-close" title="${T("close")}">✕</button>
+        </div>
+      </div>
+      <input class="input ob-search" placeholder="${T("objSearch")}" value="${escAttr(query||"")}">
+      <div class="ob-list"></div>`;
+    const list = panel.querySelector(".ob-list");
+    const match = label => !query || (label||"").toLowerCase().includes(query);
+    const lineNo = {}; let li=0, ai=0, ci=0;
+    const groups = [
+      { key:"points",  label:T("objPoints"),  items: Canvas.getPoints().map(p=>({ id:p.id, label:p.name, kind:"point" })) },
+      { key:"lines",   label:T("objLines"),   items: Canvas.getCons().filter(c=>c.kind==="line").map(c=>({ id:c.id, label:`${T("objLine")} ${++li}`, kind:"cons" })) },
+      { key:"arcs",    label:T("objArcs"),    items: Canvas.getCons().filter(c=>c.kind==="arc").map(c=>({ id:c.id, label:`${T("objArc")} ${++ai}`, kind:"cons" })) },
+      { key:"circles", label:T("objCircles"), items: Canvas.getCons().filter(c=>c.kind==="circle").map(c=>({ id:c.id, label:`${T("objCircle")} ${++ci}`, kind:"cons" })) },
+      { key:"pieces",  label:T("objPieces"),  items: Canvas.getPieces().map((p,i)=>({ id:i, label:L(p.name), kind:"piece" })) },
+      { key:"texts",   label:T("objTexts"),   items: Canvas.getTexts().map(t=>({ id:t.id, label:t.text||T("objTextEmpty"), kind:"text", x:t.x, y:t.y })) },
+    ];
+    groups.forEach(g=>{
+      const filtered = g.items.filter(it=>match(it.label));
+      if (!filtered.length && query) return;
+      const det = el("details"); det.open = true;
+      det.innerHTML = `<summary>${g.label} · ${filtered.length}</summary>`;
+      const ul = el("div","ob-rows");
+      filtered.forEach(it=>{
+        const row = el("div","ob-row", escAttr(it.label));
+        row.onclick = () => {
+          if (it.kind==="point") Canvas.selectPoint(it.id);
+          else if (it.kind==="cons") Canvas.selectCons(it.id);
+          else if (it.kind==="piece") { Canvas.selectPiece(it.id); Canvas.render(); }
+          else if (it.kind==="text") Canvas.centerOn(it.x, it.y);
+        };
+        ul.appendChild(row);
+      });
+      det.appendChild(ul); list.appendChild(det);
+    });
+    if (!groups.some(g=>g.items.some(it=>match(it.label)))) list.appendChild(el("div","help-note",T("objEmpty")));
+    panel.querySelector(".ob-close").onclick = toggleObjectBrowser;
+    panel.querySelector(".ob-refresh").onclick = renderObjectBrowser;
+    panel.querySelector(".ob-search").oninput = renderObjectBrowser;
+    panel.querySelector(".ob-search").focus();
+    if (query) panel.querySelector(".ob-search").setSelectionRange(query.length, query.length);
+  }
+
   // ================= HELP =================
   function openHelp(){
     const tools = ["select","pen","line","arc","free","symmetry","knife","move","rotate","scale","measure","text","seam","notch","grain"];
@@ -775,6 +934,125 @@
     MEAS_KEYS.forEach(k=>html+=`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line-2)"><span>${T("m_"+k)}</span><b>${m[k]} cm</b></div>`);
     html+="</div>";
     openModal("Tech Pack", html, true);
+  }
+
+  // ================= MARKER-MAKING (client-side bounding-box nesting) =================
+  // Shelf/FFDH bin packing over each piece's axis-aligned bounding box — not true
+  // polygon (NFP) nesting. Simple, fast, always safe; the preview is explicitly
+  // captioned as a simplified box approximation rather than an exact cutting layout.
+  function nestShelfPack(items, matWidth, allowRotate, minDist){
+    const sorted = items.slice().sort((a,b)=> Math.max(b.w,b.h) - Math.max(a.w,a.h));
+    const shelves = [];
+    let cur = null;
+    sorted.forEach(it=>{
+      const orients = allowRotate ? [{w:it.w,h:it.h},{w:it.h,h:it.w}] : [{w:it.w,h:it.h}];
+      let choice = cur && orients.find(o => cur.x + (cur.items.length?minDist:0) + o.w <= matWidth && o.h <= cur.height + 1e-6);
+      if(!choice){
+        const fitting = orients.filter(o=>o.w<=matWidth);
+        choice = (fitting.length?fitting:orients).slice().sort((a,b)=>a.h-b.h)[0];
+        const y = cur ? cur.y+cur.height+minDist : 0;
+        cur = { y, height: choice.h, x:0, items: [] };
+        shelves.push(cur);
+      }
+      const gap = cur.items.length ? minDist : 0;
+      const x = cur.x + gap;
+      cur.items.push({ label: it.label, x, y: cur.y, w: choice.w, h: choice.h });
+      cur.x = x + choice.w;
+    });
+    const totalHeight = shelves.length ? shelves[shelves.length-1].y + shelves[shelves.length-1].height : 0;
+    return { placed: shelves.flatMap(s=>s.items), totalHeight };
+  }
+  function drawNestPreview(canvas, result, matWidth, matLength){
+    const ctx = canvas.getContext("2d"); const W=canvas.width, H=canvas.height;
+    ctx.clearRect(0,0,W,H);
+    const h = Math.max(result.totalHeight, matLength*0.15, 10);
+    const scale = Math.min((W-20)/matWidth, (H-20)/h);
+    ctx.save(); ctx.translate(10,10);
+    const line = getComputedStyle(document.body).getPropertyValue("--line").trim()||"#ccc";
+    ctx.strokeStyle=line; ctx.lineWidth=1; ctx.strokeRect(0,0,matWidth*scale,result.totalHeight*scale);
+    ctx.setLineDash([4,3]);
+    for(let y=matLength; y<result.totalHeight; y+=matLength){ ctx.beginPath(); ctx.moveTo(0,y*scale); ctx.lineTo(matWidth*scale,y*scale); ctx.stroke(); }
+    ctx.setLineDash([]);
+    result.placed.forEach((p,i)=>{
+      const c = PALETTE[i%PALETTE.length];
+      ctx.fillStyle = c+"33"; ctx.strokeStyle = c; ctx.lineWidth=1.5;
+      ctx.fillRect(p.x*scale, p.y*scale, p.w*scale, p.h*scale);
+      ctx.strokeRect(p.x*scale, p.y*scale, p.w*scale, p.h*scale);
+      ctx.fillStyle = "#1a1a1a"; ctx.font = "10px Inter, sans-serif"; ctx.textBaseline="top";
+      ctx.fillText(p.label, p.x*scale+3, p.y*scale+3, Math.max(0,p.w*scale-6));
+    });
+    ctx.restore();
+  }
+  function openMarkerModal(){
+    const pieces = Canvas.getPieces();
+    if(!pieces.length){ toast(T("empty2d")); return; }
+    openModal(T("createMarker"), "", true);
+    const body = $("#genericModal .modal-body"); body.innerHTML="";
+
+    const matField = el("div","field");
+    matField.innerHTML = `<label>${T("markerMaterial")}</label>
+      <select class="input mk-mat">
+        <option value="">${T("pieceMaterialDefault")}</option>
+        ${FABRICS.map(f=>`<option value="${f.key}">${T("fab_"+f.key)}</option>`).join("")}
+      </select>`;
+    body.appendChild(matField);
+
+    const pcsField = el("div","field"); pcsField.style.marginTop="12px";
+    pcsField.innerHTML = `<label>${T("markerPieces")} · <span class="mk-count"></span></label>`;
+    const pcsList = el("div"); pcsList.style.cssText="max-height:140px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px";
+    const checks = pieces.map((p,i)=>{
+      const row = el("label"); row.style.cssText="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:12.5px";
+      const cb = el("input"); cb.type="checkbox"; cb.checked=true;
+      row.appendChild(cb); row.appendChild(el("span",null,L(p.name)));
+      pcsList.appendChild(row); return cb;
+    });
+    pcsField.appendChild(pcsList); body.appendChild(pcsField);
+    const updateCount = () => { pcsField.querySelector(".mk-count").textContent = `${checks.filter(c=>c.checked).length} / ${checks.length}`; };
+    checks.forEach(cb=>cb.onchange=updateCount); updateCount();
+
+    const row1 = el("div","row"); row1.style.cssText="display:flex;gap:10px;margin-top:12px";
+    const wField = el("div","field"); wField.style.flex="1"; wField.innerHTML=`<label>${T("markerWidth")}</label>`;
+    const wInp = el("input","input"); wInp.type="number"; wInp.min="20"; wInp.value="160"; wField.appendChild(wInp);
+    const lField = el("div","field"); lField.style.flex="1"; lField.innerHTML=`<label>${T("markerLength")}</label>`;
+    const lInp = el("input","input"); lInp.type="number"; lInp.min="20"; lInp.value="250"; lField.appendChild(lInp);
+    row1.appendChild(wField); row1.appendChild(lField); body.appendChild(row1);
+    body.appendChild(el("div","help-note",T("markerLengthNote"))).style.marginTop="4px";
+
+    const row2 = el("div","row"); row2.style.cssText="display:flex;gap:10px;margin-top:12px";
+    const rField = el("div","field"); rField.style.flex="1"; rField.innerHTML=`<label>${T("markerRotation")}</label>
+      <select class="input mk-rot"><option value="none">${T("markerRotNone")}</option><option value="any" selected>${T("markerRotAny")}</option></select>`;
+    const dField = el("div","field"); dField.style.flex="1"; dField.innerHTML=`<label>${T("markerMinDist")}</label>`;
+    const dInp = el("input","input"); dInp.type="number"; dInp.min="0"; dInp.step="0.1"; dInp.value="0.1"; dField.appendChild(dInp);
+    row2.appendChild(rField); row2.appendChild(dField); body.appendChild(row2);
+
+    const canvas = el("canvas"); canvas.width=680; canvas.height=380;
+    canvas.style.cssText="width:100%;height:auto;margin-top:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)";
+    body.appendChild(canvas);
+    body.appendChild(el("div","help-note",T("markerPreviewNote"))).style.marginTop="6px";
+
+    const yardEl = el("div","help-note"); yardEl.style.marginTop="8px"; yardEl.textContent=T("markerYardageHint");
+    const btnRow = el("div","row"); btnRow.style.cssText="display:flex;gap:8px;margin-top:12px";
+    const nestBtn = el("button","big-btn",T("markerNest")); nestBtn.style.flex="1";
+    const stopBtn = el("button","big-btn ghost",T("markerStop")); stopBtn.style.flex="1";
+    btnRow.appendChild(nestBtn); btnRow.appendChild(stopBtn);
+    body.appendChild(btnRow); body.appendChild(yardEl);
+
+    stopBtn.onclick = () => toast(T("markerInstant"));
+    nestBtn.onclick = () => {
+      const matFilter = body.querySelector(".mk-mat").value;
+      const selected = pieces.filter((p,i)=>checks[i].checked && (!matFilter || (p.material||state.fabric3d)===matFilter));
+      if(!selected.length){ toast(T("empty2d")); return; }
+      const items = selected.map(p=>{
+        const xs=p.outline.map(pt=>pt[0]), ys=p.outline.map(pt=>pt[1]);
+        return { label:L(p.name), w:Math.max(...xs)-Math.min(...xs), h:Math.max(...ys)-Math.min(...ys) };
+      });
+      const matWidth = +wInp.value||160, matLength = +lInp.value||250;
+      const result = nestShelfPack(items, matWidth, rField.querySelector(".mk-rot").value==="any", +dInp.value||0);
+      drawNestPreview(canvas, result, matWidth, matLength);
+      state.lastMarkerYards = result.totalHeight/100; state.lastMarkerWidth = matWidth; save();
+      yardEl.innerHTML = `${T("markerYardage")}: <b>${state.lastMarkerYards.toFixed(2)} m</b> @ ${matWidth}cm`;
+      renderExportPane();
+    };
   }
 
   // ================= PATTERN SUMMARY (one-page, print-ready) =================
@@ -901,17 +1179,35 @@
   }
   const fabricOpacity3D = () => Math.max(0.5, Math.min(1, 0.62 + Canvas.getOpt("fillOpacity")*0.6));
   function pieceVisMap(){ return Canvas.getPieces().map(p=>({ key:(p.name&&p.name.en)||"", visible:p.visible!==false })); }
+  // Mirrors the part-classification regex in three-view.js's applyPieceVisibility() —
+  // the procedural 3D body only has 4 named mesh groups, so material (like visibility)
+  // is assigned per-part, picking the first visible piece that maps to each part.
+  function classifyPart(name){
+    const k=(name||"").toLowerCase();
+    return /sleeve|كم/.test(k) ? "sleeve"
+      : /skirt|تنور/.test(k) ? "skirt"
+      : /trouser|بنطل|pant|\bleg\b/.test(k) ? "trousers" : "bodice";
+  }
+  function partsFabric(){
+    const parts={};
+    Canvas.getPieces().filter(p=>p.visible!==false).forEach(p=>{
+      const part=classifyPart(p.name&&p.name.en);
+      if(!parts[part]) parts[part]={ color:colorToInt(p.color), material:p.material||state.fabric3d||"cotton" };
+    });
+    return parts;
+  }
   function build3D(colorInt){
     const m=currentMeas(); const pieces=Canvas.getPieces();
     const fv=pieces.find(p=>p.visible!==false);
     View3D.build(state.category, m, {
       color: colorInt!=null ? colorInt : (fv ? colorToInt(fv.color) : cssHex("--brand")),
       material: state.fabric3d || "cotton", opacity: fabricOpacity3D(), pieces: pieceVisMap(),
+      parts: partsFabric(),
     });
   }
   // live 3D updates (no full rebuild)
-  function sync3DFabric(){ if(state.view!=="3d") return; const fv=Canvas.getPieces().find(p=>p.visible!==false);
-    View3D.setFabric({ color: fv?colorToInt(fv.color):undefined, material: state.fabric3d, opacity: fabricOpacity3D() }); }
+  function sync3DFabric(){ if(state.view!=="3d") return;
+    View3D.setFabric({ parts: partsFabric(), opacity: fabricOpacity3D() }); }
   function sync3DVisibility(){ if(state.view!=="3d") return; View3D.setPieceVisibility(pieceVisMap()); }
   function cssHex(k){ const t=document.createElement("canvas").getContext("2d");t.fillStyle=getComputedStyle(document.body).getPropertyValue(k).trim();return parseInt(t.fillStyle.slice(1),16);}
   function setView(v){
@@ -1167,6 +1463,9 @@
     $("#snapBtn").onclick=()=>{const v=!Canvas.getOpt("snap");Canvas.setOpt("snap",v);$("#snapBtn").classList.toggle("active",v);}; tip($("#snapBtn"),"Snap",T("tt_snap"));
     $("#bgBtn").onclick=()=>openBgPanel(); tip($("#bgBtn"),T("bgImage"),T("tt_bgImage"));
     $("#bgBtn").classList.toggle("active",Canvas.hasBackground());
+    $("#objBrowserBtn").onclick=()=>toggleObjectBrowser(); tip($("#objBrowserBtn"),T("objBrowser"),T("tt_objBrowser"));
+    $("#snapshotBtn").onclick=()=>openSnapshotPanel(); tip($("#snapshotBtn"),T("snapshotMenu"),T("tt_snapshot"));
+    $("#snapshotBtn").classList.toggle("active",Canvas.hasSnapshot());
     // zoom
     $("#zin").onclick=()=>Canvas.zoom(1.2); tip($("#zin"),"+",T("tt_zoomin"));
     $("#zout").onclick=()=>Canvas.zoom(0.83); tip($("#zout"),"−",T("tt_zoomout"));
