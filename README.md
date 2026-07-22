@@ -49,7 +49,8 @@ install it. After the first load it works **fully offline**.
 | Print & Export: A0–A4/Letter/Plotter, PDF/DXF/SVG/AI/PNG/JPEG/HPGL | ✅ SVG, DXF, PDF are native; PNG/JPEG/AI/HPGL fall back to vector |
 | Fabric consumption + cost estimator + Tech Pack + BOM | ✅ Working (uses your last Create Marker nest if you've made one, else a height-based estimate) |
 | **Pattern Summary export** — one-page bilingual print sheet: size table, a labelled dimensioned diagram per piece, and a construction note (Export pane, Project menu, ⌘K) | ✅ Working |
-| **Pattern Library — 100 pre-designed patterns, 25 per category** (Women/Men/Girls/Boys), category filter chips + search + "My Patterns" | ✅ Working — every entry is a real, gradable multi-piece garment |
+| **Pattern Library — 124 pre-designed patterns, 31 per category** (Women/Men/Girls/Boys), category filter chips + search + "My Patterns" | ✅ Working — every entry is a real, gradable multi-piece garment |
+| **Fancy Collection — 24 elaborate designs, 6 per category**: gowns, tailored jackets/coats, a three-piece suit, sherwanis and parkas — each with 8–10 real pattern pieces (princess seams, godets, capes, tiers, two-piece sleeves, lapels, hoods) and genuinely curved seams | ✅ Working — curves are bezier-sampled into the pattern outline, not straight polygon corners |
 | **Construction tools** — real drafting Point/Line/Arc/Circle tools that snap to and stay live-linked to named points, "Create Pattern Piece" to promote a closed point loop into a real piece, custom parametric **Variables** (named formulas referencing other variables and body measurements, reusable in any point's X/Y), and a trace-over **background reference image** with two-point calibration | ✅ Working — points/lines/arcs re-resolve automatically when you grade/resize |
 | AI Pattern Generator — visible "thinking" stages, robust local image analysis (neckline/hem/flare/colour from a real photo, not just a clean product shot), a wider construction vocabulary (necklines, hem shapes, wrap closures), and a "Detected" attributes panel so you can see the image/prompt actually mattered | ✅ Working (offline heuristic; swap in an LLM endpoint to go fully generative) |
 | **Object Browser** — a docked panel listing every Point/Construction Line/Arc/Circle/Piece/Text with live counts and a name filter; click a row to jump the canvas to it | ✅ Working |
@@ -59,6 +60,14 @@ install it. After the first load it works **fully offline**.
 | PWA manifest + service worker (offline, installable) | ✅ Working |
 
 ### Honest notes
+- **Fancy Collection** (`js/fancy-patterns.js`) pieces are hand-authored, not run
+  through the AI builder — each design's princess seams, lapels, godets, hoods and
+  tiers are real geometry built with quadratic/cubic bezier curves sampled into the
+  pattern outline (so seams read as genuinely curved, not straight polygon corners).
+  Proportions come from heuristic ratios of the body measurements (in the same style
+  as the hand-crafted `PATTERNS` in `js/data.js`), not couture drafting-book formulas —
+  treat these as realistic *design* references to grade and export, not
+  seam-allowance-exact sewing patterns ready for a cutting table.
 - **AI generator** (`js/ai.js`) segments the uploaded photo with a
   border-adaptive threshold + largest-contiguous-run-per-row scan (robust to
   background clutter, not just clean product shots on white), then reads
@@ -143,6 +152,7 @@ BerryStudio/                (repository root)
 │   ├── three-view.js     3D parametric avatar (Three.js)
 │   ├── ai.js             Image/prompt → style params + parametric garment builder
 │   ├── library.js        100-pattern catalog (25/category), built on ai.js's builder
+│   ├── fancy-patterns.js 24 hand-crafted 8+ piece designs (6/category) with bezier-curved seams
 │   └── app.js            Application controller (wires everything)
 └── icons/                App icons (SVG + PNG 192/512)
 ```
