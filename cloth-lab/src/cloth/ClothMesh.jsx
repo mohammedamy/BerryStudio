@@ -12,9 +12,12 @@ import { deriveCollisionRig } from '../body/collisionRig'
 // per `dims` change (placement is a pure function of body dims); the GPU
 // simulation owns position from then on — see ClothSimulation for the
 // physics and the onBeforeCompile patch below for how the render mesh reads
-// it back with zero CPU readback.
-export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC }) {
+// it back with zero CPU readback (that guarantee is specifically about the
+// steady-state render loop — grab-and-drag below does a ONE-TIME readback
+// per pointerdown, which is a rare, user-paced event, not a per-frame cost).
+export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragStateChange }) {
   const gl = useThree((s) => s.gl)
+  const camera = useThree((s) => s.camera)
 
   const assembled = useMemo(() => {
     const triangulated = triangulateAll(TSHIRT_PIECES, TSHIRT_SEAMS, 2)
@@ -99,5 +102,119 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC }) {
     }
   })
 
-  return <mesh geometry={geometry} material={material} frustumCulled={false} />
+  // Grab-and-drag: raycast -> pin one sim particle to the pointer.
+  //
+  // Three.js's Raycaster tests against `geometry.attributes.position`, which
+  // is otherwise vestigial here (the vertex shader overrides render position
+  // from the GPU texture every frame — see the material above). So on every
+  // pointerdown we do a ONE-TIME readback of the CURRENT sim state and copy
+  // it into that attribute, making the geometry briefly "true" again just
+  // long enough to raycast against the actual current drape, not the rest
+  // pose. A plain DOM listener on the canvas (not R3F's onPointerDown prop)
+  // is used deliberately: R3F's built-in per-object raycasting runs BEFORE
+  // our handler gets a chance to freshen the geometry, so it would always
+  // test against the stale rest-pose shape.
+  const meshRef = useRef(null)
+  const dragRef = useRef(null) // { particleIndex, plane: THREE.Plane }
+
+  useEffect(() => {
+    const canvas = gl.domElement
+    const raycaster = new THREE.Raycaster()
+    const ndc = new THREE.Vector2()
+    const camDir = new THREE.Vector3()
+    const target = new THREE.Vector3()
+
+    function setNdc(e) {
+      const rect = canvas.getBoundingClientRect()
+      ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+      ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+    }
+
+    function refreshGeometryToCurrentPositions() {
+      const sim = simRef.current
+      const mesh = meshRef.current
+      if (!sim || !mesh) return false
+      const texDim = sim.texDim
+      const buffer = new Float32Array(texDim * texDim * 4)
+      gl.readRenderTargetPixels(sim.gpuCompute.getCurrentRenderTarget(sim.posVar), 0, 0, texDim, texDim, buffer)
+      const { cloth } = assembled
+      const posAttr = mesh.geometry.attributes.position
+      for (let i = 0; i < cloth.renderVertexCount; i++) {
+        const sp = cloth.renderVertexToSimParticle[i]
+        posAttr.array[i * 3] = buffer[sp * 4]
+        posAttr.array[i * 3 + 1] = buffer[sp * 4 + 1]
+        posAttr.array[i * 3 + 2] = buffer[sp * 4 + 2]
+      }
+      posAttr.needsUpdate = true
+      mesh.geometry.computeBoundingSphere()
+      return true
+    }
+
+    function onPointerDown(e) {
+      const sim = simRef.current
+      const mesh = meshRef.current
+      if (!sim || !mesh || e.button !== 0) return
+      if (!refreshGeometryToCurrentPositions()) return
+
+      setNdc(e)
+      raycaster.setFromCamera(ndc, camera)
+      const hits = raycaster.intersectObject(mesh)
+      if (hits.length === 0) return
+
+      const hit = hits[0]
+      const { cloth } = assembled
+      const posAttr = mesh.geometry.attributes.position
+      const idx = mesh.geometry.index.array
+      const triStart = hit.faceIndex * 3
+      let best = idx[triStart], bestDist = Infinity
+      for (let k = 0; k < 3; k++) {
+        const c = idx[triStart + k]
+        const dx = posAttr.array[c * 3] - hit.point.x
+        const dy = posAttr.array[c * 3 + 1] - hit.point.y
+        const dz = posAttr.array[c * 3 + 2] - hit.point.z
+        const d = dx * dx + dy * dy + dz * dz
+        if (d < bestDist) { bestDist = d; best = c }
+      }
+      const particleIndex = cloth.renderVertexToSimParticle[best]
+
+      camera.getWorldDirection(camDir)
+      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(camDir, hit.point)
+      dragRef.current = { particleIndex, plane }
+      sim.setDragParticle(particleIndex, hit.point)
+      onDragStateChange?.(true)
+      canvas.setPointerCapture?.(e.pointerId)
+    }
+
+    function onPointerMove(e) {
+      const drag = dragRef.current
+      const sim = simRef.current
+      if (!drag || !sim) return
+      setNdc(e)
+      raycaster.setFromCamera(ndc, camera)
+      if (raycaster.ray.intersectPlane(drag.plane, target)) {
+        sim.setDragParticle(drag.particleIndex, target)
+      }
+    }
+
+    function onPointerUp(e) {
+      if (!dragRef.current) return
+      dragRef.current = null
+      simRef.current?.clearDrag()
+      onDragStateChange?.(false)
+      canvas.releasePointerCapture?.(e.pointerId)
+    }
+
+    canvas.addEventListener('pointerdown', onPointerDown)
+    canvas.addEventListener('pointermove', onPointerMove)
+    canvas.addEventListener('pointerup', onPointerUp)
+    canvas.addEventListener('pointercancel', onPointerUp)
+    return () => {
+      canvas.removeEventListener('pointerdown', onPointerDown)
+      canvas.removeEventListener('pointermove', onPointerMove)
+      canvas.removeEventListener('pointerup', onPointerUp)
+      canvas.removeEventListener('pointercancel', onPointerUp)
+    }
+  }, [gl, camera, assembled, onDragStateChange])
+
+  return <mesh ref={meshRef} geometry={geometry} material={material} frustumCulled={false} />
 }

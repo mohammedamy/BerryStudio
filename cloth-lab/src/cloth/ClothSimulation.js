@@ -129,13 +129,61 @@ vec3 collideCapsule(vec3 p, vec3 prevP, vec3 a, vec3 b, float r0, float r1, floa
 }
 `
 
+// Self-collision: brute-force O(N^2) — deliberately NOT spatial hashing.
+// GPUComputationRenderer has no compute-shader/atomics access, so a real
+// GPU spatial hash needs either a full bitonic sort or scatter-with-atomics
+// pass, neither available in plain WebGL2 fragment shaders. At this
+// particle budget (~2000) brute-force is measured at ~0.03ms/substep for
+// the existing 16-neighbor structural+bend scan; an O(N^2) scan is ~120x
+// that (~3.6-7ms) — too much for every substep, but comfortably affordable
+// ONCE per rendered frame (see `uApplySelfCollision`, set true only on the
+// last of the 8 substeps in step() below). Revisit with real spatial
+// hashing only if particle count grows into the 10k+ range.
+//
+// Exclusion rule: compare REST-space distance, not mesh topology. Two
+// particles close in the UNDEFORMED rest pose are normal local fabric
+// (already handled by structural/bend) regardless of current distance;
+// two particles FAR apart at rest but suddenly close in the deformed state
+// is exactly a self-fold, and gets pushed apart. This needs no neighbor-list
+// lookups — just a second static texture holding each particle's permanent
+// rest position (unlike texturePosition/texturePrevPosition, this one never
+// ping-pongs).
+function selfCollisionGlsl(texDim) {
+  return `
+vec3 selfCollisionCorrection(vec3 predicted, vec3 myRestPos, float myFlatIdx) {
+  if (uApplySelfCollision < 0.5) return vec3(0.0);
+  vec3 corr = vec3(0.0);
+  float count = 0.0;
+  for (int xi = 0; xi < ${texDim}; xi++) {
+    for (int yi = 0; yi < ${texDim}; yi++) {
+      float flatIdx = float(yi) * resolution.x + float(xi);
+      if (flatIdx >= uParticleCount || flatIdx == myFlatIdx) continue;
+      vec2 juv = (vec2(float(xi), float(yi)) + 0.5) / resolution;
+      vec3 jRest = texture2D(uRestPosition, juv).xyz;
+      if (distance(myRestPos, jRest) < uSelfCollisionRestThreshold) continue;
+      vec3 jPos = texture2D(texturePosition, juv).xyz;
+      vec3 diff = predicted - jPos;
+      float d = length(diff);
+      if (d < uSelfCollisionRadius && d > 1e-6) {
+        corr += diff * ((uSelfCollisionRadius - d) / d);
+        count += 1.0;
+      }
+    }
+  }
+  if (count > 0.5) return corr / count;
+  return vec3(0.0);
+}
+`
+}
+
 // NOTE: `texturePosition` / `texturePrevPosition` are NOT declared here —
 // GPUComputationRenderer.init() auto-prepends `uniform sampler2D <name>;`
 // for every variable listed in setVariableDependencies(); declaring them
 // again here would be a duplicate-declaration compile error.
-function positionFragmentShader() {
+function positionFragmentShader(texDim) {
   return `
 uniform sampler2D uAreaShare;
+uniform sampler2D uRestPosition;
 uniform sampler2D uStructNbrA;
 uniform sampler2D uStructNbrB;
 uniform sampler2D uStructRestA;
@@ -159,12 +207,20 @@ uniform vec3 uCapB[${MAX_COLLISION_CAPSULES}];
 uniform float uCapR0[${MAX_COLLISION_CAPSULES}];
 uniform float uCapR1[${MAX_COLLISION_CAPSULES}];
 uniform float uCapZScale[${MAX_COLLISION_CAPSULES}];
+uniform float uParticleCount;
+uniform float uApplySelfCollision;
+uniform float uSelfCollisionRadius;
+uniform float uSelfCollisionRestThreshold;
+uniform float uDragParticleIndex;
+uniform vec3 uDragTargetPosition;
 
 ${NEIGHBOR_CORRECTION_GLSL}
 ${CAPSULE_COLLISION_GLSL}
+${selfCollisionGlsl(texDim)}
 
 void main() {
   vec2 uv = gl_FragCoord.xy / resolution.xy;
+  float myFlatIdx = floor(gl_FragCoord.y) * resolution.x + floor(gl_FragCoord.x);
 
   vec4 areaData = texture2D(uAreaShare, uv);
   float areaShare = areaData.r;
@@ -174,6 +230,15 @@ void main() {
 
   if (pinned > 0.5) {
     gl_FragColor = vec4(pos, 0.0);
+    return;
+  }
+
+  // Grab-and-drag: force this particle to the pointer's live target
+  // instead of running physics on it at all. Checked before the rest of
+  // the step so a dragged particle never fights the solver — its NEIGHBORS
+  // still see it move (via texturePosition) and react normally.
+  if (myFlatIdx == uDragParticleIndex) {
+    gl_FragColor = vec4(uDragTargetPosition, 0.0);
     return;
   }
 
@@ -224,6 +289,11 @@ void main() {
     predicted = collideCapsule(predicted, prevPos, uCapA[i], uCapB[i], uCapR0[i], uCapR1[i], uCapZScale[i], uFriction);
   }
 
+  // Self-collision last: a fold pushed apart here should not get shoved
+  // back into the body by an earlier pass re-running on it.
+  vec3 selfCorr = selfCollisionCorrection(predicted, texture2D(uRestPosition, uv).xyz, myFlatIdx);
+  predicted += selfCorr;
+
   if (predicted.y < uFloorY) predicted.y = uFloorY;
 
   gl_FragColor = vec4(predicted, 0.0);
@@ -266,8 +336,14 @@ function buildCollisionUniformValues(collisionRig) {
   return { capA, capB, capR0, capR1, capZScale, count }
 }
 
+// 1.2cm push-apart radius, 3.5cm rest-space exclusion — comfortably above
+// the ~2cm Delaunay triangulation spacing (see triangulate.js) so directly
+// adjacent mesh vertices are always excluded as "normal local fabric," while
+// still catching a genuine tight self-fold (see selfCollisionGlsl above).
+const DEFAULT_SELF_COLLISION = { radius: 0.012, restThreshold: 0.035 }
+
 export class ClothSimulation {
-  constructor(renderer, cloth, neighbors, fabric, { floorY = 0, collisionRig = [] } = {}) {
+  constructor(renderer, cloth, neighbors, fabric, { floorY = 0, collisionRig = [], selfCollision = DEFAULT_SELF_COLLISION } = {}) {
     this.frameCount = 0
     this.simParticleCount = cloth.simParticleCount
     this.texDim = textureDimFor(cloth.simParticleCount)
@@ -283,7 +359,7 @@ export class ClothSimulation {
       prevTex.image.data[i * 4] = x; prevTex.image.data[i * 4 + 1] = y; prevTex.image.data[i * 4 + 2] = z; prevTex.image.data[i * 4 + 3] = 0
     }
 
-    const posVar = gpuCompute.addVariable('texturePosition', positionFragmentShader(), posTex)
+    const posVar = gpuCompute.addVariable('texturePosition', positionFragmentShader(this.texDim), posTex)
     const prevVar = gpuCompute.addVariable('texturePrevPosition', prevPositionFragmentShader(), prevTex)
     gpuCompute.setVariableDependencies(posVar, [posVar, prevVar])
     gpuCompute.setVariableDependencies(prevVar, [posVar])
@@ -293,7 +369,17 @@ export class ClothSimulation {
     const areaTex = gpuCompute.createTexture()
     for (let i = 0; i < cloth.simParticleCount; i++) {
       areaTex.image.data[i * 4] = cloth.simAreaShare[i]
-      areaTex.image.data[i * 4 + 1] = 0 // pinned flag — nothing pinned yet (Phase 1: pure drape+collision, no grab/pin UI until Phase 2)
+      areaTex.image.data[i * 4 + 1] = 0 // pinned flag — nothing pinned yet; grab-drag uses uDragParticleIndex instead (see setDragParticle)
+    }
+
+    // Permanently static (never ping-pongs, unlike texturePosition) — the
+    // self-collision exclusion test compares against the UNDEFORMED rest
+    // pose, not whatever texturePosition has drifted to.
+    const restTex = gpuCompute.createTexture()
+    for (let i = 0; i < cloth.simParticleCount; i++) {
+      restTex.image.data[i * 4] = cloth.simRestPositions[i * 3]
+      restTex.image.data[i * 4 + 1] = cloth.simRestPositions[i * 3 + 1]
+      restTex.image.data[i * 4 + 2] = cloth.simRestPositions[i * 3 + 2]
     }
 
     const structTex = packNeighborTextures(neighbors.structural, neighbors.maxNeighbors, this.texDim)
@@ -302,6 +388,7 @@ export class ClothSimulation {
 
     Object.assign(posVar.material.uniforms, {
       uAreaShare: { value: areaTex },
+      uRestPosition: { value: restTex },
       uStructNbrA: { value: structTex.nbrA }, uStructNbrB: { value: structTex.nbrB },
       uStructRestA: { value: structTex.restA }, uStructRestB: { value: structTex.restB },
       uBendNbrA: { value: bendTex.nbrA }, uBendNbrB: { value: bendTex.nbrB },
@@ -319,6 +406,12 @@ export class ClothSimulation {
       uCapA: { value: cap.capA }, uCapB: { value: cap.capB },
       uCapR0: { value: cap.capR0 }, uCapR1: { value: cap.capR1 },
       uCapZScale: { value: cap.capZScale },
+      uParticleCount: { value: cloth.simParticleCount },
+      uApplySelfCollision: { value: 0 },
+      uSelfCollisionRadius: { value: selfCollision.radius },
+      uSelfCollisionRestThreshold: { value: selfCollision.restThreshold },
+      uDragParticleIndex: { value: -1 },
+      uDragTargetPosition: { value: new THREE.Vector3() },
     })
 
     const error = gpuCompute.init()
@@ -334,6 +427,21 @@ export class ClothSimulation {
     u.uFriction.value = fabric.friction
   }
 
+  // Pins `particleIndex` to `targetPosition` every substep until cleared —
+  // the shader early-exits it straight to this target (see the
+  // `myFlatIdx == uDragParticleIndex` check), so it never fights the
+  // solver while dragged. Called every pointermove; cheap (2 uniform
+  // writes, no texture rebuild).
+  setDragParticle(particleIndex, targetPosition) {
+    const u = this.posVar.material.uniforms
+    u.uDragParticleIndex.value = particleIndex
+    u.uDragTargetPosition.value.copy(targetPosition)
+  }
+
+  clearDrag() {
+    this.posVar.material.uniforms.uDragParticleIndex.value = -1
+  }
+
   // Fixed substeps only — never feed a raw rAF delta straight into the
   // physics (a classic "explodes on a stutter" bug). A huge delta (tab was
   // backgrounded) skips this frame entirely rather than catch-up-stepping.
@@ -341,8 +449,14 @@ export class ClothSimulation {
     if (delta > 0.5) return
     this.frameCount++
     const gravityRamp = Math.min(1, this.frameCount / GRAVITY_RAMP_FRAMES)
-    this.posVar.material.uniforms.uGravityRamp.value = gravityRamp
+    const u = this.posVar.material.uniforms
+    u.uGravityRamp.value = gravityRamp
     for (let i = 0; i < SUBSTEPS; i++) {
+      // Self-collision is O(N^2) — affordable once per rendered frame, not
+      // once per substep (see selfCollisionGlsl's cost comment). Running it
+      // on the LAST substep means it sees the frame's fully-relaxed,
+      // post-body-collision positions rather than an intermediate one.
+      u.uApplySelfCollision.value = i === SUBSTEPS - 1 ? 1 : 0
       this.gpuCompute.compute()
     }
   }

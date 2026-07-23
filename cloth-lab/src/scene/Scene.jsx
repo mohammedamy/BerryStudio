@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { OrbitControls } from '@react-three/drei'
 import Avatar from '../body/Avatar'
 import StaticPiecesDebug from '../cloth/StaticPiecesDebug'
@@ -6,6 +7,10 @@ import ClothMesh from '../cloth/ClothMesh'
 
 // The actual <Canvas> contents: lighting, ground, avatar, orbit camera.
 export default function Scene({ dims, debugView, fabricId }) {
+  // Disabled while grabbing a cloth particle — otherwise dragging the mouse
+  // to move the pin also orbits the camera at the same time, fighting itself.
+  const [dragging, setDragging] = useState(false)
+
   return (
     <>
       <color attach="background" args={['#14151a']} />
@@ -21,9 +26,12 @@ export default function Scene({ dims, debugView, fabricId }) {
       <Avatar dims={dims} />
       {debugView === 'pieces' && <StaticPiecesDebug dims={dims} />}
       {debugView === 'weld' && <WeldDebugView dims={dims} />}
-      {debugView === 'cloth' && <ClothMesh dims={dims} fabricId={fabricId} />}
+      {debugView === 'cloth' && <ClothMesh dims={dims} fabricId={fabricId} onDragStateChange={setDragging} />}
 
-      <OrbitControls target={[0, dims.H * 0.55, 0]} minDistance={0.6} maxDistance={4} enableDamping dampingFactor={0.1} />
+      <OrbitControls
+        target={[0, dims.H * 0.55, 0]} minDistance={0.6} maxDistance={4}
+        enableDamping dampingFactor={0.1} enabled={!dragging}
+      />
     </>
   )
 }
