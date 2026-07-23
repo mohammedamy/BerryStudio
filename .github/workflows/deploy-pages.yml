@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+# Publishes the existing static production site (index.html, css/, js/,
+# icons/, manifest.webmanifest, sw.js) UNCHANGED at the domain root, plus the
+# cloth-lab/ Vite app built and published at a /cloth-lab/ subpath alongside
+# it — one combined artifact, not a replacement of the production site. See
+# cloth-lab/vite.config.js's `base` for the matching subpath.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: cloth-lab/package-lock.json
+
+      - name: Install cloth-lab dependencies
+        run: npm ci
+        working-directory: cloth-lab
+
+      - name: Build cloth-lab
+        run: npm run build
+        working-directory: cloth-lab
+
+      - name: Assemble combined site
+        run: |
+          set -e
+          mkdir -p _site
+          cp -r index.html css icons js manifest.webmanifest sw.js _site/
+          mkdir -p _site/cloth-lab
+          cp -r cloth-lab/dist/. _site/cloth-lab/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
