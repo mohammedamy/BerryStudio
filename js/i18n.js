@@ -10,7 +10,7 @@ const I18N = {
     // categories
     women: "Women", men: "Men", girls: "Girls", boys: "Boys",
     // views
-    view2d: "2D Pattern", view3d: "3D Preview",
+    view2d: "2D Pattern", view3d: "3D Preview", viewClothLab: "3D Cloth Lab",
     // tools
     t_select: "Select", t_pen: "Pen (Bézier)", t_line: "Line", t_arc: "Arc",
     t_free: "Freehand", t_symmetry: "Symmetry", t_knife: "Knife", t_move: "Move",
@@ -187,7 +187,7 @@ const I18N = {
     appName: "بيري ستوديو",
     tagline: "تصميم وتدريج باترونات الأزياء",
     women: "حريمي", men: "رجالي", girls: "بناتي", boys: "ولادي",
-    view2d: "الباترون ٢D", view3d: "معاينة ٣D",
+    view2d: "الباترون ٢D", view3d: "معاينة ٣D", viewClothLab: "معمل القماش ٣D",
     t_select: "تحديد", t_pen: "قلم (منحنى بيزيه)", t_line: "خط مستقيم", t_arc: "قوس",
     t_free: "رسم حر", t_symmetry: "تماثل", t_knife: "قص/تقسيم", t_move: "تحريك",
     t_rotate: "تدوير", t_scale: "تكبير/تصغير", t_measure: "قياس",

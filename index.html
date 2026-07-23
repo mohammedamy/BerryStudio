@@ -7,7 +7,7 @@
 <title>BerryStudio — بيري ستوديو</title>
 <meta name="description" content="Bilingual fashion pattern design & grading — draft, grade, preview in 3D and export print-ready patterns.">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/icon-512.png" type="image/png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/styles.css">
@@ -27,7 +27,7 @@
   <!-- ===== TOP BAR ===== -->
   <header class="topbar">
     <div class="brand">
-      <span class="logo" id="logo"><img src="icons/icon.svg" alt="BerryStudio" width="34" height="34"></span>
+      <span class="logo" id="logo"><img src="icons/icon-192.png" alt="BerryStudio" width="34" height="34"></span>
       <span><span class="brand-name" id="brandName">BerryStudio</span><br><span class="brand-sub" id="brandSub">Fashion Pattern Design</span></span>
     </div>
 
@@ -45,6 +45,7 @@
     <div class="seg" id="viewToggle">
       <button data-v="2d" class="active">2D Pattern</button>
       <button data-v="3d">3D Preview</button>
+      <button data-v="clothlab">3D Cloth Lab</button>
     </div>
 
     <button class="pill" id="unitsPill"><span class="u">cm</span></button>
@@ -91,6 +92,14 @@
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700"><input type="checkbox" id="spinToggle" checked> 360°</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700"><input type="checkbox" id="walkToggle" checked> Walk</label>
           </div>
+        </div>
+
+        <!-- Cloth Lab layer: a separate React/R3F app (cloth-lab/), embedded
+             via iframe rather than merged in — different framework, own
+             build/deploy. src is set lazily on first switch (see
+             loadClothLab in app.js), not on page load. -->
+        <div class="clothlab-wrap" id="viewClothLab">
+          <iframe id="clothLabFrame" title="3D Cloth Lab"></iframe>
         </div>
 
         <!-- empty state -->

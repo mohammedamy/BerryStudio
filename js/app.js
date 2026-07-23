@@ -1318,10 +1318,25 @@
   function setView(v){
     state.view=v;
     $("#view3d").classList.toggle("show", v==="3d");
+    $("#viewClothLab").classList.toggle("show", v==="clothlab");
     document.querySelector(".canvas-wrap").classList.toggle("threed", v==="3d");
+    document.querySelector(".canvas-wrap").classList.toggle("clothlab", v==="clothlab");
     $$("#viewToggle button").forEach(b=>b.classList.toggle("active",b.dataset.v===v));
-    if(v==="3d"){ View3D.resize(); build3D(); } else Canvas.render();
+    if(v==="3d"){ View3D.resize(); build3D(); }
+    else if(v==="clothlab"){ loadClothLab(); }
+    else Canvas.render();
     save();
+  }
+  // cloth-lab is a separate React/R3F app (own build+deploy, see
+  // cloth-lab/ and .github/workflows/deploy-pages.yml) — embedded via
+  // iframe, src set lazily on first switch so it isn't loaded (and its
+  // GPU work isn't running) unless the user actually opens this tab.
+  function loadClothLab(){
+    const frame=$("#clothLabFrame");
+    if(frame.dataset.loaded) return;
+    const isLocal=/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    frame.src = isLocal ? "http://localhost:5173/" : "cloth-lab/";
+    frame.dataset.loaded="1";
   }
 
   // ================= EMPTY STATE =================
@@ -1356,7 +1371,7 @@
     Canvas.setTranslator(T);
     buildToolRail(); buildRail(); syncCategoryUI(); updateStageChips();
     $("#brandName").textContent=T("appName"); $("#brandSub").textContent=T("tagline");
-    $$("#viewToggle button")[0].textContent=T("view2d"); $$("#viewToggle button")[1].textContent=T("view3d");
+    $$("#viewToggle button")[0].textContent=T("view2d"); $$("#viewToggle button")[1].textContent=T("view3d"); $$("#viewToggle button")[2].textContent=T("viewClothLab");
     Canvas.render();
   }
 
@@ -1463,6 +1478,7 @@
     {t:T("redoLbl"),i:IC.redo,run:()=>{Canvas.doRedo();renderLayersPane();sync3DVisibility();}},
     {t:T("view2d"),i:IC.grid,run:()=>setView("2d")},
     {t:T("view3d"),i:IC.cube,run:()=>setView("3d")},
+    {t:T("viewClothLab"),i:IC.cube,run:()=>setView("clothlab")},
     {t:T("autoGrade"),i:IC.spark,run:()=>{grade();toast(T("graded"));}},
     {t:T("theme"),i:IC.palette,run:openThemePicker},
     {t:T("settings"),i:IC.gear,run:openSettings},
