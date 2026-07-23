@@ -14,15 +14,24 @@
 // band, and bendStiff carries the wide, clearly-differentiated spread.
 // All 6 fields are plain float uniforms — switching fabric is an instant
 // uniform update, no shader recompile, no texture rebuild, no sim restart.
+// friction values run much higher than a real-world coefficient would (real
+// fabric-on-skin friction is more like 0.3-0.6) because collideCapsule's
+// friction model (ClothSimulation.js) only ever SLOWS tangential drift, it
+// doesn't fully arrest it at a realistic coefficient — checked empirically,
+// a T-shirt at the "physically realistic" ~0.35 still crept off the
+// shoulders and collapsed to the floor over a couple thousand frames, just
+// slower than with no friction at all. These values are tuned for the sim's
+// actual behavior, not real material science, preserving relative order
+// (chiffon slipperiest, leather grippiest) rather than absolute realism.
 export const FABRIC_SIM_PRESETS = {
-  chiffon: { massDensity: 30, structStiff: 0.92, bendStiff: 0.08, damping: 0.985, friction: 0.10 },
-  silk: { massDensity: 60, structStiff: 0.94, bendStiff: 0.12, damping: 0.980, friction: 0.15 },
-  satin: { massDensity: 90, structStiff: 0.95, bendStiff: 0.16, damping: 0.980, friction: 0.18 },
-  cotton: { massDensity: 150, structStiff: 0.96, bendStiff: 0.28, damping: 0.970, friction: 0.35 },
-  linen: { massDensity: 170, structStiff: 0.96, bendStiff: 0.34, damping: 0.970, friction: 0.30 },
-  wool: { massDensity: 300, structStiff: 0.97, bendStiff: 0.50, damping: 0.950, friction: 0.45 },
-  denim: { massDensity: 400, structStiff: 0.98, bendStiff: 0.75, damping: 0.930, friction: 0.55 },
-  leather: { massDensity: 550, structStiff: 0.98, bendStiff: 0.90, damping: 0.900, friction: 0.65 },
+  chiffon: { massDensity: 30, structStiff: 0.92, bendStiff: 0.08, damping: 0.985, friction: 0.75 },
+  silk: { massDensity: 60, structStiff: 0.94, bendStiff: 0.12, damping: 0.980, friction: 0.80 },
+  satin: { massDensity: 90, structStiff: 0.95, bendStiff: 0.16, damping: 0.980, friction: 0.82 },
+  cotton: { massDensity: 150, structStiff: 0.96, bendStiff: 0.28, damping: 0.970, friction: 0.90 },
+  linen: { massDensity: 170, structStiff: 0.96, bendStiff: 0.34, damping: 0.970, friction: 0.87 },
+  wool: { massDensity: 300, structStiff: 0.97, bendStiff: 0.50, damping: 0.950, friction: 0.93 },
+  denim: { massDensity: 400, structStiff: 0.98, bendStiff: 0.75, damping: 0.930, friction: 0.96 },
+  leather: { massDensity: 550, structStiff: 0.98, bendStiff: 0.90, damping: 0.900, friction: 0.97 },
 }
 
 export const FABRIC_IDS = Object.keys(FABRIC_SIM_PRESETS)

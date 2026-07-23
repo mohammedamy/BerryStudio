@@ -5,7 +5,8 @@ const DEBUG_VIEWS = [
   { id: 'off', label: 'Off', title: 'No pattern-piece debug overlay' },
   { id: 'pieces', label: 'Pieces', title: 'Per-piece flat-color static placement (no physics)' },
   { id: 'weld', label: 'Weld', title: 'Weld-degree overlay: grey=unwelded, green=seam, red=multi-piece corner' },
-  { id: 'cloth', label: 'Cloth', title: 'Live GPU cloth simulation (structural + bend, no body collision yet)' },
+  { id: 'cloth', label: 'Cloth', title: 'Live GPU cloth simulation: structural+bend+self-collision, body collision, grab-and-drag' },
+  { id: 'seams', label: 'Seams', title: 'Interactively author seam pairings for an imported pattern, in 3D' },
 ]
 
 export default function Header({ category, onCategoryChange, debugView, onDebugViewChange }) {

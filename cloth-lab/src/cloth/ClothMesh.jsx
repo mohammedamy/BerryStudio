@@ -9,22 +9,23 @@ import { FABRIC_SIM_PRESETS, DEFAULT_FABRIC } from './fabricPresets'
 import { deriveCollisionRig } from '../body/collisionRig'
 
 // Build-order steps 6+: the actual simulated garment. Geometry is built once
-// per `dims` change (placement is a pure function of body dims); the GPU
-// simulation owns position from then on — see ClothSimulation for the
-// physics and the onBeforeCompile patch below for how the render mesh reads
-// it back with zero CPU readback (that guarantee is specifically about the
-// steady-state render loop — grab-and-drag below does a ONE-TIME readback
-// per pointerdown, which is a rare, user-paced event, not a per-frame cost).
-export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragStateChange }) {
+// per `dims`/`pieces`/`seams` change (placement is a pure function of body
+// dims); the GPU simulation owns position from then on — see ClothSimulation
+// for the physics and the onBeforeCompile patch below for how the render
+// mesh reads it back with zero CPU readback (that guarantee is specifically
+// about the steady-state render loop — grab-and-drag below does a ONE-TIME
+// readback per pointerdown, which is a rare, user-paced event, not a
+// per-frame cost).
+export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS }) {
   const gl = useThree((s) => s.gl)
   const camera = useThree((s) => s.camera)
 
   const assembled = useMemo(() => {
-    const triangulated = triangulateAll(TSHIRT_PIECES, TSHIRT_SEAMS, 2)
-    const cloth = assembleCloth(triangulated, dims, TSHIRT_SEAMS)
+    const triangulated = triangulateAll(pieces, seams, 2)
+    const cloth = assembleCloth(triangulated, dims, seams)
     const neighbors = deriveNeighbors(cloth, 8)
     return { cloth, neighbors }
-  }, [dims])
+  }, [dims, pieces, seams])
 
   const geometry = useMemo(() => {
     const { cloth } = assembled

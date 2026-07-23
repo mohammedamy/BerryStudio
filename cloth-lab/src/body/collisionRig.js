@@ -21,11 +21,24 @@ import { torsoProfile } from './computeBodyDims.js'
 // to fake a taper with a primitive that doesn't support one; collision can
 // just use the taper directly, which is both simpler and smoother.
 //
-// Legs/feet are intentionally omitted: no Phase 1/2 garment reaches below
-// the hip, so a matching rig would be speculative work for garments that
-// don't exist in this codebase yet. Add alongside the first garment that does.
+// Hip-to-thigh continuation, one exception to the "match the visible mesh"
+// rule above: Avatar.jsx draws legs as two SEPARATE capsules (offset ±hipR*
+// 0.5, narrow, one per leg) because that's what looks right to the eye. But
+// a garment hem drapes around BOTH legs together as one merged outer
+// silhouette, same as placement.js's placeHipPanel/radiusBelowHip already
+// assumes for where a hip-panel piece (a skirt) gets placed — collide
+// against the two separate leg meshes instead and most of a hem ring's
+// circumference (front, back, the gap between the legs) has nothing nearby
+// to collide with at all. Checked empirically: doing it that way first left
+// 83-96% of the T-shirt's own particles uncollided even at its REST pose
+// (before any physics), with the hem averaging a 5.8cm gap — and that hem
+// already sits below the torso profile's lowest point regardless, which is
+// what surfaced this: it free-fell from frame 1 with nothing to catch it,
+// before any skirt-like garment existed to make the gap matter. So: one
+// centered taper continuing straight down from the torso profile's own
+// last point, all the way to thighR — not copying Avatar.jsx's leg meshes.
 export function deriveCollisionRig(dims) {
-  const { hipY, shoulderY, span, neckTopY, headH, neckR, shoulderHalf, chestR, upperR, armLen, female } = dims
+  const { hipY, shoulderY, span, neckTopY, headH, neckR, shoulderHalf, chestR, upperR, armLen, hipR, legLen, thighR, female } = dims
   const zScale = female ? 0.72 : 0.78
   const primitives = []
 
@@ -62,6 +75,19 @@ export function deriveCollisionRig(dims) {
     ]
     primitives.push({ a: pivot, b: wrist, ra: upperR, rb: upperR * 0.55, zScale: 1 })
   }
+
+  // Hip-to-thigh: centered on the body's own axis (X=0), continuing
+  // directly from the torso profile's own last point — not two offset
+  // per-leg cylinders, see the module comment above. Tapers on to thighR
+  // (torsoProfile's own bottom radius, hipR*0.55, is already close to a
+  // typical thighR, so this taper is gentle) then runs a flat cylinder
+  // further down, giving a flared hip-panel garment (a skirt) real depth
+  // to drape into rather than stopping right at the taper.
+  const [hipBottomR, hipBottomY] = profile[0]
+  const thighTopY = hipBottomY - legLen * 0.18
+  const thighBottomY = hipBottomY - legLen * 0.5
+  primitives.push({ a: [0, thighTopY, 0], b: [0, hipBottomY, 0], ra: thighR, rb: hipBottomR, zScale })
+  primitives.push({ a: [0, thighBottomY, 0], b: [0, thighTopY, 0], ra: thighR, rb: thighR, zScale })
 
   return primitives
 }

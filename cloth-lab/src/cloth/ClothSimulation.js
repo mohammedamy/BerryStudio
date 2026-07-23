@@ -102,12 +102,32 @@ vec4 neighborCorrection(vec3 predicted, float idx, float rest, float invMassSelf
 // sliding ALONG the surface, so gravity alone will pull a garment down and
 // off a shoulder no matter how good the push-out math is (confirmed
 // empirically: pure push-out let a T-shirt slide off the shoulders and pool
-// at the hip over ~15s). `prevPos` gives an implicit velocity (Verlet has no
-// separate velocity buffer), which is split into normal/tangential parts at
-// the contact point; damping the tangential part by `friction` before
-// returning is what actually lets cloth "catch" on a shoulder instead of
-// just glancing off it — this is what makes the per-fabric `friction` field
-// in fabricPresets.js (previously computed but never consumed) do anything.
+// at the hip over ~15s).
+//
+// A single `pushed - tangentDelta*friction` damping (an earlier version of
+// this function) is NOT enough, even at friction close to 1: it only ever
+// removes a FRACTION of each step's tangential drift, never all of it, so a
+// constant gravity pull produces a constant-rate creep that never actually
+// stops — it just slows down. Confirmed empirically by letting the sim run
+// a few thousand frames: the whole garment eventually crept off the
+// shoulders, past the hip, and collapsed flat on the floor, just slower
+// than with zero friction. Slowing a slide is not the same as arresting it.
+//
+// This tries real (Coulomb) static/kinetic friction: `depth` (how far this
+// step's predicted position was pushed into the surface) stands in for
+// normal force, and tangential drift up to `friction * depth` is fully
+// cancelled (static regime — genuinely stays put, not just slowed). But
+// `depth` alone turned out to be an unreliable proxy: for an ALREADY-settled
+// contact, the collision correction's whole job is keeping depth near zero
+// every step, which starves the static budget at exactly the moment it's
+// needed most — confirmed empirically (a few thousand frames): the budget
+// stayed too small to ever reach the static branch, so it degenerated back
+// into the same "slowed but never stopped" creep as a pure proportional
+// model. So: still try the static budget (it's free stickiness whenever
+// depth IS meaningful, e.g. right after impact), but ALSO damp whatever
+// drift remains beyond it by `friction` again — a strictly stronger floor
+// than either approach alone, closer to a critically-damped contact than a
+// slowly-leaking one.
 const CAPSULE_COLLISION_GLSL = `
 vec3 collideCapsule(vec3 p, vec3 prevP, vec3 a, vec3 b, float r0, float r1, float zScale, float friction) {
   vec3 ab = b - a;
@@ -119,11 +139,16 @@ vec3 collideCapsule(vec3 p, vec3 prevP, vec3 a, vec3 b, float r0, float r1, floa
   vec3 scaledOffset = vec3(offset.x, offset.y, offset.z / zScale);
   float dist = length(scaledOffset);
   if (dist < r) {
+    float depth = r - dist;
     vec3 pushed = c + offset * (r / max(dist, 1e-6));
     vec3 n = normalize(offset);
     vec3 delta = pushed - prevP;
     vec3 tangentDelta = delta - n * dot(delta, n);
-    return pushed - tangentDelta * friction;
+    float tangentLen = length(tangentDelta);
+    float staticBudget = friction * depth;
+    if (tangentLen <= staticBudget) return pushed - tangentDelta;
+    vec3 remainder = tangentDelta * (1.0 - staticBudget / tangentLen);
+    return pushed - tangentDelta + remainder * friction;
   }
   return p;
 }
