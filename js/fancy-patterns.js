@@ -283,6 +283,98 @@
     ];
   }
 
+  // ---------------- generic builders (for the Quick Draft builder pane) ----------------
+  // Same helpers as the named catalog designs above, but generalized to any category's
+  // measurements and a small set of runtime options, instead of one fixed named design.
+  const LEN_F = { short: 0.35, medium: 0.6, long: 0.86 };
+  const JLEN_F = { short: 1.15, medium: 1.4, long: 1.65 };
+  const CLEN_F = { short: 1.4, medium: 1.85, long: 2.3 };
+
+  function buildFancyGown(m, opts) {
+    opts = opts || {};
+    const b = princessBodice(m, { neckline: opts.neckline || "scoop", hipY: m.backLen*0.98+6, hemY: m.backLen*0.98+8 });
+    const waistW = q(m.waist), hemW = q(m.hips)*1.9;
+    const hemLen = m.height * (LEN_F[opts.length] || LEN_F.long) - b.hemY;
+    const pieces = [
+      { key:"bodiceFC", name:{en:"Bodice Front Center",ar:"مقدمة الصدرية الوسطى"}, desc:{en:"Center front panel with a curved neckline.",ar:"لوحة المقدمة الوسطى بخط رقبة منحنٍ."}, outline:b.frontCenter },
+      { key:"bodiceFS", name:{en:"Bodice Front Side",ar:"جانب الصدرية الأمامي"}, desc:{en:"Curved side panel joined at the princess seam.",ar:"لوحة جانبية منحنية تلتقي بخط قصة الأميرة."}, outline:b.frontSide },
+      { key:"bodiceBC", name:{en:"Bodice Back Center",ar:"خلفية الصدرية الوسطى"}, desc:{en:"Center back panel.",ar:"لوحة الخلفية الوسطى."}, outline:b.backCenter },
+      { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel.",ar:"لوحة جانبية خلفية منحنية."}, outline:b.backSide },
+      { key:"skirtF", name:{en:"Skirt Front Gore",ar:"مروحة التنورة الأمامية"}, desc:{en:"Front gore flaring to the hem.",ar:"مروحة أمامية تتسع نحو الحاشية."}, outline:gorePanel(waistW*0.55, hemW*0.3, hemLen, 6) },
+      { key:"skirtB", name:{en:"Skirt Back Gore",ar:"مروحة التنورة الخلفية"}, desc:{en:"Back gore flaring to the hem.",ar:"مروحة خلفية تتسع نحو الحاشية."}, outline:gorePanel(waistW*0.55, hemW*0.32, hemLen, 6) },
+      { key:"skirtSL", name:{en:"Skirt Side Gore Left",ar:"مروحة جانبية يسرى"}, desc:{en:"Side gore adding fullness.",ar:"مروحة جانبية تضيف اتساعًا."}, outline:gorePanel(waistW*0.45, hemW*0.32, hemLen, 8) },
+      { key:"skirtSR", name:{en:"Skirt Side Gore Right",ar:"مروحة جانبية يمنى"}, desc:{en:"Side gore adding fullness.",ar:"مروحة جانبية تضيف اتساعًا."}, outline:gorePanel(waistW*0.45, hemW*0.32, hemLen, 8) },
+    ];
+    if (!opts.sleeveless) pieces.push({ key:"sleeve", name:{en:"Sleeve",ar:"الكم"}, desc:{en:"Curved cap sleeve.",ar:"كم برأس منحنٍ."}, outline: sleeve1pc(m.bicep, m.sleeve * (opts.sleeveLong ? 0.85 : 0.35), 1.1) });
+    pieces.push({ key:"sash", name:{en:"Waist Sash",ar:"حزام الخصر"}, desc:{en:"Tie sash with a pointed tail.",ar:"حزام بطرف مدبب."}, outline: sashPc(waistW*0.4, 45) });
+    return pieces;
+  }
+
+  function buildFancyJacket(m, opts) {
+    opts = opts || {};
+    const len = m.backLen * (JLEN_F[opts.length] || JLEN_F.medium);
+    const jb = jacketFrontBack(m, len, { hemFlareF: 1.0 });
+    const sl = sleeve2pc(m.bicep, m.sleeve);
+    return [
+      { key:"front", name:{en:"Jacket Front",ar:"مقدمة الجاكيت"}, desc:{en:"Tailored front panel.",ar:"مقدمة مفصّلة."}, outline: jb.front },
+      { key:"back", name:{en:"Jacket Back",ar:"خلفية الجاكيت"}, desc:{en:"Tailored back panel.",ar:"خلفية مفصّلة."}, outline: jb.back },
+      { key:"sleeveU", name:{en:"Sleeve Upper",ar:"الكم العلوي"}, desc:{en:"Outer sleeve panel.",ar:"اللوحة الخارجية للكم."}, outline: sl.upper },
+      { key:"sleeveD", name:{en:"Sleeve Under",ar:"الكم السفلي"}, desc:{en:"Inner sleeve panel.",ar:"اللوحة الداخلية للكم."}, outline: sl.under },
+      { key:"collar", name:{en:"Collar",ar:"الياقة"}, desc:{en:"Curved collar.",ar:"ياقة منحنية."}, outline: shawlCollar(m.neck, 18) },
+      { key:"facing", name:{en:"Front Facing",ar:"بطانة المقدمة"}, desc:{en:"Curved lapel facing.",ar:"بطانة صدر منحنية."}, outline: lapelFacing(m.neck, len*0.5) },
+      { key:"pocket", name:{en:"Welt Pocket",ar:"جيب مطوي"}, desc:{en:"Curved welt pocket.",ar:"جيب مطوي منحنٍ."}, outline: pocketPc(10,3.5) },
+      { key:"backLining", name:{en:"Back Lining",ar:"بطانة الظهر"}, desc:{en:"Full back body lining.",ar:"بطانة كاملة للظهر."}, outline: jb.back },
+    ];
+  }
+
+  function buildFancyCoat(m, opts) {
+    opts = opts || {};
+    const len = m.backLen * (CLEN_F[opts.length] || CLEN_F.medium);
+    const jb = jacketFrontBack(m, len, { hemFlareF: 1.05, closureX: q(m.chest)*0.22 });
+    const sl = sleeve2pc(m.bicep, m.sleeve+2);
+    return [
+      { key:"front", name:{en:"Coat Front",ar:"مقدمة المعطف"}, desc:{en:"Long front panel with a curved lapel.",ar:"لوحة أمامية طويلة بياقة منحنية."}, outline: jb.front },
+      { key:"back", name:{en:"Coat Back",ar:"خلفية المعطف"}, desc:{en:"Long back panel.",ar:"لوحة خلفية طويلة."}, outline: jb.back },
+      { key:"sleeveU", name:{en:"Sleeve Upper",ar:"الكم العلوي"}, desc:{en:"Outer sleeve panel.",ar:"اللوحة الخارجية للكم."}, outline: sl.upper },
+      { key:"sleeveD", name:{en:"Sleeve Under",ar:"الكم السفلي"}, desc:{en:"Inner sleeve panel.",ar:"اللوحة الداخلية للكم."}, outline: sl.under },
+      { key:"collar", name:{en:"Wide Collar",ar:"ياقة عريضة"}, desc:{en:"Wide curved collar.",ar:"ياقة عريضة منحنية."}, outline: shawlCollar(m.neck*1.05, 20) },
+      { key:"facing", name:{en:"Front Facing",ar:"بطانة المقدمة"}, desc:{en:"Curved facing along the front edge.",ar:"بطانة منحنية على حافة المقدمة."}, outline: lapelFacing(m.neck, len*0.45) },
+      { key:"chestPocket", name:{en:"Chest Pocket",ar:"جيب الصدر"}, desc:{en:"Welt chest pocket.",ar:"جيب صدر مطوي."}, outline: pocketPc(10,3.5) },
+      { key:"hipFlap", name:{en:"Hip Flap Pocket",ar:"جيب ورك بغطاء"}, desc:{en:"Flap-covered hip pocket.",ar:"جيب ورك مغطى بغطاء."}, outline: pocketPc(14,5.5) },
+      { key:"backYoke", name:{en:"Back Yoke",ar:"كوة الظهر"}, desc:{en:"Curved shoulder yoke reinforcing the back.",ar:"كوة كتف منحنية تعزز الظهر."}, outline: yokePc(q(m.shoulder)*1.3, 10) },
+    ];
+  }
+
+  function buildFancySuit(m) {
+    const jLen = m.backLen*1.55, vLen = m.backLen*1.05;
+    const jb = jacketFrontBack(m, jLen, { hemFlareF: 1.0 });
+    const vb = jacketFrontBack(m, vLen, { hemFlareF: 0.9, closureX: q(m.chest)*0.06 });
+    const sl = sleeve2pc(m.bicep, m.sleeve);
+    const qw = q(m.waist), qh = q(m.hips);
+    return [
+      { key:"jacketFront", name:{en:"Jacket Front",ar:"مقدمة الجاكيت"}, desc:{en:"Tailored suit jacket front.",ar:"مقدمة جاكيت البدلة المفصّلة."}, outline: jb.front },
+      { key:"jacketBack", name:{en:"Jacket Back",ar:"خلفية الجاكيت"}, desc:{en:"Tailored suit jacket back.",ar:"خلفية جاكيت البدلة المفصّلة."}, outline: jb.back },
+      { key:"sleeveU", name:{en:"Jacket Sleeve Upper",ar:"الكم العلوي للجاكيت"}, desc:{en:"Outer jacket sleeve panel.",ar:"اللوحة الخارجية لكم الجاكيت."}, outline: sl.upper },
+      { key:"sleeveD", name:{en:"Jacket Sleeve Under",ar:"الكم السفلي للجاكيت"}, desc:{en:"Inner jacket sleeve panel.",ar:"اللوحة الداخلية لكم الجاكيت."}, outline: sl.under },
+      { key:"collar", name:{en:"Jacket Collar",ar:"ياقة الجاكيت"}, desc:{en:"Notch-ready jacket collar.",ar:"ياقة جاكيت جاهزة للفتحة."}, outline: shawlCollar(m.neck, 20) },
+      { key:"facing", name:{en:"Jacket Facing",ar:"بطانة الجاكيت"}, desc:{en:"Curved front facing.",ar:"بطانة أمامية منحنية."}, outline: lapelFacing(m.neck, jLen*0.5) },
+      { key:"vestFront", name:{en:"Vest Front",ar:"مقدمة الصدرية"}, desc:{en:"Fitted sleeveless vest front.",ar:"مقدمة صدرية ضيقة بلا أكمام."}, outline: vb.front },
+      { key:"vestBack", name:{en:"Vest Back",ar:"خلفية الصدرية"}, desc:{en:"Vest back panel.",ar:"لوحة خلفية الصدرية."}, outline: vb.back },
+      { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, outline: trouserPanel(qw, qh, m.thigh, m.inseam, true) },
+      { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد."}, outline: trouserPanel(qw, qh, m.thigh, m.inseam, false) },
+    ];
+  }
+
+  window.FancyGen = {
+    build(kind, m, opts) {
+      if (kind === "gown") return buildFancyGown(m, opts);
+      if (kind === "jacket") return buildFancyJacket(m, opts);
+      if (kind === "coat") return buildFancyCoat(m, opts);
+      if (kind === "suit") return buildFancySuit(m);
+      return [];
+    },
+  };
+
   // ---------------- registration ----------------
   function def(id, category, nameEn, nameAr, tagEn, tagAr, type, descEn, descAr, piecesFn) {
     PATTERNS[id] = {

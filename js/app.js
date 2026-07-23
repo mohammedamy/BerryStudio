@@ -16,6 +16,7 @@
     hoverHelp: true, highContrast: false, reduceMotion: false, cloudSync: false,
     onboarded: false, mine: [], aiEndpoint: "", fabric3d: "cotton", showMeasDiagram: false,
     lastMarkerYards: null, lastMarkerWidth: null,
+    builderKind: null, builderOpts: { length:"medium", flare:"regular", fit:"regular", sleeve:"short" }, builderCustom: {},
     avatarGLB: { women: "", men: "", girls: "", boys: "" },
   };
   const state = Object.assign({}, DEF, JSON.parse(localStorage.getItem("pps") || "{}"));
@@ -125,8 +126,8 @@
 
   // ---- right rail panes ----
   // Rail panes in a task-flow order: get a base → fit it → edit → output.
-  const PANES = ["library","ai","size","measure","layers","export"];
-  const PANE_ICON = { size:IC.scale, measure:IC.measure, layers:IC.layers, library:IC.shirt, ai:IC.spark, export:IC.download };
+  const PANES = ["library","ai","builder","size","measure","layers","export"];
+  const PANE_ICON = { size:IC.scale, measure:IC.measure, layers:IC.layers, library:IC.shirt, ai:IC.spark, builder:IC.ruler, export:IC.download };
   function buildRail() {
     const tabs = $("#railTabs"); tabs.innerHTML = "";
     PANES.forEach(p => {
@@ -134,7 +135,7 @@
       b.dataset.pane = p; b.onclick = () => showPane(p);
       tabs.appendChild(b);
     });
-    renderSizePane(); renderMeasurePane(); renderLayersPane(); renderLibraryPane(); renderAIPane(); renderExportPane();
+    renderSizePane(); renderMeasurePane(); renderLayersPane(); renderLibraryPane(); renderAIPane(); renderBuilderPane(); renderExportPane();
     showPane(state.pane || "size");
   }
   function showPane(p) {
@@ -505,6 +506,110 @@
       toast(T("generated"));
     } catch(e){ toast(T("importFail")); }
     finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
+  }
+
+  // ================= QUICK DRAFT BUILDER =================
+  // Pick a garment kind → see only the measurements that kind actually needs →
+  // produce real pattern pieces. AIGen.build() drives the 6 basic kinds;
+  // FancyGen.build() (js/fancy-patterns.js) drives the 4 richer, curved-seam kinds.
+  const BUILDER_KINDS = ["dress","top","shirt","skirt","trousers","robe","gown","jacket","coat","suit"];
+  const AIGEN_KINDS = ["dress","top","shirt","skirt","trousers","robe"];
+  const KIND_MEAS = {
+    dress:["chest","waist","hips","backLen","sleeve","bicep","height"],
+    top:["chest","waist","hips","backLen","sleeve","bicep"],
+    shirt:["chest","waist","hips","backLen","neck","sleeve","bicep"],
+    skirt:["waist","hips","inseam"],
+    trousers:["waist","hips","thigh","inseam"],
+    robe:["chest","waist","hips","backLen","neck","sleeve","bicep","height"],
+    gown:["chest","waist","hips","backLen","sleeve","bicep","height"],
+    jacket:["chest","waist","hips","backLen","neck","sleeve","bicep"],
+    coat:["chest","waist","hips","shoulder","backLen","neck","sleeve","bicep"],
+    suit:["chest","waist","hips","backLen","neck","sleeve","bicep","thigh","inseam"],
+  };
+  const KIND_STYLE = {
+    dress:{length:1,flare:1,fit:1,sleeve:1}, top:{length:1,flare:1,fit:1,sleeve:1}, shirt:{length:1,flare:1,fit:1,sleeve:1},
+    skirt:{length:1,flare:1,fit:1}, trousers:{length:1,flare:1,fit:1}, robe:{length:1,flare:1,fit:1,sleeve:1},
+    gown:{length:1,sleeve:1}, jacket:{length:1}, coat:{length:1}, suit:{},
+  };
+  const LEN_MAP = {short:0.65, medium:1.0, long:1.35};
+  const FLARE_MAP = {slim:0.9, regular:1.15, full:1.5};
+  const FIT_MAP = {fitted:0.85, regular:1.0, relaxed:1.15};
+  const SLEEVE_MAP = {sleeveless:0, short:0.45, long:1.3};
+
+  function renderBuilderPane() {
+    const c = $(".rail-pane[data-pane=builder]"); c.innerHTML = "";
+    c.appendChild(el("div","section-title",IC.ruler+T("builderTitle")));
+    c.appendChild(el("div","help-note",T("builderDesc")));
+
+    const kindGrid = el("div","opt-grid"); kindGrid.style.margin="10px 0 4px";
+    BUILDER_KINDS.forEach(k=>{
+      const o = el("div","opt"+(state.builderKind===k?" active":""), T("kind_"+k));
+      o.onclick = () => { state.builderKind=k; save(); renderBuilderPane(); };
+      kindGrid.appendChild(o);
+    });
+    c.appendChild(kindGrid);
+
+    if (!state.builderKind) { c.appendChild(el("div","help-note",T("builderPick"))); return; }
+    const kind = state.builderKind;
+
+    // Required measurements — only the fields this kind's construction actually reads.
+    // These are a local scratch override for this draft only — they don't touch the
+    // shared working measurements (Measures pane / Auto Grade stay untouched).
+    c.appendChild(el("div","section-title",IC.measure+T("builderMeas"))).style.marginTop="16px";
+    c.appendChild(el("div","help-note",T("builderMeasHint")));
+    const m = Object.assign({}, currentMeas(), state.builderCustom);
+    const box = el("div"); box.style.marginTop="6px";
+    KIND_MEAS[kind].forEach(k=>{
+      const row = el("div","meas-row",`<label>${T("m_"+k)}</label>`);
+      const inp = el("input"); inp.type="number"; inp.value=m[k]; inp.dataset.k=k;
+      inp.onchange=()=>{ state.builderCustom[k]=+inp.value; save(); };
+      row.appendChild(inp); box.appendChild(row);
+    });
+    c.appendChild(box);
+
+    // Style controls — only the ones that kind's builder actually honours.
+    const st = KIND_STYLE[kind];
+    const segRow = (label, key, opts, map) => {
+      const wrap = el("div","set-row"); wrap.style.marginTop="10px";
+      wrap.innerHTML = `<span class="sl">${label}</span>`;
+      const seg = el("div","seg");
+      opts.forEach(o=>{ const b=el("button", state.builderOpts[key]===o?"active":"", T("opt_"+o)); b.onclick=()=>{ state.builderOpts[key]=o; save(); renderBuilderPane(); }; seg.appendChild(b); });
+      wrap.appendChild(seg); c.appendChild(wrap);
+    };
+    if (st.length) segRow(T("builderLength"), "length", ["short","medium","long"]);
+    if (st.flare) segRow(T("builderFlare"), "flare", ["slim","regular","full"]);
+    if (st.fit) segRow(T("builderFit"), "fit", ["fitted","regular","relaxed"]);
+    if (st.sleeve) segRow(T("builderSleeve"), "sleeve", ["sleeveless","short","long"]);
+
+    const genBtn = el("button","big-btn",IC.check+T("builderGenerate")); genBtn.style.marginTop="16px";
+    genBtn.onclick = () => generateBuilderPattern(kind);
+    c.appendChild(genBtn);
+  }
+
+  function generateBuilderPattern(kind) {
+    const m = Object.assign({}, currentMeas(), state.builderCustom);
+    const o = state.builderOpts;
+    let pieces;
+    if (AIGEN_KINDS.includes(kind)) {
+      const style = {
+        type: kind,
+        lengthF: LEN_MAP[o.length] ?? 1,
+        flareF: FLARE_MAP[o.flare] ?? 1,
+        fitF: FIT_MAP[o.fit] ?? 1,
+        sleeveLenF: KIND_STYLE[kind].sleeve ? (SLEEVE_MAP[o.sleeve] ?? 0.45) : 0,
+        sleeveWideF: 1,
+      };
+      pieces = AIGen.build(style, m).pieces;
+    } else {
+      pieces = FancyGen.build(kind, m, { length:o.length, sleeveless:o.sleeve==="sleeveless", sleeveLong:o.sleeve==="long" });
+    }
+    if (!pieces || !pieces.length) { toast(T("importFail")); return; }
+    state.loaded = null;
+    Canvas.setPattern(pieces, PALETTE);
+    hideEmpty(); renderLayersPane();
+    if (state.view==="3d") build3D();
+    toast(T("generated")+" · "+T("kind_"+kind));
+    save();
   }
 
   // EXPORT PANE
