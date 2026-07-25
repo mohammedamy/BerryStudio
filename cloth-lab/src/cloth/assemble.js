@@ -1,5 +1,17 @@
 import { placePiece } from '../pattern/placement.js'
 
+// Fixed cm-per-repeat divisor for fabric-texture UVs (see renderUV below) —
+// a real-world scale, not each piece's own bounding box, so a weave tiles at
+// a consistent physical size whether it's on a small sleeve or a large front
+// panel. 20cm read as large ridges/pleats rather than a fine weave; 8cm
+// looked visually identical to 20cm in testing (both were confounded by
+// flatShading's per-triangle faceting competing for visual attention — see
+// ClothMesh.jsx's deriveNormalRing-based smooth normals, which fixed that
+// separately). Re-verified against 3cm across sheer/glossy/heavy fabrics
+// (chiffon/silk/denim) after the smooth-normal fix landed — reads as a
+// believable fine weave on all three, so this is the settled value.
+export const UV_REPEAT_CM = 3
+
 // Union-find (disjoint set) — plain array-based, path-compressed.
 function makeUnionFind(n) {
   const parent = new Int32Array(n)
@@ -69,13 +81,17 @@ export function assembleCloth(triangulatedPieces, dims, seams) {
   // property of the physical fabric piece, and shouldn't depend on the
   // placement heuristic's incidental stretch/compression).
   const simAreaShare = new Float32Array(simParticleCount)
+  // Rough rest-pose normal per sim particle (placed 3D positions this time,
+  // unlike simAreaShare above) — NOT the live shading normal. Only used as a
+  // stable local "up" axis to angularly sort each particle's neighbor ring
+  // in deriveNormalRing below, so the live per-frame smooth-normal
+  // computation in ClothMesh.jsx's shader has a consistent winding order.
+  const simRestNormal = new Float32Array(simParticleCount * 3)
   let triWriteOffset = 0
 
   for (const tp of triangulatedPieces) {
     const offset = pieceOffset[tp.pieceId]
     const positions3D = placePiece(tp, dims)
-    const xs = tp.positions2D.map((p) => p[0]), ys = tp.positions2D.map((p) => p[1])
-    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)
 
     positions3D.forEach(([x, y, z], localIdx) => {
       const g = offset + localIdx
@@ -84,8 +100,12 @@ export function assembleCloth(triangulatedPieces, dims, seams) {
       simRestPositions[sp * 3 + 1] += y
       simRestPositions[sp * 3 + 2] += z
       contributionCount[sp]++
-      renderUV[g * 2] = (tp.positions2D[localIdx][0] - minX) / (maxX - minX || 1)
-      renderUV[g * 2 + 1] = (tp.positions2D[localIdx][1] - minY) / (maxY - minY || 1)
+      // Fixed real-world divisor (not this piece's own bounding box) so a
+      // fabric weave repeats at the same physical size on every piece
+      // regardless of its area — see UV_REPEAT_CM above. UVs now legitimately
+      // exceed [0,1]; the consuming material must set RepeatWrapping.
+      renderUV[g * 2] = tp.positions2D[localIdx][0] / UV_REPEAT_CM
+      renderUV[g * 2 + 1] = tp.positions2D[localIdx][1] / UV_REPEAT_CM
     })
     for (let i = 0; i < tp.triangles.length; i++) renderTriangles[triWriteOffset + i] = tp.triangles[i] + offset
     triWriteOffset += tp.triangles.length
@@ -95,9 +115,20 @@ export function assembleCloth(triangulatedPieces, dims, seams) {
       const [xa, ya] = tp.positions2D[ia], [xb, yb] = tp.positions2D[ib], [xc, yc] = tp.positions2D[ic]
       const areaM2 = Math.abs((xb - xa) * (yc - ya) - (xc - xa) * (yb - ya)) / 2 * 1e-4 // cm² -> m²
       const share = areaM2 / 3
-      simAreaShare[renderVertexToSimParticle[offset + ia]] += share
-      simAreaShare[renderVertexToSimParticle[offset + ib]] += share
-      simAreaShare[renderVertexToSimParticle[offset + ic]] += share
+      const spa = renderVertexToSimParticle[offset + ia]
+      const spb = renderVertexToSimParticle[offset + ib]
+      const spc = renderVertexToSimParticle[offset + ic]
+      simAreaShare[spa] += share
+      simAreaShare[spb] += share
+      simAreaShare[spc] += share
+
+      const [xA, yA, zA] = positions3D[ia], [xB, yB, zB] = positions3D[ib], [xC, yC, zC] = positions3D[ic]
+      const ux = xB - xA, uy = yB - yA, uz = zB - zA
+      const vx = xC - xA, vy = yC - yA, vz = zC - zA
+      const fnx = uy * vz - uz * vy, fny = uz * vx - ux * vz, fnz = ux * vy - uy * vx
+      simRestNormal[spa * 3] += fnx; simRestNormal[spa * 3 + 1] += fny; simRestNormal[spa * 3 + 2] += fnz
+      simRestNormal[spb * 3] += fnx; simRestNormal[spb * 3 + 1] += fny; simRestNormal[spb * 3 + 2] += fnz
+      simRestNormal[spc * 3] += fnx; simRestNormal[spc * 3 + 1] += fny; simRestNormal[spc * 3 + 2] += fnz
     }
   }
   for (let i = 0; i < simParticleCount; i++) {
@@ -105,6 +136,12 @@ export function assembleCloth(triangulatedPieces, dims, seams) {
     simRestPositions[i * 3] /= c
     simRestPositions[i * 3 + 1] /= c
     simRestPositions[i * 3 + 2] /= c
+
+    const nx = simRestNormal[i * 3], ny = simRestNormal[i * 3 + 1], nz = simRestNormal[i * 3 + 2]
+    const nlen = Math.hypot(nx, ny, nz) || 1
+    simRestNormal[i * 3] = nx / nlen
+    simRestNormal[i * 3 + 1] = ny / nlen
+    simRestNormal[i * 3 + 2] = nz / nlen
   }
 
   // Weld degree per render vertex (debug view: 1=interior, 2=seam, 3+=corner).
@@ -114,7 +151,7 @@ export function assembleCloth(triangulatedPieces, dims, seams) {
   for (let i = 0; i < renderVertexCount; i++) weldDegree[i] = Math.min(255, simDegree[renderVertexToSimParticle[i]])
 
   return {
-    simParticleCount, simRestPositions, simAreaShare,
+    simParticleCount, simRestPositions, simRestNormal, simAreaShare,
     renderVertexCount, renderVertexToSimParticle, renderUV, renderTriangles,
     weldDegree, pieceOffset,
   }
@@ -179,4 +216,63 @@ export function deriveNeighbors(cloth, maxNeighbors = 8) {
   }
 
   return { structural: packNeighbors(structuralSets), bend: packNeighbors(bendSets), maxNeighbors }
+}
+
+// Per-sim-particle "neighbor ring" for live smooth-normal shading (see
+// ClothMesh.jsx's onBeforeCompile patch): flatShading gave every render
+// triangle its own screen-space-derivative normal — correct but visibly
+// faceted under any glossy material (Silk's clearcoat made individual
+// triangles read as gem facets). The GPU sim only ever writes particle
+// *positions*, so there is no vertex-normal attribute that tracks the live
+// deformation; this precomputes, once per mesh build, a fixed small ring of
+// neighbor particles per particle so the vertex shader can rebuild a proper
+// area-swept normal from LIVE positions every frame with a handful of extra
+// texture2D samples — no second GPGPU pass, no CPU readback.
+//
+// The ring must be angularly ordered (not just "closest N") or consecutive
+// cross-products in the shader can point opposite directions and partially
+// cancel. Ordering needs a stable local "up" axis to project into, so this
+// uses the cheap rest-pose face-normal average (cloth.simRestNormal) purely
+// as a sort key — never as the shading normal itself, which stays fully
+// live/deformed.
+export function deriveNormalRing(cloth, neighbors, ringSize = 4) {
+  const { simParticleCount, simRestPositions, simRestNormal } = cloth
+  const { idx } = neighbors.structural
+  const { maxNeighbors } = neighbors
+  const ring = new Int32Array(simParticleCount * ringSize)
+
+  for (let p = 0; p < simParticleCount; p++) {
+    const cand = []
+    for (let k = 0; k < maxNeighbors; k++) {
+      const n = idx[p * maxNeighbors + k]
+      if (n >= 0) cand.push(n)
+    }
+    if (cand.length === 0) {
+      for (let r = 0; r < ringSize; r++) ring[p * ringSize + r] = p
+      continue
+    }
+
+    const px = simRestPositions[p * 3], py = simRestPositions[p * 3 + 1], pz = simRestPositions[p * 3 + 2]
+    const nx = simRestNormal[p * 3], ny = simRestNormal[p * 3 + 1], nz = simRestNormal[p * 3 + 2]
+
+    // Seed a tangent from the first candidate, projected orthogonal to the
+    // rough normal, then bitangent = normal x tangent completes the basis.
+    let tx = simRestPositions[cand[0] * 3] - px
+    let ty = simRestPositions[cand[0] * 3 + 1] - py
+    let tz = simRestPositions[cand[0] * 3 + 2] - pz
+    const d = tx * nx + ty * ny + tz * nz
+    tx -= d * nx; ty -= d * ny; tz -= d * nz
+    const tlen = Math.hypot(tx, ty, tz) || 1
+    tx /= tlen; ty /= tlen; tz /= tlen
+    const bx = ny * tz - nz * ty, by = nz * tx - nx * tz, bz = nx * ty - ny * tx
+
+    const withAngles = cand.map((n) => {
+      const dx = simRestPositions[n * 3] - px, dy = simRestPositions[n * 3 + 1] - py, dz = simRestPositions[n * 3 + 2] - pz
+      return [n, Math.atan2(dx * bx + dy * by + dz * bz, dx * tx + dy * ty + dz * tz)]
+    }).sort((a, b) => a[1] - b[1])
+
+    for (let r = 0; r < ringSize; r++) ring[p * ringSize + r] = withAngles[r % withAngles.length][0]
+  }
+
+  return ring
 }

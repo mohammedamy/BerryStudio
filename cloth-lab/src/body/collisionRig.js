@@ -93,3 +93,57 @@ export function deriveCollisionRig(dims) {
 }
 
 export const MAX_COLLISION_CAPSULES = 16
+
+// Shoulder-seam pin zone. Body collision only ever pushes fabric outward
+// and damps sliding via friction — it can never fully arrest a slide (see
+// ClothSimulation.js's collideCapsule comment), and right at the shoulder,
+// where a garment's weight most needs to be caught, the surface curves
+// steeply enough that gravity's pull is mostly ALONG it rather than into
+// it, which starves the friction model's static budget at exactly the
+// point it matters most. A real T-shirt doesn't stay up through friction —
+// the shoulder SEAM is a hard structural anchor, stitched fabric that
+// can't slide past that point without stretching. This derives the
+// equivalent: a short line segment per side, from near the neckline to the
+// shoulder/arm joint (the second endpoint matches deriveCollisionRig's own
+// arm-capsule pivot exactly, so the pin zone and the visible joint agree).
+// Any sim particle whose REST position lands within PIN_RADIUS of either
+// segment should be held fixed — see ClothSimulation.js's existing
+// (previously unused) `pinned` flag, and deriveShoulderPinMask below which
+// turns this into the per-particle mask that flag consumes.
+const SHOULDER_PIN_RADIUS = 0.05 // 5cm — wide enough to catch a small cluster, not just 1-2 isolated vertices (which pinned a sharp point rather than a soft anchored region)
+
+export function deriveShoulderPinSegments(dims) {
+  const { shoulderHalf, shoulderY, span } = dims
+  return [-1, 1].map((side) => ([
+    [side * shoulderHalf * 0.15, shoulderY + span * 0.02, 0],
+    [side * shoulderHalf * 0.95, shoulderY - span * 0.04, 0],
+  ]))
+}
+
+function distToSegment(p, a, b) {
+  const abx = b[0] - a[0], aby = b[1] - a[1], abz = b[2] - a[2]
+  const abLen2 = abx * abx + aby * aby + abz * abz
+  const t = abLen2 > 1e-10
+    ? Math.max(0, Math.min(1, ((p[0] - a[0]) * abx + (p[1] - a[1]) * aby + (p[2] - a[2]) * abz) / abLen2))
+    : 0
+  const cx = a[0] + abx * t, cy = a[1] + aby * t, cz = a[2] + abz * t
+  return Math.hypot(p[0] - cx, p[1] - cy, p[2] - cz)
+}
+
+// `simRestPositions`/`simParticleCount` come straight off assembleCloth's
+// returned `cloth` object — purely geometric (rest position only), so this
+// works unchanged for the default T-shirt, any bridge-imported garment, or
+// a seam-authored one: a garment with no fabric near the shoulder (a
+// skirt, an off-shoulder top) simply gets an all-zero mask, same
+// friction-only behavior as before this fix.
+export function deriveShoulderPinMask(simRestPositions, simParticleCount, dims) {
+  const segments = deriveShoulderPinSegments(dims)
+  const mask = new Uint8Array(simParticleCount)
+  for (let i = 0; i < simParticleCount; i++) {
+    const p = [simRestPositions[i * 3], simRestPositions[i * 3 + 1], simRestPositions[i * 3 + 2]]
+    for (const [a, b] of segments) {
+      if (distToSegment(p, a, b) < SHOULDER_PIN_RADIUS) { mask[i] = 1; break }
+    }
+  }
+  return mask
+}

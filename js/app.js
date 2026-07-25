@@ -1505,6 +1505,7 @@
       measurements: currentMeas(),
       category: state.category,
       fabricId: dominantFabricId(),
+      avatarGLB: state.avatarGLB || {},
       pieces: Canvas.getPieces().filter(p=>p.visible!==false).map((p,i)=>({
         id: ((p.name&&p.name.en)||"piece").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")+"_"+i,
         label: p.name || {en:"Piece "+(i+1), ar:"قطعة "+(i+1)},

@@ -27,6 +27,11 @@ export default function App() {
   const [debugView, setDebugView] = useState('cloth')
   const [fabricId, setFabricId] = useState(DEFAULT_FABRIC)
   const [garment, setGarment] = useState(null) // null = default T-shirt; else {pieces, seams} from the seam editor
+  // Per-category GLB avatar URLs from the bridge (root app's state.avatarGLB
+  // dict) — keyed by category, not a single URL, because cloth-lab's own
+  // Header category switcher is independent of the bridge: switching
+  // category in here must not lose the association or need a resend.
+  const [avatarGLBByCategory, setAvatarGLBByCategory] = useState({})
 
   // Whatever the bridge (root BerryStudio app, embedded via iframe — see
   // js/app.js's syncClothLab/loadClothLab) last sent, converted — see
@@ -61,6 +66,7 @@ export default function App() {
       setCategory(e.data.category)
       setMeasurementsByCategory((prev) => ({ ...prev, [e.data.category]: e.data.measurements }))
       if (result.fabricId) setFabricId(result.fabricId)
+      setAvatarGLBByCategory(e.data.avatarGLB || {})
       setGarment(null) // the previous "Simulate This Garment" result doesn't apply to a new pattern
       setImported(result)
       setGarmentVersion((v) => v + 1)
@@ -84,6 +90,7 @@ export default function App() {
         fabricId={fabricId} onFabricChange={setFabricId}
         debugView={debugView} garment={garment}
         imported={imported} skirtRawPieces={skirtRawPieces}
+        avatarGLBUrl={avatarGLBByCategory[category]}
         onReset={() => { setGarment(null); setImported(null); setGarmentVersion((v) => v + 1) }}
         onSimulate={(result) => { setGarment(result); setDebugView('cloth') }}
       />
@@ -95,7 +102,7 @@ export default function App() {
 // Seams view — split out from App so the whole thing can be remounted
 // (via App's key={garmentVersion}) as a unit whenever a new garment import
 // needs a fresh seam-editor rather than picking up on top of a stale one.
-function Workspace({ dims, measurements, onMeasurementsChange, fabricId, onFabricChange, debugView, garment, imported, skirtRawPieces, onReset, onSimulate }) {
+function Workspace({ dims, measurements, onMeasurementsChange, fabricId, onFabricChange, debugView, garment, imported, skirtRawPieces, avatarGLBUrl, onReset, onSimulate }) {
   const rawPieces = imported ? imported.rawPieces : skirtRawPieces
   const roles = imported ? imported.roles : SKIRT_ROLES
   const seedEdges = imported ? imported.edgeInstructions : undefined
@@ -128,7 +135,7 @@ function Workspace({ dims, measurements, onMeasurementsChange, fabricId, onFabri
       </aside>
       <main style={{ flex: '1 1 auto', position: 'relative' }}>
         <Canvas shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
-          <Scene dims={dims} debugView={debugView} fabricId={fabricId} garment={garment} seamEditor={seamEditor} />
+          <Scene dims={dims} debugView={debugView} fabricId={fabricId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} />
         </Canvas>
       </main>
     </div>

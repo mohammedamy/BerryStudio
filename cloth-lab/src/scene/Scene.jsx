@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import * as THREE from 'three'
 import { OrbitControls, Environment } from '@react-three/drei'
-import Avatar from '../body/Avatar'
+import BodyAvatar from '../body/BodyAvatar'
 import StaticPiecesDebug from '../cloth/StaticPiecesDebug'
 import WeldDebugView from '../cloth/WeldDebugView'
 import ClothMesh from '../cloth/ClothMesh'
 import SeamEditorScene from '../seam/SeamEditorScene'
+import PostFX from './PostFX'
 
 // The actual <Canvas> contents: lighting, ground, avatar, orbit camera.
-export default function Scene({ dims, debugView, fabricId, garment, seamEditor }) {
+export default function Scene({ dims, debugView, fabricId, garment, seamEditor, avatarGLBUrl }) {
   // Disabled while grabbing a cloth particle — otherwise dragging the mouse
   // to move the pin also orbits the camera at the same time, fighting itself.
   const [dragging, setDragging] = useState(false)
@@ -19,30 +19,20 @@ export default function Scene({ dims, debugView, fabricId, garment, seamEditor }
       <hemisphereLight args={['#8899bb', '#111114', 0.55]} />
       <directionalLight position={[2, 4, 3]} intensity={1.6} castShadow shadow-mapSize={[1024, 1024]} />
       <directionalLight position={[-3, 2, -2]} intensity={0.4} />
-      {/* Procedural (no network fetch) environment — baked from a few soft
-          emissive panels, purely for ambient reflection/sheen quality on
-          fabric and skin; doesn't touch the scene background (set above). */}
-      <Environment resolution={128} background={false}>
-        <mesh position={[0, 2, 3]} scale={[4, 3, 1]}>
-          <planeGeometry />
-          <meshBasicMaterial color="#cfd6e6" side={THREE.DoubleSide} />
-        </mesh>
-        <mesh position={[-3, 1.5, -2]} rotation={[0, Math.PI * 0.4, 0]} scale={[3, 2.5, 1]}>
-          <planeGeometry />
-          <meshBasicMaterial color="#8a93b8" side={THREE.DoubleSide} />
-        </mesh>
-        <mesh position={[3, 0.5, -1]} rotation={[0, -Math.PI * 0.35, 0]} scale={[2.5, 2, 1]}>
-          <planeGeometry />
-          <meshBasicMaterial color="#3a3d4a" side={THREE.DoubleSide} />
-        </mesh>
-      </Environment>
+      {/* Real CC0 studio-softbox HDRI (bundled locally, see public/env/README.md)
+          for ambient reflection/sheen quality on fabric and skin — deliberately
+          a local file rather than drei's preset= (which fetches from a
+          third-party GitHub-raw proxy with no SLA) so this has zero live
+          network dependency during a demo. Doesn't touch the scene background
+          (set above) — reflections/lighting only. */}
+      <Environment files={`${import.meta.env.BASE_URL}env/studio_small_08_1k.hdr`} background={false} />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[6, 6]} />
         <meshStandardMaterial color="#20222b" roughness={1} />
       </mesh>
 
-      {debugView !== 'seams' && <Avatar dims={dims} />}
+      {debugView !== 'seams' && <BodyAvatar dims={dims} url={avatarGLBUrl} />}
       {debugView === 'pieces' && <StaticPiecesDebug dims={dims} pieces={garment?.pieces} seams={garment?.seams} />}
       {debugView === 'weld' && <WeldDebugView dims={dims} pieces={garment?.pieces} seams={garment?.seams} />}
       {debugView === 'cloth' && (
@@ -54,6 +44,7 @@ export default function Scene({ dims, debugView, fabricId, garment, seamEditor }
         target={[0, dims.H * 0.55, 0]} minDistance={0.6} maxDistance={4}
         enableDamping dampingFactor={0.1} enabled={!dragging}
       />
+      <PostFX />
     </>
   )
 }

@@ -3,10 +3,38 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { TSHIRT_PIECES, TSHIRT_SEAMS } from '../pattern/tshirt'
 import { triangulateAll } from '../pattern/triangulate'
-import { assembleCloth, deriveNeighbors } from './assemble'
+import { assembleCloth, deriveNeighbors, deriveNormalRing } from './assemble'
 import { ClothSimulation, textureDimFor } from './ClothSimulation'
 import { FABRIC_PRESETS, DEFAULT_FABRIC } from './fabricPresets'
-import { deriveCollisionRig } from '../body/collisionRig'
+import { deriveCollisionRig, deriveShoulderPinMask } from '../body/collisionRig'
+
+// A single real (CC0, see public/textures/fabric-weave/README.md) fabric-
+// weave texture set, shared across every fabric preset — color/roughness/
+// sheen/clearcoat still differ per fabric (below), this only replaces "flat
+// solid color" with real woven-fabric surface detail. Loaded once at module
+// scope (not per fabric switch, not via a Suspense hook — see the cloth-lab
+// realism plan's Tier-1/B2 notes on why plain TextureLoader was chosen over
+// drei's useTexture here) so switching fabrics never re-triggers a network
+// fetch or shows a pop-in.
+const TEX_BASE = `${import.meta.env.BASE_URL}textures/fabric-weave/`
+let fabricTexturesPromise = null
+function loadFabricTextures() {
+  if (fabricTexturesPromise) return fabricTexturesPromise
+  const loader = new THREE.TextureLoader()
+  const load = (file, isColor) => new Promise((resolve) => {
+    loader.load(TEX_BASE + file, (tex) => {
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+      if (isColor) tex.colorSpace = THREE.SRGBColorSpace // normal/roughness maps must stay linear
+      resolve(tex)
+    }, undefined, () => resolve(null)) // missing/broken texture -> fall back to flat color, not a crash
+  })
+  fabricTexturesPromise = Promise.all([
+    load('diffuse.jpg', true),
+    load('normal.jpg', false),
+    load('roughness.jpg', false),
+  ]).then(([map, normalMap, roughnessMap]) => ({ map, normalMap, roughnessMap }))
+  return fabricTexturesPromise
+}
 
 // Build-order steps 6+: the actual simulated garment. Geometry is built once
 // per `dims`/`pieces`/`seams` change (placement is a pure function of body
@@ -24,7 +52,8 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
     const triangulated = triangulateAll(pieces, seams, 2)
     const cloth = assembleCloth(triangulated, dims, seams)
     const neighbors = deriveNeighbors(cloth, 8)
-    return { cloth, neighbors }
+    const normalRing = deriveNormalRing(cloth, neighbors, 4)
+    return { cloth, neighbors, normalRing }
   }, [dims, pieces, seams])
 
   const geometry = useMemo(() => {
@@ -41,9 +70,10 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
     geom.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     geom.setAttribute('uv', new THREE.BufferAttribute(cloth.renderUV, 2))
     geom.setIndex(new THREE.BufferAttribute(cloth.renderTriangles, 1))
-    // Vestigial: MeshStandardMaterial's vertex stage still requires a
-    // `normal` attribute to exist even though flatShading (below) recomputes
-    // real per-face normals from screen-space derivatives every frame.
+    // Vestigial: MeshPhysicalMaterial's standard vertex chunks reference a
+    // `normal` attribute unconditionally even though the onBeforeCompile
+    // patch below fully overwrites vNormal with a live-computed smooth
+    // normal afterward — this rest-pose value is never actually seen.
     geom.computeVertexNormals()
 
     const texDim = textureDimFor(cloth.simParticleCount)
@@ -55,14 +85,45 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
     }
     geom.setAttribute('aSimUV', new THREE.BufferAttribute(simUV, 2))
 
+    // Neighbor-ring texel UVs for live smooth-normal shading (see the
+    // onBeforeCompile patch below and assemble.js's deriveNormalRing) — each
+    // render vertex carries its sim particle's angularly-sorted 4-neighbor
+    // ring, converted to the same position-texture texel coordinates aSimUV
+    // already uses, packed as two vec4s since GLSL has no vec2[4] attribute.
+    const ringSize = 4
+    const { normalRing } = assembled
+    const toU = (sp) => (sp % texDim + 0.5) / texDim
+    const toV = (sp) => (Math.floor(sp / texDim) + 0.5) / texDim
+    const nbrUV0 = new Float32Array(cloth.renderVertexCount * 4)
+    const nbrUV1 = new Float32Array(cloth.renderVertexCount * 4)
+    for (let i = 0; i < cloth.renderVertexCount; i++) {
+      const sp = cloth.renderVertexToSimParticle[i]
+      const r0 = normalRing[sp * ringSize], r1 = normalRing[sp * ringSize + 1]
+      const r2 = normalRing[sp * ringSize + 2], r3 = normalRing[sp * ringSize + 3]
+      nbrUV0[i * 4] = toU(r0); nbrUV0[i * 4 + 1] = toV(r0)
+      nbrUV0[i * 4 + 2] = toU(r1); nbrUV0[i * 4 + 3] = toV(r1)
+      nbrUV1[i * 4] = toU(r2); nbrUV1[i * 4 + 1] = toV(r2)
+      nbrUV1[i * 4 + 2] = toU(r3); nbrUV1[i * 4 + 3] = toV(r3)
+    }
+    geom.setAttribute('aNbrUV0', new THREE.BufferAttribute(nbrUV0, 4))
+    geom.setAttribute('aNbrUV1', new THREE.BufferAttribute(nbrUV1, 4))
+
     return geom
   }, [assembled])
 
-  // flatShading=true makes three.js derive normals per-face from dFdx/dFdy
-  // of vViewPosition (see normal_fragment_begin) instead of interpolated
-  // vertex normals — and since vViewPosition is computed downstream of
-  // `transformed` in every standard-material vertex shader, it automatically
-  // reflects the GPU-deformed position with no extra patching required.
+  // Smooth per-vertex normals, computed live in the vertex shader from the
+  // GPU position texture — NOT flatShading. An earlier pass used
+  // flatShading (screen-space-derivative normals, free and automatic) but
+  // that gives every render TRIANGLE its own flat normal, which reads as
+  // visible facets/ridges under any glossy material (very obvious on Silk's
+  // clearcoat). Real smooth shading needs a normal that's consistent across
+  // every triangle sharing a vertex — impossible to get from screen-space
+  // derivatives alone. Since the GPU sim only ever writes particle
+  // *positions* (no vertex-normal attribute tracks the live deformation),
+  // this instead samples each vertex's precomputed neighbor ring (see
+  // assemble.js's deriveNormalRing + the aNbrUV0/aNbrUV1 attributes above)
+  // from the SAME position texture already bound below, and rebuilds an
+  // area-swept normal from current, live, deformed positions every frame.
   //
   // MeshPhysicalMaterial (a MeshStandardMaterial superset) so sheen/clearcoat
   // are available — same onBeforeCompile GPU-position patch works unchanged,
@@ -76,23 +137,56 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
       color: '#c9cedb', roughness: fabric.rough, metalness: fabric.metal,
       sheen: fabric.sheen, sheenRoughness: 0.5, clearcoat: fabric.clear, clearcoatRoughness: 0.4,
       transparent: fabric.om < 1, opacity: fabric.om,
-      flatShading: true, side: THREE.DoubleSide,
+      side: THREE.DoubleSide,
     })
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uSimPositionTex = { value: null }
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', 'attribute vec2 aSimUV;\nuniform sampler2D uSimPositionTex;\n#include <common>')
-        .replace('#include <begin_vertex>', 'vec3 transformed = texture2D( uSimPositionTex, aSimUV ).xyz;')
+        .replace(
+          '#include <common>',
+          'attribute vec2 aSimUV;\nattribute vec4 aNbrUV0;\nattribute vec4 aNbrUV1;\nuniform sampler2D uSimPositionTex;\n#include <common>'
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `vec3 selfPos = texture2D( uSimPositionTex, aSimUV ).xyz;
+          vec3 rn0 = texture2D( uSimPositionTex, aNbrUV0.xy ).xyz - selfPos;
+          vec3 rn1 = texture2D( uSimPositionTex, aNbrUV0.zw ).xyz - selfPos;
+          vec3 rn2 = texture2D( uSimPositionTex, aNbrUV1.xy ).xyz - selfPos;
+          vec3 rn3 = texture2D( uSimPositionTex, aNbrUV1.zw ).xyz - selfPos;
+          vec3 smoothNormal = cross(rn0, rn1) + cross(rn1, rn2) + cross(rn2, rn3) + cross(rn3, rn0);
+          vNormal = normalize( normalMatrix * normalize(smoothNormal) );
+          vec3 transformed = selfPos;`
+        )
       mat.userData.shader = shader
     }
     return mat
   }, [fabricId])
 
+  // Applied asynchronously once the (module-cached, loaded-once) fabric
+  // texture set resolves — kept separate from the material useMemo above
+  // since texture loading is inherently async and useMemo must return
+  // synchronously. `needsUpdate=true` forces a recompile that re-runs
+  // onBeforeCompile above, so the GPU-position patch survives. The `live`
+  // flag guards against applying a stale/superseded load to a material from
+  // a since-changed fabricId (this effect's own cleanup flips it off).
+  useEffect(() => {
+    let live = true
+    loadFabricTextures().then(({ map, normalMap, roughnessMap }) => {
+      if (!live) return
+      material.map = map
+      material.normalMap = normalMap
+      material.roughnessMap = roughnessMap
+      material.needsUpdate = true
+    })
+    return () => { live = false }
+  }, [material])
+
   const simRef = useRef(null)
   useEffect(() => {
     const fabric = FABRIC_PRESETS[fabricId] || FABRIC_PRESETS[DEFAULT_FABRIC]
     const collisionRig = deriveCollisionRig(dims)
-    const sim = new ClothSimulation(gl, assembled.cloth, assembled.neighbors, fabric, { collisionRig })
+    const pinnedMask = deriveShoulderPinMask(assembled.cloth.simRestPositions, assembled.cloth.simParticleCount, dims)
+    const sim = new ClothSimulation(gl, assembled.cloth, assembled.neighbors, fabric, { collisionRig, pinnedMask })
     simRef.current = sim
     return () => {
       sim.dispose()

@@ -28,15 +28,23 @@
 // `FABRIC` const) so the two separate 3D views agree on what each fabric
 // looks like. `om` is an opacity multiplier (chiffon/silk render slightly
 // sheer) — see ClothMesh.jsx for how these feed the render material.
+// bendStiff values below are nudged up ~15-25% from the original pass (was
+// 0.08-0.90) — the original band read slightly paper-flat/floppy at rest
+// rather than showing fabric-like rounded folds. Deliberately NOT touching
+// massDensity/structStiff/friction here: those are load-bearing for sim
+// STABILITY specifically (see header above — friction in particular was
+// hard-won against a real "shirt collapses to the floor" bug), and bendStiff
+// alone is what the codebase's own comment already identifies as the
+// intended look-differentiating axis between fabrics.
 export const FABRIC_PRESETS = {
-  chiffon: { massDensity: 30, structStiff: 0.92, bendStiff: 0.08, damping: 0.985, friction: 0.75, rough: 0.5, metal: 0.0, sheen: 0.45, clear: 0.0, om: 0.55 },
-  silk: { massDensity: 60, structStiff: 0.94, bendStiff: 0.12, damping: 0.980, friction: 0.80, rough: 0.26, metal: 0.05, sheen: 0.9, clear: 0.15, om: 0.98 },
-  satin: { massDensity: 90, structStiff: 0.95, bendStiff: 0.16, damping: 0.980, friction: 0.82, rough: 0.2, metal: 0.12, sheen: 0.85, clear: 0.22, om: 1 },
-  cotton: { massDensity: 150, structStiff: 0.96, bendStiff: 0.28, damping: 0.970, friction: 0.90, rough: 0.85, metal: 0.0, sheen: 0.2, clear: 0.0, om: 1 },
-  linen: { massDensity: 170, structStiff: 0.96, bendStiff: 0.34, damping: 0.970, friction: 0.87, rough: 0.82, metal: 0.0, sheen: 0.15, clear: 0.0, om: 1 },
-  wool: { massDensity: 300, structStiff: 0.97, bendStiff: 0.50, damping: 0.950, friction: 0.93, rough: 0.96, metal: 0.0, sheen: 0.08, clear: 0.0, om: 1 },
-  denim: { massDensity: 400, structStiff: 0.98, bendStiff: 0.75, damping: 0.930, friction: 0.96, rough: 0.9, metal: 0.02, sheen: 0.1, clear: 0.0, om: 1 },
-  leather: { massDensity: 550, structStiff: 0.98, bendStiff: 0.90, damping: 0.900, friction: 0.97, rough: 0.4, metal: 0.2, sheen: 0.2, clear: 0.35, om: 1 },
+  chiffon: { massDensity: 30, structStiff: 0.92, bendStiff: 0.10, damping: 0.985, friction: 0.75, rough: 0.5, metal: 0.0, sheen: 0.45, clear: 0.0, om: 0.55 },
+  silk: { massDensity: 60, structStiff: 0.94, bendStiff: 0.15, damping: 0.980, friction: 0.80, rough: 0.26, metal: 0.05, sheen: 0.9, clear: 0.15, om: 0.98 },
+  satin: { massDensity: 90, structStiff: 0.95, bendStiff: 0.20, damping: 0.980, friction: 0.82, rough: 0.2, metal: 0.12, sheen: 0.85, clear: 0.22, om: 1 },
+  cotton: { massDensity: 150, structStiff: 0.96, bendStiff: 0.35, damping: 0.970, friction: 0.90, rough: 0.85, metal: 0.0, sheen: 0.2, clear: 0.0, om: 1 },
+  linen: { massDensity: 170, structStiff: 0.96, bendStiff: 0.42, damping: 0.970, friction: 0.87, rough: 0.82, metal: 0.0, sheen: 0.15, clear: 0.0, om: 1 },
+  wool: { massDensity: 300, structStiff: 0.97, bendStiff: 0.58, damping: 0.950, friction: 0.93, rough: 0.96, metal: 0.0, sheen: 0.08, clear: 0.0, om: 1 },
+  denim: { massDensity: 400, structStiff: 0.98, bendStiff: 0.80, damping: 0.930, friction: 0.96, rough: 0.9, metal: 0.02, sheen: 0.1, clear: 0.0, om: 1 },
+  leather: { massDensity: 550, structStiff: 0.98, bendStiff: 0.92, damping: 0.900, friction: 0.97, rough: 0.4, metal: 0.2, sheen: 0.2, clear: 0.35, om: 1 },
 }
 
 export const FABRIC_IDS = Object.keys(FABRIC_PRESETS)

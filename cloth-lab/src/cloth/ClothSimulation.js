@@ -368,7 +368,7 @@ function buildCollisionUniformValues(collisionRig) {
 const DEFAULT_SELF_COLLISION = { radius: 0.012, restThreshold: 0.035 }
 
 export class ClothSimulation {
-  constructor(renderer, cloth, neighbors, fabric, { floorY = 0, collisionRig = [], selfCollision = DEFAULT_SELF_COLLISION } = {}) {
+  constructor(renderer, cloth, neighbors, fabric, { floorY = 0, collisionRig = [], selfCollision = DEFAULT_SELF_COLLISION, pinnedMask = null } = {}) {
     this.frameCount = 0
     this.simParticleCount = cloth.simParticleCount
     this.texDim = textureDimFor(cloth.simParticleCount)
@@ -394,7 +394,11 @@ export class ClothSimulation {
     const areaTex = gpuCompute.createTexture()
     for (let i = 0; i < cloth.simParticleCount; i++) {
       areaTex.image.data[i * 4] = cloth.simAreaShare[i]
-      areaTex.image.data[i * 4 + 1] = 0 // pinned flag — nothing pinned yet; grab-drag uses uDragParticleIndex instead (see setDragParticle)
+      // pinned flag — shoulder-seam vertices only (see collisionRig.js's
+      // deriveShoulderPinMask); everything else stays pure collision+
+      // friction. Independent of grab-drag, which uses uDragParticleIndex
+      // (see setDragParticle) rather than this per-particle texture.
+      areaTex.image.data[i * 4 + 1] = pinnedMask && pinnedMask[i] ? 1 : 0
     }
 
     // Permanently static (never ping-pongs, unlike texturePosition) — the

@@ -69,3 +69,45 @@ export function torsoProfile(dims) {
     [neckR * 1.15, shoulderY + span * 0.02],
   ]
 }
+
+// Arm/leg lathe profiles, in the limb's own LOCAL space (y=0 at the
+// shoulder/hip pivot, decreasing downward toward the hand/ankle) — same
+// revolve-a-curve technique as torsoProfile, used in place of Avatar.jsx's
+// earlier 3-stacked-capsules-plus-a-ball-joint-sphere construction. That
+// construction is exactly what an artist's wooden posing mannequin looks
+// like (it's literally built the same way, for the same reason: cheap
+// articulation) — a single continuously-tapered lathe mesh per limb has no
+// joint seams to read as "toy" in the first place. Deliberately a smooth
+// monotonic taper (no bicep/calf bulge) rather than a more anatomically
+// exact curve — safe against looking lumpy at this low a vertex budget;
+// smooth-but-simplified reads as more real than bumpy-but-ambitious does.
+export function armProfile(dims) {
+  const { armLen, upperR } = dims
+  return [
+    // Wider than the arm's own taper for just this first point — reaches
+    // into the torso's silhouette at the shoulder instead of abutting it,
+    // closing the small gap a same-radius join left at the seam.
+    [upperR * 1.4, 0],
+    [upperR * 0.94, -armLen * 0.18],
+    [upperR * 0.80, -armLen * 0.38],
+    [upperR * 0.66, -armLen * 0.58],
+    [upperR * 0.50, -armLen * 0.80],
+    [upperR * 0.40, -armLen * 0.94],
+    [upperR * 0.32, -armLen * 1.0],
+  ]
+}
+
+export function legProfile(dims) {
+  const { legLen, thighR } = dims
+  return [
+    // Same reasoning as armProfile's first point: wider than the leg's own
+    // taper so it reaches up into the hip/torso silhouette at the join.
+    [thighR * 1.3, 0],
+    [thighR * 0.92, -legLen * 0.16],
+    [thighR * 0.70, -legLen * 0.42],
+    [thighR * 0.60, -legLen * 0.50],
+    [thighR * 0.48, -legLen * 0.68],
+    [thighR * 0.40, -legLen * 0.85],
+    [thighR * 0.36, -legLen * 0.92],
+  ]
+}
