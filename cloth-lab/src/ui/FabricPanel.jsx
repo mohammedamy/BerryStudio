@@ -1,4 +1,4 @@
-import { FABRIC_IDS, FABRIC_SIM_PRESETS } from '../cloth/fabricPresets'
+import { FABRIC_IDS, FABRIC_PRESETS } from '../cloth/fabricPresets'
 
 const LABELS = {
   chiffon: 'Chiffon', silk: 'Silk', satin: 'Satin', cotton: 'Cotton',
@@ -19,7 +19,7 @@ export default function FabricPanel({ fabricId, onChange }) {
           <button
             key={id}
             onClick={() => onChange(id)}
-            title={`massDensity ${FABRIC_SIM_PRESETS[id].massDensity}g/m², stiffness ${FABRIC_SIM_PRESETS[id].structStiff}, friction ${FABRIC_SIM_PRESETS[id].friction}`}
+            title={`massDensity ${FABRIC_PRESETS[id].massDensity}g/m², stiffness ${FABRIC_PRESETS[id].structStiff}, friction ${FABRIC_PRESETS[id].friction}`}
             style={{
               padding: '7px 8px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 12.5, fontWeight: 600,
               background: id === fabricId ? 'var(--accent)' : 'var(--panel-2)',

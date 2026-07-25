@@ -14,7 +14,7 @@
     category: "women", size: "M", standard: "intl",
     kids: null, custom: {}, unitsCm: true,
     hoverHelp: true, highContrast: false, reduceMotion: false, cloudSync: false,
-    onboarded: false, mine: [], aiEndpoint: "", fabric3d: "cotton", showMeasDiagram: false,
+    onboarded: false, mine: [], aiEndpoint: "", aiImageEndpoint: "", fabric3d: "cotton", showMeasDiagram: false,
     lastMarkerYards: null, lastMarkerWidth: null,
     builderKind: null, builderOpts: { length:"medium", flare:"regular", fit:"regular", sleeve:"short" }, builderCustom: {},
     avatarGLB: { women: "", men: "", girls: "", boys: "" },
@@ -26,6 +26,17 @@
 
   const PALETTE = ["#6d5efc", "#00c2a8", "#ff5d8f", "#e2a52b", "#4c8dff", "#c1492e"];
   let aiImage = null;   // data-URL of the uploaded AI inspiration image
+  // AI Fashion Billboard — up to 2 source clothing photos, the generated
+  // editorial "billboard" photo, and the pattern-drawing image derived from it
+  let bbImages = [null, null];
+  let bbBillboard = null;
+  let bbPattern = null;
+  // 3D Cloth Lab bridge — whether the iframe's own message listener has
+  // confirmed it's mounted (see wire()'s "clothlab:ready" handler), and a
+  // hash of the last payload actually sent, so revisiting the tab with an
+  // unchanged pattern doesn't force a jarring cloth-sim restart for nothing.
+  let clothLabReady = false;
+  let lastClothLabPayloadJSON = null;
 
   // ---------------- ICONS (inline SVG) ----------------
   const IC = {
@@ -449,6 +460,132 @@
 
     c.appendChild(preview); c.appendChild(f); c.appendChild(file); c.appendChild(up); c.appendChild(gen);
     c.appendChild(statusBox); c.appendChild(attrsBox);
+
+    // ---- AI Fashion Billboard: dress a model in real garment photos, then
+    // draw a measured pattern from that photo (see js/billboard.js) ----
+    c.appendChild(el("div","section-title",IC.image+T("billboardTitle"))).style.marginTop="22px";
+    c.appendChild(el("div","help-note",T("billboardDesc")));
+
+    const slots=el("div","bb-slots");
+    slots.appendChild(makeBBSlot(0,T("billboardUpload1")));
+    slots.appendChild(makeBBSlot(1,T("billboardUpload2")));
+    c.appendChild(slots);
+
+    const bbGen=el("button","big-btn",IC.spark+T("billboardGenerate")); bbGen.style.marginTop="10px";
+    bbGen.onclick=()=>runBillboard(bbGen);
+    c.appendChild(bbGen);
+
+    const bbStatus=el("div","ai-status"); bbStatus.id="bbStatus"; c.appendChild(bbStatus);
+    const bbResult=el("div","bb-result"); bbResult.id="bbResult"; c.appendChild(bbResult);
+    paintBBResult();
+  }
+  // One upload slot for the Fashion Billboard's source clothing photos —
+  // mirrors the single-image AI-inspiration uploader above (preview + hidden
+  // file input + upload button), just parametrised over bbImages[i].
+  function makeBBSlot(i, label){
+    const wrap=el("div","bb-slot");
+    const preview=el("div","ai-preview"+(bbImages[i]?" show":""));
+    const paint=()=>{
+      if(bbImages[i]){
+        preview.innerHTML=`<img src="${bbImages[i]}" alt=""><button class="ai-x" title="${T('removeImg')}">×</button>`;
+        preview.classList.add("show");
+        preview.querySelector(".ai-x").onclick=()=>{ bbImages[i]=null; paint(); };
+      } else { preview.classList.remove("show"); preview.innerHTML=""; }
+    };
+    const file=el("input"); file.type="file"; file.accept="image/*"; file.style.display="none";
+    file.onchange=()=>{ const im=file.files&&file.files[0]; if(!im) return;
+      const r=new FileReader();
+      r.onload=()=>{ bbImages[i]=r.result; paint(); };
+      r.readAsDataURL(im);
+    };
+    const up=el("button","big-btn ghost",IC.image+label); up.style.marginTop="8px";
+    up.onclick=()=>file.click();
+    wrap.appendChild(preview); wrap.appendChild(file); wrap.appendChild(up);
+    return wrap;
+  }
+  // Shared 2-stage "thinking" indicator for both billboard calls (sending →
+  // waiting on the proxy) — same visual language as beginAIThinking above,
+  // kept separate since the stage keys/labels don't overlap with AI_STAGES.
+  function beginBBThinking(stage2Key){
+    const box=$("#bbStatus"); if(!box) return ()=>{};
+    box.innerHTML="";
+    ["billboardStageSending",stage2Key].forEach((k,i)=>{ const row=el("div","ai-stage"); row.dataset.i=i; row.innerHTML=`<span class="dot"></span><span>${T(k)}</span>`; box.appendChild(row); });
+    box.classList.add("show");
+    return (idx)=>{
+      [...box.children].forEach((row,i)=>{
+        row.classList.toggle("done", idx==="done" || i<idx);
+        row.classList.toggle("active", idx!=="done" && i===idx);
+      });
+      if(idx==="done") setTimeout(()=>box.classList.remove("show"),260);
+    };
+  }
+  function downloadDataURL(dataURL,name){ const a=el("a"); a.href=dataURL; a.download=name; a.click(); }
+  // Renders the generated billboard photo (with a "draw pattern from this"
+  // follow-up) and, once available, the pattern-drawing image derived from it.
+  function paintBBResult(){
+    const box=$("#bbResult"); if(!box) return;
+    box.innerHTML="";
+    box.classList.toggle("show", !!bbBillboard);
+    if(!bbBillboard) return;
+
+    const card1=el("div","bb-card");
+    card1.appendChild(el("img")).src=bbBillboard;
+    const row1=el("div","bb-card-actions");
+    const dl1=el("button","tbtn",IC.download); dl1.title=T("billboardDownload");
+    dl1.onclick=()=>downloadDataURL(bbBillboard,"berrystudio-billboard.png");
+    row1.appendChild(dl1); card1.appendChild(row1);
+    const drawBtn=el("button","big-btn ghost",IC.ruler+T("billboardDrawPattern"));
+    drawBtn.onclick=()=>runPattern(drawBtn);
+    card1.appendChild(drawBtn);
+    box.appendChild(card1);
+
+    if(bbPattern){
+      const card2=el("div","bb-card");
+      card2.appendChild(el("img")).src=bbPattern;
+      const row2=el("div","bb-card-actions");
+      const dl2=el("button","tbtn",IC.download); dl2.title=T("billboardDownload");
+      dl2.onclick=()=>downloadDataURL(bbPattern,"berrystudio-pattern-drawing.png");
+      row2.appendChild(dl2); card2.appendChild(row2);
+      const traceBtn=el("button","big-btn ghost",IC.image+T("billboardUseTrace"));
+      traceBtn.onclick=async()=>{
+        const ok=await Canvas.setBackgroundImage(bbPattern);
+        if(ok){ bgVisible=true; $("#bgBtn").classList.add("active"); setView("2d"); openBgPanel(); toast(T("billboardTraceReady")); }
+        else toast(T("importFail"));
+      };
+      card2.appendChild(traceBtn);
+      box.appendChild(card2);
+    }
+  }
+  async function runBillboard(btn){
+    const endpoint=(state.aiImageEndpoint||"").trim();
+    if(!endpoint){ toast(T("billboardNoEndpoint")); return; }
+    const imgs=bbImages.filter(Boolean);
+    if(!imgs.length){ toast(T("billboardNeedImages")); return; }
+    const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("billboardGenerating"); btn.style.opacity=".7"; btn.disabled=true;
+    const setStage=beginBBThinking("billboardStageRendering");
+    try{
+      setStage(0); await new Promise(r=>setTimeout(r,350));
+      setStage(1);
+      bbPattern=null;
+      bbBillboard=await Billboard.generateBillboard({ endpoint, images:imgs });
+      setStage("done"); paintBBResult(); toast(T("billboardDone"));
+    } catch(e){ setStage("done"); toast(T("billboardFail")); }
+    finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
+  }
+  async function runPattern(btn){
+    const endpoint=(state.aiImageEndpoint||"").trim();
+    if(!endpoint){ toast(T("billboardNoEndpoint")); return; }
+    if(!bbBillboard) return;
+    const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("billboardGenerating"); btn.style.opacity=".7"; btn.disabled=true;
+    const setStage=beginBBThinking("billboardStageDrafting");
+    const sizeLabel = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids).label) : state.size;
+    try{
+      setStage(0); await new Promise(r=>setTimeout(r,350));
+      setStage(1);
+      bbPattern=await Billboard.generatePattern({ endpoint, image:bbBillboard, sizeLabel });
+      setStage("done"); paintBBResult(); toast(T("billboardDone"));
+    } catch(e){ setStage("done"); toast(T("billboardFail")); }
+    finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
   }
   // Build the 3-step checklist fresh for each run (first label depends on
   // whether an image was supplied) and return a setter to advance it.
@@ -1323,7 +1460,7 @@
     document.querySelector(".canvas-wrap").classList.toggle("clothlab", v==="clothlab");
     $$("#viewToggle button").forEach(b=>b.classList.toggle("active",b.dataset.v===v));
     if(v==="3d"){ View3D.resize(); build3D(); }
-    else if(v==="clothlab"){ loadClothLab(); }
+    else if(v==="clothlab"){ loadClothLab(); syncClothLab(); }
     else Canvas.render();
     save();
   }
@@ -1337,6 +1474,59 @@
     const isLocal=/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
     frame.src = isLocal ? "http://localhost:5173/" : "cloth-lab/";
     frame.dataset.loaded="1";
+  }
+  // Derived straight from the iframe's actual src (same-origin in production
+  // — one combined GH Pages deploy; genuinely cross-origin in local dev —
+  // root app on :4173, cloth-lab's own Vite dev server on :5173, per
+  // .claude/launch.json) rather than re-deriving isLocal independently, so
+  // this can never drift out of sync with whatever loadClothLab() actually
+  // pointed the iframe at.
+  function clothLabOrigin(){
+    const frame=$("#clothLabFrame");
+    return frame && frame.src ? new URL(frame.src).origin : location.origin;
+  }
+  // Majority vote over each visible piece's chosen material — both apps use
+  // identical fabric key names (cotton/denim/silk/satin/chiffon/wool/linen/
+  // leather), so this is a direct passthrough, not a translation.
+  function dominantFabricId(){
+    const counts={};
+    Canvas.getPieces().forEach(p=>{ if(p.material) counts[p.material]=(counts[p.material]||0)+1; });
+    let best=null, bestN=0;
+    for(const k in counts) if(counts[k]>bestN){ best=k; bestN=counts[k]; }
+    return best; // null → cloth-lab keeps its own current/default fabric
+  }
+  // What actually crosses the iframe boundary — see cloth-lab/src/App.jsx's
+  // message listener (Phase 2) for how this gets turned into a simulated
+  // garment. Piece outlines are already cm, already compatible; the harder
+  // half-piece/role/seam conversion happens entirely on the cloth-lab side.
+  function buildClothLabPayload(){
+    return {
+      type: "berrystudio:pattern",
+      measurements: currentMeas(),
+      category: state.category,
+      fabricId: dominantFabricId(),
+      pieces: Canvas.getPieces().filter(p=>p.visible!==false).map((p,i)=>({
+        id: ((p.name&&p.name.en)||"piece").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")+"_"+i,
+        label: p.name || {en:"Piece "+(i+1), ar:"قطعة "+(i+1)},
+        outline: p.outline,
+      })),
+    };
+  }
+  // Only actually posts once cloth-lab's own listener has confirmed it's
+  // mounted (see wire()'s "clothlab:ready" handler) and only when the
+  // pattern actually changed since the last send — ClothMesh fully disposes
+  // and rebuilds the GPU sim on any pieces/seams/dims change, so resending an
+  // identical payload on every tab visit would force a jarring multi-second
+  // resim restart purely from switching tabs to look.
+  function syncClothLab(force){
+    if(!clothLabReady) return;
+    const frame=$("#clothLabFrame");
+    if(!frame || !frame.contentWindow) return;
+    const payload = buildClothLabPayload();
+    const json = JSON.stringify(payload);
+    if(!force && json===lastClothLabPayloadJSON) return;
+    lastClothLabPayloadJSON = json;
+    frame.contentWindow.postMessage(payload, clothLabOrigin());
   }
 
   // ================= EMPTY STATE =================
@@ -1438,6 +1628,12 @@
     const aiin=el("input","input"); aiin.type="url"; aiin.placeholder="https://your-proxy.example/generate";
     aiin.value=state.aiEndpoint||""; aiin.oninput=()=>{ state.aiEndpoint=aiin.value.trim(); save(); };
     aif.appendChild(aiin); aif.appendChild(el("div","help-note",T("aiEndpointD"))); body.appendChild(aif);
+    // AI Image endpoint (OpenAI gpt-image proxy, for the Fashion Billboard generator)
+    const bif=el("div","field"); bif.style.marginTop="14px";
+    bif.innerHTML=`<label>${T("billboardEndpoint")}</label>`;
+    const biin=el("input","input"); biin.type="url"; biin.placeholder="https://your-proxy.example/billboard";
+    biin.value=state.aiImageEndpoint||""; biin.oninput=()=>{ state.aiImageEndpoint=biin.value.trim(); save(); };
+    bif.appendChild(biin); bif.appendChild(el("div","help-note",T("billboardEndpointD"))); body.appendChild(bif);
     // 3D avatar models — paste a GLB URL per category (e.g. Ready Player Me)
     const av = el("div","field"); av.style.marginTop="14px";
     av.innerHTML = `<label>${T("avatarModels")}</label>`;
@@ -1604,6 +1800,18 @@
     $("#walkToggle").onchange=e=>View3D.setWalk(e.target.checked);
     document.addEventListener("keydown",keys);
     window.addEventListener("resize",()=>{if(state.view==="3d")View3D.resize();});
+    // 3D Cloth Lab bridge: cloth-lab posts {type:"clothlab:ready"} once its
+    // own listener is mounted (avoids a race where we'd post before it can
+    // hear us) — confirm the sender really is our iframe, then send it the
+    // current pattern right away and on every later tab switch (syncClothLab
+    // itself no-ops if the pattern hasn't actually changed).
+    window.addEventListener("message",(e)=>{
+      if(!e.data || e.data.type!=="clothlab:ready") return;
+      const frame=$("#clothLabFrame");
+      if(!frame || e.source!==frame.contentWindow) return;
+      clothLabReady=true;
+      syncClothLab(true);
+    });
   }
   function updateUnitsPill(){ $("#unitsPill .u").textContent=state.unitsCm?"cm":"inch"; }
 

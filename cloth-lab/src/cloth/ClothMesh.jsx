@@ -5,7 +5,7 @@ import { TSHIRT_PIECES, TSHIRT_SEAMS } from '../pattern/tshirt'
 import { triangulateAll } from '../pattern/triangulate'
 import { assembleCloth, deriveNeighbors } from './assemble'
 import { ClothSimulation, textureDimFor } from './ClothSimulation'
-import { FABRIC_SIM_PRESETS, DEFAULT_FABRIC } from './fabricPresets'
+import { FABRIC_PRESETS, DEFAULT_FABRIC } from './fabricPresets'
 import { deriveCollisionRig } from '../body/collisionRig'
 
 // Build-order steps 6+: the actual simulated garment. Geometry is built once
@@ -63,9 +63,19 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
   // vertex normals — and since vViewPosition is computed downstream of
   // `transformed` in every standard-material vertex shader, it automatically
   // reflects the GPU-deformed position with no extra patching required.
+  //
+  // MeshPhysicalMaterial (a MeshStandardMaterial superset) so sheen/clearcoat
+  // are available — same onBeforeCompile GPU-position patch works unchanged,
+  // since it still targets the shared <begin_vertex>/<common> chunks. Rebuilt
+  // per fabricId (a real, if infrequent, shader recompile) so switching
+  // fabric actually looks different, not just simulates differently — values
+  // ported from the production app's own fabric table, see fabricPresets.js.
   const material = useMemo(() => {
-    const mat = new THREE.MeshStandardMaterial({
-      color: '#c9cedb', roughness: 0.85, metalness: 0.02,
+    const fabric = FABRIC_PRESETS[fabricId] || FABRIC_PRESETS[DEFAULT_FABRIC]
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: '#c9cedb', roughness: fabric.rough, metalness: fabric.metal,
+      sheen: fabric.sheen, sheenRoughness: 0.5, clearcoat: fabric.clear, clearcoatRoughness: 0.4,
+      transparent: fabric.om < 1, opacity: fabric.om,
       flatShading: true, side: THREE.DoubleSide,
     })
     mat.onBeforeCompile = (shader) => {
@@ -76,11 +86,11 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
       mat.userData.shader = shader
     }
     return mat
-  }, [])
+  }, [fabricId])
 
   const simRef = useRef(null)
   useEffect(() => {
-    const fabric = FABRIC_SIM_PRESETS[fabricId] || FABRIC_SIM_PRESETS[DEFAULT_FABRIC]
+    const fabric = FABRIC_PRESETS[fabricId] || FABRIC_PRESETS[DEFAULT_FABRIC]
     const collisionRig = deriveCollisionRig(dims)
     const sim = new ClothSimulation(gl, assembled.cloth, assembled.neighbors, fabric, { collisionRig })
     simRef.current = sim
@@ -91,7 +101,7 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
   }, [gl, assembled, dims])
 
   useEffect(() => {
-    simRef.current?.setFabric(FABRIC_SIM_PRESETS[fabricId] || FABRIC_SIM_PRESETS[DEFAULT_FABRIC])
+    simRef.current?.setFabric(FABRIC_PRESETS[fabricId] || FABRIC_PRESETS[DEFAULT_FABRIC])
   }, [fabricId])
 
   useFrame((_, delta) => {
@@ -217,5 +227,5 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
     }
   }, [gl, camera, assembled, onDragStateChange])
 
-  return <mesh ref={meshRef} geometry={geometry} material={material} frustumCulled={false} />
+  return <mesh ref={meshRef} geometry={geometry} material={material} frustumCulled={false} castShadow receiveShadow />
 }

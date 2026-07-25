@@ -14,10 +14,10 @@ const CORNER_COLOR = [0.95, 0.25, 0.20]
 // Build-order step 5: color every render vertex by weld degree so a bad
 // `reverse` flag or a missed seam pairing shows up as a wrong color right
 // here, instead of surfacing as an unexplained tear once physics is running.
-export default function WeldDebugView({ dims }) {
+export default function WeldDebugView({ dims, pieces: pieceDefs = TSHIRT_PIECES, seams = TSHIRT_SEAMS }) {
   const geometry = useMemo(() => {
-    const triangulated = triangulateAll(TSHIRT_PIECES, TSHIRT_SEAMS, 2)
-    const cloth = assembleCloth(triangulated, dims, TSHIRT_SEAMS)
+    const triangulated = triangulateAll(pieceDefs, seams, 2)
+    const cloth = assembleCloth(triangulated, dims, seams)
 
     const positions = new Float32Array(cloth.renderVertexCount * 3)
     const colors = new Float32Array(cloth.renderVertexCount * 3)
@@ -51,7 +51,7 @@ export default function WeldDebugView({ dims }) {
     )
 
     return geom
-  }, [dims])
+  }, [dims, pieceDefs, seams])
 
   return (
     <group name="weld-debug">

@@ -335,6 +335,19 @@ button { cursor: pointer; border: none; background: none; }
 .ai-attrs .aa-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; border-top: 1px solid var(--line-2); font-size: 12.5px; }
 .ai-attrs .aa-row b { font-weight: 600; color: var(--ink-2); }
 .ai-attrs .aa-row .aa-val { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+
+/* AI Fashion Billboard — two source-photo slots + result cards */
+.bb-slots { display: flex; gap: 10px; margin-top: 12px; }
+.bb-slot { flex: 1; min-width: 0; }
+.bb-slot .ai-preview img { max-height: 120px; }
+.bb-result { display: none; flex-direction: column; gap: 14px; margin-top: 14px; }
+.bb-result.show { display: flex; animation: fade .2s var(--ease); }
+.bb-card { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; background: var(--panel-2); }
+.bb-card img { width: 100%; display: block; border-bottom: 1px solid var(--line); }
+.bb-card-actions { display: flex; gap: 8px; padding: 10px 10px 0; }
+.bb-card-actions .tbtn { width: 34px; height: 34px; flex: none; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--panel); display: grid; place-items: center; color: var(--ink-2); }
+.bb-card-actions .tbtn:hover { border-color: var(--brand); color: var(--brand); }
+.bb-card .big-btn.ghost { margin: 10px; width: calc(100% - 20px); }
 .ai-attrs .aa-swatch { width: 13px; height: 13px; border-radius: 4px; border: 1px solid rgba(0,0,0,.15); flex: none; }
 
 /* ============ TEXT TOOL EDITOR ============ */

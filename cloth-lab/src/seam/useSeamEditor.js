@@ -7,11 +7,28 @@ let edgeCounter = 0
 // the 3D visual (SeamEditorScene — clickable vertices) and the HTML panel
 // (SeamEditorPanel — seam list, commit/finalize buttons) via a common parent,
 // the same way `dragging` state is lifted for ClothMesh/OrbitControls.
-export function useSeamEditor(rawPieces, roles) {
-  const [drafts, setDrafts] = useState(() => rawPieces.map((rp) => createDraftPiece(rp, roles[rp.id])))
+// `seedEdges` optionally pre-populates edges on mount (e.g. from an
+// auto-import's best-effort guess — see pattern/importFromApp.js) by
+// replaying them through the same validating addEdge() a human's clicks go
+// through, so a seeded state can never be more invalid than a manually
+// authored one. `seedSeams` similarly pre-populates the seams list. Both
+// default to nothing, so the existing skirt-demo call site is unaffected.
+export function useSeamEditor(rawPieces, roles, seedEdges, seedSeams) {
+  const [drafts, setDrafts] = useState(() => {
+    const ds = rawPieces.map((rp) => createDraftPiece(rp, roles[rp.id]))
+    if (seedEdges && seedEdges.length) {
+      const byId = {}
+      ds.forEach((d) => { byId[d.id] = d })
+      for (const { pieceId, edgeName, fromIdx, toIdx } of seedEdges) {
+        const d = byId[pieceId]
+        if (d) { try { addEdge(d, edgeName, fromIdx, toIdx) } catch { /* skip a bad seed edge, keep the rest */ } }
+      }
+    }
+    return ds
+  })
   const [pendingStart, setPendingStart] = useState(null) // {pieceIdx, vertIdx}
   const [pendingEdges, setPendingEdges] = useState([]) // up to 2: {pieceIdx, edgeName, from, to}
-  const [seams, setSeams] = useState([])
+  const [seams, setSeams] = useState(() => (seedSeams && seedSeams.length ? seedSeams : []))
   const [error, setError] = useState(null)
 
   const touchDrafts = () => setDrafts((d) => d.slice())
