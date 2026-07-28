@@ -20,7 +20,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Gates build/deploy — see BerryStudio-Upgrade-Plan WP-0.2. Root app tests
+  # (node --test, no build step needed — the app is loaded directly as ES
+  # modules), cloth-lab's vitest unit tests, and one light Playwright smoke
+  # spec covering load → grade → export SVG → open 3D preview.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            cloth-lab/package-lock.json
+
+      - name: Install root dev dependencies
+        run: npm ci
+
+      - name: Root unit tests (node --test)
+        run: npm test
+
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright smoke test
+        run: npm run test:e2e
+
+      - name: Install cloth-lab dependencies
+        run: npm ci
+        working-directory: cloth-lab
+
+      - name: cloth-lab unit tests (vitest)
+        run: npm test
+        working-directory: cloth-lab
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

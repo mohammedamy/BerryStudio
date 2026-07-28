@@ -27,7 +27,7 @@
    random) variety so the same input always reproduces the same
    result, but different inputs actually look different.
    ============================================================ */
-const AIGen = (() => {
+export const AIGen = (() => {
   const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
   const q = v => v / 4;
   const DEFAULT_COLORS = ["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"];
@@ -532,3 +532,5 @@ const AIGen = (() => {
 
   return { analyzeImage, deriveStyle, build, summary, attributes, generate };
 })();
+// TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.
+if (typeof window !== 'undefined') window.AIGen = AIGen;

@@ -20,7 +20,7 @@
    OpenAI's own {data:[{b64_json}]} shape, so a minimal proxy that just
    forwards OpenAI's response works without any reshaping)
    ============================================================ */
-const Billboard = (() => {
+export const Billboard = (() => {
   const DEFAULT_MODEL = "gpt-image-2";
 
   // Verbatim from the ComfyUI export's node 24 ("OpenAI GPT Image 2") —
@@ -125,3 +125,5 @@ Do not alter, enhance, or "improve" the fabric appearances. Transfer the exact m
 
   return { DEFAULT_MODEL, DRESS_PROMPT, patternPrompt, generateBillboard, generatePattern };
 })();
+// TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.
+if (typeof window !== 'undefined') window.Billboard = Billboard;

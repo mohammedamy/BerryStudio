@@ -12,6 +12,9 @@
    (length / flare / fit / sleeve) chosen per garment so the shape
    actually matches its name — not a placeholder or a recolor.
    ============================================================ */
+import { AIGen } from './ai.js';
+import { PATTERNS, LIBRARY } from './data.js';
+
 (function () {
   const TAG = {
     dress: { en: "Dress", ar: "فستان" },

@@ -1,0 +1,15 @@
+{
+  "name": "berrystudio",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Dev/test tooling for the root BerryStudio app. The shipped app itself stays build-free — index.html loads js/*.js directly as ES modules, this file is never referenced by the browser.",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.0",
+    "jsdom": "^25.0.1"
+  }
+}

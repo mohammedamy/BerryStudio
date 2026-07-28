@@ -8,3 +8,8 @@
 # Logs & temp
 *.log
 node_modules/
+
+# Test tooling artifacts (WP-0.2)
+test-results/
+playwright-report/
+blob-report/

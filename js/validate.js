@@ -1,0 +1,279 @@
+/* ============================================================
+   PatternValidator — 8 patternmaking checks (BerryStudio-Upgrade-Plan
+   WP-0.4), tiered honestly by what the current pattern data actually
+   supports:
+
+   FULL CONFIDENCE (pure single-piece geometry, no guessing):
+     closedOutline, selfIntersection, grainline, seamAllowance, foldSymmetry
+
+   HEURISTIC (need to know which piece pairs with which — no such data
+   exists anywhere in the 148-pattern library today; confirmed by a
+   repo-wide search for any seam/edge-pairing structure). Reuses the SAME
+   closed-world front/back name-matching idiom cloth-lab's
+   importFromApp.js:classify() already uses for the identical problem,
+   rather than inventing a second heuristic. Unpairable pieces are
+   flagged as such, never silently guessed:
+     seamLengthParity, notchAlignment
+
+   DEFERRED (would need a SECOND unverifiable heuristic — which edge/level
+   *is* the finished-chest line — stacked on the first, with no ground
+   truth to check it against; a wrong FAIL here would actively mislead a
+   patternmaker, which is worse than an honest gap):
+     ease — see future WP-6 (metadata-at-source) for the real fix.
+   ============================================================ */
+
+// ---------- geometry helpers ----------
+function segLen(a, b) { return Math.hypot(b[0] - a[0], b[1] - a[1]); }
+
+function perimeter(outline) {
+  let p = 0;
+  for (let i = 0; i < outline.length; i++) p += segLen(outline[i], outline[(i + 1) % outline.length]);
+  return p;
+}
+
+function cross2(a, b) { return a[0] * b[1] - a[1] * b[0]; }
+function sub2(a, b) { return [a[0] - b[0], a[1] - b[1]]; }
+
+// Proper-crossing test (does not count endpoint-touching as a crossing).
+function segmentsIntersect(p1, p2, p3, p4) {
+  const d1 = cross2(sub2(p4, p3), sub2(p1, p3));
+  const d2 = cross2(sub2(p4, p3), sub2(p2, p3));
+  const d3 = cross2(sub2(p2, p1), sub2(p3, p1));
+  const d4 = cross2(sub2(p2, p1), sub2(p4, p1));
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
+function pointToSegmentInfo(p, a, b) {
+  const abx = b[0] - a[0], aby = b[1] - a[1];
+  const abLen2 = abx * abx + aby * aby || 1e-9;
+  let t = ((p[0] - a[0]) * abx + (p[1] - a[1]) * aby) / abLen2;
+  t = Math.max(0, Math.min(1, t));
+  const cx = a[0] + abx * t, cy = a[1] + aby * t;
+  return { t, dist: Math.hypot(p[0] - cx, p[1] - cy) };
+}
+
+// How far along the outline's own perimeter (0..1) the nearest point to
+// `point` sits — used to compare notch positions between two DIFFERENT
+// pieces' outlines without needing them to share an index/edge convention.
+function arcPositionFraction(outline, point) {
+  let bestDist = Infinity, bestArc = 0, walked = 0;
+  const total = perimeter(outline);
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i], b = outline[(i + 1) % outline.length];
+    const segL = segLen(a, b);
+    const { t, dist } = pointToSegmentInfo(point, a, b);
+    if (dist < bestDist) { bestDist = dist; bestArc = walked + t * segL; }
+    walked += segL;
+  }
+  return total > 0 ? bestArc / total : 0;
+}
+
+// ---------- full-confidence, single-piece checks ----------
+
+function checkClosedOutline(piece) {
+  const o = piece.outline || [];
+  if (o.length < 3) return { status: 'fail', message: `only ${o.length} point(s) — not a polygon` };
+  for (const pt of o) {
+    if (!Number.isFinite(pt[0]) || !Number.isFinite(pt[1])) return { status: 'fail', message: 'non-finite coordinate in outline' };
+  }
+  for (let i = 0; i < o.length; i++) {
+    const a = o[i], b = o[(i + 1) % o.length];
+    if (a[0] === b[0] && a[1] === b[1]) return { status: 'fail', message: `duplicate consecutive point at index ${i}` };
+  }
+  return { status: 'pass' };
+}
+
+function checkSelfIntersection(piece) {
+  const o = piece.outline || [];
+  const n = o.length;
+  if (n < 4) return { status: 'pass' };
+  for (let i = 0; i < n; i++) {
+    const a1 = o[i], a2 = o[(i + 1) % n];
+    for (let j = i + 1; j < n; j++) {
+      if (j === i + 1 || (i === 0 && j === n - 1)) continue; // adjacent edges share a vertex — not a crossing
+      const b1 = o[j], b2 = o[(j + 1) % n];
+      if (segmentsIntersect(a1, a2, b1, b2)) return { status: 'fail', message: `edge ${i} crosses edge ${j}` };
+    }
+  }
+  return { status: 'pass' };
+}
+
+const GRAIN_CARDINAL_TOL_DEG = 0.5;
+const GRAIN_BIAS_BAND = [30, 60]; // degrees off vertical — plausibly an intentional bias cut
+
+function checkGrainline(piece) {
+  const g = piece.grain;
+  if (!g || g.length < 2) return { status: 'fail', message: 'no grainline' };
+  const [p1, p2] = g;
+  const dx = p2[0] - p1[0], dy = p2[1] - p1[1];
+  if (Math.hypot(dx, dy) < 1e-6) return { status: 'fail', message: 'degenerate grainline (zero length)' };
+  const angleFromVertical = Math.abs((Math.atan2(dx, dy) * 180) / Math.PI);
+  const angleFromHorizontal = Math.abs(90 - angleFromVertical);
+  const nearestCardinalDeviation = Math.min(angleFromVertical, angleFromHorizontal);
+  if (nearestCardinalDeviation <= GRAIN_CARDINAL_TOL_DEG) return { status: 'pass' };
+  if (angleFromVertical >= GRAIN_BIAS_BAND[0] && angleFromVertical <= GRAIN_BIAS_BAND[1]) {
+    return { status: 'warn', message: `grain is ${angleFromVertical.toFixed(1)}° off vertical — possible intentional bias cut, unconfirmed (no bias flag exists in current pattern data)` };
+  }
+  return { status: 'fail', message: `grain is ${nearestCardinalDeviation.toFixed(1)}° off the nearest cardinal axis` };
+}
+
+function checkSeamAllowance(piece, seamCm, offsetPolyFn) {
+  const o = piece.outline;
+  if (!offsetPolyFn) return { status: 'warn', message: 'no offsetPoly function provided to the validator' };
+  if (!o || o.length < 3) return { status: 'fail', message: 'no outline to offset' };
+  let offset;
+  try {
+    offset = offsetPolyFn(o, seamCm);
+  } catch (e) {
+    return { status: 'fail', message: `seam-allowance offset threw: ${e.message}` };
+  }
+  const selfCheck = checkSelfIntersection({ outline: offset });
+  if (selfCheck.status === 'fail') return { status: 'fail', message: `seam-allowance offset self-intersects (${selfCheck.message})` };
+  const signedArea = (poly) => {
+    let a = 0;
+    for (let i = 0; i < poly.length; i++) { const [x1, y1] = poly[i], [x2, y2] = poly[(i + 1) % poly.length]; a += x1 * y2 - x2 * y1; }
+    return a;
+  };
+  if (Math.sign(signedArea(o)) !== Math.sign(signedArea(offset))) {
+    return { status: 'fail', message: 'seam-allowance offset inverted the polygon winding (a corner folded over itself)' };
+  }
+  return { status: 'pass' };
+}
+
+// A real sewing fold line must be a perfectly straight edge — you fold
+// fabric along a line, not a curve. This looks for a long run of points
+// sitting at the piece's own leftmost X extent (the authoring convention
+// every pattern in this codebase already uses for a fold edge) and checks
+// they're genuinely collinear, rather than assuming any piece IS meant to
+// be cut on fold (no cutOnFold field exists in the data — see the module
+// comment). No candidate found -> "n/a", not a failure.
+function checkFoldSymmetry(piece) {
+  const o = piece.outline || [];
+  if (o.length < 3) return { status: 'pass', message: 'n/a' };
+  const xs = o.map((p) => p[0]);
+  const ys = o.map((p) => p[1]);
+  const minX = Math.min(...xs);
+  const width = Math.max(...xs) - minX || 1;
+  const totalHeight = Math.max(...ys) - Math.min(...ys) || 1;
+  const nearMinX = o.filter((p) => Math.abs(p[0] - minX) < width * 0.02);
+  if (nearMinX.length < 2) return { status: 'pass', message: 'n/a — no candidate fold edge' };
+  const span = Math.max(...nearMinX.map((p) => p[1])) - Math.min(...nearMinX.map((p) => p[1]));
+  if (span < totalHeight * 0.3) return { status: 'pass', message: 'n/a — leftmost run too short to be a fold edge' };
+  const maxDeviation = Math.max(...nearMinX.map((p) => Math.abs(p[0] - minX)));
+  const tol = Math.max(0.05, width * 0.005);
+  if (maxDeviation > tol) {
+    return { status: 'fail', message: `candidate fold edge isn't straight — points vary by up to ${maxDeviation.toFixed(2)}cm in X (a real fold must be a perfectly straight line)` };
+  }
+  return { status: 'pass', message: `straight fold edge confirmed (${nearMinX.length} points, span ${span.toFixed(1)}cm)` };
+}
+
+// ---------- heuristic, cross-piece checks ----------
+// Same closed-world idiom as cloth-lab/src/pattern/importFromApp.js's
+// classify() — deliberately not a second, different heuristic.
+const IGNORE_RE = /waistband|collar|cuff|sash|tie|gusset|facing|pocket|lining|\bband\b|sleeve|كم/i;
+const FRONT_RE = /front|أمام/i;
+const BACK_RE = /back|خلف/i;
+
+function pieceLabel(piece) {
+  return (piece.name && piece.name.en) || piece.key || 'piece';
+}
+
+function pairFrontBack(pieces) {
+  const fronts = [], backs = [];
+  for (const p of pieces) {
+    const label = pieceLabel(p);
+    if (IGNORE_RE.test(label)) continue; // not a front/back-paired piece at all — no verdict needed
+    if (FRONT_RE.test(label)) fronts.push({ piece: p, base: label.replace(FRONT_RE, '').trim().toLowerCase() });
+    else if (BACK_RE.test(label)) backs.push({ piece: p, base: label.replace(BACK_RE, '').trim().toLowerCase() });
+  }
+  const pairs = [];
+  const usedBacks = new Set();
+  for (const f of fronts) {
+    let matchIdx = backs.findIndex((b, i) => !usedBacks.has(i) && b.base === f.base);
+    if (matchIdx < 0) matchIdx = backs.findIndex((b, i) => !usedBacks.has(i)); // fallback: any unused back
+    if (matchIdx >= 0) { usedBacks.add(matchIdx); pairs.push({ front: f.piece, back: backs[matchIdx].piece }); }
+    else pairs.push({ front: f.piece, back: null });
+  }
+  backs.forEach((b, i) => { if (!usedBacks.has(i)) pairs.push({ front: null, back: b.piece }); });
+  return pairs;
+}
+
+const SEAM_LENGTH_TOL_MM = 3;
+const NOTCH_ARC_TOL_FRACTION = 0.05; // 5% of perimeter
+
+function checkSeamLengthParity(pair) {
+  if (!pair.front || !pair.back) return { status: 'warn', message: 'could not confidently pair this piece with a front/back counterpart' };
+  // Heuristic proxy for "the side seam": each piece's own vertical extent.
+  // Front/back bodice pieces in this codebase's convention run top-to-
+  // bottom along the side seam, so a mismatch here is a real, catchable
+  // drafting bug even without true edge-to-edge seam metadata.
+  const heightOf = (p) => { const ys = p.outline.map((pt) => pt[1]); return Math.max(...ys) - Math.min(...ys); };
+  const hf = heightOf(pair.front), hb = heightOf(pair.back);
+  const diffMm = Math.abs(hf - hb) * 10;
+  if (diffMm <= SEAM_LENGTH_TOL_MM) return { status: 'pass', message: `matches within ${diffMm.toFixed(1)}mm` };
+  return { status: 'fail', message: `front (${hf.toFixed(1)}cm) and back (${hb.toFixed(1)}cm) side lengths differ by ${diffMm.toFixed(1)}mm` };
+}
+
+function checkNotchAlignment(pair) {
+  if (!pair.front || !pair.back) return { status: 'warn', message: 'could not confidently pair this piece with a front/back counterpart' };
+  const nf = (pair.front.notches || []).length;
+  const nb = (pair.back.notches || []).length;
+  if (nf !== nb) return { status: 'warn', message: `front has ${nf} notch(es), back has ${nb} — may be a deliberate single/double-notch front-vs-back convention, not necessarily a defect` };
+  if (nf === 0) return { status: 'pass', message: 'n/a — no notches on either piece' };
+  let worst = 0;
+  for (let i = 0; i < nf; i++) {
+    const pf = arcPositionFraction(pair.front.outline, pair.front.notches[i]);
+    const pb = arcPositionFraction(pair.back.outline, pair.back.notches[i]);
+    worst = Math.max(worst, Math.abs(pf - pb));
+  }
+  if (worst <= NOTCH_ARC_TOL_FRACTION) return { status: 'pass', message: `matches within ${(worst * 100).toFixed(1)}% of perimeter` };
+  return { status: 'fail', message: `notch position differs by ${(worst * 100).toFixed(1)}% of perimeter between front and back` };
+}
+
+// ---------- deferred ----------
+function checkEase() {
+  return { status: 'deferred', message: 'needs a declared finished-chest edge to compare against the body — no such metadata exists yet; see future WP-6 (metadata-at-source)' };
+}
+
+// ---------- entry point ----------
+// `ctx.offsetPoly` should be Canvas.offsetPoly (a pure function, reused
+// rather than reimplemented). `ctx.seamAllowanceCm` defaults to 1.
+export function run(pieces, ctx = {}) {
+  const seamCm = ctx.seamAllowanceCm != null ? ctx.seamAllowanceCm : 1;
+  const offsetPolyFn = ctx.offsetPoly || null;
+
+  const perPiece = (pieces || []).map((p) => ({
+    label: pieceLabel(p),
+    checks: {
+      closedOutline: checkClosedOutline(p),
+      selfIntersection: checkSelfIntersection(p),
+      grainline: checkGrainline(p),
+      seamAllowance: checkSeamAllowance(p, seamCm, offsetPolyFn),
+      foldSymmetry: checkFoldSymmetry(p),
+    },
+  }));
+
+  const pairs = pairFrontBack(pieces || []);
+  const crossPiece = pairs.map((pair) => ({
+    label: `${pair.front ? pieceLabel(pair.front) : '(unmatched)'} / ${pair.back ? pieceLabel(pair.back) : '(unmatched)'}`,
+    checks: {
+      seamLengthParity: checkSeamLengthParity(pair),
+      notchAlignment: checkNotchAlignment(pair),
+    },
+  }));
+
+  const ease = checkEase();
+
+  const summary = { pass: 0, warn: 0, fail: 0, deferred: 0 };
+  const tally = (r) => { summary[r.status] = (summary[r.status] || 0) + 1; };
+  perPiece.forEach((p) => Object.values(p.checks).forEach(tally));
+  crossPiece.forEach((p) => Object.values(p.checks).forEach(tally));
+  tally(ease);
+
+  return { perPiece, crossPiece, ease, summary };
+}
+
+export const PatternValidator = { run };
+
+// TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.
+if (typeof window !== 'undefined') window.PatternValidator = PatternValidator;

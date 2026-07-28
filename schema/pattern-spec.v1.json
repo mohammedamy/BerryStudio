@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://berrystudio.app/schema/pattern-spec.v1.json",
+  "title": "BerryStudio Pattern Spec v1",
+  "description": "A declarative garment description for FUTURE AI-generated patterns (BerryStudio-Upgrade-Plan WP-0.3/WP-1/WP-3). An LLM asked to emit raw polygon coordinates produces geometrically invalid, ungradable output; an LLM asked to emit a spec matching this schema produces reliable output that BerryStudio's existing deterministic engine (AIGen.build(), the grading engine, the associative construction solver) can turn into correct, gradable geometry. Nothing in the app emits or consumes this spec yet — this is the schema and its validator only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["specVersion", "garment", "pieces"],
+  "properties": {
+    "specVersion": { "const": "1" },
+
+    "garment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "category"],
+      "properties": {
+        "type": { "enum": ["dress", "top", "shirt", "skirt", "trousers", "robe"] },
+        "category": { "enum": ["women", "men", "girls", "boys"] },
+        "closure": { "enum": ["none", "button", "zip", "wrap", "tie"] }
+      }
+    },
+
+    "silhouette": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lengthF": { "type": "number", "minimum": 0, "maximum": 3 },
+        "flareF": { "type": "number", "minimum": 0, "maximum": 3 },
+        "fitF": { "type": "number", "minimum": 0, "maximum": 3 }
+      }
+    },
+
+    "construction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "neckline": { "enum": ["v", "round", "boat", "off-shoulder", "halter", "collar"] },
+        "necklineDepthF": { "type": "number", "minimum": 0, "maximum": 2 },
+        "sleeve": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "enum": ["none", "set-in", "raglan", "two-piece"] },
+            "lengthF": { "type": "number", "minimum": 0, "maximum": 3 },
+            "widthF": { "type": "number", "minimum": 0, "maximum": 3 }
+          }
+        },
+        "hem": { "enum": ["straight", "curved", "highlow", "asymmetric"] },
+        "seams": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "pieces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "role", "cutOnFold", "quantity", "grainline"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+          "role": {
+            "enum": [
+              "bodice-front", "bodice-back", "skirt-front", "skirt-back",
+              "sleeve", "collar", "cuff", "facing", "waistband", "yoke",
+              "pocket", "lining", "other"
+            ]
+          },
+          "cutOnFold": { "type": "boolean" },
+          "quantity": { "type": "integer", "minimum": 1 },
+          "grainline": { "enum": ["straight", "cross", "bias"] },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id"],
+              "properties": {
+                "id": { "type": "string" },
+                "seamId": { "type": ["string", "null"] },
+                "seamAllowanceMm": { "type": "number", "minimum": 0 }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "seams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "a", "b"],
+        "properties": {
+          "id": { "type": "string" },
+          "a": { "type": "string", "pattern": "^[a-z0-9_-]+/[a-z0-9_-]+$" },
+          "b": { "type": "string", "pattern": "^[a-z0-9_-]+/[a-z0-9_-]+$" }
+        }
+      }
+    },
+
+    "provenance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "source"],
+        "properties": {
+          "field": { "type": "string" },
+          "source": { "enum": ["user", "llm-inferred", "default"] },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    }
+  }
+}

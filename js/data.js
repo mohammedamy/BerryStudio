@@ -3,11 +3,11 @@
    pattern definitions. All measurements in centimetres.
    ============================================================ */
 
-const SIZES = ["XXS","XS","S","M","L","XL","XXL","XXXL","XXXXL","5XL","6XL"];
+export const SIZES = ["XXS","XS","S","M","L","XL","XXL","XXXL","XXXXL","5XL","6XL"];
 // Grade step relative to M (index 3). Each step = one size.
-const SIZE_STEP = SIZES.reduce((o,s,i)=>(o[s]=i-3,o),{});
+export const SIZE_STEP = SIZES.reduce((o,s,i)=>(o[s]=i-3,o),{});
 
-const KIDS_AGES = [
+export const KIDS_AGES = [
   { id:"2-3",   label:{en:"2–3Y",  ar:"٢-٣ سنة"},  height:98 },
   { id:"4-5",   label:{en:"4–5Y",  ar:"٤-٥ سنة"},  height:110 },
   { id:"6-7",   label:{en:"6–7Y",  ar:"٦-٧ سنة"},  height:122 },
@@ -18,7 +18,7 @@ const KIDS_AGES = [
 ];
 
 /* Base body (size M / mid-age) per category. */
-const BASE = {
+export const BASE = {
   women: { chest:88, waist:70, hips:96, shoulder:39, backLen:41, sleeve:58, neck:37, bicep:28, inseam:78, thigh:56, height:167 },
   men:   { chest:100,waist:86, hips:100,shoulder:46, backLen:45, sleeve:64, neck:40, bicep:33, inseam:82, thigh:60, height:178 },
   girls: { chest:68, waist:60, hips:72, shoulder:31, backLen:31, sleeve:44, neck:30, bicep:21, inseam:58, thigh:40, height:134 },
@@ -26,20 +26,20 @@ const BASE = {
 };
 
 /* Per-size-step grade increments (cm) — proportion-perfect. */
-const GRADE = {
+export const GRADE = {
   chest:4, waist:4, hips:4, shoulder:1, backLen:1, sleeve:1.5, neck:0.8, bicep:1.2, inseam:2, thigh:1.6, height:4
 };
 
 /* Standard offsets — Egyptian & Gulf blocks run slightly different
    ease and rise vs. ASTM/ISO. Applied as small proportional shifts. */
-const STANDARDS = {
+export const STANDARDS = {
   intl:  { name:{en:"International (ASTM/ISO)",ar:"عالمي"}, chest:0, waist:0, hips:0, ease:1.00 },
   egypt: { name:{en:"Egyptian",ar:"مصري"},                 chest:1, waist:2, hips:1, ease:1.04 },
   saudi: { name:{en:"Saudi / Gulf",ar:"سعودي / خليجي"},    chest:2, waist:1, hips:2, ease:1.06 },
 };
 
 /* Compute a full measurement set for the given selection. */
-function computeMeasurements({ category, size, standard, kids, custom }) {
+export function computeMeasurements({ category, size, standard, kids, custom }) {
   const base = { ...BASE[category] };
   let step = SIZE_STEP[size] ?? 0;
 
@@ -72,9 +72,9 @@ function computeMeasurements({ category, size, standard, kids, custom }) {
    ============================================================ */
 
 // small helper — quarter measurements for front/back blocks
-const q = v => v / 4;
+export const q = v => v / 4;
 
-const PATTERNS = {
+export const PATTERNS = {
   /* -------- WOMEN'S FITTED DRESS (multi-piece) -------- */
   womens_dress: {
     id: "womens_dress",
@@ -257,7 +257,7 @@ const PATTERNS = {
 };
 
 /* Library card list (order + tags for filtering). */
-const LIBRARY = [
+export const LIBRARY = [
   { id:"womens_dress", cat:"women",  tag:{en:"Dress",ar:"فستان"},   type:"dress" },
   { id:"abaya",        cat:"women",  tag:{en:"Abaya",ar:"عباية"},   type:"robe" },
   { id:"mens_shirt",   cat:"men",    tag:{en:"Shirt",ar:"قميص"},    type:"shirt" },
@@ -265,3 +265,13 @@ const LIBRARY = [
   { id:"girls_dress",  cat:"girls",  tag:{en:"Dress",ar:"فستان"},   type:"dress" },
   { id:"boys_trousers",cat:"boys",   tag:{en:"Trousers",ar:"بنطلون"},type:"trousers" },
 ];
+
+// TEMP compat aliases for one release — see BerryStudio-Upgrade-Plan WP-0.1.
+// Guarded: these modules also load under plain Node (node --test), where
+// there is no `window`.
+if (typeof window !== 'undefined') {
+  window.SIZES = SIZES; window.SIZE_STEP = SIZE_STEP; window.KIDS_AGES = KIDS_AGES;
+  window.BASE = BASE; window.GRADE = GRADE; window.STANDARDS = STANDARDS;
+  window.computeMeasurements = computeMeasurements; window.q = q;
+  window.PATTERNS = PATTERNS; window.LIBRARY = LIBRARY;
+}

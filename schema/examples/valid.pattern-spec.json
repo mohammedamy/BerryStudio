@@ -1,0 +1,38 @@
+{
+  "specVersion": "1",
+  "garment": { "type": "dress", "category": "women", "closure": "none" },
+  "silhouette": { "lengthF": 1.1, "flareF": 1.3, "fitF": 1.0 },
+  "construction": {
+    "neckline": "v", "necklineDepthF": 1.0,
+    "sleeve": { "kind": "set-in", "lengthF": 0.5, "widthF": 1.0 },
+    "hem": "curved",
+    "seams": ["side", "shoulder"]
+  },
+  "pieces": [
+    {
+      "id": "bodice-front", "role": "bodice-front", "cutOnFold": true, "quantity": 1, "grainline": "straight",
+      "edges": [
+        { "id": "shoulder", "seamId": "shoulder-seam", "seamAllowanceMm": 10 },
+        { "id": "side", "seamId": "side-seam", "seamAllowanceMm": 15 }
+      ]
+    },
+    {
+      "id": "bodice-back", "role": "bodice-back", "cutOnFold": true, "quantity": 1, "grainline": "straight",
+      "edges": [
+        { "id": "shoulder", "seamId": "shoulder-seam", "seamAllowanceMm": 10 },
+        { "id": "side", "seamId": "side-seam", "seamAllowanceMm": 15 }
+      ]
+    },
+    {
+      "id": "sleeve", "role": "sleeve", "cutOnFold": false, "quantity": 2, "grainline": "straight", "edges": []
+    }
+  ],
+  "seams": [
+    { "id": "shoulder-seam", "a": "bodice-front/shoulder", "b": "bodice-back/shoulder" },
+    { "id": "side-seam", "a": "bodice-front/side", "b": "bodice-back/side" }
+  ],
+  "provenance": [
+    { "field": "silhouette.flareF", "source": "llm-inferred", "confidence": 0.72 },
+    { "field": "garment.closure", "source": "default", "confidence": 1.0 }
+  ]
+}

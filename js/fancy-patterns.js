@@ -7,9 +7,12 @@
    the app already understands — NOT the AIGen.build() pipeline
    used by library.js, which tops out at ~5 straight-edged pieces.
 
-   Relies on globals already defined by data.js (loaded first):
-   q(), PATTERNS, LIBRARY.
+   Relies on q(), PATTERNS, LIBRARY from data.js.
    ============================================================ */
+import { q, PATTERNS, LIBRARY } from './data.js';
+
+export let FancyGen;
+
 (function () {
   "use strict";
 
@@ -365,7 +368,7 @@
     ];
   }
 
-  window.FancyGen = {
+  FancyGen = {
     build(kind, m, opts) {
       if (kind === "gown") return buildFancyGown(m, opts);
       if (kind === "jacket") return buildFancyJacket(m, opts);
@@ -374,6 +377,8 @@
       return [];
     },
   };
+  // TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.
+  if (typeof window !== 'undefined') window.FancyGen = FancyGen;
 
   // ---------------- registration ----------------
   function def(id, category, nameEn, nameAr, tagEn, tagAr, type, descEn, descAr, piecesFn) {

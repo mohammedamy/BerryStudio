@@ -1,0 +1,10 @@
+{
+  "specVersion": "1",
+  "garment": { "category": "women", "closure": "none" },
+  "pieces": [
+    {
+      "id": "mystery-panel", "role": "cape-thingy", "cutOnFold": "yes", "quantity": 1,
+      "grainline": "straight", "edges": [], "unknownField": true
+    }
+  ]
+}

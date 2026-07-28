@@ -2,6 +2,16 @@
    BerryStudio — application controller.
    Wires i18n, themes, RTL, panels, grading, 3D, export, etc.
    ============================================================ */
+import { I18N } from './i18n.js';
+import { PATTERNS, LIBRARY, computeMeasurements, SIZES, SIZE_STEP, KIDS_AGES } from './data.js';
+import { Canvas } from './canvas.js';
+import { View3D } from './three-view.js';
+import { AIGen } from './ai.js';
+import { Billboard } from './billboard.js';
+import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, exports nothing
+import { FancyGen } from './fancy-patterns.js';
+import { PatternValidator } from './validate.js';
+
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
@@ -790,6 +800,7 @@
     const ps=el("button","big-btn ghost",IC.printer+T("patternSummary")); ps.style.marginTop="8px"; ps.onclick=()=>exportSummary(); c.appendChild(ps);
     c.appendChild(el("div","help-note",T("patternSummaryD"))).style.marginTop="6px";
     const bo=el("button","big-btn ghost",T("bom")); bo.style.marginTop="10px"; bo.onclick=()=>toast(T("bom")+" ✓"); c.appendChild(bo);
+    const cp=el("button","big-btn ghost",T("checkPattern")); cp.style.marginTop="8px"; cp.onclick=()=>runCheckPattern(); c.appendChild(cp);
   }
 
   function doExport(){
@@ -1176,6 +1187,55 @@
     MEAS_KEYS.forEach(k=>html+=`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line-2)"><span>${T("m_"+k)}</span><b>${m[k]} cm</b></div>`);
     html+="</div>";
     openModal("Tech Pack", html, true);
+  }
+
+  // ================= CHECK PATTERN (WP-0.4) =================
+  const CP_COLOR = { pass: "var(--ok)", warn: "var(--warn)", fail: "var(--danger)", deferred: "var(--ink-2)" };
+  function cpChip(checkKey, result, heuristic){
+    const color = CP_COLOR[result.status] || "var(--ink-2)";
+    const title = [result.message, heuristic ? T("cp_heuristicNote") : ""].filter(Boolean).join(" — ");
+    return `<span title="${title.replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid ${color};color:${color};font-size:11px;font-weight:700;white-space:nowrap">
+      ${T("cp_"+checkKey)}${heuristic?` · ${T("cp_heuristic")}`:""}: ${T("cp_"+result.status)}
+    </span>`;
+  }
+  function runCheckPattern(){
+    const pieces=Canvas.getPieces(); if(!pieces.length){toast(T("empty2d"));return;}
+    const report = PatternValidator.run(pieces, { seamAllowanceCm: state.seamCm||1, offsetPoly: Canvas.offsetPoly });
+    const s = report.summary;
+    let html = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <span style="color:var(--ok);font-weight:700">${s.pass||0} ${T("cp_pass")}</span>
+      <span style="color:var(--warn);font-weight:700">${s.warn||0} ${T("cp_warn")}</span>
+      <span style="color:var(--danger);font-weight:700">${s.fail||0} ${T("cp_fail")}</span>
+      <span style="color:var(--ink-2);font-weight:700">${s.deferred||0} ${T("cp_deferred")}</span>
+    </div>`;
+
+    html += `<h3 style="margin:10px 0 6px">${T("cp_perPiece")}</h3>`;
+    report.perPiece.forEach((p)=>{
+      html += `<div style="padding:8px 0;border-bottom:1px solid var(--line-2)">
+        <div style="font-weight:700;margin-bottom:6px">${p.label}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,false)).join("")}
+        </div>
+      </div>`;
+    });
+
+    if (report.crossPiece.length){
+      html += `<h3 style="margin:14px 0 6px">${T("cp_crossPiece")}</h3>`;
+      report.crossPiece.forEach((p)=>{
+        html += `<div style="padding:8px 0;border-bottom:1px solid var(--line-2)">
+          <div style="font-weight:700;margin-bottom:6px">${p.label}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,true)).join("")}
+          </div>
+        </div>`;
+      });
+    }
+
+    html += `<div style="margin-top:14px;padding:10px;border-radius:8px;background:var(--panel-2);font-size:12.5px;color:var(--ink-2)">
+      <b>${T("cp_ease")}:</b> ${T("cp_deferred")} — ${T("cp_easeNote")}
+    </div>`;
+
+    openModal(T("checkPattern"), html, true);
   }
 
   // ================= MARKER-MAKING (client-side bounding-box nesting) =================
@@ -1671,6 +1731,7 @@
     {t:T("exportDXF"),i:IC.download,run:()=>exportAs("DXF")},
     {t:T("printProject"),i:IC.printer,run:printPattern},
     {t:T("patternSummary"),i:IC.printer,run:exportSummary},
+    {t:T("checkPattern"),i:IC.spark,run:()=>runCheckPattern()},
     {t:T("undoLbl"),i:IC.undo,run:()=>{Canvas.doUndo();renderLayersPane();sync3DVisibility();}},
     {t:T("redoLbl"),i:IC.redo,run:()=>{Canvas.doRedo();renderLayersPane();sync3DVisibility();}},
     {t:T("view2d"),i:IC.grid,run:()=>setView("2d")},

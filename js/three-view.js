@@ -12,7 +12,7 @@
      repo and they are used instead, auto-scaled to the measurements.
    • Graceful fallback when WebGL / network is unavailable.
    ============================================================ */
-const View3D = (() => {
+export const View3D = (() => {
   let THREE, OrbitControls, GLTFLoader;
   let renderer, scene, camera, controls, raf = null;
   let root, bodyGroup, garmentGroup, limbs = {};
@@ -534,3 +534,5 @@ const View3D = (() => {
     setAvatarURL, isReady: () => ready,
   };
 })();
+// TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.
+if (typeof window !== 'undefined') window.View3D = View3D;

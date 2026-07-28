@@ -59,6 +59,9 @@ install it. After the first load it works **fully offline**.
 | Command palette (⌘/Ctrl-K), tooltips + global Hover-Help toggle | ✅ Working |
 | Onboarding, toasts, high-contrast, reduce-motion, local-first storage | ✅ Working |
 | PWA manifest + service worker (offline, installable) | ✅ Working |
+| **ES modules** — `js/*.js` are real `import`/`export` modules (was: 9 classic IIFE scripts sharing sibling browser scope) | ✅ Working (`window.X` globals kept as a temporary compat layer — see Honest notes) |
+| **Pattern Spec schema** (`schema/pattern-spec.v1.json`) — a declarative JSON Schema for future AI-generated garments | ✅ Schema + validator defined (not yet wired into the AI generator — see Honest notes) |
+| **Check Pattern validator** (`js/validate.js`, Export pane / ⌘K) — 8 patternmaking checks: closed outline, self-intersection, grainline, seam-allowance offset, cut-on-fold symmetry, seam-length parity, notch alignment, ease | ✅ 5 full-confidence, 2 heuristic, 1 deferred (see Honest notes) |
 
 ### Honest notes
 - **Fancy Collection** (`js/fancy-patterns.js`) pieces are hand-authored, not run
@@ -135,6 +138,50 @@ install it. After the first load it works **fully offline**.
   them in the repo (e.g. `avatars/women.glb`) and paste that relative path.
 - Three.js + OrbitControls load from a CDN (via an import map) on first visit,
   then are cached for offline use.
+- **ES modules**: every root `js/*.js` file now has real `export`s and the files
+  that need them have real `import`s, replacing the previous "9 classic scripts
+  sharing one browser lexical scope" pattern. Every exported symbol also still
+  gets a `window.X = X` compat alias for one release, per the working rule of
+  not breaking anything mid-transition — these are genuinely temporary and
+  should be removed once nothing outside the module graph needs them. One
+  side effect worth knowing: those symbols (`AIGen`, `PATTERNS`, `Canvas`,
+  etc.) are now real `window` properties for the first time — they weren't
+  before, since classic-script sibling scope isn't the same as `window`.
+- **Pattern Spec schema** (`schema/pattern-spec.v1.json`) defines a declarative
+  garment description (silhouette, construction, pieces, seam pairing,
+  provenance) that vendored ajv v6 (`js/vendor/ajv6.min.js`) validates strictly
+  — `npm test` includes a round-trip check against one valid and one
+  intentionally invalid fixture. Nothing in the app emits or consumes this
+  spec yet: no AI provider is wired to produce it, and `AIGen.build()` still
+  uses its own internal `style` object, not this schema — that's future work.
+  The vendored ajv build also has a known, documented gap: it loads correctly
+  under Node (used by the test suite) but has NOT been wired to work from a
+  plain browser `<script>` tag yet (see `js/vendor/README.md`) — not an issue
+  today since nothing loads it from the browser, but it'll need a small
+  CommonJS shim when it actually is.
+- **Check Pattern** (`js/validate.js`) runs 8 patternmaking checks, but only 5
+  of them (closed outline, self-intersection, grainline angle, seam-allowance
+  offset validity, cut-on-fold symmetry) can be verified from a single piece's
+  own geometry with full confidence. **Seam-length parity** and **notch
+  alignment** need to know which piece's edges correspond to which other
+  piece's — data that doesn't exist anywhere in the current pattern library
+  (confirmed via a repo-wide search for any seam-pairing structure) — so those
+  two reuse the same closed-world front/back name-matching heuristic Cloth
+  Lab's importer already uses (`cloth-lab/src/pattern/importFromApp.js`), and
+  are labelled "Heuristic" in the report: a piece with no plausible front/back
+  counterpart is flagged as unpairable, never guessed at. Running it over the
+  full pattern library on its first pass genuinely found real issues, not
+  hypothetical ones — 30 Fancy Collection pieces have a duplicate consecutive
+  point in their outline (a likely bezier-sampling boundary bug in
+  `js/fancy-patterns.js`, not yet fixed here) and a consistent ~5mm
+  front/back "side length" delta across many catalogue garments that most
+  likely reflects an intentionally deeper front neckline rather than a real
+  defect — exactly the kind of result a *heuristic* check is supposed to
+  produce: a lead for a human to judge, not a verified fact. **Ease**
+  (finished chest vs. body chest + minimum ease) is not implemented at all —
+  it would need a second, unverifiable heuristic on top of the first (which
+  edge is the chest measurement) — this is left as a documented gap rather
+  than faked.
 
 ---
 
@@ -142,7 +189,7 @@ install it. After the first load it works **fully offline**.
 
 ```
 BerryStudio/                (repository root)
-├── index.html            App shell
+├── index.html            App shell — loads js/*.js as real ES modules
 ├── manifest.webmanifest  PWA manifest
 ├── sw.js                 Service worker (offline-first)
 ├── css/styles.css        Design system: 3 themes × light/dark, full RTL
@@ -152,10 +199,28 @@ BerryStudio/                (repository root)
 │   ├── canvas.js         2D drafting engine (Canvas 2D)
 │   ├── three-view.js     3D parametric avatar (Three.js)
 │   ├── ai.js             Image/prompt → style params + parametric garment builder
+│   ├── billboard.js      AI Fashion Billboard generator (image-edit proxy)
 │   ├── library.js        100-pattern catalog (25/category), built on ai.js's builder
 │   ├── fancy-patterns.js 24 hand-crafted 8+ piece designs (6/category) with bezier-curved seams
+│   ├── validate.js       Check Pattern — 8 patternmaking checks over any piece set
+│   ├── schema-validate.js  Thin ajv wrapper for schema/pattern-spec.v1.json (not wired in yet)
+│   ├── vendor/           Vendored third-party files (ajv6.min.js) — see its own README
 │   └── app.js            Application controller (wires everything)
+├── schema/               Pattern Spec JSON Schema + example fixtures (see Honest notes)
+├── test/                 node --test unit tests for the root app (`npm test`)
+├── e2e/                  One Playwright smoke spec (`npm run test:e2e`)
 └── icons/                App icons (SVG + PNG 192/512)
+```
+
+### Development
+
+The shipped app itself is still build-free — `npm`/`package.json` here are
+dev/test tooling only, never referenced by `index.html`:
+
+```bash
+npm install && npm test        # root unit tests (node --test)
+npm run test:e2e               # one Playwright smoke spec
+cd cloth-lab && npm test        # cloth-lab's own vitest unit tests
 ```
 
 ## Extending

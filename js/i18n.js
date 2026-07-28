@@ -2,7 +2,7 @@
    i18n — English + Egyptian/Saudi Arabic
    Natural, professional garment-industry Arabic.
    ============================================================ */
-const I18N = {
+export const I18N = {
   en: {
     dir: "ltr",
     appName: "BerryStudio",
@@ -139,6 +139,14 @@ const I18N = {
     fabric: "Fabric", trims: "Trims", labor: "Labor", total: "Total",
     techPack: "Generate Tech Pack", bom: "Bill of Materials", exportNow: "Export",
     printNow: "Print",
+    checkPattern: "Check Pattern",
+    cp_pass: "Pass", cp_warn: "Warn", cp_fail: "Fail", cp_deferred: "Not yet checked", cp_heuristic: "Heuristic",
+    cp_perPiece: "Per-piece checks", cp_crossPiece: "Front/back pairing checks", cp_summary: "Summary",
+    cp_closedOutline: "Closed outline", cp_selfIntersection: "Self-intersection",
+    cp_grainline: "Grainline angle", cp_seamAllowance: "Seam allowance offset", cp_foldSymmetry: "Cut-on-fold symmetry",
+    cp_seamLengthParity: "Seam-length parity", cp_notchAlignment: "Notch alignment", cp_ease: "Ease",
+    cp_easeNote: "Not implemented — would need a declared finished-chest edge with no way to confirm it, so this is left honestly blank rather than guessed.",
+    cp_heuristicNote: "Heuristic: paired by name (front/back), not real seam data — treat as a hint, not a verified fact.",
     // project menu
     project: "Project", projectMenu: "Project menu — new, import, export, print",
     newProject: "New Project", importProject: "Import Project…",
@@ -322,6 +330,14 @@ const I18N = {
     fabric: "قماش", trims: "إكسسوارات", labor: "مصنعية", total: "الإجمالي",
     techPack: "توليد الحقيبة الفنية", bom: "قائمة الخامات", exportNow: "تصدير",
     printNow: "طباعة",
+    checkPattern: "فحص الباترون",
+    cp_pass: "سليم", cp_warn: "تنبيه", cp_fail: "خطأ", cp_deferred: "غير مُتحقَّق منه بعد", cp_heuristic: "تخميني",
+    cp_perPiece: "فحوصات كل قطعة", cp_crossPiece: "فحوصات مطابقة الأمام والخلف", cp_summary: "الملخص",
+    cp_closedOutline: "إغلاق الخط الخارجي", cp_selfIntersection: "تقاطع الخطوط الذاتي",
+    cp_grainline: "زاوية اتجاه القماش", cp_seamAllowance: "إزاحة سماحية الحياكة", cp_foldSymmetry: "تناظر خط الطية",
+    cp_seamLengthParity: "تساوي طول خط الحياكة", cp_notchAlignment: "محاذاة العلامات", cp_ease: "فراغ الراحة",
+    cp_easeNote: "غير مُفعّل — يحتاج إلى تحديد خط محيط الصدر النهائي، ولا توجد طريقة موثوقة لتأكيده، لذا تُركت هذه الخانة فارغة بأمانة بدلاً من التخمين.",
+    cp_heuristicNote: "تخميني: تمت المطابقة بالاسم (أمام/خلف)، وليس ببيانات حياكة حقيقية — يُعتبر تلميحًا لا حقيقة مؤكدة.",
     // project menu
     project: "المشروع", projectMenu: "قائمة المشروع — جديد، استيراد، تصدير، طباعة",
     newProject: "مشروع جديد", importProject: "استيراد مشروع…",
@@ -375,3 +391,7 @@ const I18N = {
     cutLine: "خط القص", sewLine: "خط الحياكة", grainDir: "اتجاه القماش",
   }
 };
+// TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.
+// Guarded: these modules also load under plain Node (node --test), where
+// there is no `window`.
+if (typeof window !== 'undefined') window.I18N = I18N;

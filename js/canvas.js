@@ -3,7 +3,7 @@
    Grid, rulers, zoom/pan, seam allowance, notches, grainlines,
    selection, snapping, measure & sketch tools, undo/redo.
    ============================================================ */
-const Canvas = (() => {
+export const Canvas = (() => {
   let cv, ctx, dpr = 1;
   let view = { x: 60, y: 60, scale: 3.2 };     // px per cm
   let pieces = [];                              // current pattern pieces (cm space, positioned)
@@ -1169,5 +1169,9 @@ const Canvas = (() => {
            setBackgroundImage, setBgOpacity, setBgVisible, removeBackground, hasBackground, getBgOpacity,
            moveBackground, onCalibrationRequest, applyCalibration,
            centerOn, selectPoint, selectCons, clearHighlight,
-           freezeSnapshot, showSnapshot, setSnapshotOpacity, removeSnapshot, hasSnapshot, getSnapshotOpacity };
+           freezeSnapshot, showSnapshot, setSnapshotOpacity, removeSnapshot, hasSnapshot, getSnapshotOpacity,
+           // exposed for js/validate.js (WP-0.4) — a pure function, safe to reuse rather than reimplement
+           offsetPoly };
 })();
+// TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.
+if (typeof window !== 'undefined') window.Canvas = Canvas;
