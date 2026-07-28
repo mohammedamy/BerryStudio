@@ -1,57 +1,46 @@
 /* ============================================================
-   PatternSpecValidator — thin wrapper around vendored ajv v6
-   (js/vendor/ajv6.min.js) for schema/pattern-spec.v1.json.
+   PatternSpecValidator — validates a garment spec against
+   schema/pattern-spec.v1.json.
 
-   Not wired into the running app yet — no AI provider emits this spec,
-   and AIGen.build() still consumes its own internal `style` object, not
-   this schema. This exists so the schema itself is validated (see
-   schema/selftest.js and test/schema.test.js) ahead of that future work.
-   See BerryStudio-Upgrade-Plan WP-0.3.
+   Used by the WP-3 spec-first generation pipeline
+   (js/ai-spec-pipeline.js) to validate a provider's structured-output
+   response before it's ever handed to AIGen.build(). See
+   BerryStudio-Upgrade-Plan WP-0.3 (schema) and WP-3 (its first real
+   caller).
 
-   Loading ajv6.min.js: it's a CommonJS/UMD build (module.exports=...),
-   not a real ES module (no `export` statements) — `import` cannot see
-   its value directly. Under Node this uses createRequire, which works
-   correctly once js/vendor/package.json scopes that directory back to
-   CommonJS (the root package.json's "type":"module" would otherwise make
-   Node parse this CJS file as an empty ES module). This has NOT been
-   verified to work when loaded via a plain browser <script> tag —
-   confirmed empirically that this specific minified build's UMD
-   "browser global" branch does not attach a bare `window.Ajv` on its
-   own. Whoever wires this into the actual browser app (WP-1/WP-3) will
-   need a small CommonJS shim first (define global `module`/`exports`
-   objects before the script tag runs, then read `module.exports`
-   afterward) — a standard, well-known pattern for loading a UMD bundle
-   without a bundler, just not implemented here since nothing calls this
-   from the browser yet.
+   Backed by js/vendor/pattern-spec-validate.generated.js — a
+   precompiled validator function with zero runtime code generation.
+   This is deliberate, not incidental: ajv's normal runtime compiler
+   (ajv.compile()) builds each validator with `new Function(...)`,
+   which throws under BerryStudio's CSP (script-src has no
+   'unsafe-eval' — WP-1 security requirement #4). See
+   js/vendor/README.md for the full story and how to regenerate the
+   validator if schema/pattern-spec.v1.json ever changes.
    ============================================================ */
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const Ajv = require('./vendor/ajv6.min.js');
+import validate from './vendor/pattern-spec-validate.generated.js';
 
 export const PatternSpecValidator = (() => {
-  let ajv = null;
-  let validateFn = null;
-
+  // The validator is precompiled specifically for pattern-spec.v1.json, so
+  // init() no longer loads or compiles anything — kept as a no-op for API
+  // stability (existing/future callers can still `await init(schema)`) with
+  // a light sanity check that the caller passed the schema this validator
+  // actually matches, in case schema/pattern-spec.v1.json is ever versioned.
   function init(schema) {
-    ajv = new Ajv({ allErrors: true });
-    validateFn = ajv.compile(schema);
+    if (schema && schema.$id && schema.$id !== 'https://berrystudio.app/schema/pattern-spec.v1.json') {
+      throw new Error('PatternSpecValidator is precompiled for pattern-spec.v1.json; regenerate js/vendor/pattern-spec-validate.generated.js for a different schema (see scripts/generate-schema-validator.mjs)');
+    }
   }
 
-  function validate(specObj) {
-    if (!validateFn) throw new Error('PatternSpecValidator.init(schema) must be called first');
-    const valid = validateFn(specObj);
+  function validateSpec(specObj) {
+    const valid = validate(specObj);
     return {
       valid,
-      errors: valid ? [] : (validateFn.errors || []).map((e) => ({
-        path: e.dataPath || e.instancePath || '(root)',
+      errors: valid ? [] : (validate.errors || []).map((e) => ({
+        path: e.instancePath || '(root)',
         message: e.message,
       })),
     };
   }
 
-  return { init, validate };
+  return { init, validate: validateSpec };
 })();
-
-// TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.
-if (typeof window !== 'undefined') window.PatternSpecValidator = PatternSpecValidator;

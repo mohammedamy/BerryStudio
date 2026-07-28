@@ -15,5 +15,14 @@ export default defineConfig({
   },
   use: {
     baseURL: 'http://localhost:8793',
+    // BerryStudio-Upgrade-Plan WP-1 added a real, strict CSP (no
+    // 'unsafe-inline' in script-src — see index.html). Playwright's own
+    // browser automation injects its test-harness instrumentation as an
+    // inline script, which that CSP correctly blocks like any other inline
+    // script — a real site visitor never triggers this, only the test
+    // driver does. `bypassCSP` is Playwright's documented mechanism for
+    // exactly this situation: it only affects this isolated test browser
+    // context, never the CSP real users get.
+    bypassCSP: true,
   },
 });

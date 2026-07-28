@@ -1,12 +1,18 @@
 /* BerryStudio — service worker (offline-capable, update-friendly) */
-const CACHE = "berrystudio-v22";
+const CACHE = "berrystudio-v27";
 const ASSETS = [
   "./", "./index.html",
   "./css/styles.css",
-  "./js/i18n.js", "./js/data.js", "./js/canvas.js", "./js/three-view.js", "./js/ai.js", "./js/billboard.js", "./js/library.js", "./js/fancy-patterns.js", "./js/validate.js", "./js/app.js",
+  "./js/i18n.js", "./js/data.js", "./js/canvas.js", "./js/three-view.js", "./js/ai.js", "./js/billboard.js", "./js/library.js", "./js/fancy-patterns.js", "./js/validate.js",
+  "./js/ai-keystore.js", "./js/capability-probe.js", "./js/ai-providers.js", "./js/schema-validate.js", "./js/ai-spec-pipeline.js", "./js/ai-fusion.js", "./js/image-providers.js", "./js/app.js",
+  "./js/vendor/pattern-spec-validate.generated.js",
+  "./schema/pattern-spec.v1.json",
   "./manifest.webmanifest",
   "./icons/icon.svg",
 ];
+// Deliberately NOT precached: js/workers/local-model-worker.js — it's only
+// ever instantiated on demand (WP-2 Routes B/C), and its own dynamic import
+// of the ML runtime must never be triggered by a service-worker precache.
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

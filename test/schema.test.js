@@ -7,7 +7,7 @@ const schema = JSON.parse(readFileSync(new URL('../schema/pattern-spec.v1.json',
 const validSpec = JSON.parse(readFileSync(new URL('../schema/examples/valid.pattern-spec.json', import.meta.url)));
 const invalidSpec = JSON.parse(readFileSync(new URL('../schema/examples/invalid.pattern-spec.json', import.meta.url)));
 
-PatternSpecValidator.init(schema);
+await PatternSpecValidator.init(schema);
 
 test('the valid fixture passes schema validation', () => {
   const result = PatternSpecValidator.validate(validSpec);

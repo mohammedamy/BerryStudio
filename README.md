@@ -52,7 +52,12 @@ install it. After the first load it works **fully offline**.
 | **Pattern Library — 124 pre-designed patterns, 31 per category** (Women/Men/Girls/Boys), category filter chips + search + "My Patterns" | ✅ Working — every entry is a real, gradable multi-piece garment |
 | **Fancy Collection — 24 elaborate designs, 6 per category**: gowns, tailored jackets/coats, a three-piece suit, sherwanis and parkas — each with 8–10 real pattern pieces (princess seams, godets, capes, tiers, two-piece sleeves, lapels, hoods) and genuinely curved seams | ✅ Working — curves are bezier-sampled into the pattern outline, not straight polygon corners |
 | **Construction tools** — real drafting Point/Line/Arc/Circle tools that snap to and stay live-linked to named points, "Create Pattern Piece" to promote a closed point loop into a real piece, custom parametric **Variables** (named formulas referencing other variables and body measurements, reusable in any point's X/Y), and a trace-over **background reference image** with two-point calibration | ✅ Working — points/lines/arcs re-resolve automatically when you grade/resize |
-| AI Pattern Generator — visible "thinking" stages, robust local image analysis (neckline/hem/flare/colour from a real photo, not just a clean product shot), a wider construction vocabulary (necklines, hem shapes, wrap closures), and a "Detected" attributes panel so you can see the image/prompt actually mattered | ✅ Working (offline heuristic; swap in an LLM endpoint to go fully generative) |
+| AI Pattern Generator — visible "thinking" stages, robust local image analysis (neckline/hem/flare/colour from a real photo, not just a clean product shot), a wider construction vocabulary (necklines, hem shapes, wrap closures), and a "Detected" attributes panel (with source + confidence, click-to-override) so you can see what actually mattered | ✅ Working (offline heuristic by default; bring your own AI provider in Settings — see below) |
+| **Bring Your Own AI** (Settings → AI Provider) — 8 text/vision adapters (Anthropic, OpenAI, Gemini, OpenAI-compatible, Ollama, LM Studio, llama.cpp/vLLM, your own proxy) with per-provider key/URL/model fields, Fetch Models, and Test Connection with real error text | ✅ Working — sessionStorage-only keys by default, optional encrypted persistent storage, strict CSP |
+| **Local model support** — Route A (local server via Ollama/LM Studio/llama.cpp/vLLM) is fully working; Route C (Hugging Face model ID, in-browser WebGPU/WASM) loads via a lazy Web Worker; a Capability Probe badges WebGPU readiness | ⚠️ Route A working; Route C structurally implemented, not live-tested with a real multi-hundred-MB model download this pass; Route B (local file picker) not wired up yet — see Honest notes |
+| **Spec-first generation** — prompt → schema-validated `PatternSpecV1` JSON → the same deterministic `AIGen.build()`/Check Pattern pipeline every other path uses, with one validate-and-retry pass and an honest fallback to the offline heuristic on failure | ✅ Working |
+| **Vision fusion** — when an image is supplied to a configured provider, the vision-informed spec is authoritative for garment type/neckline/closure; the existing pixel-analysis heuristic stays authoritative for length/flare/hem/colour | ✅ Working |
+| **AI Fashion Billboard, BYO-key** (Settings → AI Provider → Image generation) — OpenAI images, Gemini image, a local Stable Diffusion (Automatic1111) backend, plus the original proxy contract, unchanged | ✅ Working — proxy option is byte-for-byte compatible with existing `server/billboard-proxy/worker.js` deployments |
 | **Quick Draft builder** — pick a garment kind (Dress/Top/Shirt/Skirt/Trousers/Robe/Gown/Jacket/Coat/Suit), see only the measurements that kind actually needs, adjust Length/Flare/Fit/Sleeve, and produce real pattern pieces | ✅ Working — measurement edits here are a local draft override and don't touch your working Measures/Auto Grade |
 | **Object Browser** — a docked panel listing every Point/Construction Line/Arc/Circle/Piece/Text with live counts and a name filter; click a row to jump the canvas to it | ✅ Working |
 | **Snapshot** — freeze the pattern's current state as a translucent ghost layer (opacity/show/remove) to visually compare later edits against | ✅ Working |
@@ -91,8 +96,9 @@ install it. After the first load it works **fully offline**.
   ends with a "Detected" chip panel — Type, Length, Flare, Sleeve, Neckline,
   Hem, Colour — so you can see exactly what was read from your input. It's
   still a heuristic, not real computer vision, and will misread low-contrast
-  or very busy photos; point `endpoint` (Settings → AI endpoint) at a
-  Claude-vision proxy to replace it with true image understanding.
+  or very busy photos on its own; configure a real AI provider in Settings →
+  AI Provider (see "Bring Your Own AI" below) to fuse this with actual vision
+  understanding instead.
 - **Construction tools** are real associative CAD drafting: lines/arcs/circles
   reference points by ID, not frozen coordinates, so dragging a point (or
   changing it to a formula that references a Variable or a body measurement)
@@ -147,18 +153,24 @@ install it. After the first load it works **fully offline**.
   side effect worth knowing: those symbols (`AIGen`, `PATTERNS`, `Canvas`,
   etc.) are now real `window` properties for the first time — they weren't
   before, since classic-script sibling scope isn't the same as `window`.
+  Every module added in Phase 1 (`js/ai-providers.js`, `js/ai-keystore.js`,
+  and the rest of the BYO-AI layer) is consumed only via real `import`s and
+  deliberately does **not** get a `window.X` alias — that compat layer was
+  specifically for the original 9-file conversion, not a standing
+  convention for new code.
 - **Pattern Spec schema** (`schema/pattern-spec.v1.json`) defines a declarative
   garment description (silhouette, construction, pieces, seam pairing,
-  provenance) that vendored ajv v6 (`js/vendor/ajv6.min.js`) validates strictly
-  — `npm test` includes a round-trip check against one valid and one
-  intentionally invalid fixture. Nothing in the app emits or consumes this
-  spec yet: no AI provider is wired to produce it, and `AIGen.build()` still
-  uses its own internal `style` object, not this schema — that's future work.
-  The vendored ajv build also has a known, documented gap: it loads correctly
-  under Node (used by the test suite) but has NOT been wired to work from a
-  plain browser `<script>` tag yet (see `js/vendor/README.md`) — not an issue
-  today since nothing loads it from the browser, but it'll need a small
-  CommonJS shim when it actually is.
+  provenance), validated by `js/schema-validate.js` — `npm test` includes a
+  round-trip check against one valid and one intentionally invalid fixture.
+  The validator itself (`js/vendor/pattern-spec-validate.generated.js`) is
+  ajv's precompiled "standalone code" output rather than a runtime ajv build:
+  an early version vendored ajv v6's UMD runtime and called `ajv.compile()`
+  directly, but that generates each validator with `new Function(...)` at
+  call time, which is blocked by this app's CSP (no `'unsafe-eval'` in
+  `script-src` — see the CSP note below). Precompiling offline (see
+  `js/vendor/README.md`, regenerate with `scripts/generate-schema-validator.mjs`)
+  produces a plain function with zero runtime code generation, which works
+  under the strict CSP with no compromise.
 - **Check Pattern** (`js/validate.js`) runs 8 patternmaking checks, but only 5
   of them (closed outline, self-intersection, grainline angle, seam-allowance
   offset validity, cut-on-fold symmetry) can be verified from a single piece's
@@ -182,6 +194,79 @@ install it. After the first load it works **fully offline**.
   it would need a second, unverifiable heuristic on top of the first (which
   edge is the chest measurement) — this is left as a documented gap rather
   than faked.
+- **Bring Your Own AI** (`js/ai-providers.js`, `js/ai-keystore.js`, Settings →
+  AI Provider): API keys default to `sessionStorage` (cleared when the tab
+  closes) and never enter `state`/the `localStorage["pps"]` blob at all —
+  they're only ever resolved from the keystore at call time. Turning on
+  "Remember this key on this device" requires a passphrase and encrypts the
+  key with WebCrypto (PBKDF2, 250k iterations, SHA-256 → AES-GCM) before it
+  touches `localStorage`; the derived key lives in memory only and a fresh
+  page load always re-prompts. This app ships a real CSP (`index.html`'s
+  `<meta>` tag — no `'unsafe-eval'`, a `connect-src` allow-list) for the
+  first time. One deliberate, documented trade-off: `openai-compatible`/
+  `llamacpp`/`vllm` let you type an arbitrary base URL at runtime, and a
+  `<meta>` CSP is fixed at parse time — it can't be expanded per-session — so
+  `connect-src` is broadened to `https:` + `http(s)://localhost:*` rather
+  than a short named list, or those adapters simply couldn't work at all.
+  "Test connection" always shows the adapter's real error text (e.g. an
+  actual `401 invalid x-api-key`), never a generic failure — confirmed
+  against the live Anthropic API during this work.
+- **Local model support** (`js/capability-probe.js`,
+  `js/workers/local-model-worker.js`): Route A (a local Ollama/LM
+  Studio/llama.cpp/vLLM server) is just the corresponding text adapters and
+  is fully working, CORS command included verbatim in the UI. Route C
+  (a Hugging Face model ID, run in-browser) lazily spins up a Web Worker
+  that dynamically `import()`s `@huggingface/transformers` from a CDN only
+  the first time it's used — never at app load, never in the service
+  worker's precache list. It is real, working code, not a stub, but this
+  pass did not download and run a genuine multi-hundred-megabyte model in
+  the browser end-to-end (impractical to verify repeatedly in this
+  environment) — treat it as structurally verified, not fully
+  field-tested. **Route B (pick a local `.onnx`/`.gguf` file) is honestly
+  not wired up** — GGUF isn't supported by the in-browser runtime at all,
+  and `.onnx` needs an IndexedDB/OPFS + `onnxruntime-web` `InferenceSession`
+  path that doesn't exist yet; picking either file type today returns a
+  clear "not supported, use a local server instead" message rather than a
+  silent failure.
+- **Spec-first generation** (`js/ai-spec-pipeline.js`): a configured
+  provider is asked for a `PatternSpecV1` object (schema/pattern-spec.v1.json),
+  validated once, retried once with the validator's own error text on
+  failure, and — if it's still invalid — the UI falls back to the offline
+  heuristic and says so in a toast rather than ever rendering unvalidated
+  output. The schema has no colour/fabric field today, so a spec-driven
+  generation always uses `AIGen.build()`'s default palette; real colour
+  still comes from the pixel-analysis path. The `proxy` adapter doesn't
+  understand this schema at all (no server anywhere implements it) — its
+  legacy `{pieces}`/`{style}` response is detected and routed straight to
+  the pre-Phase-1 handling, unchanged, rather than validated against a
+  schema it was never asked to produce.
+- **Vision fusion** (`js/ai-fusion.js`): not a rewrite of the existing pixel
+  heuristic — a thin overlay above it. When an image is supplied to a
+  configured provider, the spec's own vision-informed reads for garment
+  type/neckline/closure win; length, flare, hem shape and colour stay
+  exactly what the existing `analyzeImage()` heuristic already computes,
+  because a model's own numeric guess for those fields is not more
+  trustworthy than a geometric read. Pixel-sourced attribute chips show
+  `confidence: null` honestly (no real confidence score exists for that
+  path) rather than a fabricated number. Every "Detected" chip with a known
+  correction handler is click-to-override; an override always shows as
+  "your edit," never misattributed to the AI.
+- **AI Fashion Billboard folding** (`js/image-providers.js`): the original
+  proxy contract (`{prompt, images, model}` → `{image}`) is preserved
+  byte-for-byte — confirmed by a test asserting the exact request shape —
+  so existing `server/billboard-proxy/worker.js` deployments keep working
+  with zero server-side changes. Of the three realistic local image-gen
+  backends, only Automatic1111's documented REST API is implemented this
+  pass (the simplest well-documented contract); ComfyUI's node-graph API in
+  particular is substantially more complex and is left as future work, not
+  silently claimed done.
+- **Deferred, not dropped** (documented here rather than left unmentioned):
+  a "draft program" generation mode against the associative point/line/arc
+  system (the plan's own stretch goal beyond spec-first generation), and
+  replacing the pixel-analysis threshold scan with a real segmentation
+  model (RMBG-1.4/U²-Net/SAM-tiny) running on the same Route B/C worker
+  infrastructure — both are natural extensions of what's shipped here, not
+  started this pass.
 
 ---
 
@@ -189,7 +274,7 @@ install it. After the first load it works **fully offline**.
 
 ```
 BerryStudio/                (repository root)
-├── index.html            App shell — loads js/*.js as real ES modules
+├── index.html            App shell — loads js/*.js as real ES modules, real CSP
 ├── manifest.webmanifest  PWA manifest
 ├── sw.js                 Service worker (offline-first)
 ├── css/styles.css        Design system: 3 themes × light/dark, full RTL
@@ -199,16 +284,24 @@ BerryStudio/                (repository root)
 │   ├── canvas.js         2D drafting engine (Canvas 2D)
 │   ├── three-view.js     3D parametric avatar (Three.js)
 │   ├── ai.js             Image/prompt → style params + parametric garment builder
-│   ├── billboard.js      AI Fashion Billboard generator (image-edit proxy)
+│   ├── billboard.js      AI Fashion Billboard prompt templates (image-gen provider dispatch)
 │   ├── library.js        100-pattern catalog (25/category), built on ai.js's builder
 │   ├── fancy-patterns.js 24 hand-crafted 8+ piece designs (6/category) with bezier-curved seams
 │   ├── validate.js       Check Pattern — 8 patternmaking checks over any piece set
-│   ├── schema-validate.js  Thin ajv wrapper for schema/pattern-spec.v1.json (not wired in yet)
-│   ├── vendor/           Vendored third-party files (ajv6.min.js) — see its own README
+│   ├── schema-validate.js  Validator for schema/pattern-spec.v1.json (precompiled, CSP-safe)
+│   ├── ai-keystore.js    BYO-AI key storage: sessionStorage default, opt-in WebCrypto encryption
+│   ├── ai-providers.js   Text/vision provider adapters (Anthropic/OpenAI/Gemini/Ollama/…)
+│   ├── image-providers.js  Image-generation provider adapters (OpenAI images/Gemini/local SD/proxy)
+│   ├── ai-spec-pipeline.js  Spec-first generation: prompt → schema-validated spec → AIGen.build()
+│   ├── ai-fusion.js      Vision + pixel-analysis fusion for image-driven generation
+│   ├── capability-probe.js  WebGPU readiness probe for in-browser local models
+│   ├── workers/local-model-worker.js  Lazy Web Worker running a Hugging Face model in-browser
+│   ├── vendor/           Generated/vendored files (pattern-spec-validate.generated.js) — see its own README
 │   └── app.js            Application controller (wires everything)
 ├── schema/               Pattern Spec JSON Schema + example fixtures (see Honest notes)
+├── scripts/              Dev-only tooling (schema validator codegen)
 ├── test/                 node --test unit tests for the root app (`npm test`)
-├── e2e/                  One Playwright smoke spec (`npm run test:e2e`)
+├── e2e/                  Playwright smoke + AI settings specs (`npm run test:e2e`)
 └── icons/                App icons (SVG + PNG 192/512)
 ```
 
@@ -219,8 +312,17 @@ dev/test tooling only, never referenced by `index.html`:
 
 ```bash
 npm install && npm test        # root unit tests (node --test)
-npm run test:e2e               # one Playwright smoke spec
+npm run test:e2e               # Playwright smoke + AI settings specs
 cd cloth-lab && npm test        # cloth-lab's own vitest unit tests
+```
+
+If you ever change `schema/pattern-spec.v1.json`, regenerate its precompiled
+validator (`ajv` is a dev-only code-generation tool, never a runtime
+dependency of the shipped app — see `js/vendor/README.md`):
+
+```bash
+npm install --no-save ajv
+node scripts/generate-schema-validator.mjs
 ```
 
 ## Extending

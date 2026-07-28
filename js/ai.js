@@ -449,8 +449,14 @@ export const AIGen = (() => {
     const bits=[en.len, wrapTxt, en.flare, en.type, neck, hem, en.slv].filter(Boolean);
     return bits.join(" · ");
   }
-  // structured attribute chips for the "detected" panel in the UI
-  function attributes(style, lang){
+  // structured attribute chips for the "detected" panel in the UI.
+  // `provenance` (WP-3/WP-4, optional) is either an array of
+  // {field,source,confidence} (a PatternSpecV1 provenance list) or a plain
+  // {field:{source,confidence}} map — when a chip's `k` matches a `field`,
+  // the chip gets tagged with where that value actually came from. Callers
+  // that don't pass it (today's local/remote path) get exactly today's
+  // shape back — this is additive, not a breaking change.
+  function attributes(style, lang, provenance){
     const ar = lang==="ar";
     const out = [];
     out.push({ k:"type", label: ar?"النوع":"Type", value: ar?(AR_TYPE[style.type]||"—"):(EN_TYPE[style.type]||"—") });
@@ -463,6 +469,10 @@ export const AIGen = (() => {
     if(HEM_LABEL[style.hemShape]) out.push({ k:"hem", label: ar?"الحاشية":"Hem", value: HEM_LABEL[style.hemShape][ar?"ar":"en"] });
     if(style.wrap) out.push({ k:"closure", label: ar?"الإغلاق":"Closure", value: ar?"ملفوف":"Wrap" });
     out.push({ k:"color", label: ar?"اللون":"Colour", value: style.color, swatch:true });
+    if(provenance){
+      const byField = Array.isArray(provenance) ? Object.fromEntries(provenance.map(p=>[p.field,p])) : provenance;
+      out.forEach(row=>{ const p=byField[row.k]; if(p){ row.source=p.source; if(p.confidence!=null) row.confidence=p.confidence; } });
+    }
     return out;
   }
 

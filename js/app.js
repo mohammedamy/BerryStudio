@@ -11,6 +11,12 @@ import { Billboard } from './billboard.js';
 import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, exports nothing
 import { FancyGen } from './fancy-patterns.js';
 import { PatternValidator } from './validate.js';
+import { AIProviders, AI_PROVIDER_IDS, getProvider } from './ai-providers.js';
+import { KeyStore } from './ai-keystore.js';
+import { probeCapabilities } from './capability-probe.js';
+import { generateFromSpec, provenanceMapFromSpec } from './ai-spec-pipeline.js';
+import { fuseStyle, mergeProvenance } from './ai-fusion.js';
+import { ImageProviders, IMAGE_PROVIDER_IDS } from './image-providers.js';
 
 (() => {
   "use strict";
@@ -25,6 +31,11 @@ import { PatternValidator } from './validate.js';
     kids: null, custom: {}, unitsCm: true,
     hoverHelp: true, highContrast: false, reduceMotion: false, cloudSync: false,
     onboarded: false, mine: [], aiEndpoint: "", aiImageEndpoint: "", fabric3d: "cotton", showMeasDiagram: false,
+    // BerryStudio-Upgrade-Plan WP-1: provider layer config. Non-secret only —
+    // API keys never live here, see js/ai-keystore.js. aiProviderCfg/
+    // aiImageProviderCfg are keyed by provider id: { baseUrl?, model?, visionModel? }.
+    aiProvider: "proxy", aiProviderCfg: null, aiKeyPersist: false,
+    aiImageProvider: "proxy", aiImageProviderCfg: null,
     lastMarkerYards: null, lastMarkerWidth: null,
     builderKind: null, builderOpts: { length:"medium", flare:"regular", fit:"regular", sleeve:"short" }, builderCustom: {},
     avatarGLB: { women: "", men: "", girls: "", boys: "" },
@@ -566,9 +577,22 @@ import { PatternValidator } from './validate.js';
       box.appendChild(card2);
     }
   }
+  // BerryStudio-Upgrade-Plan WP-4: resolves the configured image-generation
+  // adapter (default `proxy` — today's exact "AI Image endpoint" behaviour)
+  // instead of a bare endpoint string. Returns null (and toasts) if the
+  // active adapter isn't configured yet.
+  async function resolveImageAdapter(){
+    ensureAIState();
+    const providerId = state.aiImageProvider || "proxy";
+    const adapter = ImageProviders[providerId];
+    const cfg = await resolveAICfg(providerId, aiCfgFor(providerId, true));
+    const notConfigured = providerId==="proxy" ? !cfg.baseUrl : (adapter.needsKey && !cfg.apiKey);
+    if(notConfigured){ toast(T("billboardNoEndpoint")); return null; }
+    return { adapter, cfg };
+  }
   async function runBillboard(btn){
-    const endpoint=(state.aiImageEndpoint||"").trim();
-    if(!endpoint){ toast(T("billboardNoEndpoint")); return; }
+    const resolved = await resolveImageAdapter();
+    if(!resolved) return;
     const imgs=bbImages.filter(Boolean);
     if(!imgs.length){ toast(T("billboardNeedImages")); return; }
     const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("billboardGenerating"); btn.style.opacity=".7"; btn.disabled=true;
@@ -577,14 +601,14 @@ import { PatternValidator } from './validate.js';
       setStage(0); await new Promise(r=>setTimeout(r,350));
       setStage(1);
       bbPattern=null;
-      bbBillboard=await Billboard.generateBillboard({ endpoint, images:imgs });
+      bbBillboard=await Billboard.generateBillboard({ adapter:resolved.adapter, cfg:resolved.cfg, images:imgs });
       setStage("done"); paintBBResult(); toast(T("billboardDone"));
     } catch(e){ setStage("done"); toast(T("billboardFail")); }
     finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
   }
   async function runPattern(btn){
-    const endpoint=(state.aiImageEndpoint||"").trim();
-    if(!endpoint){ toast(T("billboardNoEndpoint")); return; }
+    const resolved = await resolveImageAdapter();
+    if(!resolved) return;
     if(!bbBillboard) return;
     const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("billboardGenerating"); btn.style.opacity=".7"; btn.disabled=true;
     const setStage=beginBBThinking("billboardStageDrafting");
@@ -592,7 +616,7 @@ import { PatternValidator } from './validate.js';
     try{
       setStage(0); await new Promise(r=>setTimeout(r,350));
       setStage(1);
-      bbPattern=await Billboard.generatePattern({ endpoint, image:bbBillboard, sizeLabel });
+      bbPattern=await Billboard.generatePattern({ adapter:resolved.adapter, cfg:resolved.cfg, image:bbBillboard, sizeLabel });
       setStage("done"); paintBBResult(); toast(T("billboardDone"));
     } catch(e){ setStage("done"); toast(T("billboardFail")); }
     finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
@@ -619,32 +643,153 @@ import { PatternValidator } from './validate.js';
   // Render the bilingual "Detected" attribute chips (type, length, flare,
   // sleeve, neckline, hem, closure, colour) once generation completes —
   // this is the concrete evidence that the image/prompt actually mattered.
+  // BerryStudio-Upgrade-Plan WP-4: chips carrying a provenance `source`
+  // (vision/pixel/prompt/heuristic/spec/user-override) show it inline, and
+  // every chip with a known override handler is click-to-correct — users
+  // trust AI they can override, and an overridden value is honestly
+  // relabelled "your edit" rather than left looking like an AI read.
+  let lastAIResult = null;
+  const OVERRIDE_ENUMS = {
+    type: ["dress","top","shirt","skirt","trousers","robe"],
+    neckline: ["v","round","boat","offshoulder","halter","collar"],
+    hem: ["straight","curved","highlow","asymmetric"],
+  };
+  const OVERRIDE_FACTOR_FIELD = { length:"lengthF", flare:"flareF", sleeve:"sleeveLenF" };
+  const OVERRIDE_FACTOR_RANGE = { lengthF:[0.55,1.6], flareF:[0.82,1.9], sleeveLenF:[0,1.5] };
+  function overrideAIAttribute(key){
+    if(!lastAIResult || !lastAIResult.style) return;
+    const style = { ...lastAIResult.style };
+    if(OVERRIDE_ENUMS[key]){
+      const field = key==="hem" ? "hemShape" : key;
+      const opts = OVERRIDE_ENUMS[key];
+      const input = window.prompt(`${T("attrOverridePrompt")} (${opts.join(", ")})`, style[field]||"");
+      if(input==null) return;
+      const val = input.trim().toLowerCase();
+      if(!opts.includes(val)){ toast(T("attrOverrideInvalid")); return; }
+      style[field] = val;
+    } else if(OVERRIDE_FACTOR_FIELD[key]){
+      const field = OVERRIDE_FACTOR_FIELD[key];
+      const [lo,hi] = OVERRIDE_FACTOR_RANGE[field];
+      const input = window.prompt(`${T("attrOverridePromptNum")} (${lo}–${hi})`, String(style[field]));
+      if(input==null) return;
+      const num = parseFloat(input);
+      if(Number.isNaN(num)){ toast(T("attrOverrideInvalid")); return; }
+      style[field] = Math.max(lo, Math.min(hi, num));
+    } else if(key==="closure"){
+      const input = window.prompt(T("attrOverridePromptYN"), style.wrap?"yes":"no");
+      if(input==null) return;
+      style.wrap = /^y/i.test(input.trim());
+    } else if(key==="color"){
+      const input = window.prompt(T("attrOverridePromptColor"), style.color||"");
+      if(input==null || !input.trim()) return;
+      style.color = input.trim();
+    } else return;
+
+    const built = AIGen.build(style, currentMeas());
+    const provenance = (lastAIResult.attributes||[]).reduce((m,a)=>{ if(a.source) m[a.k]={source:a.source,confidence:a.confidence}; return m; },{});
+    provenance[key] = { source:"user-override", confidence:1 };
+    const newRes = {
+      ...built, summary: AIGen.summary(style, state.lang), style,
+      attributes: AIGen.attributes(style, state.lang, provenance),
+      source: lastAIResult.source, validation: PatternValidator.run(built.pieces, {}),
+    };
+    state.loaded = null;
+    Canvas.setPattern(newRes.pieces, newRes.colors);
+    hideEmpty(); renderLayersPane();
+    if(state.view==="3d") build3D(newRes.colorInt);
+    renderAIAttrs(newRes);
+    toast(T("generated"));
+  }
+  const SOURCE_LABEL_KEY = { vision:"provenanceVision", pixel:"provenancePixel", prompt:"provenancePrompt", heuristic:"provenanceHeuristic", spec:"provenanceSpec", "user-override":"provenanceUserOverride" };
   function renderAIAttrs(res){
+    lastAIResult = res;
     const box=$("#aiAttrs"); if(!box) return;
     box.style.display=""; box.innerHTML="";
-    const src = res.source==="remote" ? "Claude" : (res.usedImage ? T("usedImageNote") : "");
+    const src = res.source==="remote" ? "Claude" : res.source==="spec" ? T("provenanceSpec") : res.source==="fused" ? T("provenanceVision") : (res.usedImage ? T("usedImageNote") : "");
     box.appendChild(el("div","aa-head",`<span>${T("detected")}</span>${src?`<span>${src}</span>`:""}`));
     (res.attributes||[]).forEach(a=>{
       const row=el("div","aa-row");
       const val = a.swatch ? `<span class="aa-swatch" style="background:${a.value}"></span>${a.value}` : a.value;
-      row.innerHTML=`<b>${a.label}</b><span class="aa-val">${val}</span>`;
+      const srcLabel = a.source ? T(SOURCE_LABEL_KEY[a.source]||a.source) : "";
+      const srcTxt = srcLabel ? ` <small class="aa-src">· ${srcLabel}${a.confidence!=null?` · ${a.confidence.toFixed(2)}`:""}</small>` : "";
+      row.innerHTML=`<b>${a.label}</b><span class="aa-val">${val}${srcTxt}</span>`;
+      const overridable = OVERRIDE_ENUMS[a.k] || OVERRIDE_FACTOR_FIELD[a.k] || a.k==="closure" || a.k==="color";
+      if(overridable){ row.style.cursor="pointer"; row.title=T("attrOverrideTitle"); row.onclick=()=>overrideAIAttribute(a.k); }
       box.appendChild(row);
     });
   }
+  // schema/pattern-spec.v1.json fetched once and cached — needed by
+  // generateFromSpec() to pass the raw schema to a provider's own
+  // structured-output mechanism (json_schema/responseSchema/tool input_schema).
+  let cachedSpecSchema = null;
+  async function loadSpecSchema(){
+    if(!cachedSpecSchema) cachedSpecSchema = await (await fetch("./schema/pattern-spec.v1.json")).json();
+    return cachedSpecSchema;
+  }
+
   async function runAI(txt, btn){
     const prompt=(txt||"").trim();
     if(!prompt && !aiImage){ toast(T("aiNeedInput")); return; }
     const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7"; btn.disabled=true;
     const setStage = beginAIThinking(!!aiImage);
     try {
+      // BerryStudio-Upgrade-Plan WP-3: if a real AI provider is configured
+      // (anything beyond the default empty `proxy`), try the spec-first
+      // pipeline first — prompt -> schema-validated spec -> AIGen.build().
+      // Any failure (network, invalid output twice) falls through to
+      // EXACTLY today's local heuristic path below, with an honest toast —
+      // never a silently broken pattern. No provider configured reproduces
+      // today's behaviour with zero new code on this path.
+      ensureAIState();
+      const providerId = state.aiProvider || "proxy";
+      const adapter = AIProviders[providerId];
+      const cfg = await resolveAICfg(providerId, aiCfgFor(providerId, false));
+      const hasRealProvider = providerId!=="proxy" ? true : !!cfg.baseUrl;
+      let res = null;
+      if(hasRealProvider){
+        setStage("analyzing");
+        const schema = await loadSpecSchema();
+        const specResult = await generateFromSpec({
+          adapter, cfg, prompt, measurements: currentMeas(), category: state.category, lang: state.lang,
+          schema, images: aiImage ? [aiImage] : undefined,
+        });
+        if(!specResult.fellBack){
+          // BerryStudio-Upgrade-Plan WP-4: when an image was supplied and the
+          // provider returned a real spec (not the legacy proxy shape), fuse
+          // the vision-informed spec with the existing pixel-analysis
+          // heuristic — vision wins for type/neckline/wrap, pixel analysis
+          // stays authoritative for length/flare/hem/colour exactly as it
+          // is today. Text-only or legacy-proxy generations skip this and
+          // use the spec result as-is.
+          if(aiImage && specResult.source==="spec"){
+            const pixelMetrics = await AIGen.analyzeImage(aiImage);
+            const promptStyle = AIGen.deriveStyle({ metrics: pixelMetrics, prompt, category: state.category, imageDataURL: aiImage });
+            const { style: fusedStyle, sourceMap } = fuseStyle({ specStyle: specResult.style, promptStyle });
+            const built = AIGen.build(fusedStyle, currentMeas());
+            const provenance = mergeProvenance(sourceMap, provenanceMapFromSpec(specResult.spec));
+            res = {
+              ...built, summary: AIGen.summary(fusedStyle, state.lang), style: fusedStyle,
+              attributes: AIGen.attributes(fusedStyle, state.lang, provenance),
+              source: "fused", validation: PatternValidator.run(built.pieces, {}),
+              usedImage: !!(pixelMetrics && pixelMetrics.ok),
+            };
+          } else {
+            res = specResult;
+          }
+          setStage("done");
+        } else toast(T("specValidationFallback"));
+      }
       // Image-driven parametric generation: robust local silhouette analysis
-      // (neckline/hem/flare/colour) or a configured Claude-vision endpoint,
-      // walked through visibly via setStage so generation feels deliberate.
-      const res = await AIGen.generate({
-        prompt, imageDataURL: aiImage, category: state.category,
-        measurements: currentMeas(), endpoint: (state.aiEndpoint||"").trim(), lang: state.lang,
-        onStage: setStage,
-      });
+      // (neckline/hem/flare/colour), walked through visibly via setStage so
+      // generation feels deliberate — the fallback path whenever no provider
+      // is configured, or the configured one failed/returned invalid output.
+      if(!res){
+        res = await AIGen.generate({
+          prompt, imageDataURL: aiImage, category: state.category,
+          measurements: currentMeas(), endpoint: "", lang: state.lang,
+          onStage: setStage,
+        });
+      }
       state.loaded = null;
       Canvas.setPattern(res.pieces, res.colors);
       hideEmpty(); renderLayersPane();
@@ -1668,6 +1813,187 @@ import { PatternValidator } from './validate.js';
     $("#themeModal").classList.add("show");
   }
 
+  // ================= AI PROVIDER SETTINGS (WP-1) =================
+  // Local UI state only (which sub-nav pane is showing) — not persisted,
+  // openSettings() rebuilds this panel from scratch every time it's opened.
+  let aiSettingsTab = "text";
+
+  // Today's state.aiEndpoint/aiImageEndpoint (the old flat fields) become the
+  // `proxy` adapter's persisted baseUrl the first time this renders — existing
+  // users' saved values keep working with zero migration step of their own.
+  function ensureAIState(){
+    if(!state.aiProviderCfg) state.aiProviderCfg = { proxy: { baseUrl: state.aiEndpoint||"" } };
+    if(!state.aiImageProviderCfg) state.aiImageProviderCfg = { proxy: { baseUrl: state.aiImageEndpoint||"" } };
+  }
+  function aiCfgFor(providerId, isImage){
+    const bag = isImage ? state.aiImageProviderCfg : state.aiProviderCfg;
+    if(!bag[providerId]) bag[providerId] = {};
+    return bag[providerId];
+  }
+  // Resolves {baseUrl, apiKey, model} for an adapter call, prompting once for
+  // the encryption passphrase if a persisted key exists but is locked. Never
+  // logs/toasts the resolved key itself — see js/ai-keystore.js.
+  async function resolveAICfg(providerId, cfg, useVisionModel){
+    let apiKey = await KeyStore.resolve(providerId);
+    if(apiKey==null && KeyStore.hasPersistent(providerId) && KeyStore.needsPassphrase()){
+      const pass = window.prompt(T("keyPassphrasePrompt"));
+      if(pass){ try{ await KeyStore.unlock(pass); apiKey = await KeyStore.resolve(providerId); }catch(e){ toast(T("keyPassphraseWrong")); } }
+    }
+    return { baseUrl: cfg.baseUrl||undefined, apiKey: apiKey||undefined, model: (useVisionModel? cfg.visionModel : cfg.model)||undefined };
+  }
+
+  function renderAISettings(body){
+    ensureAIState();
+    const wrap=el("div","field"); wrap.style.marginTop="14px";
+    wrap.innerHTML=`<label>${T("aiProviderSection")}</label>`;
+    const seg=el("div","seg",`<button class="${aiSettingsTab==="text"?"active":""}">${T("aiTextGen")}</button><button class="${aiSettingsTab==="image"?"active":""}">${T("aiImageGen")}</button>`);
+    seg.children[0].onclick=()=>{ aiSettingsTab="text"; openSettings(); };
+    seg.children[1].onclick=()=>{ aiSettingsTab="image"; openSettings(); };
+    wrap.appendChild(seg);
+    const pane=el("div"); pane.style.marginTop="10px";
+    wrap.appendChild(pane);
+    body.appendChild(wrap);
+    renderProviderPane(pane, aiSettingsTab==="image");
+  }
+
+  function renderProviderPane(pane, isImage){
+    pane.innerHTML="";
+    // BerryStudio-Upgrade-Plan WP-4: image-generation adapters
+    // (openai-images/gemini-image/local-image, js/image-providers.js) —
+    // `proxy` here preserves today's exact "AI Image endpoint" behaviour.
+    const providerList = isImage ? IMAGE_PROVIDER_IDS : AI_PROVIDER_IDS;
+    const providerSet = isImage ? ImageProviders : AIProviders;
+    const stateKey = isImage ? "aiImageProvider" : "aiProvider";
+    const activeId = providerList.includes(state[stateKey]) ? state[stateKey] : providerList[0];
+    if(activeId!==state[stateKey]){ state[stateKey]=activeId; save(); }
+
+    const selWrap=el("div","field");
+    selWrap.innerHTML=`<label>${T("aiProviderLabel")}</label>`;
+    const sel=el("select","select");
+    providerList.forEach(id=>{
+      const opt=document.createElement("option"); opt.value=id; opt.textContent=providerSet[id].label; if(id===activeId) opt.selected=true;
+      sel.appendChild(opt);
+    });
+    sel.onchange=()=>{ state[stateKey]=sel.value; save(); renderProviderPane(pane, isImage); };
+    selWrap.appendChild(sel); pane.appendChild(selWrap);
+    if(isImage && activeId==="local-image"){
+      pane.appendChild(el("div","help-note",T("localImageHint")));
+    }
+    if(!isImage && activeId==="browser-local"){
+      pane.appendChild(el("div","help-note",T("browserLocalHint")));
+      const badge=el("div","help-note",T("loading")); pane.appendChild(badge);
+      probeCapabilities().then(cap=>{
+        const color = cap.tier==="green" ? "var(--ok)" : cap.tier==="amber" ? "var(--warn)" : "var(--danger)";
+        badge.style.color = color;
+        badge.textContent = `${cap.tier==="green"?"●":cap.tier==="amber"?"◐":"○"} WebGPU: ${cap.webgpu?"yes":"no"} — ${cap.reason}`;
+      });
+    }
+
+    const adapter=providerSet[activeId];
+    const cfg=aiCfgFor(activeId, isImage);
+
+    (adapter.fields||[]).forEach(f=>{
+      const fWrap=el("div","field");
+      const labelKey = f.key==="apiKey" ? "aiKeyLabel" : f.key==="baseUrl" ? "aiBaseUrlLabel" : f.key;
+      fWrap.innerHTML=`<label>${T(labelKey)}${f.required?" *":""}</label>`;
+      const inp=el("input","input");
+      inp.type = f.key==="apiKey" ? "password" : "url";
+      inp.dir="ltr";
+      inp.placeholder = f.key==="baseUrl" ? (adapter.defaultBaseUrl||"") : "sk-…";
+      if(f.key==="apiKey"){
+        inp.value = KeyStore.get(activeId) || "";
+        inp.oninput=()=>{ KeyStore.set(activeId, inp.value); };
+      } else {
+        inp.value = cfg[f.key] || "";
+        inp.oninput=()=>{ cfg[f.key]=inp.value.trim(); save(); };
+      }
+      fWrap.appendChild(inp); pane.appendChild(fWrap);
+    });
+
+    if(["ollama","lmstudio","llamacpp","vllm"].includes(activeId)){
+      pane.appendChild(el("div","help-note", activeId==="ollama" ? T("ollamaCorsHint") : T("localServerCorsHint")));
+    }
+
+    if(adapter.needsKey){
+      const pr=el("label","set-row");
+      pr.innerHTML=`<span class="sl">${T("keyPersistToggle")}<small>${T("keyPersistWarnD")}</small></span>`;
+      const sw=el("span","switch",`<input type="checkbox" ${state.aiKeyPersist?"checked":""}><span class="track"></span>`);
+      sw.querySelector("input").onchange=async(e)=>{
+        state.aiKeyPersist=e.target.checked; save();
+        if(state.aiKeyPersist){
+          if(KeyStore.needsPassphrase()){
+            const pass=window.prompt(T("keyPassphrasePrompt"));
+            if(!pass){ state.aiKeyPersist=false; save(); e.target.checked=false; return; }
+            try{ await KeyStore.unlock(pass); }catch(err){ toast(T("keyPassphraseWrong")); state.aiKeyPersist=false; save(); e.target.checked=false; return; }
+          }
+          const val=KeyStore.get(activeId);
+          if(val) await KeyStore.setPersistent(activeId, val);
+          toast("✓ "+T("keyPersistToggle"));
+        } else {
+          KeyStore.removePersistent(activeId);
+        }
+      };
+      pr.appendChild(sw); pane.appendChild(pr);
+    }
+
+    // model slot — free-text input with a <datalist> populated by "Fetch
+    // models" (text/vision providers only — image adapters have no
+    // models-list API, the field still just sets cfg.model directly).
+    const modelRow=el("div","field"); modelRow.style.marginTop="10px";
+    modelRow.innerHTML=`<label>${T(isImage?"aiModelImage":"aiModelText")}</label>`;
+    const modelInput=el("input","input"); modelInput.dir="ltr"; modelInput.value=cfg.model||""; modelInput.placeholder=isImage?(adapter.id==="openai-images"?"gpt-image-2":""):"";
+    if(!isImage) modelInput.setAttribute("list","dl-text-"+activeId);
+    modelInput.oninput=()=>{ cfg.model=modelInput.value.trim(); save(); };
+    const dlText=isImage?null:el("datalist"); if(dlText) dlText.id="dl-text-"+activeId;
+    modelRow.appendChild(modelInput); if(dlText) modelRow.appendChild(dlText); pane.appendChild(modelRow);
+
+    let visionInput=null, dlVision=null;
+    if(!isImage){
+      const visionRow=el("div","field");
+      visionRow.innerHTML=`<label>${T("aiModelVision")}</label>`;
+      visionInput=el("input","input"); visionInput.dir="ltr"; visionInput.value=cfg.visionModel||""; visionInput.setAttribute("list","dl-vision-"+activeId);
+      visionInput.oninput=()=>{ cfg.visionModel=visionInput.value.trim(); save(); };
+      dlVision=el("datalist"); dlVision.id="dl-vision-"+activeId;
+      visionRow.appendChild(visionInput); visionRow.appendChild(dlVision); pane.appendChild(visionRow);
+    }
+    if(isImage) return; // image adapters have no models()/test() API — nothing further to render
+
+    const btnRow=el("div"); btnRow.style.cssText="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap";
+    const fetchBtn=el("button","big-btn ghost", T("fetchModels"));
+    fetchBtn.type="button";
+    fetchBtn.onclick=async()=>{
+      const orig=fetchBtn.textContent; fetchBtn.disabled=true; fetchBtn.textContent=T("loading");
+      try{
+        const resolved=await resolveAICfg(activeId, cfg, false);
+        const {text, vision}=await adapter.models(resolved);
+        dlText.innerHTML=text.map(m=>`<option value="${m.replace(/"/g,'')}">`).join("");
+        if(dlVision) dlVision.innerHTML=vision.map(m=>`<option value="${m.replace(/"/g,'')}">`).join("");
+        toast(text.length ? `✓ ${text.length}` : T("noModelsFound"));
+      }catch(e){ toast(T("aiRequestFailed")); }
+      finally{ fetchBtn.disabled=false; fetchBtn.textContent=orig; }
+    };
+    btnRow.appendChild(fetchBtn);
+
+    const testBtn=el("button","big-btn ghost", T("testConnection"));
+    testBtn.type="button";
+    const statusLine=el("div","help-note"); statusLine.style.display="none"; statusLine.style.marginTop="8px"; statusLine.dir="ltr"; statusLine.style.textAlign=state.lang==="ar"?"right":"left";
+    testBtn.onclick=async()=>{
+      const orig=testBtn.textContent; testBtn.disabled=true; testBtn.textContent=T("loading");
+      try{
+        const resolved=await resolveAICfg(activeId, cfg, false);
+        const r=await adapter.test(resolved);
+        statusLine.style.display="";
+        statusLine.style.color = r.ok ? "var(--ok)" : "var(--danger)";
+        statusLine.textContent = (r.ok?"✓ ":"✗ ") + (r.message||"") + (r.latencyMs!=null?` (${r.latencyMs}ms)`:"");
+      }catch(e){
+        statusLine.style.display=""; statusLine.style.color="var(--danger)"; statusLine.textContent="✗ "+(e&&e.message||e);
+      }
+      finally{ testBtn.disabled=false; testBtn.textContent=orig; }
+    };
+    btnRow.appendChild(testBtn);
+    pane.appendChild(btnRow); pane.appendChild(statusLine);
+  }
+
   // Settings
   function openSettings(){
     const body=$("#settingsModal .modal-body"); body.innerHTML="";
@@ -1683,18 +2009,10 @@ import { PatternValidator } from './validate.js';
     seg.children[0].onclick=()=>{state.unitsCm=true;Canvas.setOpt("unitsCm",true);save();openSettings();updateStageChips();};
     seg.children[1].onclick=()=>{state.unitsCm=false;Canvas.setOpt("unitsCm",false);save();openSettings();updateStageChips();};
     units.appendChild(seg); body.appendChild(units);
-    // AI endpoint (optional Claude-vision proxy)
-    const aif=el("div","field"); aif.style.marginTop="14px";
-    aif.innerHTML=`<label>${T("aiEndpoint")}</label>`;
-    const aiin=el("input","input"); aiin.type="url"; aiin.placeholder="https://your-proxy.example/generate";
-    aiin.value=state.aiEndpoint||""; aiin.oninput=()=>{ state.aiEndpoint=aiin.value.trim(); save(); };
-    aif.appendChild(aiin); aif.appendChild(el("div","help-note",T("aiEndpointD"))); body.appendChild(aif);
-    // AI Image endpoint (OpenAI gpt-image proxy, for the Fashion Billboard generator)
-    const bif=el("div","field"); bif.style.marginTop="14px";
-    bif.innerHTML=`<label>${T("billboardEndpoint")}</label>`;
-    const biin=el("input","input"); biin.type="url"; biin.placeholder="https://your-proxy.example/billboard";
-    biin.value=state.aiImageEndpoint||""; biin.oninput=()=>{ state.aiImageEndpoint=biin.value.trim(); save(); };
-    bif.appendChild(biin); bif.appendChild(el("div","help-note",T("billboardEndpointD"))); body.appendChild(bif);
+    // AI Provider section (BerryStudio-Upgrade-Plan WP-1) — replaces the old
+    // flat "AI endpoint"/"AI Image endpoint" fields; today's saved values
+    // become the `proxy` adapter's baseUrl under the hood (see ensureAIState()).
+    renderAISettings(body);
     // 3D avatar models — paste a GLB URL per category (e.g. Ready Player Me)
     const av = el("div","field"); av.style.marginTop="14px";
     av.innerHTML = `<label>${T("avatarModels")}</label>`;

@@ -47,3 +47,35 @@ test('load, grade, export SVG, open 3D preview — no console errors', async ({ 
 
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
+
+// BerryStudio-Upgrade-Plan WP-1: the AI Provider settings panel renders and
+// a full provider round-trip (settings entry -> Test Connection -> real
+// adapter -> UI status line) works end-to-end. The actual provider API call
+// is intercepted (page.route) so this never depends on network access or a
+// real key in CI — it still exercises the real js/ai-providers.js code path,
+// just against a canned response instead of a live server.
+test('AI Provider settings panel renders and a mocked Test Connection round-trip succeeds', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+  page.on('console', (msg) => { if (msg.type() === 'error' && !/Failed to load resource.*404/.test(msg.text())) errors.push(msg.text()); });
+
+  await page.route('**/v1/messages', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ content: [{ type: 'text', text: 'OK' }], usage: { input_tokens: 5, output_tokens: 1 } }),
+  }));
+
+  await page.goto('/index.html');
+  const skip = page.getByRole('button', { name: 'Skip' });
+  if (await skip.isVisible().catch(() => false)) await skip.click();
+
+  await page.locator('#settingsBtn').click();
+  await expect(page.locator('#settingsModal')).toHaveClass(/show/);
+  await page.getByText('Text generation', { exact: true }).click();
+  await page.locator('#settingsModal select').selectOption('anthropic');
+  await expect(page.getByText('API key', { exact: false })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Test connection' }).click();
+  await expect(page.locator('#settingsModal .help-note', { hasText: '✓' })).toBeVisible({ timeout: 10000 });
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});

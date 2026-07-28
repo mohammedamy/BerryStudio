@@ -6,19 +6,14 @@
      1) dress a model in 1-2 real clothing photos → editorial "billboard" photo
      2) feed that photo back in → an AI-drawn pattern with cm measurements
 
-   Real photorealistic image generation can't run in a browser (no local
-   model, and OpenAI's API key must never sit in client-side code — anyone
-   opening devtools on the deployed site could read it straight out of the
-   network tab). So exactly like AIGen's existing Claude-vision "AI endpoint"
-   (see js/ai.js), this POSTs to a user-configured proxy URL (Settings → AI
-   Image endpoint) that holds the real OpenAI key server-side. A ready-to-
-   deploy example proxy lives in server/billboard-proxy/.
-
-   Request sent to the proxy:  { prompt, images:[dataURL,...], model }
-   Response expected back:     { image: dataURL }
-   (also accepts a bare base64 string, {b64_json}, or a raw passthrough of
-   OpenAI's own {data:[{b64_json}]} shape, so a minimal proxy that just
-   forwards OpenAI's response works without any reshaping)
+   BerryStudio-Upgrade-Plan WP-4 folded this into the same provider-adapter
+   layer js/ai-spec-pipeline.js uses for text — generateBillboard()/
+   generatePattern() no longer talk HTTP themselves, they just build the
+   right prompt and hand it to whichever image-generation adapter the
+   caller resolved (js/image-providers.js: the original user-deployed-proxy
+   contract stays available, plus direct-with-your-own-key OpenAI/Gemini,
+   plus a local Stable Diffusion option), keeping this module's job scoped
+   to "what prompt do we send," not "how do we send it."
    ============================================================ */
 export const Billboard = (() => {
   const DEFAULT_MODEL = "gpt-image-2";
@@ -73,54 +68,27 @@ Do not alter, enhance, or "improve" the fabric appearances. Transfer the exact m
     return `Draw the pattern to make this piece with all measurements accurate in cm for size ${sizeLabel || "M"}`;
   }
 
-  // Accepts whatever shape the proxy hands back and normalises to a data URL.
-  function extractImage(data) {
-    if (!data) return null;
-    if (typeof data === "string") return asDataURL(data);
-    if (data.image) return asDataURL(data.image);
-    if (data.b64_json) return asDataURL(data.b64_json);
-    if (Array.isArray(data.data) && data.data[0]) {
-      if (data.data[0].b64_json) return asDataURL(data.data[0].b64_json);
-      if (data.data[0].url) return data.data[0].url;
-    }
-    return null;
-  }
-  function asDataURL(s) {
-    if (/^(data:|https?:)/.test(s)) return s;
-    return "data:image/png;base64," + s;   // bare base64 → data URL
-  }
-
-  async function callProxy(endpoint, { prompt, images, model }) {
-    const ctrl = new AbortController();
-    // photorealistic multi-image generation is slow — give it real headroom
-    const to = setTimeout(() => ctrl.abort(), 90000);
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, images, model: model || DEFAULT_MODEL }),
-        signal: ctrl.signal,
-      });
-      if (!res.ok) throw new Error("bad status " + res.status);
-      const image = extractImage(await res.json());
-      if (!image) throw new Error("no image in response");
-      return image;
-    } finally { clearTimeout(to); }
-  }
-
-  // Step 1 (node 3 + 26 → 24 → 2): dress a model in 1-2 source clothing photos.
-  async function generateBillboard({ endpoint, images, model }) {
-    if (!endpoint) throw new Error("no endpoint configured");
+  // Step 1 (node 3 + 26 → 24 → 2): dress a model in 1-2 source clothing
+  // photos. `adapter`/`cfg` come from js/image-providers.js, resolved by
+  // the caller (js/app.js) from state.aiImageProvider — same pattern as
+  // the text/vision provider layer.
+  async function generateBillboard({ adapter, cfg, images, model }) {
+    if (!adapter) throw new Error("no image provider configured");
     const imgs = (images || []).filter(Boolean);
     if (!imgs.length) throw new Error("no source images");
-    return callProxy(endpoint, { prompt: DRESS_PROMPT, images: imgs, model });
+    const r = await adapter.generate(cfg, { prompt: DRESS_PROMPT, images: imgs, model });
+    if (!r.ok) throw new Error(r.error || "generation failed");
+    return r.image;
   }
 
   // Step 2 (node 24 output → 25 → 16): derive a measured pattern drawing
   // from the billboard photo generated in step 1.
-  async function generatePattern({ endpoint, image, sizeLabel, model }) {
-    if (!endpoint) throw new Error("no endpoint configured");
+  async function generatePattern({ adapter, cfg, image, sizeLabel, model }) {
+    if (!adapter) throw new Error("no image provider configured");
     if (!image) throw new Error("no billboard image");
-    return callProxy(endpoint, { prompt: patternPrompt(sizeLabel), images: [image], model });
+    const r = await adapter.generate(cfg, { prompt: patternPrompt(sizeLabel), images: [image], model });
+    if (!r.ok) throw new Error(r.error || "generation failed");
+    return r.image;
   }
 
   return { DEFAULT_MODEL, DRESS_PROMPT, patternPrompt, generateBillboard, generatePattern };
