@@ -24,15 +24,20 @@ class AvatarErrorBoundary extends Component {
 // possibly with cloth that doesn't fit it precisely, still beats no real
 // body at all. (3) loads AND the rig is recognized -> GLBAvatar repose-
 // corrects it to the same arms-down convention collisionRig.js and
-// placement.js already assume. All three tiers keep today's
-// formula-driven (not mesh-fit) collision rig unchanged — see the plan's
-// C2 for mesh-fit, deliberately not attempted here.
-export default function BodyAvatar({ dims, url }) {
-  if (!url) return <Avatar dims={dims} />
+// placement.js already assume. `collisionRigRef`, if given, is where tier
+// 3 writes a WP-8.3 mesh-fit collision rig (real measurements from the
+// loaded mesh) — see GLBAvatar.jsx and meshFitCollisionRig.js; tiers 1/2
+// leave it untouched (null), and whatever reads it (ClothMesh.jsx) falls
+// back to the formula-driven rig in that case.
+// `skinColor` (WP-8.6) only ever reaches the procedural Avatar — a loaded
+// GLB carries its own baked-in skin texture/material, which this doesn't
+// touch (see body/skinTones.js's own header comment).
+export default function BodyAvatar({ dims, url, collisionRigRef, skinColor }) {
+  if (!url) return <Avatar dims={dims} skinColor={skinColor} />
   return (
-    <AvatarErrorBoundary fallback={<Avatar dims={dims} />}>
-      <Suspense fallback={<Avatar dims={dims} />}>
-        <GLBAvatar dims={dims} url={url} />
+    <AvatarErrorBoundary fallback={<Avatar dims={dims} skinColor={skinColor} />}>
+      <Suspense fallback={<Avatar dims={dims} skinColor={skinColor} />}>
+        <GLBAvatar dims={dims} url={url} collisionRigRef={collisionRigRef} />
       </Suspense>
     </AvatarErrorBoundary>
   )

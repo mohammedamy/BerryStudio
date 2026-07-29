@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import Header from './ui/Header'
 import MeasurementPanel from './ui/MeasurementPanel'
 import FabricPanel from './ui/FabricPanel'
+import AvatarPanel, { DEFAULT_SKIN_TONE } from './ui/AvatarPanel'
 import SolverHUD, { isSolverHUDEnabled } from './ui/SolverHUD'
 import Scene from './scene/Scene'
 import { DEFAULT_MEASUREMENTS } from './state/measurements'
@@ -27,6 +28,7 @@ export default function App() {
   const [measurementsByCategory, setMeasurementsByCategory] = useState(DEFAULT_MEASUREMENTS)
   const [debugView, setDebugView] = useState('cloth')
   const [fabricId, setFabricId] = useState(DEFAULT_FABRIC)
+  const [skinToneId, setSkinToneId] = useState(DEFAULT_SKIN_TONE)
   const [garment, setGarment] = useState(null) // null = default T-shirt; else {pieces, seams} from the seam editor
   // Per-category GLB avatar URLs from the bridge (root app's state.avatarGLB
   // dict) — keyed by category, not a single URL, because cloth-lab's own
@@ -89,6 +91,7 @@ export default function App() {
         dims={dims} measurements={measurements}
         onMeasurementsChange={(next) => setMeasurementsByCategory((prev) => ({ ...prev, [category]: next }))}
         fabricId={fabricId} onFabricChange={setFabricId}
+        skinToneId={skinToneId} onSkinToneChange={setSkinToneId}
         debugView={debugView} garment={garment}
         imported={imported} skirtRawPieces={skirtRawPieces}
         avatarGLBUrl={avatarGLBByCategory[category]}
@@ -103,7 +106,7 @@ export default function App() {
 // Seams view — split out from App so the whole thing can be remounted
 // (via App's key={garmentVersion}) as a unit whenever a new garment import
 // needs a fresh seam-editor rather than picking up on top of a stale one.
-function Workspace({ dims, measurements, onMeasurementsChange, fabricId, onFabricChange, debugView, garment, imported, skirtRawPieces, avatarGLBUrl, onReset, onSimulate }) {
+function Workspace({ dims, measurements, onMeasurementsChange, fabricId, onFabricChange, skinToneId, onSkinToneChange, debugView, garment, imported, skirtRawPieces, avatarGLBUrl, onReset, onSimulate }) {
   const rawPieces = imported ? imported.rawPieces : skirtRawPieces
   const roles = imported ? imported.roles : SKIRT_ROLES
   const seedEdges = imported ? imported.edgeInstructions : undefined
@@ -133,11 +136,12 @@ function Workspace({ dims, measurements, onMeasurementsChange, fabricId, onFabri
         )}
         <MeasurementPanel measurements={measurements} onChange={onMeasurementsChange} />
         <FabricPanel fabricId={fabricId} onChange={onFabricChange} />
+        <AvatarPanel skinTone={skinToneId} onChange={onSkinToneChange} />
         {debugView === 'seams' && <SeamEditorPanel editor={seamEditor} onSimulate={onSimulate} />}
       </aside>
       <main style={{ flex: '1 1 auto', position: 'relative' }}>
         <Canvas shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
-          <Scene dims={dims} debugView={debugView} fabricId={fabricId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} />
+          <Scene dims={dims} debugView={debugView} fabricId={fabricId} skinToneId={skinToneId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} />
         </Canvas>
         {debugView === 'cloth' && isSolverHUDEnabled() && <SolverHUD statsRef={statsRef} />}
       </main>

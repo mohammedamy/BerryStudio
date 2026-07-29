@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { OrbitControls, Environment } from '@react-three/drei'
 import BodyAvatar from '../body/BodyAvatar'
+import { resolveSkinToneHex } from '../body/skinTones'
 import StaticPiecesDebug from '../cloth/StaticPiecesDebug'
 import WeldDebugView from '../cloth/WeldDebugView'
 import ClothMesh from '../cloth/ClothMesh'
@@ -8,10 +9,15 @@ import SeamEditorScene from '../seam/SeamEditorScene'
 import PostFX from './PostFX'
 
 // The actual <Canvas> contents: lighting, ground, avatar, orbit camera.
-export default function Scene({ dims, debugView, fabricId, garment, seamEditor, avatarGLBUrl, statsRef }) {
+export default function Scene({ dims, debugView, fabricId, skinToneId, garment, seamEditor, avatarGLBUrl, statsRef }) {
   // Disabled while grabbing a cloth particle — otherwise dragging the mouse
   // to move the pin also orbits the camera at the same time, fighting itself.
   const [dragging, setDragging] = useState(false)
+  // WP-8.3: written by BodyAvatar/GLBAvatar (tier 3 of its fallback, a
+  // real loaded+reposed GLB) during render, read by ClothMesh's own effect
+  // afterward — see BodyAvatar.jsx's header comment for the full flow.
+  // Siblings, not parent/child, so this ref is the hand-off point.
+  const meshFitRigRef = useRef(null)
 
   return (
     <>
@@ -32,11 +38,13 @@ export default function Scene({ dims, debugView, fabricId, garment, seamEditor, 
         <meshStandardMaterial color="#20222b" roughness={1} />
       </mesh>
 
-      {debugView !== 'seams' && <BodyAvatar dims={dims} url={avatarGLBUrl} />}
+      {debugView !== 'seams' && (
+        <BodyAvatar dims={dims} url={avatarGLBUrl} collisionRigRef={meshFitRigRef} skinColor={resolveSkinToneHex(skinToneId)} />
+      )}
       {debugView === 'pieces' && <StaticPiecesDebug dims={dims} pieces={garment?.pieces} seams={garment?.seams} />}
       {debugView === 'weld' && <WeldDebugView dims={dims} pieces={garment?.pieces} seams={garment?.seams} />}
       {debugView === 'cloth' && (
-        <ClothMesh dims={dims} fabricId={fabricId} onDragStateChange={setDragging} pieces={garment?.pieces} seams={garment?.seams} statsRef={statsRef} />
+        <ClothMesh dims={dims} fabricId={fabricId} onDragStateChange={setDragging} pieces={garment?.pieces} seams={garment?.seams} statsRef={statsRef} meshFitRigRef={meshFitRigRef} />
       )}
       {debugView === 'seams' && <SeamEditorScene editor={seamEditor} />}
 

@@ -24,6 +24,28 @@ const ARM_BONE_NAMES = {
 // those two the exact value barely matters visually — see module comment).
 const RESIDUAL_LEAN = 0.1
 
+// WP-8.4: VRM detection only — full VRM support (humanoid.humanBones
+// retargeting) is a real separate spec with its own bone-mapping model,
+// not a small extension of the Mixamo/RPM name lookup above, and is out of
+// scope for this pass. Detecting it lets the caller show an honest "VRM
+// detected, not supported yet" message instead of a generic "no rig
+// found" one that would misdescribe why the repose didn't happen — a VRM
+// file's bones are real and named, just under a different convention this
+// app doesn't parse. `gltfResult` is whatever useGLTF(url) returns (the
+// full GLTFLoader result, not just `.scene`) — VRM 0.x declares itself via
+// the `VRM` extension, VRM 1.0 via `VRMC_vrm`; checking `extensionsUsed`
+// (always populated by GLTFLoader for every extension referenced in the
+// file, known or not) is more reliable than checking for a parsed
+// `userData.gltfExtensions` entry, which only exists for extensions the
+// loader doesn't already handle itself.
+const VRM_EXTENSION_NAMES = ['VRM', 'VRMC_vrm']
+
+export function detectVRM(gltfResult) {
+  const used = gltfResult?.parser?.json?.extensionsUsed
+  if (!Array.isArray(used)) return false
+  return VRM_EXTENSION_NAMES.some((name) => used.includes(name))
+}
+
 function findBone(scene, names) {
   for (const name of names) {
     const bone = scene.getObjectByName(name)

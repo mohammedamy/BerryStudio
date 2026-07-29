@@ -44,7 +44,7 @@ function loadFabricTextures() {
 // about the steady-state render loop — grab-and-drag below does a ONE-TIME
 // readback per pointerdown, which is a rare, user-paced event, not a
 // per-frame cost).
-export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef }) {
+export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef }) {
   const gl = useThree((s) => s.gl)
   const camera = useThree((s) => s.camera)
 
@@ -184,7 +184,10 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
   const simRef = useRef(null)
   useEffect(() => {
     const fabric = FABRIC_PRESETS[fabricId] || FABRIC_PRESETS[DEFAULT_FABRIC]
-    const collisionRig = deriveCollisionRig(dims)
+    // WP-8.3: prefer a real, currently-loaded GLB's own mesh-fit collision
+    // rig (written by BodyAvatar/GLBAvatar into meshFitRigRef — see
+    // Scene.jsx's header comment) over the formula-only one, when present.
+    const collisionRig = meshFitRigRef?.current || deriveCollisionRig(dims)
     const shoulderMask = deriveShoulderPinMask(assembled.cloth.simRestPositions, assembled.cloth.simParticleCount, dims)
     const waistbandMask = deriveWaistbandPinMask(assembled.cloth.simRestPositions, assembled.cloth.simParticleCount, dims)
     const pinnedMask = shoulderMask.map((v, i) => (v || waistbandMask[i] ? 1 : 0))
