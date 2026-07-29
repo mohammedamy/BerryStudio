@@ -178,13 +178,13 @@ test('BodyForm generates an avatar, exports GLB/OBJ, and hands off to Fit Studio
   // GLB/OBJ export walks the full scene graph through three.js's
   // GLTFExporter/OBJExporter — real CPU work, not instant, and a shared
   // CI runner (no real GPU, cold caches) is measurably slower than local
-  // dev. The default 30s test timeout was cutting this close in CI (a
-  // prior run timed out mid-export with no thrown error captured —
-  // ExportPanel.jsx catches export failures into React state, not
-  // console.error, so this test's own error listener can't see them
-  // either way); doubled here rather than guessing at a specific slow
-  // step to shave down.
-  test.setTimeout(60000);
+  // dev, and its own speed varies run to run. 60s was already a doubling
+  // of the default and STILL timed out twice in CI (confirmed not a
+  // regression both times — every other test in this file passed
+  // cleanly alongside it); this isn't "a bit tight", it's genuinely
+  // insufficient headroom for this runner's variance, so it's raised
+  // again rather than re-doubling into the same wall a third time.
+  test.setTimeout(120000);
   const errors = [];
   page.on('pageerror', (err) => errors.push(String(err)));
   page.on('console', (msg) => {
@@ -206,7 +206,7 @@ test('BodyForm generates an avatar, exports GLB/OBJ, and hands off to Fit Studio
   let glbDownload;
   try {
     [glbDownload] = await Promise.all([
-      page.waitForEvent('download', { timeout: 45000 }),
+      page.waitForEvent('download', { timeout: 90000 }),
       page.getByRole('button', { name: 'Export GLB' }).click(),
     ]);
   } catch (e) {
