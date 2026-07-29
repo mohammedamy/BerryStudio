@@ -36,15 +36,46 @@
 // hard-won against a real "shirt collapses to the floor" bug), and bendStiff
 // alone is what the codebase's own comment already identifies as the
 // intended look-differentiating axis between fabrics.
+// WP-7.1 `maxStrain`: fabric-overridable hard stretch ceiling (see
+// ClothSimulation.js's STRAIN_LIMIT_GLSL) — a multiplier on rest edge
+// length, NOT a physical elongation-at-break number. Woven fabrics (poplin,
+// denim, leather) get a tight ceiling near ClothSimulation's 1.06 default;
+// true knits (jersey, scuba) get real give, matching how a T-shirt knit
+// visibly stretches under body ease in a way a woven shirt front doesn't;
+// tulle (a loose net, not a woven sheet) gets some give for the same reason
+// it's exempted from the tight structStiff band below.
+//
+// WP-7.2 `label`: a separate display name from the lookup key — the key
+// stays the stable id every other file matches on (js/three-view.js's own
+// FABRIC table, fabricId payload field, cloth-lab's UI button props), only
+// the label changes to the more accurate historical/technical name.
+//
+// WP-7.2 warp/weft/bias anisotropy: deferred. Tagging each structural
+// spring's orientation against a piece's declared `grainline` (WP-6) needs
+// per-edge grain-alignment data threaded through triangulate.js/assemble.js
+// into a new GPU texture and blended in the structural shader pass — a real
+// engine addition, not a preset-table change, and out of scope for this
+// pass. Not adding stiffWarp/stiffWeft/stiffBias fields here since unused
+// preset fields that look wired up but aren't would be misleading; tracked
+// as documented future work (see CHANGELOG).
 export const FABRIC_PRESETS = {
-  chiffon: { massDensity: 30, structStiff: 0.92, bendStiff: 0.10, damping: 0.985, friction: 0.75, rough: 0.5, metal: 0.0, sheen: 0.45, clear: 0.0, om: 0.55 },
-  silk: { massDensity: 60, structStiff: 0.94, bendStiff: 0.15, damping: 0.980, friction: 0.80, rough: 0.26, metal: 0.05, sheen: 0.9, clear: 0.15, om: 0.98 },
-  satin: { massDensity: 90, structStiff: 0.95, bendStiff: 0.20, damping: 0.980, friction: 0.82, rough: 0.2, metal: 0.12, sheen: 0.85, clear: 0.22, om: 1 },
-  cotton: { massDensity: 150, structStiff: 0.96, bendStiff: 0.35, damping: 0.970, friction: 0.90, rough: 0.85, metal: 0.0, sheen: 0.2, clear: 0.0, om: 1 },
-  linen: { massDensity: 170, structStiff: 0.96, bendStiff: 0.42, damping: 0.970, friction: 0.87, rough: 0.82, metal: 0.0, sheen: 0.15, clear: 0.0, om: 1 },
-  wool: { massDensity: 300, structStiff: 0.97, bendStiff: 0.58, damping: 0.950, friction: 0.93, rough: 0.96, metal: 0.0, sheen: 0.08, clear: 0.0, om: 1 },
-  denim: { massDensity: 400, structStiff: 0.98, bendStiff: 0.80, damping: 0.930, friction: 0.96, rough: 0.9, metal: 0.02, sheen: 0.1, clear: 0.0, om: 1 },
-  leather: { massDensity: 550, structStiff: 0.98, bendStiff: 0.92, damping: 0.900, friction: 0.97, rough: 0.4, metal: 0.2, sheen: 0.2, clear: 0.35, om: 1 },
+  chiffon: { label: 'Chiffon', massDensity: 30, structStiff: 0.92, bendStiff: 0.10, maxStrain: 1.08, damping: 0.985, friction: 0.75, rough: 0.5, metal: 0.0, sheen: 0.45, clear: 0.0, om: 0.55 },
+  silk: { label: 'Silk Charmeuse', massDensity: 60, structStiff: 0.94, bendStiff: 0.15, maxStrain: 1.07, damping: 0.980, friction: 0.80, rough: 0.26, metal: 0.05, sheen: 0.9, clear: 0.15, om: 0.98 },
+  satin: { label: 'Satin', massDensity: 90, structStiff: 0.95, bendStiff: 0.20, maxStrain: 1.06, damping: 0.980, friction: 0.82, rough: 0.2, metal: 0.12, sheen: 0.85, clear: 0.22, om: 1 },
+  cotton: { label: 'Cotton Poplin', massDensity: 150, structStiff: 0.96, bendStiff: 0.35, maxStrain: 1.05, damping: 0.970, friction: 0.90, rough: 0.85, metal: 0.0, sheen: 0.2, clear: 0.0, om: 1 },
+  linen: { label: 'Linen', massDensity: 170, structStiff: 0.96, bendStiff: 0.42, maxStrain: 1.05, damping: 0.970, friction: 0.87, rough: 0.82, metal: 0.0, sheen: 0.15, clear: 0.0, om: 1 },
+  wool: { label: 'Wool Crepe', massDensity: 300, structStiff: 0.97, bendStiff: 0.58, maxStrain: 1.04, damping: 0.950, friction: 0.93, rough: 0.96, metal: 0.0, sheen: 0.08, clear: 0.0, om: 1 },
+  denim: { label: 'Denim', massDensity: 400, structStiff: 0.98, bendStiff: 0.80, maxStrain: 1.03, damping: 0.930, friction: 0.96, rough: 0.9, metal: 0.02, sheen: 0.1, clear: 0.0, om: 1 },
+  leather: { label: 'Leather', massDensity: 550, structStiff: 0.98, bendStiff: 0.92, maxStrain: 1.02, damping: 0.900, friction: 0.97, rough: 0.4, metal: 0.2, sheen: 0.2, clear: 0.35, om: 1 },
+  // WP-7.2 new presets — GSM-grounded starting values, following the
+  // existing file's own convention (structStiff narrow-high, bendStiff the
+  // differentiating axis), except tulle which is deliberately exempted from
+  // the narrow-high structStiff band: it's a loose open net, not a woven
+  // sheet, and a woven-grade structStiff made it read as an invisible rigid
+  // scaffold instead of the soft, airy mesh it should be.
+  jersey: { label: 'Cotton Jersey', massDensity: 180, structStiff: 0.90, bendStiff: 0.22, maxStrain: 1.18, damping: 0.965, friction: 0.88, rough: 0.7, metal: 0.0, sheen: 0.18, clear: 0.0, om: 1 },
+  scuba: { label: 'Scuba Knit', massDensity: 260, structStiff: 0.91, bendStiff: 0.45, maxStrain: 1.14, damping: 0.955, friction: 0.85, rough: 0.35, metal: 0.0, sheen: 0.35, clear: 0.05, om: 1 },
+  tulle: { label: 'Tulle', massDensity: 18, structStiff: 0.80, bendStiff: 0.06, maxStrain: 1.12, damping: 0.988, friction: 0.55, rough: 0.55, metal: 0.0, sheen: 0.3, clear: 0.0, om: 0.35 },
 }
 
 export const FABRIC_IDS = Object.keys(FABRIC_PRESETS)

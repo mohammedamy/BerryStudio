@@ -6,7 +6,7 @@ import { triangulateAll } from '../pattern/triangulate'
 import { assembleCloth, deriveNeighbors, deriveNormalRing } from './assemble'
 import { ClothSimulation, textureDimFor } from './ClothSimulation'
 import { FABRIC_PRESETS, DEFAULT_FABRIC } from './fabricPresets'
-import { deriveCollisionRig, deriveShoulderPinMask } from '../body/collisionRig'
+import { deriveCollisionRig, deriveShoulderPinMask, deriveWaistbandPinMask } from '../body/collisionRig'
 
 // A single real (CC0, see public/textures/fabric-weave/README.md) fabric-
 // weave texture set, shared across every fabric preset — color/roughness/
@@ -44,7 +44,7 @@ function loadFabricTextures() {
 // about the steady-state render loop — grab-and-drag below does a ONE-TIME
 // readback per pointerdown, which is a rare, user-paced event, not a
 // per-frame cost).
-export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS }) {
+export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef }) {
   const gl = useThree((s) => s.gl)
   const camera = useThree((s) => s.camera)
 
@@ -185,8 +185,11 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
   useEffect(() => {
     const fabric = FABRIC_PRESETS[fabricId] || FABRIC_PRESETS[DEFAULT_FABRIC]
     const collisionRig = deriveCollisionRig(dims)
-    const pinnedMask = deriveShoulderPinMask(assembled.cloth.simRestPositions, assembled.cloth.simParticleCount, dims)
+    const shoulderMask = deriveShoulderPinMask(assembled.cloth.simRestPositions, assembled.cloth.simParticleCount, dims)
+    const waistbandMask = deriveWaistbandPinMask(assembled.cloth.simRestPositions, assembled.cloth.simParticleCount, dims)
+    const pinnedMask = shoulderMask.map((v, i) => (v || waistbandMask[i] ? 1 : 0))
     const sim = new ClothSimulation(gl, assembled.cloth, assembled.neighbors, fabric, { collisionRig, pinnedMask })
+    sim.preRelax()
     simRef.current = sim
     return () => {
       sim.dispose()
@@ -205,6 +208,9 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
     if (material.userData.shader) {
       material.userData.shader.uniforms.uSimPositionTex.value = sim.getPositionTexture()
     }
+    // WP-7.3: cheap plain-object write, no state/re-render — SolverHUD.jsx
+    // polls this ref on its own throttled timer from outside the R3F loop.
+    if (statsRef) Object.assign(statsRef.current, sim.getStats())
   })
 
   // Grab-and-drag: raycast -> pin one sim particle to the pointer.

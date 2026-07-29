@@ -147,3 +147,36 @@ export function deriveShoulderPinMask(simRestPositions, simParticleCount, dims) 
   }
   return mask
 }
+
+// WP-7.5 waistband pin zone — same rationale as the shoulder pin above
+// (friction alone can slow a slide but never fully arrest one; a fitted
+// waistband is a hard structural anchor, elastic sewn to a fixed
+// circumference, that a real garment can't slide down past), but the
+// anchor geometry is a horizontal RING around the body rather than a short
+// line segment per side, so this needs its own (cylindrical, not
+// segment-distance) test rather than reusing distToSegment. Anchored at
+// `hipY + span*0.44` — the same waist keypoint torsoProfile/placement.js's
+// placeHipPanel/placeGorePanel already use, so the pin ring lines up with
+// where a waistband/hip-panel piece actually gets placed.
+const WAISTBAND_HEIGHT_TOLERANCE = 0.045 // 4.5cm vertical band
+const WAISTBAND_RADIAL_TOLERANCE = 0.05 // 5cm outward from the body's own waist radius — catches a waistband/fitted-skirt-top's own particles without also grabbing loose torso fabric well clear of the surface
+
+export function deriveWaistbandPinRing(dims) {
+  const { hipY, span, waistR, female } = dims
+  return { y: hipY + span * 0.44, r: waistR, zScale: female ? 0.72 : 0.78 }
+}
+
+// `simRestPositions`/`simParticleCount` come straight off assembleCloth's
+// returned `cloth` object, same as deriveShoulderPinMask — a garment with
+// no fabric near the waist (a top, a cape) simply gets an all-zero mask.
+export function deriveWaistbandPinMask(simRestPositions, simParticleCount, dims) {
+  const { y: waistY, r: waistR, zScale } = deriveWaistbandPinRing(dims)
+  const mask = new Uint8Array(simParticleCount)
+  for (let i = 0; i < simParticleCount; i++) {
+    const px = simRestPositions[i * 3], py = simRestPositions[i * 3 + 1], pz = simRestPositions[i * 3 + 2]
+    if (Math.abs(py - waistY) > WAISTBAND_HEIGHT_TOLERANCE) continue
+    const pr = Math.hypot(px, pz / zScale) // unsquash Z the same way collideCapsule does, for an elliptical cross-section
+    if (Math.abs(pr - waistR) < WAISTBAND_RADIAL_TOLERANCE) mask[i] = 1
+  }
+  return mask
+}

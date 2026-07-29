@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import Header from './ui/Header'
 import MeasurementPanel from './ui/MeasurementPanel'
 import FabricPanel from './ui/FabricPanel'
+import SolverHUD, { isSolverHUDEnabled } from './ui/SolverHUD'
 import Scene from './scene/Scene'
 import { DEFAULT_MEASUREMENTS } from './state/measurements'
 import { computeBodyDims } from './body/computeBodyDims'
@@ -108,6 +109,7 @@ function Workspace({ dims, measurements, onMeasurementsChange, fabricId, onFabri
   const seedEdges = imported ? imported.edgeInstructions : undefined
   const seedSeams = imported ? imported.seamInstructions : undefined
   const seamEditor = useSeamEditor(rawPieces, roles, seedEdges, seedSeams)
+  const statsRef = useRef({ substeps: 0, emaMs: 0, lastCostMs: 0 })
 
   return (
     <div style={{ flex: '1 1 auto', display: 'flex', minHeight: 0 }}>
@@ -135,8 +137,9 @@ function Workspace({ dims, measurements, onMeasurementsChange, fabricId, onFabri
       </aside>
       <main style={{ flex: '1 1 auto', position: 'relative' }}>
         <Canvas shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
-          <Scene dims={dims} debugView={debugView} fabricId={fabricId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} />
+          <Scene dims={dims} debugView={debugView} fabricId={fabricId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} />
         </Canvas>
+        {debugView === 'cloth' && isSolverHUDEnabled() && <SolverHUD statsRef={statsRef} />}
       </main>
     </div>
   )

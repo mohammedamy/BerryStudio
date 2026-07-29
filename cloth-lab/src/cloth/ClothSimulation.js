@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { GPUComputationRenderer } from 'three/addons/misc/GPUComputationRenderer.js'
 import { MAX_COLLISION_CAPSULES } from '../body/collisionRig.js'
+import { FrameBudgetController } from '../perf/frameBudget.js'
 
 // Position Verlet + iterative distance-constraint relaxation (Jakobsen/Provot
 // — the classic approach behind three.js's own long-standing cloth demo).
@@ -9,12 +10,27 @@ import { MAX_COLLISION_CAPSULES } from '../body/collisionRig.js'
 // in-pass sequential relaxation like CPU Gauss-Seidel is possible), so "K
 // relaxation iterations" means K separate .compute() calls per frame
 // (substeps), not a loop inside one shader call.
-const SUBSTEPS = 8
-const SUBSTEP_DT = (1 / 60) / SUBSTEPS
+//
+// WP-7.3: substep count is now adaptive (4-12, was a fixed 8) via
+// FrameBudgetController — a slower device/GPU drops substeps to stay
+// smooth, a fast one spends the headroom on extra relaxation quality
+// instead of sitting idle. `uDt` (each substep's simulated time slice) is
+// recomputed from the CURRENT substep count every step() call so total
+// simulated time per real frame stays ~1/60s regardless of how many
+// substeps that's currently split across — changing substep count changes
+// stability/accuracy, deliberately, not simulation SPEED.
+const SUBSTEPS_MIN = 4
+const SUBSTEPS_MAX = 12
+const SUBSTEPS_START = 8
+const SUBSTEP_TARGET_MS = 1000 / 60 * 0.5 // budget the sim to ~half a 60fps frame, leaving room for render+scene
 const GRAVITY = new THREE.Vector3(0, -9.81, 0)
 // Ramp gravity in over the first ~1.5s so a bad initial placement/topology
 // bug shows up as a slow, readable drift instead of an instant explosion.
 const GRAVITY_RAMP_FRAMES = 90
+// WP-7.1: fabric-overridable via fabricPresets.js's `maxStrain` field; 1.06
+// (6% stretch ceiling) sits mid-band of the plan's 102-108% target and reads
+// as "resists but isn't rigid" for the default (cotton) fabric.
+const DEFAULT_MAX_STRAIN = 1.06
 
 export function textureDimFor(count) {
   return Math.max(2, Math.ceil(Math.sqrt(count)))
@@ -83,6 +99,28 @@ vec4 neighborCorrection(vec3 predicted, float idx, float rest, float invMassSelf
   vec3 d = predicted - npos;
   float dist = max(length(d), 1e-5);
   return vec4(d * (1.0 - rest / dist) * wSelf, 1.0);
+}
+`
+
+// WP-7.1 strain limiting: a HARD clamp (no stiffness scaling — full
+// correction every time it fires) applied AFTER the proportional structural
+// pass above, so a structural spring that's too soft to fully arrest stretch
+// under load (a real risk once anisotropy makes per-edge stiffness uneven —
+// see WP-7.2) still can't stretch a structural edge past uMaxStrain * rest.
+// Reuses the same structural neighbor textures — no new texture uploads.
+const STRAIN_LIMIT_GLSL = `
+vec4 strainLimitCorrection(vec3 predicted, float idx, float rest, float invMassSelf, float maxStrain) {
+  if (idx < -0.5) return vec4(0.0);
+  vec2 nuv = ( vec2( mod(idx, resolution.x), floor(idx / resolution.x) ) + 0.5 ) / resolution;
+  vec3 npos = texture2D(texturePosition, nuv).xyz;
+  vec2 nArea = texture2D(uAreaShare, nuv).rg;
+  float invMassNbr = nArea.g > 0.5 ? 0.0 : 1.0 / max(uMassDensity * nArea.r, 1e-6);
+  float wSelf = invMassSelf / max(invMassSelf + invMassNbr, 1e-6);
+  vec3 d = predicted - npos;
+  float dist = max(length(d), 1e-5);
+  float maxDist = rest * maxStrain;
+  if (dist <= maxDist) return vec4(0.0);
+  return vec4(d * (1.0 - maxDist / dist) * wSelf, 1.0);
 }
 `
 
@@ -224,6 +262,7 @@ uniform float uDamping;
 uniform float uMassDensity;
 uniform float uStructStiff;
 uniform float uBendStiff;
+uniform float uMaxStrain;
 uniform float uFloorY;
 uniform float uFriction;
 uniform int uCapsuleCount;
@@ -240,6 +279,7 @@ uniform float uDragParticleIndex;
 uniform vec3 uDragTargetPosition;
 
 ${NEIGHBOR_CORRECTION_GLSL}
+${STRAIN_LIMIT_GLSL}
 ${CAPSULE_COLLISION_GLSL}
 ${selfCollisionGlsl(texDim)}
 
@@ -288,6 +328,19 @@ void main() {
   structAcc += neighborCorrection(predicted, sB.z, srB.z, invMassSelf);
   structAcc += neighborCorrection(predicted, sB.w, srB.w, invMassSelf);
   if (structAcc.w > 0.5) predicted -= (structAcc.xyz / structAcc.w) * uStructStiff;
+
+  // WP-7.1 strain limit: hard clamp on the same structural edges, after the
+  // proportional pass above — see STRAIN_LIMIT_GLSL's header comment.
+  vec4 strainAcc = vec4(0.0);
+  strainAcc += strainLimitCorrection(predicted, sA.x, srA.x, invMassSelf, uMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sA.y, srA.y, invMassSelf, uMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sA.z, srA.z, invMassSelf, uMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sA.w, srA.w, invMassSelf, uMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sB.x, srB.x, invMassSelf, uMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sB.y, srB.y, invMassSelf, uMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sB.z, srB.z, invMassSelf, uMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sB.w, srB.w, invMassSelf, uMaxStrain);
+  if (strainAcc.w > 0.5) predicted -= strainAcc.xyz / strainAcc.w;
 
   // Bend: the fold/hinge constraint between the two off-edge vertices of
   // each pair of triangles sharing an edge.
@@ -372,6 +425,8 @@ export class ClothSimulation {
     this.frameCount = 0
     this.simParticleCount = cloth.simParticleCount
     this.texDim = textureDimFor(cloth.simParticleCount)
+    this.substeps = SUBSTEPS_START
+    this.budget = new FrameBudgetController({ min: SUBSTEPS_MIN, max: SUBSTEPS_MAX, start: SUBSTEPS_START, targetMs: SUBSTEP_TARGET_MS })
 
     const gpuCompute = new GPUComputationRenderer(this.texDim, this.texDim, renderer)
     this.gpuCompute = gpuCompute
@@ -422,13 +477,14 @@ export class ClothSimulation {
       uStructRestA: { value: structTex.restA }, uStructRestB: { value: structTex.restB },
       uBendNbrA: { value: bendTex.nbrA }, uBendNbrB: { value: bendTex.nbrB },
       uBendRestA: { value: bendTex.restA }, uBendRestB: { value: bendTex.restB },
-      uDt: { value: SUBSTEP_DT },
+      uDt: { value: (1 / 60) / SUBSTEPS_START },
       uGravityRamp: { value: 0 },
       uGravity: { value: GRAVITY },
       uDamping: { value: fabric.damping },
       uMassDensity: { value: fabric.massDensity },
       uStructStiff: { value: fabric.structStiff },
       uBendStiff: { value: fabric.bendStiff },
+      uMaxStrain: { value: fabric.maxStrain ?? DEFAULT_MAX_STRAIN },
       uFloorY: { value: floorY },
       uFriction: { value: fabric.friction },
       uCapsuleCount: { value: cap.count },
@@ -453,6 +509,7 @@ export class ClothSimulation {
     u.uMassDensity.value = fabric.massDensity
     u.uStructStiff.value = fabric.structStiff
     u.uBendStiff.value = fabric.bendStiff
+    u.uMaxStrain.value = fabric.maxStrain ?? DEFAULT_MAX_STRAIN
     u.uFriction.value = fabric.friction
   }
 
@@ -461,6 +518,28 @@ export class ClothSimulation {
   // `myFlatIdx == uDragParticleIndex` check), so it never fights the
   // solver while dragged. Called every pointermove; cheap (2 uniform
   // writes, no texture rebuild).
+  // WP-7.6 rest-state pre-relax: runs `steps` headless structural/bend/
+  // collision relaxation passes with gravity fully off, right after
+  // construction and before the first VISIBLE frame — so the placement
+  // heuristic's own tension (pieces placed close-but-not-exact by design,
+  // see placement.js's own header comment) settles out silently instead of
+  // reading as a one-frame snap once step() starts running. Coexists with
+  // (doesn't replace) GRAVITY_RAMP_FRAMES's own visible settle: that ramp
+  // is for the FALL under gravity reading as a slow drift rather than an
+  // explosion; this is for the static placement tension having nowhere to
+  // hide before gravity even starts. Doesn't touch frameCount, so the
+  // visible gravity ramp still starts fresh at 0 on the next real step().
+  preRelax(steps = 40) {
+    const u = this.posVar.material.uniforms
+    const savedGravityRamp = u.uGravityRamp.value
+    u.uGravityRamp.value = 0
+    for (let i = 0; i < steps; i++) {
+      u.uApplySelfCollision.value = i === steps - 1 ? 1 : 0
+      this.gpuCompute.compute()
+    }
+    u.uGravityRamp.value = savedGravityRamp
+  }
+
   setDragParticle(particleIndex, targetPosition) {
     const u = this.posVar.material.uniforms
     u.uDragParticleIndex.value = particleIndex
@@ -471,23 +550,44 @@ export class ClothSimulation {
     this.posVar.material.uniforms.uDragParticleIndex.value = -1
   }
 
-  // Fixed substeps only — never feed a raw rAF delta straight into the
-  // physics (a classic "explodes on a stutter" bug). A huge delta (tab was
-  // backgrounded) skips this frame entirely rather than catch-up-stepping.
+  // Fixed real time per frame only — never feed a raw rAF delta straight
+  // into the physics (a classic "explodes on a stutter" bug). A huge delta
+  // (tab was backgrounded) skips this frame entirely rather than
+  // catch-up-stepping. WP-7.3: substep COUNT is adaptive (see class header
+  // comment); `delta` itself is still never used to size a substep.
   step(delta) {
     if (delta > 0.5) return
     this.frameCount++
     const gravityRamp = Math.min(1, this.frameCount / GRAVITY_RAMP_FRAMES)
     const u = this.posVar.material.uniforms
     u.uGravityRamp.value = gravityRamp
-    for (let i = 0; i < SUBSTEPS; i++) {
+    u.uDt.value = (1 / 60) / this.substeps
+
+    const t0 = performance.now()
+    for (let i = 0; i < this.substeps; i++) {
       // Self-collision is O(N^2) — affordable once per rendered frame, not
       // once per substep (see selfCollisionGlsl's cost comment). Running it
       // on the LAST substep means it sees the frame's fully-relaxed,
       // post-body-collision positions rather than an intermediate one.
-      u.uApplySelfCollision.value = i === SUBSTEPS - 1 ? 1 : 0
+      u.uApplySelfCollision.value = i === this.substeps - 1 ? 1 : 0
       this.gpuCompute.compute()
     }
+    // WebGL compute is queued, not necessarily finished, the instant
+    // .compute() returns — but GPUComputationRenderer reuses a small fixed
+    // set of render targets across calls, so back-to-back .compute() calls
+    // this frame already serialize on the GPU's own command queue, and this
+    // timing (CPU-side dispatch + queue wait for prior work) is a stable,
+    // consistent proxy for relative cost across frames even without an
+    // explicit GPU fence — exactly what the adaptive knob needs (relative
+    // trend, not an absolute GPU-time measurement).
+    const costMs = performance.now() - t0
+    this.substeps = this.budget.report(costMs)
+    this.lastCostMs = costMs
+  }
+
+  // Read-only snapshot for SolverHUD.jsx — never mutates controller state.
+  getStats() {
+    return { substeps: this.substeps, emaMs: this.budget.emaMs, lastCostMs: this.lastCostMs ?? 0 }
   }
 
   getPositionTexture() {

@@ -1,10 +1,5 @@
 import { FABRIC_IDS, FABRIC_PRESETS } from '../cloth/fabricPresets'
 
-const LABELS = {
-  chiffon: 'Chiffon', silk: 'Silk', satin: 'Satin', cotton: 'Cotton',
-  linen: 'Linen', wool: 'Wool', denim: 'Denim', leather: 'Leather',
-}
-
 // Live fabric switching — ClothSimulation.setFabric() only ever touches
 // plain float uniforms (massDensity/stiffness/damping/friction), so this is
 // an instant swap: no shader recompile, no texture rebuild, no sim restart.
@@ -26,7 +21,7 @@ export default function FabricPanel({ fabricId, onChange }) {
               color: id === fabricId ? '#fff' : 'var(--text)',
             }}
           >
-            {LABELS[id]}
+            {FABRIC_PRESETS[id].label}
           </button>
         ))}
       </div>
