@@ -24,24 +24,36 @@ import { convertAppPattern } from './pattern/importFromApp'
 // pipeline on a real, non-T-shirt garment.
 const SKIRT_ROLES = { frontSkirt: 'hipPanelFront', backSkirt: 'hipPanelBack' }
 
-export default function App() {
-  const [category, setCategory] = useState('women')
-  const [measurementsByCategory, setMeasurementsByCategory] = useState(DEFAULT_MEASUREMENTS)
+// WP-5.3: `embedded`/`pattern`/`onReady` are only used by the new embedded
+// entry point (embed.js) — the standalone build (main.jsx) renders <App />
+// with none of them, so every default below reproduces standalone's exact
+// prior behavior unchanged. `pattern`, when given, is the SAME payload
+// shape buildClothLabPayload() (js/app.js) already builds for the iframe
+// bridge — embed.js's update() re-renders this component with a new
+// `pattern` object each time the root app's own state changes, replacing
+// the postMessage round-trip with a plain prop (no serialization tax, no
+// separate "is cloth-lab ready yet" handshake needed since there's no
+// cross-document boundary to wait for).
+export default function App({ embedded = false, pattern = null, onReady } = {}) {
+  const [category, setCategory] = useState(pattern?.category || 'women')
+  const [measurementsByCategory, setMeasurementsByCategory] = useState(
+    pattern ? { ...DEFAULT_MEASUREMENTS, [pattern.category]: pattern.measurements } : DEFAULT_MEASUREMENTS,
+  )
   const [debugView, setDebugView] = useState('cloth')
-  const [fabricId, setFabricId] = useState(DEFAULT_FABRIC)
+  const [fabricId, setFabricId] = useState((pattern && pattern.fabricId) || DEFAULT_FABRIC)
   const [skinToneId, setSkinToneId] = useState(DEFAULT_SKIN_TONE)
   const [garment, setGarment] = useState(null) // null = default T-shirt; else {pieces, seams} from the seam editor
   // Per-category GLB avatar URLs from the bridge (root app's state.avatarGLB
   // dict) — keyed by category, not a single URL, because cloth-lab's own
   // Header category switcher is independent of the bridge: switching
   // category in here must not lose the association or need a resend.
-  const [avatarGLBByCategory, setAvatarGLBByCategory] = useState({})
+  const [avatarGLBByCategory, setAvatarGLBByCategory] = useState((pattern && pattern.avatarGLB) || {})
 
-  // Whatever the bridge (root BerryStudio app, embedded via iframe — see
-  // js/app.js's syncClothLab/loadClothLab) last sent, converted — see
-  // pattern/importFromApp.js. null = standalone / nothing imported yet,
+  // Whatever the bridge (root BerryStudio app — iframe postMessage in
+  // standalone/legacy mode, the `pattern` prop when embedded) last sent,
+  // converted — see pattern/importFromApp.js. null = nothing imported yet,
   // falls back to the skirt-import demo below exactly as before this feature.
-  const [imported, setImported] = useState(null)
+  const [imported, setImported] = useState(pattern ? convertAppPattern(pattern) : null)
   // Bumped once per accepted bridge payload. useSeamEditor's drafts/seams are
   // lazy-initialized (useState(() => ...)) and won't pick up new rawPieces on
   // their own — Workspace below is remounted via key={garmentVersion} to
@@ -56,34 +68,64 @@ export default function App() {
     [measurements],
   )
 
-  // Bridge from the root BerryStudio app. Announce we're mounted and ready to
-  // receive (the root app waits for this before posting, to avoid a race
-  // where it sends before this listener exists), then on each pattern:
-  // convert it (closed-world classifier — see importFromApp.js for exactly
-  // what is/isn't recognized), sync category/measurements/fabric to match,
-  // and always land in the Seams view for review — never auto-simulate, see
-  // importFromApp.js's header comment for why.
+  // Shared by both ingestion paths below: convert (closed-world classifier
+  // — see importFromApp.js for exactly what is/isn't recognized), sync
+  // category/measurements/fabric/avatar to match, and always land on the
+  // Seams view for review — never auto-simulate, see importFromApp.js's
+  // header comment for why.
+  function applyIncomingPattern(payload) {
+    const result = convertAppPattern(payload)
+    setCategory(payload.category)
+    setMeasurementsByCategory((prev) => ({ ...prev, [payload.category]: payload.measurements }))
+    if (result.fabricId) setFabricId(result.fabricId)
+    setAvatarGLBByCategory(payload.avatarGLB || {})
+    setGarment(null) // the previous "Simulate This Garment" result doesn't apply to a new pattern
+    setImported(result)
+    setGarmentVersion((v) => v + 1)
+    setDebugView('seams')
+  }
+
+  // Legacy/standalone bridge from the root BerryStudio app when embedded
+  // via iframe (not used when `embedded` — see the prop-based path below
+  // instead). Announces mounted-and-ready first (the root app waits for
+  // this before posting, to avoid a race where it sends before this
+  // listener exists).
   useEffect(() => {
+    if (embedded) return
     function onMessage(e) {
       if (!e.data || e.data.type !== 'berrystudio:pattern') return
-      const result = convertAppPattern(e.data)
-      setCategory(e.data.category)
-      setMeasurementsByCategory((prev) => ({ ...prev, [e.data.category]: e.data.measurements }))
-      if (result.fabricId) setFabricId(result.fabricId)
-      setAvatarGLBByCategory(e.data.avatarGLB || {})
-      setGarment(null) // the previous "Simulate This Garment" result doesn't apply to a new pattern
-      setImported(result)
-      setGarmentVersion((v) => v + 1)
-      setDebugView('seams')
+      applyIncomingPattern(e.data)
     }
     window.addEventListener('message', onMessage)
     window.parent.postMessage({ type: 'clothlab:ready' }, '*')
     return () => window.removeEventListener('message', onMessage)
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded])
+
+  // Embedded path: onReady fires once, synchronously reachable (no
+  // cross-document handshake needed) — embed.js's mount() can call
+  // update() immediately after if a pattern is already available.
+  useEffect(() => {
+    if (embedded && onReady) onReady()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded])
+
+  // Re-applies whenever embed.js's update() passes a NEW pattern object
+  // (reference-checked — the caller, js/app.js, already dedupes identical
+  // payloads before calling update() at all, same as it does today for the
+  // iframe's postMessage path).
+  const lastAppliedPatternRef = useRef(pattern)
+  useEffect(() => {
+    if (!embedded || !pattern || pattern === lastAppliedPatternRef.current) return
+    lastAppliedPatternRef.current = pattern
+    applyIncomingPattern(pattern)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded, pattern])
 
   return (
-    <>
+    <div className="cloth-lab-root">
       <Header
+        embedded={embedded}
         category={category} onCategoryChange={setCategory}
         debugView={debugView} onDebugViewChange={setDebugView}
       />
@@ -99,7 +141,7 @@ export default function App() {
         onReset={() => { setGarment(null); setImported(null); setGarmentVersion((v) => v + 1) }}
         onSimulate={(result) => { setGarment(result); setDebugView('cloth') }}
       />
-    </>
+    </div>
   )
 }
 

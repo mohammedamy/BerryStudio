@@ -39,6 +39,12 @@ import { ImageProviders, IMAGE_PROVIDER_IDS } from './image-providers.js';
     lastMarkerYards: null, lastMarkerWidth: null,
     builderKind: null, builderOpts: { length:"medium", flare:"regular", fit:"regular", sleeve:"short" }, builderCustom: {},
     avatarGLB: { women: "", men: "", girls: "", boys: "" },
+    // BerryStudio-Upgrade-Plan WP-5: "iframe" (default, unchanged behavior)
+    // or "embedded" (cloth-lab's lib build mounted directly into this page,
+    // sharing React/three.js via the import map — see setView()'s clothlab
+    // branch and mountClothLabEmbedded() below). Defaults to "iframe" so
+    // nothing changes for existing users until they opt in via Settings.
+    clothLabEngine: "iframe",
   };
   const state = Object.assign({}, DEF, JSON.parse(localStorage.getItem("pps") || "{}"));
   const save = () => localStorage.setItem("pps", JSON.stringify(state));
@@ -1661,6 +1667,7 @@ import { ImageProviders, IMAGE_PROVIDER_IDS } from './image-providers.js';
     state.view=v;
     $("#view3d").classList.toggle("show", v==="3d");
     $("#viewClothLab").classList.toggle("show", v==="clothlab");
+    $("#viewClothLab").classList.toggle("engine-embedded", state.clothLabEngine==="embedded");
     document.querySelector(".canvas-wrap").classList.toggle("threed", v==="3d");
     document.querySelector(".canvas-wrap").classList.toggle("clothlab", v==="clothlab");
     $$("#viewToggle button").forEach(b=>b.classList.toggle("active",b.dataset.v===v));
@@ -1669,16 +1676,53 @@ import { ImageProviders, IMAGE_PROVIDER_IDS } from './image-providers.js';
     else Canvas.render();
     save();
   }
-  // cloth-lab is a separate React/R3F app (own build+deploy, see
-  // cloth-lab/ and .github/workflows/deploy-pages.yml) — embedded via
-  // iframe, src set lazily on first switch so it isn't loaded (and its
-  // GPU work isn't running) unless the user actually opens this tab.
+  // cloth-lab is a separate React/R3F app (own build+deploy, see cloth-lab/
+  // and .github/workflows/deploy-pages.yml). Two mount strategies (WP-5),
+  // gated by state.clothLabEngine — dispatch lives here so setView()'s own
+  // clothlab branch (and syncClothLab() below) never need to know which one
+  // is active. "iframe" (default): src set lazily on first switch so it
+  // isn't loaded (and its GPU work isn't running) unless the user actually
+  // opens this tab. "embedded": cloth-lab's lib build (cloth-lab/dist-embed/,
+  // WP-5.4) dynamically imported and mounted directly into #clothLabEmbed —
+  // same lazy-on-first-switch principle, just no iframe/postMessage
+  // boundary to cross.
   function loadClothLab(){
+    if(state.clothLabEngine==="embedded"){ mountClothLabEmbedded(); return; }
     const frame=$("#clothLabFrame");
     if(frame.dataset.loaded) return;
     const isLocal=/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
     frame.src = isLocal ? "http://localhost:5173/" : "cloth-lab/";
     frame.dataset.loaded="1";
+  }
+  // `clothLabEmbedModule` holds the {update, unmount} handle mount() returns
+  // once the dynamic import + first render actually complete — syncClothLab()
+  // reads it to push later pattern updates. `clothLabEmbedLoadPromise` guards
+  // against double-mounting if the user flips tabs again before the first
+  // import finishes (dynamic import() itself is cached by the module
+  // registry, but calling mount() twice would create two React roots on the
+  // same container).
+  let clothLabEmbedModule = null;
+  let clothLabEmbedLoadPromise = null;
+  function mountClothLabEmbedded(){
+    if(clothLabEmbedLoadPromise) return clothLabEmbedLoadPromise;
+    const container = $("#clothLabEmbed");
+    // Relative to THIS module's own URL (js/app.js), not location.origin —
+    // resolves correctly whether the site is served from the domain root
+    // (local dev) or a GitHub Pages subpath (production), same reasoning
+    // as clothLabOrigin() below not hardcoding an origin.
+    const embedUrl = new URL("../cloth-lab/dist-embed/cloth-lab-embed.js", import.meta.url).href;
+    const assetBase = new URL("../cloth-lab/dist-embed/", import.meta.url).href;
+    clothLabEmbedLoadPromise = import(/* @vite-ignore */ embedUrl).then((mod) => {
+      clothLabEmbedModule = mod.mount(container, {
+        assetBase,
+        pattern: buildClothLabPayload(),
+        onReady: () => { clothLabReady = true; },
+      });
+    }).catch((err) => {
+      console.error("Cloth Lab (embedded engine) failed to load:", err);
+      clothLabEmbedLoadPromise = null; // allow a retry on the next tab switch
+    });
+    return clothLabEmbedLoadPromise;
   }
   // Derived straight from the iframe's actual src (same-origin in production
   // — one combined GH Pages deploy; genuinely cross-origin in local dev —
@@ -1732,12 +1776,16 @@ import { ImageProviders, IMAGE_PROVIDER_IDS } from './image-providers.js';
   // resim restart purely from switching tabs to look.
   function syncClothLab(force){
     if(!clothLabReady) return;
-    const frame=$("#clothLabFrame");
-    if(!frame || !frame.contentWindow) return;
     const payload = buildClothLabPayload();
     const json = JSON.stringify(payload);
     if(!force && json===lastClothLabPayloadJSON) return;
     lastClothLabPayloadJSON = json;
+    if(state.clothLabEngine==="embedded"){
+      if(clothLabEmbedModule) clothLabEmbedModule.update({ pattern: payload });
+      return;
+    }
+    const frame=$("#clothLabFrame");
+    if(!frame || !frame.contentWindow) return;
     frame.contentWindow.postMessage(payload, clothLabOrigin());
   }
 
@@ -2039,6 +2087,22 @@ import { ImageProviders, IMAGE_PROVIDER_IDS } from './image-providers.js';
     });
     av.appendChild(el("div","help-note",T("avatarModelsD")));
     body.appendChild(av);
+    // BerryStudio-Upgrade-Plan WP-5: 3D Cloth Lab engine — feature-flagged
+    // swap between the original iframe embed and the new same-page embedded
+    // mount. Same .seg segmented-toggle pattern as the cm/inch units field
+    // above. Switching takes effect the next time the Cloth Lab tab opens
+    // (loadClothLab()'s dataset.loaded guard is iframe-only, so flipping
+    // this while already on that tab needs a tab round-trip to re-mount —
+    // acceptable for a rarely-changed setting, not worth extra plumbing).
+    const engineRow=el("label","set-row"); engineRow.style.marginTop="14px";
+    engineRow.innerHTML=`<span class="sl">${T("clothLabEngine")}<small>${T("clothLabEngineD")}</small></span>`;
+    const engineSeg=el("div","seg",
+      `<button ${state.clothLabEngine!=="embedded"?'class="active"':''}>${T("clothLabEngineIframe")}</button>`+
+      `<button ${state.clothLabEngine==="embedded"?'class="active"':''}>${T("clothLabEngineEmbedded")}</button>`
+    );
+    engineSeg.children[0].onclick=()=>{state.clothLabEngine="iframe";save();openSettings();};
+    engineSeg.children[1].onclick=()=>{state.clothLabEngine="embedded";save();openSettings();};
+    engineRow.appendChild(engineSeg); body.appendChild(engineRow);
     const rb=el("button","big-btn ghost",T("resetOnb")); rb.style.marginTop="16px"; rb.onclick=()=>{closeModal("#settingsModal");startOnboarding();}; body.appendChild(rb);
     const ib=el("button","big-btn",IC.download+T("installApp")); ib.style.marginTop="8px"; ib.onclick=installApp; body.appendChild(ib);
     $("#settingsModal").classList.add("show");

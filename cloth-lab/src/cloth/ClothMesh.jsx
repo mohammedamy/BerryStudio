@@ -7,6 +7,7 @@ import { assembleCloth, deriveNeighbors, deriveNormalRing } from './assemble'
 import { ClothSimulation, textureDimFor } from './ClothSimulation'
 import { FABRIC_PRESETS, DEFAULT_FABRIC } from './fabricPresets'
 import { deriveCollisionRig, deriveShoulderPinMask, deriveWaistbandPinMask } from '../body/collisionRig'
+import { getAssetBase } from '../assetBase'
 
 // A single real (CC0, see public/textures/fabric-weave/README.md) fabric-
 // weave texture set, shared across every fabric preset — color/roughness/
@@ -16,13 +17,22 @@ import { deriveCollisionRig, deriveShoulderPinMask, deriveWaistbandPinMask } fro
 // realism plan's Tier-1/B2 notes on why plain TextureLoader was chosen over
 // drei's useTexture here) so switching fabrics never re-triggers a network
 // fetch or shows a pop-in.
-const TEX_BASE = `${import.meta.env.BASE_URL}textures/fabric-weave/`
+//
+// WP-5.2: TEX_BASE is computed INSIDE loadFabricTextures(), not as a
+// top-level module const — ES module imports are hoisted and evaluated
+// before any importing module's own top-level code runs, so a module-level
+// `const TEX_BASE = getAssetBase() + ...` would capture the embedded
+// build's default base before embed.js's mount() ever gets a chance to
+// call setAssetBase(). Reading it lazily, on first actual call (still
+// cached via fabricTexturesPromise below, so this costs nothing extra),
+// guarantees setAssetBase() has already run by the time it matters.
 let fabricTexturesPromise = null
 function loadFabricTextures() {
   if (fabricTexturesPromise) return fabricTexturesPromise
+  const texBase = `${getAssetBase()}textures/fabric-weave/`
   const loader = new THREE.TextureLoader()
   const load = (file, isColor) => new Promise((resolve) => {
-    loader.load(TEX_BASE + file, (tex) => {
+    loader.load(texBase + file, (tex) => {
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping
       if (isColor) tex.colorSpace = THREE.SRGBColorSpace // normal/roughness maps must stay linear
       resolve(tex)

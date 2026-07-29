@@ -24,17 +24,47 @@
   script-src allows the two CDN origins existing/planned dynamic imports use:
   unpkg.com (three.js, via the import map below) and esm.sh (the on-demand
   transformers.js/onnxruntime-web loader inside js/workers/local-model-worker.js,
-  WP-2 — loaded only if/when a user opts into a browser-local model route).
+  WP-2; and, as of WP-5, react/react-dom/@react-three/fiber/@react-three/drei
+  below, lazy-loaded only when Fit Studio's embedded engine opens).
 -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https: http://localhost:* https://localhost:*; worker-src 'self' blob:; manifest-src 'self'; base-uri 'self'; form-action 'self';">
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    "three": "https://unpkg.com/three@0.185.1/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.185.1/examples/jsm/",
+    "react": "https://esm.sh/react@19.2.7",
+    "react/jsx-runtime": "https://esm.sh/react@19.2.7/jsx-runtime",
+    "react-dom": "https://esm.sh/react-dom@19.2.7?external=react",
+    "react-dom/client": "https://esm.sh/react-dom@19.2.7/client?external=react",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@9.6.1?external=react,react-dom,three",
+    "@react-three/drei": "https://esm.sh/@react-three/drei@10.7.7?external=react,react-dom,three,@react-three/fiber"
   }
 }
 </script>
+<!--
+  WP-5: `three` bumped 0.160.0 -> 0.185.1 to match cloth-lab's own pinned
+  version (package.json: "three": "^0.185.1") — the whole point of routing
+  both apps' three.js through this one import map is that they load the
+  EXACT SAME module instance (two separate Three.js copies in one page is a
+  real bug class: instanceof checks across the two fail silently). Checked
+  directly against the pinned 0.160.0 source before this bump (see
+  three-view.js's own WP-9.2/9.3 comments) that every API this app's
+  three-view.js uses (ACESFilmicToneMapping, SRGBColorSpace, transmission,
+  anisotropy, RGBELoader, PCFSoftShadowMap, OrbitControls, GLTFLoader) is
+  present in both versions — confirmed again after the bump via the
+  existing Playwright smoke spec, not just assumed stable across 25 releases.
+  react/react-dom/@react-three/fiber/@react-three/drei: React 19 has no
+  ready-to-serve browser ESM build on a plain file host like unpkg (its
+  package exports are structured for a bundler) — esm.sh transpiles/bundles
+  on the fly AND supports `?external=` to make a downstream package (fiber,
+  drei) import react/react-dom/three as bare specifiers instead of pulling
+  in its own copies, which is what lets this import map be the single
+  source of truth for those three shared libraries. Confirmed by fetching
+  fiber's actual served module and checking its own import statements
+  reference bare `"react"`/`"three"` (resolved by this map), not a
+  esm.sh-hosted react/three of its own.
+-->
 </head>
 <body data-theme="intl" data-mode="light" data-contrast="normal">
 
@@ -110,12 +140,19 @@
           </div>
         </div>
 
-        <!-- Cloth Lab layer: a separate React/R3F app (cloth-lab/), embedded
-             via iframe rather than merged in — different framework, own
-             build/deploy. src is set lazily on first switch (see
-             loadClothLab in app.js), not on page load. -->
+        <!-- Cloth Lab layer: a separate React/R3F app (cloth-lab/). Two
+             mount strategies, gated by state.clothLabEngine (WP-5.5):
+             "iframe" (default) — the original approach, own build/deploy,
+             src set lazily on first switch (loadClothLab in app.js).
+             "embedded" — cloth-lab's lib build (cloth-lab/dist-embed/,
+             WP-5.4) mounted directly into #clothLabEmbed via its own
+             mount()/update() API, sharing this page's React/three.js
+             instances through the import map above instead of loading a
+             second framework copy inside an iframe. Only one of the two
+             is ever populated at a time; the other stays empty. -->
         <div class="clothlab-wrap" id="viewClothLab">
           <iframe id="clothLabFrame" title="3D Cloth Lab"></iframe>
+          <div id="clothLabEmbed" style="width:100%;height:100%"></div>
         </div>
 
         <!-- empty state -->

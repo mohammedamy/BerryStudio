@@ -1,0 +1,12 @@
+/* WP-5.2: the one page-level rule that's correct ONLY when this app owns
+   the whole page (the standalone build, main.jsx) — html/body need a real
+   100%-height ancestor chain for .cloth-lab-root's own height:100% (see
+   index.css) to actually fill the viewport. NOT imported by embed.js: the
+   embedded build is mounted inside the root app's own page, which owns
+   its own html/body sizing.
+*/
+html,
+body {
+  height: 100%;
+  margin: 0;
+}

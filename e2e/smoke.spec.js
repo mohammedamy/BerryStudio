@@ -96,3 +96,49 @@ test('AI Provider settings panel renders and a mocked Test Connection round-trip
 
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
+
+// BerryStudio-Upgrade-Plan WP-5.5: the feature-flagged "embedded" Cloth Lab
+// engine (React/R3F mounted directly into #clothLabEmbed via the shared
+// import map, replacing the default cross-document iframe) actually mounts
+// and renders. Run in real Chromium via Playwright rather than the
+// interactive dev tool's own WebKit-based browser pane, which was observed
+// to fail dynamic `import('react')` even though the import map is correctly
+// present in the DOM — a tool-specific limitation, not a bug in this code
+// (confirmed by this same check passing here).
+test('embedded Cloth Lab engine mounts real content with no console errors', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+  page.on('console', (msg) => {
+    if (msg.type() !== 'error') return;
+    if (/Failed to load resource.*404/.test(msg.text())) return;
+    errors.push(msg.text());
+  });
+
+  await page.goto('/index.html');
+  const skip = page.getByRole('button', { name: 'Skip' });
+  if (await skip.isVisible().catch(() => false)) await skip.click();
+
+  // Flip the engine flag via the real Settings UI, not a localStorage
+  // shortcut — this also exercises the toggle rendering itself.
+  await page.locator('#settingsBtn').click();
+  await expect(page.locator('#settingsModal')).toHaveClass(/show/);
+  await page.getByRole('button', { name: 'Embedded', exact: true }).click();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: '3D Cloth Lab' }).click();
+
+  const embedContainer = page.locator('#clothLabEmbed');
+  await expect(embedContainer).toBeVisible();
+  // React having actually mounted into the container, not just the div
+  // existing — the concrete assertion the dynamic import() + mount() call
+  // succeeded rather than silently failing into the .catch() in
+  // mountClothLabEmbedded() (js/app.js).
+  await expect(embedContainer.locator('canvas')).toBeVisible({ timeout: 15000 });
+
+  // The iframe path must be genuinely inactive, not just visually hidden —
+  // .engine-embedded's CSS rule (css/styles.css) is what proves the flag
+  // actually took effect end-to-end, not merely that a canvas rendered.
+  await expect(page.locator('#viewClothLab')).toHaveClass(/engine-embedded/);
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});

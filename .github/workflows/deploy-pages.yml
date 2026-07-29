@@ -1,10 +1,15 @@
 name: Deploy to GitHub Pages
 
 # Publishes the existing static production site (index.html, css/, js/,
-# icons/, manifest.webmanifest, sw.js) UNCHANGED at the domain root, plus the
-# cloth-lab/ Vite app built and published at a /cloth-lab/ subpath alongside
-# it — one combined artifact, not a replacement of the production site. See
-# cloth-lab/vite.config.js's `base` for the matching subpath.
+# icons/, env/, schema/, manifest.webmanifest, sw.js) UNCHANGED at the domain
+# root, plus the cloth-lab/ Vite app built and published at a /cloth-lab/
+# subpath alongside it — one combined artifact, not a replacement of the
+# production site. See cloth-lab/vite.config.js's `base` for the matching
+# subpath. Also builds and publishes cloth-lab's embedded-library bundle
+# (dist-embed/, WP-5) at /cloth-lab/dist-embed/ — js/app.js's
+# mountClothLabEmbedded() resolves it relative to its own module URL, so it
+# must land at exactly that path for the "embedded" engine flag to work in
+# production.
 on:
   push:
     branches: [main]
@@ -73,17 +78,23 @@ jobs:
         run: npm ci
         working-directory: cloth-lab
 
-      - name: Build cloth-lab
+      - name: Build cloth-lab (standalone)
         run: npm run build
+        working-directory: cloth-lab
+
+      - name: Build cloth-lab (embedded library, WP-5)
+        run: npm run build:embed
         working-directory: cloth-lab
 
       - name: Assemble combined site
         run: |
           set -e
           mkdir -p _site
-          cp -r index.html css icons js manifest.webmanifest sw.js _site/
+          cp -r index.html css icons js env schema manifest.webmanifest sw.js _site/
           mkdir -p _site/cloth-lab
           cp -r cloth-lab/dist/. _site/cloth-lab/
+          mkdir -p _site/cloth-lab/dist-embed
+          cp -r cloth-lab/dist-embed/. _site/cloth-lab/dist-embed/
 
       - uses: actions/upload-pages-artifact@v3
         with:

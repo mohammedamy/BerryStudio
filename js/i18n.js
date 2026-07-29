@@ -106,6 +106,10 @@ export const I18N = {
     sc_undo: "Undo / Redo", sc_cmd: "Command palette", sc_esc: "Close dialogs & menus",
     avatarModels: "3D avatar models (GLB)",
     avatarModelsD: "Optional: paste a GLB model URL per category (e.g. a Ready Player Me link ending in .glb) to replace the built-in stylised bodies with photoreal avatars. Leave blank to keep the defaults.",
+    clothLabEngine: "3D Cloth Lab engine",
+    clothLabEngineD: "\"Iframe\" (default) loads Cloth Lab as a separate embedded app — the safest, most isolated option. \"Embedded\" mounts it directly into this page instead, sharing this page's own React/Three.js so it starts faster and updates instantly — an experimental option, still being rolled out.",
+    clothLabEngineIframe: "Iframe",
+    clothLabEngineEmbedded: "Embedded",
     // pattern summary export
     patternSummary: "Pattern Summary", patternSummaryD: "One-page bilingual sheet: size table, a labelled diagram per piece, and a construction note — ready to print or save as PDF.",
     summaryNote: "Note: {n} cm seam allowance is left on every cutting line — adjust to your own base measurements and your fabric's stretch.",
@@ -324,6 +328,10 @@ export const I18N = {
     sc_undo: "تراجع / إعادة", sc_cmd: "لوحة الأوامر", sc_esc: "إغلاق النوافذ والقوائم",
     avatarModels: "نماذج المجسم ثلاثي الأبعاد (GLB)",
     avatarModelsD: "اختياري: الصق رابط نموذج GLB لكل فئة (مثل رابط Ready Player Me المنتهي بـ .glb) لاستبدال الأجسام المدمجة بمجسمات واقعية. اتركه فارغًا للإبقاء على الافتراضي.",
+    clothLabEngine: "محرك معمل القماش ثلاثي الأبعاد",
+    clothLabEngineD: "\"إطار مضمّن\" (الافتراضي) يحمّل معمل القماش كتطبيق منفصل مضمّن — الخيار الأكثر أمانًا وعزلًا. \"مدمج\" يضمّه مباشرة في هذه الصفحة بدلًا من ذلك، مستخدمًا React/Three.js الخاصين بهذه الصفحة نفسها، فيبدأ أسرع ويتحدّث فورًا — خيار تجريبي لا يزال قيد الطرح.",
+    clothLabEngineIframe: "إطار مضمّن",
+    clothLabEngineEmbedded: "مدمج",
     // pattern summary export
     patternSummary: "ملخص الباترون", patternSummaryD: "صفحة واحدة ثنائية اللغة: جدول المقاسات، رسم موضّح لكل قطعة، وملاحظة تفصيلية — جاهزة للطباعة أو الحفظ كملف PDF.",
     summaryNote: "تنبيه: تم ترك {n} سم مسافة خياطة على كل خطوط القص — يجب ضبطها وفقًا لقياساتك الأساسية ومرونة القماش.",

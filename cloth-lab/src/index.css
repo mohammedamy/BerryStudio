@@ -1,4 +1,19 @@
-:root {
+/* WP-5.2: everything here is scoped under .cloth-lab-root (the mount
+   node — #root in the standalone build, whatever container embed.js's
+   mount() receives in the embedded build) rather than :root/html/body.
+   Those global selectors are correct ONLY when this app owns the whole
+   page — the root BerryStudio app already defines its OWN --bg/--panel/
+   --panel-2/--accent custom properties (css/styles.css, multi-theme) on
+   :root for its own theming; a plain `:root { --bg: ... }` block here
+   would silently overwrite those for the entire host page the moment this
+   is embedded, breaking the root app's look outside this component
+   entirely. CSS custom properties inherit through descendants regardless
+   of which ancestor declares them, so scoping to the mount node changes
+   nothing for consumers (`var(--bg)` etc. everywhere else in this app) —
+   see standalone.css for the one page-level rule (`html,body{height:100%}`)
+   that's still correctly global-only, imported by main.jsx alone.
+*/
+.cloth-lab-root {
   --bg: #14151a;
   --panel: #1c1e26;
   --panel-2: #23252f;
@@ -10,38 +25,29 @@
   --danger: #ff5d6c;
   --radius: 10px;
   color-scheme: dark;
-}
 
-* {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
   height: 100%;
   margin: 0;
-}
-
-body {
+  display: flex;
+  flex-direction: column;
   font: 14px/1.5 -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
   overscroll-behavior: none;
 }
 
-button,
-select,
-input {
+.cloth-lab-root,
+.cloth-lab-root * {
+  box-sizing: border-box;
+}
+
+.cloth-lab-root button,
+.cloth-lab-root select,
+.cloth-lab-root input {
   font: inherit;
   color: inherit;
 }
 
-button {
+.cloth-lab-root button {
   cursor: pointer;
-}
-
-#root {
-  display: flex;
-  flex-direction: column;
 }

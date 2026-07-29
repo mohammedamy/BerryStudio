@@ -9,6 +9,7 @@ import SeamEditorScene from '../seam/SeamEditorScene'
 import PostFX from './PostFX'
 import AdaptiveDpr from './AdaptiveDpr'
 import ExportControls from './ExportControls'
+import { getAssetBase } from '../assetBase'
 
 // The actual <Canvas> contents: lighting, ground, avatar, orbit camera.
 export default function Scene({ dims, debugView, fabricId, skinToneId, garment, seamEditor, avatarGLBUrl, statsRef, exportRef }) {
@@ -38,7 +39,7 @@ export default function Scene({ dims, debugView, fabricId, skinToneId, garment, 
           third-party GitHub-raw proxy with no SLA) so this has zero live
           network dependency during a demo. Doesn't touch the scene background
           (set above) — reflections/lighting only. */}
-      <Environment files={`${import.meta.env.BASE_URL}env/studio_small_08_1k.hdr`} background={false} />
+      <Environment files={`${getAssetBase()}env/studio_small_08_1k.hdr`} background={false} />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[6, 6]} />

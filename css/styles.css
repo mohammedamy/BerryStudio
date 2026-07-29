@@ -174,6 +174,12 @@ button { cursor: pointer; border: none; background: none; }
 .clothlab-wrap.show { display: block; }
 .clothlab-wrap iframe { width: 100%; height: 100%; border: 0; display: block; }
 .canvas-wrap.clothlab #patternCanvas { visibility: hidden; }
+/* WP-5.5: state.clothLabEngine==="embedded" adds .engine-embedded — only
+   one of the two mount targets is ever visible at a time, default
+   (no class) keeps today's iframe-only behavior unchanged. */
+.clothlab-wrap #clothLabEmbed { display: none; }
+.clothlab-wrap.engine-embedded iframe { display: none; }
+.clothlab-wrap.engine-embedded #clothLabEmbed { display: block; }
 
 /* 3D loading overlay */
 .v3d-loading {

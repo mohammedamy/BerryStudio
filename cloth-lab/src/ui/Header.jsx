@@ -9,7 +9,14 @@ const DEBUG_VIEWS = [
   { id: 'seams', label: 'Seams', title: 'Interactively author seam pairings for an imported pattern, in 3D' },
 ]
 
-export default function Header({ category, onCategoryChange, debugView, onDebugViewChange }) {
+// WP-5.3: `embedded` hides the title and category switcher — both are
+// redundant chrome once mounted inside the root BerryStudio app's own tab
+// UI, which already shows its own branding and its own Women/Men/Girls/
+// Boys switcher one level up (category flows in via the `pattern` prop
+// instead — see App.jsx). The debug-view switcher (Off/Pieces/Weld/Cloth/
+// Seams) stays either way: it's genuinely unique to cloth-lab, no root-app
+// equivalent exists to defer to.
+export default function Header({ embedded = false, category, onCategoryChange, debugView, onDebugViewChange }) {
   return (
     <header
       style={{
@@ -17,7 +24,7 @@ export default function Header({ category, onCategoryChange, debugView, onDebugV
         borderBottom: '1px solid var(--border)', background: 'var(--panel)', flex: '0 0 auto',
       }}
     >
-      <strong style={{ fontSize: 15 }}>BerryStudio 3D — Cloth Lab</strong>
+      {!embedded && <strong style={{ fontSize: 15 }}>BerryStudio 3D — Cloth Lab</strong>}
       <div style={{ display: 'flex', gap: 4 }}>
         {DEBUG_VIEWS.map((v) => (
           <button
@@ -34,21 +41,23 @@ export default function Header({ category, onCategoryChange, debugView, onDebugV
           </button>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 4, marginInlineStart: 'auto' }}>
-        {CATEGORIES.map((c) => (
-          <button
-            key={c}
-            onClick={() => onCategoryChange(c)}
-            style={{
-              padding: '6px 14px', borderRadius: 999, border: '1px solid var(--border)',
-              background: c === category ? 'var(--accent)' : 'var(--panel-2)',
-              color: c === category ? '#fff' : 'var(--text)',
-            }}
-          >
-            {LABELS[c]}
-          </button>
-        ))}
-      </div>
+      {!embedded && (
+        <div style={{ display: 'flex', gap: 4, marginInlineStart: 'auto' }}>
+          {CATEGORIES.map((c) => (
+            <button
+              key={c}
+              onClick={() => onCategoryChange(c)}
+              style={{
+                padding: '6px 14px', borderRadius: 999, border: '1px solid var(--border)',
+                background: c === category ? 'var(--accent)' : 'var(--panel-2)',
+                color: c === category ? '#fff' : 'var(--text)',
+              }}
+            >
+              {LABELS[c]}
+            </button>
+          ))}
+        </div>
+      )}
     </header>
   )
 }
