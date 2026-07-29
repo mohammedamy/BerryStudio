@@ -1715,6 +1715,12 @@ import { ImageProviders, IMAGE_PROVIDER_IDS } from './image-providers.js';
         id: ((p.name&&p.name.en)||"piece").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")+"_"+i,
         label: p.name || {en:"Piece "+(i+1), ar:"قطعة "+(i+1)},
         outline: p.outline,
+        darts: p.darts, notches: p.notches, grain: p.grain,
+        // BerryStudio-Upgrade-Plan WP-6: forward declared metadata so
+        // cloth-lab's importer can use it instead of guessing from `label`
+        // — see cloth-lab/src/pattern/importFromApp.js and roles.js.
+        role: p.role, cutOnFold: p.cutOnFold, foldEdgeIndex: p.foldEdgeIndex,
+        bilateral: p.bilateral, edges: p.edges, grainline: p.grainline,
       })),
     };
   }

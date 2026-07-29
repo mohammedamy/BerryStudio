@@ -96,13 +96,120 @@ export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */,
   })
 }
 
-// Dispatch by piece role + id (sleeveL/sleeveR need opposite `side`).
+// Gore panel: a radial wedge placed at a FIXED angular slot around the hip/
+// hem circumference (front centered at 0°, back at 180°, sides at ±90°),
+// each spanning a fixed angular width — not chained to its neighbor gores'
+// actual computed edges (see placement.js's own header comment: placement
+// only needs to be close and non-overlapping, constraint relaxation does
+// the rest). Four fixed slots because that's the real vocabulary every
+// gored-skirt Fancy Collection design uses (front/back/side-left/side-
+// right), not a generalized N-gore scheme — see pattern/roles.js.
+const GORE_ANGLE = Math.PI * 0.42 // half-width per gore slot — 4 slots cover most of the circumference with small honest gaps, not full overlap
+export function placeGorePanel(positions2D, dims, angleCenter) {
+  const topWorldY = dims.hipY + dims.span * 0.44 // waist height, matches placeHipPanel's own anchor
+  const xs = positions2D.map(([x]) => x)
+  const minX = Math.min(...xs), maxX = Math.max(...xs)
+  const width = Math.max(1e-6, maxX - minX)
+  const ys = positions2D.map(([, y]) => y)
+  const hemReachCm = Math.max(1e-6, Math.max(...ys) - Math.min(...ys))
+  const hipEdgeR = radiusAtHeight(dims, dims.hipY) * 1.1
+  return positions2D.map(([xCm, yCm]) => {
+    const worldY = topWorldY - cm(yCm)
+    // Above the hip, follow the body profile like any other panel. Below
+    // it, radiusAtHeight collapses toward the (much narrower) thigh/leg
+    // radius — right for a body-hugging panel, wrong for a gore, which is
+    // cut wider toward its hem specifically so it flares AWAY from the
+    // body once it hangs. Anchor at the hip radius and grow outward with
+    // how far down the panel's own pattern reaches instead of tracking
+    // the leg surface, or the hem ends up placed inside the leg mesh —
+    // occluded and invisible, not just badly draped.
+    const r = worldY >= dims.hipY
+      ? radiusAtHeight(dims, worldY) * 1.1
+      : lerp(hipEdgeR, hipEdgeR * 1.9, Math.min(1, (dims.hipY - worldY) / cm(hemReachCm)))
+    const t = (xCm - minX) / width // 0..1 across the wedge's own width
+    const theta = angleCenter + (t - 0.5) * GORE_ANGLE
+    return [r * Math.sin(theta), worldY, r * Math.cos(theta)]
+  })
+}
+
+// ---------------- WP-6 attachment placements ----------------
+// These cover roles that get a reasonable position but no auto-seam this
+// pass (collar/hood/cape/yoke/waistband/peplum/sash/godet/tier/pocket/
+// facing/lining/cuff — see pattern/roles.js's own header comment for why).
+// All are simple, closed-form functions of `dims` + a small per-role
+// vertical/depth offset and a `side` for bilateral pieces (hood/godet) —
+// deliberately not "walk the seam graph and align to a neighbor's computed
+// edge," which would need a real rigid-alignment (Procrustes) solve for a
+// benefit placement.js's own header comment already says isn't needed
+// ("does not need to register with drafting precision").
+const bboxCenterX = (positions2D) => {
+  let minX = Infinity, maxX = -Infinity
+  for (const [x] of positions2D) { if (x < minX) minX = x; if (x > maxX) maxX = x }
+  return (minX + maxX) / 2
+}
+
+// Neckline-attached: collar/hood/cape/yoke — centered at the neck, small
+// forward offset so it doesn't z-fight the bodice, hanging down over the
+// piece's own local Y extent.
+export function placeAttachNeck(positions2D, dims, side = 0) {
+  const worldY = dims.shoulderY + dims.span * 0.02
+  const cx = bboxCenterX(positions2D)
+  const zOffset = 0.02
+  return positions2D.map(([xCm, yCm]) => [
+    cm(xCm - cx) + side * dims.shoulderHalf * 0.5,
+    worldY - cm(yCm),
+    zOffset,
+  ])
+}
+
+// Waist-attached: waistband/peplum/sash — centered at the waist.
+export function placeAttachWaist(positions2D, dims, zSign = 1) {
+  const worldY = dims.hipY + dims.span * 0.44
+  const cx = bboxCenterX(positions2D)
+  return positions2D.map(([xCm, yCm]) => [cm(xCm - cx), worldY - cm(yCm), zSign * 0.02])
+}
+
+// Hem-attached: godet/tier — centered at the garment hem height, hanging down.
+export function placeAttachHem(positions2D, dims, side = 0) {
+  const worldY = dims.hipY - dims.legLen * 0.1
+  const cx = bboxCenterX(positions2D)
+  return positions2D.map(([xCm, yCm]) => [
+    cm(xCm - cx) + side * dims.hipR * 0.6,
+    worldY - cm(yCm),
+    0.02,
+  ])
+}
+
+// Generic small body accessory: pocket/facing/lining/cuff — placed near
+// chest height, slightly recessed so linings sit behind the shell.
+export function placeAttachBody(positions2D, dims, zSign = 1) {
+  const worldY = dims.hipY + dims.span * 0.6
+  const cx = bboxCenterX(positions2D)
+  return positions2D.map(([xCm, yCm]) => [cm(xCm - cx), worldY - cm(yCm), zSign * 0.015])
+}
+
+// Dispatch by piece role + id (sleeveL/sleeveR, and WP-6's bilateral-
+// duplicated `_l`/`_r` suffixes, need opposite `side`). `*Back` variants of
+// the attachment roles are distinct role strings (not a boolean field)
+// specifically so triangulate.js's {pieceId,role,positions2D,...} shape
+// (used unmodified) never needs a new field threaded through it.
 export function placePiece(triangulated, dims) {
   const { pieceId, role, positions2D } = triangulated
+  const side = (pieceId.endsWith('L') || pieceId.endsWith('_l')) ? -1 : 1
   if (role === 'frontPanel') return placeTorsoPanel(positions2D, dims, { zSign: 1 })
   if (role === 'backPanel') return placeTorsoPanel(positions2D, dims, { zSign: -1 })
-  if (role === 'sleeve') return placeSleeve(positions2D, dims, pieceId.endsWith('L') ? -1 : 1)
+  if (role === 'sleeve') return placeSleeve(positions2D, dims, side)
   if (role === 'hipPanelFront') return placeHipPanel(positions2D, dims, { zSign: 1 })
   if (role === 'hipPanelBack') return placeHipPanel(positions2D, dims, { zSign: -1 })
+  if (role === 'goreFront') return placeGorePanel(positions2D, dims, 0)
+  if (role === 'goreBack') return placeGorePanel(positions2D, dims, Math.PI)
+  if (role === 'goreSideLeft') return placeGorePanel(positions2D, dims, -Math.PI / 2)
+  if (role === 'goreSideRight') return placeGorePanel(positions2D, dims, Math.PI / 2)
+  if (role === 'attachNeck') return placeAttachNeck(positions2D, dims, side)
+  if (role === 'attachWaist') return placeAttachWaist(positions2D, dims, 1)
+  if (role === 'attachWaistBack') return placeAttachWaist(positions2D, dims, -1)
+  if (role === 'attachHem') return placeAttachHem(positions2D, dims, side)
+  if (role === 'attachBody') return placeAttachBody(positions2D, dims, 1)
+  if (role === 'attachBodyBack') return placeAttachBody(positions2D, dims, -1)
   throw new Error(`placePiece: no placement heuristic for role "${role}"`)
 }

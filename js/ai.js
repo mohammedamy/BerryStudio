@@ -333,6 +333,11 @@ export const AIGen = (() => {
                [hipW+1,bod+(gh-bod)*0.42], ...hemFront],
       darts:waistDart, notches:[[chestW,3],[waistW+1,bod]],
       grain:[[chestW*0.5,9],[chestW*0.5,gh-6]],
+      // wrap styles skew the front hem's near corner off X=0 (an honest
+      // asymmetric overlap, not a fold) — cutOnFold would mirror that skew
+      // into a symmetric double-wide front, so wrap gets the un-folded
+      // front-panel role instead of bodice-front-center.
+      role: style.wrap ? "front-panel" : "bodice-front-center", cutOnFold: !style.wrap,
     };
     const back = {
       name:{en:en+" Back", ar:"ظهر "+ar},
@@ -342,6 +347,7 @@ export const AIGen = (() => {
                [hipW+0.5,bod+(gh-bod)*0.42], ...hemBack],
       darts:waistDart, notches:[[chestW,3.5]],
       grain:[[2,9],[2,gh-6]],
+      role:"bodice-back-center", cutOnFold:true,
     };
     const pieces=[front, back];
 
@@ -355,6 +361,7 @@ export const AIGen = (() => {
         outline:[[0,0],[bic,-cap],[bic*2,0],[bic*2-1,slen],[1,slen]],
         darts:[], notches:[[bic,-cap]],
         grain:[[bic,4],[bic,slen-4]],
+        role:"sleeve", bilateral:true,
       });
     }
     if(style.neckline==="collar" && style.type==="shirt"){
@@ -364,6 +371,7 @@ export const AIGen = (() => {
         desc:{en:"Two-piece collar for the button-front neckline.", ar:"ياقة من قطعتين لفتحة الأزرار الأمامية."},
         outline:[[0,0],[nc,0],[nc,7],[0,8]], darts:[], notches:[],
         grain:[[2,2],[nc-2,2]],
+        role:"collar",
       });
     }
     if(style.wrap){
@@ -372,6 +380,7 @@ export const AIGen = (() => {
         desc:{en:"Self-fabric sash for the wrap closure.", ar:"حزام من نفس القماش لإغلاق الفستان الملفوف."},
         outline:[[0,0],[8,0],[8,110],[0,110]], darts:[], notches:[],
         grain:[[4,10],[4,100]],
+        role:"wrap-tie",
       });
     }
     return pieces;
@@ -392,7 +401,13 @@ export const AIGen = (() => {
       grain:[[w/2,7],[w/2,len-7]] };
     const band={ name:{en:"Waistband", ar:"الحزام"},
       desc:{en:"Generated waistband.", ar:"حزام مولّد."},
-      outline:[[0,0],[m.waist*fit+4,0],[m.waist*fit+4,7],[0,7]], grain:[[3,2],[m.waist*fit,2]] };
+      outline:[[0,0],[m.waist*fit+4,0],[m.waist*fit+4,7],[0,7]], grain:[[3,2],[m.waist*fit,2]],
+      role:"waistband" };
+    // front/back trouser legs get no declared role: cloth-lab's WP-6 role
+    // vocabulary (roles.js) covers tops/dresses/skirts, not trouser legs —
+    // there's no placement heuristic for them, so leaving role undeclared
+    // (rather than forcing a wrong torso/hip placement) matches the
+    // existing, already-honest "skip what we don't understand" behavior.
     return [front, back, band];
   }
 
@@ -402,6 +417,16 @@ export const AIGen = (() => {
     const gh=clamp(m.inseam*0.6*style.lengthF, 20, m.inseam);
     const hem=Math.max(w, w*style.flareF);
     const wrapCut = style.wrap ? w*0.4 : 0;
+    // front/back panels get no declared role here: they're genuinely
+    // half-width fold pieces whenever !style.wrap (like buildTop's front/
+    // back), but roles.js's hip-panel-front/hip-panel-back have no
+    // cutOnFold default (unlike the bodice-*-center roles) and the wrap
+    // case skews the front hem off-fold the same way buildTop's does — so,
+    // unlike buildTop, there's no single role name that's correct in both
+    // cases. Leaving role undeclared here routes through classifyLegacy,
+    // whose geometric isFoldPiece() check already handles both shapes
+    // correctly (these pieces are literally named "Front Skirt"/"Back
+    // Skirt", which classify() already recognizes as skirt-front/skirt-back).
     const panel=(en,ar,side)=>{
       const hemLine = hemPts(style, side==="front"?-wrapCut:0, hem, gh, gh, side);
       return { name:{en, ar},
@@ -410,10 +435,12 @@ export const AIGen = (() => {
     };
     const band={ name:{en:"Waistband", ar:"الحزام"},
       desc:{en:"Generated waistband.", ar:"حزام مولّد."},
-      outline:[[0,0],[m.waist*fit+4,0],[m.waist*fit+4,7],[0,7]], grain:[[3,2],[m.waist*fit,2]] };
+      outline:[[0,0],[m.waist*fit+4,0],[m.waist*fit+4,7],[0,7]], grain:[[3,2],[m.waist*fit,2]],
+      role:"waistband" };
     const pieces=[panel("Front Skirt","تنورة أمامية","front"), panel("Back Skirt","تنورة خلفية","back"), band];
     if(style.wrap) pieces.push({ name:{en:"Tie Sash", ar:"حزام ربط"}, desc:{en:"Self-fabric sash for the wrap closure.", ar:"حزام من نفس القماش لإغلاق التنورة الملفوفة."},
-      outline:[[0,0],[7,0],[7,90],[0,90]], grain:[[3.5,8],[3.5,82]] });
+      outline:[[0,0],[7,0],[7,90],[0,90]], grain:[[3.5,8],[3.5,82]],
+      role:"wrap-tie" });
     return pieces;
   }
 

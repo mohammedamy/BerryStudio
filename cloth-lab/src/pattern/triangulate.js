@@ -6,6 +6,19 @@ function edgeRawPoints(piece, edgeName) {
   const { from, to } = piece.seamEdges[edgeName]
   const n = piece.outline.length
   const pts = []
+  // from===to is finalizePiece's sentinel for "one edge covers the whole
+  // perimeter" (see piece.js's totalSteps `|| n` fallback) — a piece with
+  // zero declared edges gets exactly this from seamAuthoring.js. Walking
+  // "push, stop once i===to" like the multi-edge case would stop after a
+  // single point instead of going all the way around.
+  if (from === to) {
+    let i = from
+    for (let k = 0; k < n; k++) {
+      pts.push(piece.outline[i])
+      i = (i + 1) % n
+    }
+    return pts
+  }
   let i = from
   while (true) {
     pts.push(piece.outline[i])

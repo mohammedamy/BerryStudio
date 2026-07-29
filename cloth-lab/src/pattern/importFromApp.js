@@ -2,34 +2,24 @@
 // js/app.js's buildClothLabPayload/syncClothLab) into raw pieces + roles +
 // a best-effort seam suggestion, ready to seed useSeamEditor.
 //
-// Closed-world by design: only pieces that look like they came from the root
-// app's js/ai.js / js/data.js generator family (front/back torso or hip
-// panels, a single symmetric sleeve) are recognized. Anything else — most
-// notably js/fancy-patterns.js's princess-seam/gore/godet shapes, which are
-// structurally incompatible with this classifier and would silently mis-
-// drape if treated as a plain front/back panel — is excluded with a reason
-// rather than guessed at. The caller (App.jsx) always lands the result in
-// the Seams debug view for human review before simulating; nothing here ever
-// calls setGarment directly.
+// BerryStudio-Upgrade-Plan WP-6: pieces that declare a `role` (js/data.js,
+// js/ai.js, js/fancy-patterns.js all now attach role/cutOnFold/bilateral/
+// edges at construction time — see pattern/roles.js) go through the THIN
+// METADATA-PATH VALIDATOR below — no name guessing, no geometric
+// classification of WHAT a piece is. Only pieces with no declared role (or
+// an unrecognized one — legacy saved projects, hand-typed piece names)
+// fall back to CLASSIFY_LEGACY, the original closed-world name-matching
+// classifier this file used exclusively before WP-6. Both paths feed the
+// same rawPieces/roles/edgeInstructions/seamInstructions/recognized/skipped
+// collections, so a payload can freely mix metadata-bearing and legacy
+// pieces (e.g. an old saved project touched up with newer patterns).
 //
-// Two geometric operations this file introduces, neither of which exists
-// elsewhere in cloth-lab:
-//  - unfoldPiece: the root app draws torso/hip panels as HALF pieces (cut on
-//    fold, one side only — confirmed directly against js/ai.js's buildTop/
-//    buildSkirt AND against a real hand-authored js/data.js pattern), while
-//    cloth-lab's placement (placeTorsoPanel/placeHipPanel) expects a FULL
-//    symmetric panel like tshirt.js's hand-authored front/back. This mirrors
-//    the half across its fold edge and merges it into one full outline —
-//    distinct from tshirt.js's existing mirrorPieceX, which duplicates a
-//    piece into a SEPARATE one (used below for sleeves) rather than merging.
-//  - isFoldPiece: detects a half-piece by checking whether the outline's
-//    closing edge (last point back to first) sits at the piece's own
-//    leftmost extent — a position-invariant structural test (survives
-//    js/canvas.js's layoutPieces() shifting every piece's coordinates by an
-//    arbitrary amount, confirmed against real payload data) that doesn't
-//    depend on matching any generator's exact point count/formula.
+// The caller (App.jsx) always lands the result in the Seams debug view for
+// human review before simulating; nothing here ever calls setGarment
+// directly.
+import { resolveSchemaRole } from './roles.js'
 
-// ---------- role classification (mirrors js/app.js's classifyPart) ----------
+// ---------- CLASSIFY_LEGACY: role classification (mirrors js/app.js's classifyPart) ----------
 
 const IGNORE_RE = /waistband|collar|cuff|sash|tie|gusset|facing|pocket|lining|\bband\b/i
 const SLEEVE_RE = /sleeve|كم/i
@@ -40,8 +30,10 @@ const BACK_RE = /back|خلف/i
 
 // Returns one of: 'sleeve' | 'bodice-front' | 'bodice-back' | 'skirt-front' |
 // 'skirt-back' | {ignore:true} | {unrecognized:true} — never guesses front
-// vs back when neither name pattern matches.
-function classify(labelEn) {
+// vs back when neither name pattern matches. UNCHANGED from the pre-WP-6
+// classifier — kept verbatim as the fallback for pieces with no declared
+// (or unrecognized) role.
+function classifyLegacy(labelEn) {
   const name = (labelEn || '').toLowerCase()
   if (IGNORE_RE.test(name)) return { ignore: true, reason: 'accessory piece (no 3D placement for it yet)' }
   if (SLEEVE_RE.test(name)) return 'sleeve'
@@ -52,7 +44,7 @@ function classify(labelEn) {
   return { unrecognized: true, reason: 'couldn’t tell if this is a front or back piece from its name' }
 }
 
-// ---------- geometry ----------
+// ---------- geometry (shared by both paths) ----------
 
 function bbox(outline) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
@@ -78,11 +70,10 @@ function relocalize(outline) {
 
 // A half (cut-on-fold) piece's closing edge — outline[last] back to
 // outline[0] — sits at the piece's own leftmost extent and runs roughly
-// vertically (small X span relative to the piece's total width). Checked
-// against real data: both js/ai.js-generated and hand-authored js/data.js
-// front/back panels and skirt panels satisfy this; a sleeve (which needs
-// duplication, not unfolding — filtered out by role before this ever runs)
-// would too by coincidence, which is exactly why role is checked first.
+// vertically (small X span relative to the piece's total width). Still used
+// by classifyLegacy's path (geometric detection, no declared metadata to
+// trust); the metadata path trusts a declared `cutOnFold` instead of
+// re-deriving this.
 function isFoldPiece(outline) {
   const n = outline.length
   if (n < 3) return false
@@ -106,13 +97,20 @@ function unfoldPiece(outline) {
   return outline.concat(mirrored)
 }
 
-// tshirt.js's own mirrorPieceX, adapted to work on a plain outline (before
-// finalizePiece) rather than an already-finalized piece — duplicates into a
-// SEPARATE mirrored outline (for sleeves: the root app draws one symmetric
-// sleeve standing in for a mirrored L/R pair, unlike a fold piece which is
-// one physical half of a single piece).
+// Duplicates into a SEPARATE mirrored outline (for sleeves and, since WP-6,
+// any other `bilateral` piece: the root app draws one symmetric piece
+// standing in for a mirrored L/R pair).
 function mirrorOutline(outline) {
   return outline.slice().reverse().map(([x, y]) => [-x, y])
+}
+
+// Transforms declared edge index ranges to refer to the correct points in a
+// MIRROR-DUPLICATED copy of a piece (see mirrorOutline): mirroring reverses
+// point order and negates X, so a forward walk [fromIdx,toIdx] in the
+// original corresponds to a forward walk [n-1-toIdx, n-1-fromIdx] in the
+// mirrored copy (same physical curve, opposite winding).
+function mirrorEdgeIndices(edges, n) {
+  return edges.map((e) => ({ ...e, fromIdx: (n - 1 - e.toIdx + n) % n, toIdx: (n - 1 - e.fromIdx + n) % n }))
 }
 
 // Locates the shoulder/side (or waist/side, for a skirt panel) seam-worthy
@@ -120,8 +118,9 @@ function mirrorOutline(outline) {
 // point index — robust to different source generators producing different
 // point counts/hem shapes. Point 0 is always the fold-line's shared top
 // vertex (center-front/back neck or waist) by construction of unfoldPiece.
-// Returns edge instructions only (fromIdx/toIdx) — never touches seam state
-// directly, see convertAppPattern for why.
+// Used by BOTH paths: classifyLegacy's simple front/back panels, and the
+// metadata path's princess-center panels (post-unfold, its rightSide/
+// leftSide split IS the princess seam — see convertAppPattern below).
 function deriveTorsoEdgeInstructions(outline, { includeTop }) {
   const n = outline.length
   const half = Math.floor(n / 2) // unfoldPiece is symmetric: n = 2*(orig-1)
@@ -138,7 +137,24 @@ function deriveTorsoEdgeInstructions(outline, { includeTop }) {
   return out
 }
 
+// Self-tube-seams a single sleeve outline (cap-top(0)/cuff-bottom split,
+// matched by VALUE — max Y = cuff — same reasoning as deriveTorsoEdgeInstructions).
+// Shared by both paths' sleeve handling.
+function sleeveTubeEdges(outline) {
+  const n = outline.length
+  let cuffIdx = 0, cuffY = -Infinity
+  for (let i = 0; i < n; i++) if (outline[i][1] > cuffY) { cuffY = outline[i][1]; cuffIdx = i }
+  if (cuffIdx <= 0 || cuffIdx >= n - 1) return null
+  return { frontSeam: { from: 0, to: cuffIdx }, backSeam: { from: cuffIdx, to: n - 1 } }
+}
+
 const FABRIC_NAME_TO_ID = new Set(['chiffon', 'silk', 'satin', 'cotton', 'linen', 'wool', 'denim', 'leather'])
+
+const SLEEVE_ROLES = new Set(['sleeve', 'cap-sleeve', 'puff-sleeve', 'butterfly-sleeve'])
+// Roles that get bilateral duplication but NOT auto-seamed (drape from
+// placement + gravity alone this pass — see pattern/roles.js's header for
+// the "unstitched but well-placed" precedent this follows).
+const UNSEAMED_BILATERAL_ROLES = new Set(['hood', 'godet', 'sleeve-upper', 'sleeve-under'])
 
 // The single entry point. Never throws — always returns a best-effort
 // result; anything it couldn't use is in `skipped` with a human-readable
@@ -151,71 +167,137 @@ export function convertAppPattern(payload) {
   const recognized = []
   const skipped = []
 
-  const bySlot = {} // 'bodice-front' | 'bodice-back' | 'skirt-front' | 'skirt-back' -> converted piece id
+  const bySlot = { frontPanel: [], backPanel: [], hipPanelFront: [], hipPanelBack: [] }
   const sleeves = []
+  const seamIdEdges = {} // seamId -> [{pieceId, fromIdx, toIdx}] — resolved into seams after the main loop
+
+  function pushEdge(pieceId, edgeName, from, to) {
+    edgeInstructions.push({ pieceId, edgeName, fromIdx: from, toIdx: to })
+  }
 
   for (const p of payload.pieces || []) {
     const label = (p.label && p.label.en) || p.id
-    const cls = classify(label)
-    if (cls && typeof cls === 'object') {
-      skipped.push({ label, reason: cls.reason })
+    const resolved = resolveSchemaRole(p.role)
+
+    if (!resolved) {
+      // ---------- CLASSIFY_LEGACY path (unchanged from pre-WP-6) ----------
+      const cls = classifyLegacy(label)
+      if (cls && typeof cls === 'object') { skipped.push({ label, reason: cls.reason }); continue }
+      const local = relocalize(p.outline)
+
+      if (cls === 'sleeve') { sleeves.push({ id: p.id, label, outline: local }); continue }
+
+      const slotKey = { 'bodice-front': 'frontPanel', 'bodice-back': 'backPanel', 'skirt-front': 'hipPanelFront', 'skirt-back': 'hipPanelBack' }[cls]
+      if (bySlot[slotKey].length) {
+        skipped.push({ label, reason: `already have a piece for "${cls}" (${bySlot[slotKey][0].label}) — this pattern has more structure than the importer understands` })
+        continue
+      }
+      const isSkirt = cls.startsWith('skirt')
+      const outline = isFoldPiece(local) ? unfoldPiece(local) : local
+      rawPieces.push({ id: p.id, label: p.label, outline })
+      roles[p.id] = slotKey
+      bySlot[slotKey].push({ id: p.id, label })
+      for (const e of deriveTorsoEdgeInstructions(outline, { includeTop: !isSkirt })) pushEdge(p.id, e.name, e.from, e.to)
+      recognized.push({ id: p.id, label })
       continue
     }
+
+    // ---------- WP-6 metadata path: thin structural validation, trust the declared role ----------
+    const { role: schemaRole, placement, cutOnFold, bilateral, edges, princessSeamId } = resolved
     const local = relocalize(p.outline)
 
-    if (cls === 'sleeve') {
+    if (SLEEVE_ROLES.has(schemaRole)) {
       sleeves.push({ id: p.id, label, outline: local })
       continue
     }
 
-    // bodice-front / bodice-back / skirt-front / skirt-back. A SECOND piece
-    // landing on the same slot (e.g. a princess-seam pattern's "Bodice Front
-    // Center" AND "Bodice Front Side" both matching /front/) is a sign this
-    // pattern has more structure than the classifier understands — placing
-    // both independently would silently overlap them in 3D, and pairing the
-    // wrong one into the auto-seam would silently seam the wrong panels. Skip
-    // the extra rather than guess which one is "right".
-    if (bySlot[cls]) {
-      skipped.push({ label, reason: `already have a piece for "${cls}" (${bySlot[cls].label}) — this pattern has more structure than the importer understands` })
+    if (schemaRole === 'skirt-front-gore' || schemaRole === 'skirt-back-gore' || schemaRole === 'skirt-side-gore-left' || schemaRole === 'skirt-side-gore-right') {
+      const internalRole = { 'skirt-front-gore': 'goreFront', 'skirt-back-gore': 'goreBack', 'skirt-side-gore-left': 'goreSideLeft', 'skirt-side-gore-right': 'goreSideRight' }[schemaRole]
+      rawPieces.push({ id: p.id, label: p.label, outline: local })
+      roles[p.id] = internalRole
+      recognized.push({ id: p.id, label })
       continue
     }
-    const isSkirt = cls.startsWith('skirt')
-    const outline = isFoldPiece(local) ? unfoldPiece(local) : local
-    const role = { 'bodice-front': 'frontPanel', 'bodice-back': 'backPanel', 'skirt-front': 'hipPanelFront', 'skirt-back': 'hipPanelBack' }[cls]
-    rawPieces.push({ id: p.id, label: p.label, outline })
-    roles[p.id] = role
-    bySlot[cls] = { id: p.id, label }
-    for (const e of deriveTorsoEdgeInstructions(outline, { includeTop: !isSkirt })) {
-      edgeInstructions.push({ pieceId: p.id, edgeName: e.name, fromIdx: e.from, toIdx: e.to })
+
+    if (cutOnFold) {
+      // Princess-center or simple front/back-equivalent half-piece — unfold,
+      // trusting the DECLARATION (no isFoldPiece re-derivation) since the
+      // generator that authored this outline already knows it's a half.
+      const outline = unfoldPiece(local)
+      rawPieces.push({ id: p.id, label: p.label, outline })
+      roles[p.id] = placement
+      if (princessSeamId) {
+        // Post-unfold, the shape's own rightSide/leftSide split (found the
+        // same value-based way deriveTorsoEdgeInstructions always has) IS
+        // the two halves of the (now-doubled) princess curve.
+        const [right, left] = deriveTorsoEdgeInstructions(outline, { includeTop: false })
+        pushEdge(p.id, right.name, right.from, right.to)
+        pushEdge(p.id, left.name, left.from, left.to)
+        ;(seamIdEdges[princessSeamId + '_R'] ||= []).push({ pieceId: p.id, fromIdx: right.from, toIdx: right.to })
+        ;(seamIdEdges[princessSeamId + '_L'] ||= []).push({ pieceId: p.id, fromIdx: left.from, toIdx: left.to })
+      } else {
+        bySlot[placement].push({ id: p.id, label })
+        for (const e of deriveTorsoEdgeInstructions(outline, { includeTop: placement === 'frontPanel' || placement === 'backPanel' })) pushEdge(p.id, e.name, e.from, e.to)
+      }
+      recognized.push({ id: p.id, label })
+      continue
+    }
+
+    if (bilateral) {
+      const rId = p.id + '_r', lId = p.id + '_l'
+      const n = local.length
+      rawPieces.push({ id: rId, label: p.label, outline: local })
+      rawPieces.push({ id: lId, label: p.label, outline: mirrorOutline(local) })
+      roles[rId] = placement
+      roles[lId] = placement
+      if (edges && edges.length && !UNSEAMED_BILATERAL_ROLES.has(schemaRole)) {
+        edges.forEach((e, i) => {
+          const edgeName = `seam${i}`
+          pushEdge(rId, edgeName, e.fromIdx, e.toIdx)
+          ;(seamIdEdges[e.seamId + '_R'] ||= []).push({ pieceId: rId, fromIdx: e.fromIdx, toIdx: e.toIdx })
+        })
+        const mirrored = mirrorEdgeIndices(edges, n)
+        mirrored.forEach((e, i) => {
+          const edgeName = `seam${i}`
+          pushEdge(lId, edgeName, e.fromIdx, e.toIdx)
+          ;(seamIdEdges[edges[i].seamId + '_L'] ||= []).push({ pieceId: lId, fromIdx: e.fromIdx, toIdx: e.toIdx })
+        })
+      }
+      recognized.push({ id: rId, label: label + ' (R)' })
+      recognized.push({ id: lId, label: label + ' (L)' })
+      continue
+    }
+
+    // Plain single piece — front-panel/back-panel/hip-panel-* not on fold
+    // (e.g. an asymmetric jacket front), or a decorative attach-only role
+    // (collar/cuff/pocket/facing/waistband/sash/yoke/peplum/tier/cape/lining/
+    // other) — placed via its role's placement family, not auto-seamed.
+    rawPieces.push({ id: p.id, label: p.label, outline: local })
+    roles[p.id] = placement
+    if (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack') {
+      bySlot[placement].push({ id: p.id, label })
+      for (const e of deriveTorsoEdgeInstructions(local, { includeTop: placement === 'frontPanel' || placement === 'backPanel' })) pushEdge(p.id, e.name, e.from, e.to)
     }
     recognized.push({ id: p.id, label })
   }
 
-  // Sleeves: duplicate+mirror into R/L (root app draws one piece standing in
-  // for a mirrored pair — see mirrorOutline above). Self-seamed into a tube
-  // (matching tshirt.js's own rightSleeveTube/leftSleeveTube precedent) and
-  // placed near the shoulder by cloth-lab's existing placeSleeve — NOT seamed
-  // to the front/back armhole in this pass (no reliable armhole marker
-  // survives on every source shape; an unstitched-but-correctly-placed
-  // sleeve drapes plausibly from gravity+placement alone, which is safer
-  // than guessing a seam location and risking a visibly torn result).
+  // Sleeves (both paths converge here): duplicate+mirror into R/L, self-
+  // seamed into a tube, placed near the shoulder — NOT seamed to the
+  // front/back armhole (no reliable armhole marker survives on every source
+  // shape; an unstitched-but-correctly-placed sleeve drapes plausibly from
+  // gravity+placement alone, safer than guessing a seam location).
   for (const s of sleeves) {
     const rId = s.id + '_r', lId = s.id + '_l'
     rawPieces.push({ id: rId, label: s.label, outline: s.outline })
     rawPieces.push({ id: lId, label: s.label, outline: mirrorOutline(s.outline) })
     roles[rId] = 'sleeve'
     roles[lId] = 'sleeve'
-    const n = s.outline.length
-    // Long edges of the tube run the full point range on either side of the
-    // cap-top(0)/cuff-bottom(roughly n/2) split — matched by value (max Y =
-    // cuff) for the same reason deriveTorsoEdgeInstructions is value-based.
-    let cuffIdx = 0, cuffY = -Infinity
-    for (let i = 0; i < n; i++) if (s.outline[i][1] > cuffY) { cuffY = s.outline[i][1]; cuffIdx = i }
-    if (cuffIdx > 0 && cuffIdx < n - 1) {
-      edgeInstructions.push({ pieceId: rId, edgeName: 'frontSeam', fromIdx: 0, toIdx: cuffIdx })
-      edgeInstructions.push({ pieceId: rId, edgeName: 'backSeam', fromIdx: cuffIdx, toIdx: n - 1 })
-      edgeInstructions.push({ pieceId: lId, edgeName: 'frontSeam', fromIdx: 0, toIdx: cuffIdx })
-      edgeInstructions.push({ pieceId: lId, edgeName: 'backSeam', fromIdx: cuffIdx, toIdx: n - 1 })
+    const tube = sleeveTubeEdges(s.outline)
+    if (tube) {
+      pushEdge(rId, 'frontSeam', tube.frontSeam.from, tube.frontSeam.to)
+      pushEdge(rId, 'backSeam', tube.backSeam.from, tube.backSeam.to)
+      pushEdge(lId, 'frontSeam', tube.frontSeam.from, tube.frontSeam.to)
+      pushEdge(lId, 'backSeam', tube.backSeam.from, tube.backSeam.to)
       seamInstructions.push({ id: rId + '_tube', a: { piece: rId, edge: 'frontSeam' }, b: { piece: rId, edge: 'backSeam' }, reverse: true })
       seamInstructions.push({ id: lId + '_tube', a: { piece: lId, edge: 'frontSeam' }, b: { piece: lId, edge: 'backSeam' }, reverse: true })
     }
@@ -223,21 +305,40 @@ export function convertAppPattern(payload) {
     recognized.push({ id: lId, label: s.label + ' (L)' })
   }
 
-  // Front/back seams — only when BOTH sides of a slot were recognized.
-  for (const kind of ['bodice', 'skirt']) {
-    const f = bySlot[kind + '-front']?.id, b = bySlot[kind + '-back']?.id
-    if (!f || !b) continue
-    const includeTop = kind === 'bodice'
-    if (includeTop) {
-      seamInstructions.push({ id: kind + '_rightTop', a: { piece: f, edge: 'rightTop' }, b: { piece: b, edge: 'rightTop' }, reverse: false })
-      seamInstructions.push({ id: kind + '_leftTop', a: { piece: f, edge: 'leftTop' }, b: { piece: b, edge: 'leftTop' }, reverse: false })
+  // Front/back seams (both paths converge here) — only when BOTH sides of a
+  // slot were recognized, and there's exactly one of each (more than one —
+  // e.g. a wrap design's two independent front panels — means there's no
+  // single unambiguous pairing, so those pieces stay placed-but-unseamed
+  // rather than guessed at).
+  for (const [frontKey, backKey, includeTop] of [['frontPanel', 'backPanel', true], ['hipPanelFront', 'hipPanelBack', false]]) {
+    if (bySlot[frontKey].length === 1 && bySlot[backKey].length === 1) {
+      const f = bySlot[frontKey][0].id, b = bySlot[backKey][0].id
+      if (includeTop) {
+        seamInstructions.push({ id: frontKey + '_rightTop', a: { piece: f, edge: 'rightTop' }, b: { piece: b, edge: 'rightTop' }, reverse: false })
+        seamInstructions.push({ id: frontKey + '_leftTop', a: { piece: f, edge: 'leftTop' }, b: { piece: b, edge: 'leftTop' }, reverse: false })
+      }
+      seamInstructions.push({ id: frontKey + '_rightSide', a: { piece: f, edge: 'rightSide' }, b: { piece: b, edge: 'rightSide' }, reverse: false })
+      seamInstructions.push({ id: frontKey + '_leftSide', a: { piece: f, edge: 'leftSide' }, b: { piece: b, edge: 'leftSide' }, reverse: false })
     }
-    seamInstructions.push({ id: kind + '_rightSide', a: { piece: f, edge: 'rightSide' }, b: { piece: b, edge: 'rightSide' }, reverse: false })
-    seamInstructions.push({ id: kind + '_leftSide', a: { piece: f, edge: 'leftSide' }, b: { piece: b, edge: 'leftSide' }, reverse: false })
+    // A recognized front (or back) with no matching other half (or more
+    // than one candidate) still gets placed and simulated on its own —
+    // honest (nothing invented) rather than excluding an otherwise-good piece.
   }
-  // A recognized front (or back) with no matching other half still gets
-  // placed and simulated on its own — just unseamed to anything, which is
-  // honest (nothing invented) rather than excluding an otherwise-good piece.
+
+  // WP-6 seamId-tagged edges (princess seams, and any future declared-edge
+  // role): pair up every seamId with EXACTLY 2 contributing edges. A seamId
+  // used once (a design error) or 3+ times (ambiguous) is left unseamed
+  // rather than guessed — same "never guess" principle as everywhere else
+  // in this file.
+  let seamIdCounter = 0
+  for (const [seamId, contributors] of Object.entries(seamIdEdges)) {
+    if (contributors.length !== 2) continue
+    const [a, b] = contributors
+    const aEdgeName = edgeInstructions.find((e) => e.pieceId === a.pieceId && e.fromIdx === a.fromIdx && e.toIdx === a.toIdx)?.edgeName
+    const bEdgeName = edgeInstructions.find((e) => e.pieceId === b.pieceId && e.fromIdx === b.fromIdx && e.toIdx === b.toIdx)?.edgeName
+    if (!aEdgeName || !bEdgeName) continue
+    seamInstructions.push({ id: `seamId_${seamIdCounter++}_${seamId}`, a: { piece: a.pieceId, edge: aEdgeName }, b: { piece: b.pieceId, edge: bEdgeName }, reverse: true })
+  }
 
   const fabricId = FABRIC_NAME_TO_ID.has(payload.fabricId) ? payload.fabricId : null
 

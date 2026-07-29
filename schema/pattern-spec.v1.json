@@ -63,10 +63,20 @@
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
           "role": {
+            "description": "bodice-front/bodice-back/skirt-front/skirt-back are kept as validator-resolved aliases for the WP-6 vocabulary below (front-panel/back-panel/hip-panel-front/hip-panel-back in cloth-lab's own placement roles — see cloth-lab/src/pattern/roles.js) so existing Phase-1 AI-pipeline specs keep validating unchanged.",
             "enum": [
               "bodice-front", "bodice-back", "skirt-front", "skirt-back",
-              "sleeve", "collar", "cuff", "facing", "waistband", "yoke",
-              "pocket", "lining", "other"
+              "front-panel", "back-panel",
+              "bodice-front-center", "bodice-front-side", "bodice-back-center", "bodice-back-side",
+              "skirt-front-gore", "skirt-back-gore", "skirt-side-gore-left", "skirt-side-gore-right",
+              "sleeve", "sleeve-upper", "sleeve-under", "cap-sleeve", "puff-sleeve", "butterfly-sleeve",
+              "collar", "undercollar", "collar-stand", "collar-band",
+              "lapel-facing", "placket-facing", "facing",
+              "hood", "yoke", "peplum-front", "peplum-back",
+              "sash", "wrap-tie", "belt", "pocket",
+              "waistband", "cuff", "rib-cuff", "hem-band",
+              "lining", "godet", "tier", "cape", "cape-overlay",
+              "other"
             ]
           },
           "cutOnFold": { "type": "boolean" },
