@@ -70,12 +70,6 @@ jobs:
       - name: Root unit tests (node --test)
         run: npm test
 
-      - name: Install Playwright's Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Playwright smoke test
-        run: npm run test:e2e
-
       - name: Install cloth-lab dependencies
         run: npm ci
         working-directory: cloth-lab
@@ -83,6 +77,30 @@ jobs:
       - name: cloth-lab unit tests (vitest)
         run: npm test
         working-directory: cloth-lab
+
+      # The Playwright smoke suite serves the repo root directly (no build
+      # step for the root app itself), but 2 of its 5 tests exercise the
+      # embedded Cloth Lab engine (WP-5) and the standalone BodyForm page
+      # (WP-10), both of which dynamically import cloth-lab/dist-embed/
+      # cloth-lab-embed.js at a real, physical path — a build OUTPUT this
+      # job never produced before this fix. The separate `build` job below
+      # does build it, but that's a different runner with no shared
+      # filesystem, and only runs (needs: test) AFTER this job already
+      # passed — it can never retroactively fix what this job just tested
+      # against. Confirmed via CI annotations (not guessed): both failing
+      # tests' captured console errors were literally "Failed to fetch
+      # dynamically imported module: .../cloth-lab-embed.js" — a plain
+      # 404, not a WebGL/GPU/headless-rendering limitation as first
+      # suspected before the `github` reporter surfaced the real error.
+      - name: Build cloth-lab (embedded library, needed by the Playwright smoke test)
+        run: npm run build:embed
+        working-directory: cloth-lab
+
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright smoke test
+        run: npm run test:e2e
 
   build:
     needs: test
