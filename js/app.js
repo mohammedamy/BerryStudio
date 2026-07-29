@@ -880,10 +880,21 @@ import { nest as nestTruePolygon, cancelNest } from './nesting.js';
     const fg=el("div","opt-grid"); fg.style.margin="8px 0";
     FORMATS.forEach((p,i)=>{const o=el("div","opt"+(i===2?" active":""),p);o.dataset.fmt=p;o.onclick=()=>{$$("#fg .opt").forEach(x=>x.classList.remove("active"));o.classList.add("active");};fg.appendChild(o);}); fg.id="fg"; c.appendChild(fg);
     // toggles
-    [["tiled",true],["regMarks",true]].forEach(([k,v])=>{
+    [["tiled","exportTiled"],["regMarks","exportRegMarks"]].forEach(([k,sk])=>{
+      const v = state[sk]!==false; // default on
       const r=el("label","set-row"); r.innerHTML=`<span class="sl">${T(k)}</span>`;
-      const sw=el("span","switch",`<input type="checkbox" ${v?"checked":""}><span class="track"></span>`); r.appendChild(sw); c.appendChild(r);
+      const sw=el("span","switch",`<input type="checkbox" ${v?"checked":""}><span class="track"></span>`); r.appendChild(sw);
+      sw.querySelector("input").onchange=(e)=>{ state[sk]=e.target.checked; save(); };
+      c.appendChild(r);
     });
+    c.appendChild(el("div",null,`<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("dpi")}</label>`)).style.marginTop="10px";
+    const dpiRow=el("div","opt-grid"); dpiRow.style.margin="8px 0";
+    [150,300,600].forEach(d=>{
+      const o=el("div","opt"+((state.exportDpi||300)===d?" active":""),String(d));
+      o.onclick=()=>{ $$("#dpiRow .opt").forEach(x=>x.classList.remove("active")); o.classList.add("active"); state.exportDpi=d; save(); };
+      dpiRow.appendChild(o);
+    }); dpiRow.id="dpiRow"; c.appendChild(dpiRow);
+    c.appendChild(el("div","help-note",T("dpiNote")));
     // fabric + cost
     c.appendChild(el("div","section-title",null)).textContent=T("fabricCalc");
     const meas=currentMeas();
@@ -915,15 +926,38 @@ import { nest as nestTruePolygon, cancelNest } from './nesting.js';
     const fmt=($("#fg .opt.active")||{}).dataset?.fmt||"SVG";
     exportAs(fmt);
   }
+  // Paper sizes that are actual home-printer page formats — tiling only
+  // makes sense for these; A0-A3/Plotter/Custom are already large-format.
+  const TILEABLE_PAPER_TO_PAGESIZE = { A4: "a4", Letter: "letter" };
+  function currentExportPdfOpts(){
+    const paper = ($("#pg .opt.active")||{}).textContent || "A4";
+    const pageSize = TILEABLE_PAPER_TO_PAGESIZE[paper];
+    const tiled = !!(state.exportTiled!==false && pageSize);
+    return { tiled, pageSize: pageSize||"a4", overlapMm: 10, includeGuides: state.exportRegMarks!==false };
+  }
   // Central exporter used by both the Export pane and the Project menu.
   function exportAs(fmt){
     if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
     const F=(fmt||"SVG").toUpperCase();
     if(F==="SVG")      download("berrystudio-pattern.svg","image/svg+xml",Canvas.exportSVG());
     else if(F==="DXF") download("berrystudio-pattern.dxf","application/dxf",Canvas.exportDXF());
-    else if(F==="PDF"){ const p=Canvas.exportPDF(); if(!p){toast(T("empty2d"));return;} download("berrystudio-pattern.pdf","application/pdf",p); }
+    else if(F==="HPGL")download("berrystudio-pattern.hpgl","application/vnd.hp-hpgl",Canvas.exportHPGL());
+    else if(F==="PDF"){ const p=Canvas.exportPDF(currentExportPdfOpts()); if(!p){toast(T("empty2d"));return;} download("berrystudio-pattern.pdf","application/pdf",p); }
+    else if(F==="AI"){
+      const p=Canvas.exportPDF(currentExportPdfOpts()); if(!p){toast(T("empty2d"));return;}
+      const ai=`%!PS-Adobe-3.0\n%%Creator: Adobe Illustrator(R) 24.0\n%%AI8_CreatorVersion: 24.0\n%%For: BerryStudio\n${p}`;
+      download("berrystudio-pattern.ai","application/postscript",ai);
+    }
+    else if(F==="PNG"||F==="JPEG"){
+      Canvas.exportRaster(F.toLowerCase(), state.exportDpi||300).then(res=>{
+        if(!res){toast(T("empty2d"));return;}
+        const u=URL.createObjectURL(res.blob); const a=el("a");a.href=u;a.download=`berrystudio-pattern.${F.toLowerCase()}`;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
+        toast(res.clamped ? T("exported")+" · "+F+" ("+Math.round(res.dpi)+" "+T("dpiClamped")+")" : T("exported")+" · "+F);
+      }).catch(()=>toast(T("rasterFailed")));
+      return;
+    }
     else if(F==="JSON")download("berrystudio-project.json","application/json",JSON.stringify({app:"BerryStudio",version:1,pieces:Canvas.getPieces(),texts:Canvas.getTexts(),points:Canvas.getPoints(),cons:Canvas.getCons(),variables:Canvas.getVariables()},null,0));
-    else               download(`berrystudio-pattern.${F.toLowerCase()}`,"image/svg+xml",Canvas.exportSVG()); // PNG/JPEG/AI/HPGL → vector fallback
+    else               download(`berrystudio-pattern.${F.toLowerCase()}`,"image/svg+xml",Canvas.exportSVG());
     toast(T("exported")+" · "+F);
   }
   function download(name,type,data){ const b=new Blob([data],{type}); const u=URL.createObjectURL(b); const a=el("a");a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000); }

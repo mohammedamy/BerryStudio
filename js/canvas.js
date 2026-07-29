@@ -3,6 +3,7 @@
    Grid, rulers, zoom/pan, seam allowance, notches, grainlines,
    selection, snapping, measure & sketch tools, undo/redo.
    ============================================================ */
+import { buildDXF, buildHPGL, buildPDF } from './pattern-export.js';
 export const Canvas = (() => {
   let cv, ctx, dpr = 1;
   let view = { x: 60, y: 60, scale: 3.2 };     // px per cm
@@ -1074,61 +1075,78 @@ export const Canvas = (() => {
   function hasSnapshot(){ return !!ghostSnap; }
   function getSnapshotOpacity(){ return ghostSnap?ghostSnap.opacity:0.35; }
 
-  // ---- DXF export (AutoCAD R12 ENTITIES; cm units, y-up) ----
-  function exportDXF(){
-    if(!pieces.length) return "";
-    const out=["0","SECTION","2","ENTITIES"];
-    const push=(...l)=>out.push(...l);
-    pieces.forEach(p=>{
-      push("0","LWPOLYLINE","8","CUT","90",String(p.outline.length),"70","1","43","0");
-      p.outline.forEach(pt=>push("10",pt[0].toFixed(3),"20",(-pt[1]).toFixed(3)));
-      if(p.grain && p.grain.length===2)
-        push("0","LINE","8","GRAIN","10",p.grain[0][0].toFixed(3),"20",(-p.grain[0][1]).toFixed(3),
-             "11",p.grain[1][0].toFixed(3),"21",(-p.grain[1][1]).toFixed(3));
-      (p.darts||[]).forEach(d=>{ for(let i=0;i<d.length-1;i++)
-        push("0","LINE","8","DART","10",d[i][0].toFixed(3),"20",(-d[i][1]).toFixed(3),
-             "11",d[i+1][0].toFixed(3),"21",(-d[i+1][1]).toFixed(3)); });
+  // ---- DXF / HPGL export ----
+  // WP-12: the actual entity-building logic lives in js/pattern-export.js
+  // as pure functions (no DOM/Canvas-closure dependency) so it's directly
+  // unit-testable via `node --test` — jsdom (this project's test runner)
+  // has no real <canvas> 2D context to exercise Canvas.init() through, so
+  // anything worth testing precisely has to live outside this closure.
+  // DXF now uses real AAMA/ASTM D6673 layer numbers (1/2/3/4/8/11/13),
+  // replacing the earlier ad hoc CUT/GRAIN/DART layer NAMES — see
+  // buildDXF()'s own header comment for exactly what's on each layer.
+  function exportDXF(){ return buildDXF(pieces); }
+  // HPGL: genuine `IN;SP1;PU;PD;...` plotter output (cut line only — a
+  // real plotter is one pen, no separate grain/dart layers the way DXF
+  // has), replacing the earlier SVG-saved-under-the-wrong-extension
+  // fallback (BerryStudio-Upgrade-Plan L7).
+  function exportHPGL(){ return buildHPGL(pieces); }
+
+  // ---- raster export (PNG/JPEG at selectable DPI) ----
+  // WP-12: replaces the earlier "just save the SVG under a .png/.jpeg
+  // extension" fallback (BerryStudio-Upgrade-Plan L7) with a real raster.
+  // Reuses exportSVG() entirely (rendered into an <img>, drawn onto an
+  // offscreen canvas sized by real DPI math) rather than reimplementing
+  // any drawing logic — the SVG generator stays the single source of
+  // truth for how a pattern is drawn. Needs a real DOM (Image/canvas/
+  // Blob) so — unlike exportDXF/exportHPGL — this can't be extracted into
+  // js/pattern-export.js's pure-function style; covered by a Playwright
+  // test instead of node --test for that reason.
+  // Chromium/Firefox/Safari all refuse to allocate a canvas beyond roughly
+  // these bounds (exact ceilings vary by browser/GPU) — silently returning
+  // a null blob from toBlob() rather than throwing. A real multi-piece
+  // garment laid out in drafting space (not a nested marker) easily spans
+  // 1-2 meters per side, so at 300-600 DPI this ceiling is a real,
+  // reachable case, not a theoretical one — clamp proportionally instead
+  // of letting toBlob fail invisibly.
+  const MAX_CANVAS_DIM = 16384, MAX_CANVAS_PIXELS = 200_000_000;
+  function exportRaster(fmt, dpi){
+    if(!pieces.length) return Promise.resolve(null);
+    const svg = exportSVG();
+    const m = /width="([\d.]+)cm" height="([\d.]+)cm"/.exec(svg);
+    const wCm = m ? +m[1] : 20, hCm = m ? +m[2] : 20;
+    let pxW = Math.max(1, Math.round((wCm/2.54)*dpi)), pxH = Math.max(1, Math.round((hCm/2.54)*dpi));
+    let effectiveDpi = dpi;
+    const overDim = Math.max(pxW/MAX_CANVAS_DIM, pxH/MAX_CANVAS_DIM);
+    const overArea = Math.sqrt((pxW*pxH)/MAX_CANVAS_PIXELS);
+    const clampFactor = Math.max(1, overDim, overArea);
+    if(clampFactor > 1){
+      pxW = Math.max(1, Math.floor(pxW/clampFactor)); pxH = Math.max(1, Math.floor(pxH/clampFactor));
+      effectiveDpi = dpi/clampFactor;
+    }
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(svgBlob);
+      img.onload = () => {
+        const off = document.createElement("canvas"); off.width = pxW; off.height = pxH;
+        const octx = off.getContext("2d");
+        octx.fillStyle = "#fff"; octx.fillRect(0, 0, pxW, pxH); // JPEG has no alpha channel — white background
+        octx.drawImage(img, 0, 0, pxW, pxH);
+        URL.revokeObjectURL(url);
+        off.toBlob(blob => resolve(blob ? { blob, dpi: effectiveDpi, clamped: clampFactor > 1 } : null), fmt==="jpeg" ? "image/jpeg" : "image/png", 0.92);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("raster export: failed to rasterize the pattern SVG")); };
+      img.src = url;
     });
-    push("0","ENDSEC","0","EOF");
-    return out.join("\n");
   }
 
   // ---- PDF export (hand-built, valid PDF 1.4; vector cutting lines) ----
-  function exportPDF(){
-    if(!pieces.length) return null;
-    const PT = 28.3465;                 // points per cm
-    const all=pieces.flatMap(p=>p.outline);
-    const xs=all.map(p=>p[0]), ys=all.map(p=>p[1]);
-    const minX=Math.min(...xs), minY=Math.min(...ys), maxX=Math.max(...xs), maxY=Math.max(...ys);
-    const margin=28;
-    const W=(maxX-minX)*PT+margin*2, H=(maxY-minY)*PT+margin*2;
-    const Xn=x=>(x-minX)*PT+margin, Yn=y=>H-((y-minY)*PT+margin);
-    const X=x=>Xn(x).toFixed(2), Y=y=>Yn(y).toFixed(2);
-    let cs="0.75 w 0 0 0 RG 0 0 0 rg\n";
-    pieces.forEach(p=>{
-      p.outline.forEach((pt,i)=>{ cs+=`${X(pt[0])} ${Y(pt[1])} ${i?'l':'m'}\n`; });
-      cs+="h S\n";
-      if(p.grain && p.grain.length===2)
-        cs+=`${X(p.grain[0][0])} ${Y(p.grain[0][1])} m ${X(p.grain[1][0])} ${Y(p.grain[1][1])} l S\n`;
-      (p.darts||[]).forEach(d=>{ d.forEach((pt,i)=>cs+=`${X(pt[0])} ${Y(pt[1])} ${i?'l':'m'}\n`); cs+="S\n"; });
-      const cx=avg(p.outline.map(q=>q[0])), cy=avg(p.outline.map(q=>q[1]));
-      const label=String((p.name&&p.name.en)||"").replace(/[()\\]/g,"").replace(/[^\x20-\x7E]/g,"");
-      cs+=`BT /F1 9 Tf ${(Xn(cx)-label.length*2.4).toFixed(2)} ${Yn(cy).toFixed(2)} Td (${label}) Tj ET\n`;
-    });
-    const objs=[null,
-      "<< /Type /Catalog /Pages 2 0 R >>",
-      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W.toFixed(2)} ${H.toFixed(2)}] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>`,
-      `<< /Length ${cs.length} >>\nstream\n${cs}endstream`,
-      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
-    let pdf="%PDF-1.4\n"; const off=[];
-    for(let i=1;i<=5;i++){ off[i]=pdf.length; pdf+=`${i} 0 obj\n${objs[i]}\nendobj\n`; }
-    const xref=pdf.length;
-    pdf+="xref\n0 6\n0000000000 65535 f \n";
-    for(let i=1;i<=5;i++) pdf+=String(off[i]).padStart(10,"0")+" 00000 n \n";
-    pdf+=`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-    return pdf;
-  }
+  // WP-12: `opts.tiled` (default false, unchanged behavior) splits the
+  // pattern across A4/Letter pages with overlap + registration marks + an
+  // assembly-map page — "the #1 request in every home-sewing community"
+  // per the plan doc. Entity/object-building logic lives in
+  // js/pattern-export.js (pure, unit-tested); this stays a thin wrapper.
+  function exportPDF(opts){ return buildPDF(pieces, opts); }
 
   // ---- project round-trip: load already-positioned pieces / clear all ----
   function loadPieces(arr, txts, pts, consArr){
@@ -1161,7 +1179,7 @@ export const Canvas = (() => {
            selectPiece, clearSketch, render,
            addText, updateText, removeText, getTexts, onTextRequest,
            addPiece, removePiece, renamePiece, setPieceProps,
-           onZoomChange, exportSVG, exportDXF, exportPDF, loadPieces, clearAll, screenOf,
+           onZoomChange, exportSVG, exportDXF, exportHPGL, exportRaster, exportPDF, loadPieces, clearAll, screenOf,
            // construction geometry
            addPoint, removePoint, getPointById, getPoints, setPointName, setPointXY, setPointFormula, onPointRequest,
            getCons, removeCons, onPromoteRequest, finishPromotePiece, cancelPromote,

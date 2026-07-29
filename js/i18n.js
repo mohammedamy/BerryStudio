@@ -138,6 +138,8 @@ export const I18N = {
     // export
     exportTitle: "Print & Export", paperSize: "Paper Size", format: "Export Format",
     tiled: "Tiled home printing", regMarks: "Registration marks + assembly guide",
+    dpi: "Raster DPI (PNG/JPEG)", dpiNote: "Only affects PNG/JPEG export — other formats are vector/plotter output.",
+    dpiClamped: "reduced — pattern too large for the requested DPI", rasterFailed: "Raster export failed — try a lower DPI",
     fabricCalc: "Fabric Consumption", costEst: "Cost Estimator",
     createMarker: "Create Marker", markerMaterial: "Material", markerPieces: "Pieces",
     markerWidth: "Material width (cm)", markerLength: "Material length (cm)",
@@ -370,6 +372,8 @@ export const I18N = {
     aiStageSilhouette: "قراءة فتحة الرقبة والحاشية والقصّة…", aiStageDrafting: "رسم قطع الباترون…",
     exportTitle: "الطباعة والتصدير", paperSize: "مقاس الورق", format: "صيغة التصدير",
     tiled: "طباعة منزلية مقسّمة", regMarks: "علامات المحاذاة + دليل التجميع",
+    dpi: "دقة الصورة النقطية (PNG/JPEG)", dpiNote: "تؤثر فقط على تصدير PNG/JPEG — الصيغ الأخرى ناتجة متجهية أو لآلة قص.",
+    dpiClamped: "تم تخفيضها — النموذج كبير جدًا على الدقة المطلوبة", rasterFailed: "فشل تصدير الصورة النقطية — جرّب دقة أقل",
     fabricCalc: "استهلاك القماش", costEst: "تقدير التكلفة",
     createMarker: "إنشاء تخطيط قص", markerMaterial: "الخامة", markerPieces: "القطع",
     markerWidth: "عرض الخامة (سم)", markerLength: "طول الخامة (سم)",
