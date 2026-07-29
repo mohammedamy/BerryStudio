@@ -212,12 +212,21 @@ test('BodyForm generates an avatar, exports GLB/OBJ, and hands off to Fit Studio
   } catch (e) {
     // ExportPanel.jsx (cloth-lab) catches export failures into React
     // state, not console.error — this test's own `errors` listener can't
-    // see them. Read the panel's own error text (and whether the button
-    // is still stuck on "Working…") directly so a real failure is
-    // diagnosable instead of just "timed out".
+    // see them from there either way. Dump everything available: captured
+    // console/page errors, the panel's own error text, the export button's
+    // current text (still "Working…" = hung; reverted with no download =
+    // silently swallowed somewhere), and a body-text snapshot in case the
+    // whole page crashed/blanked rather than just this one panel.
     const panelError = await page.locator('text=/Export.+failed:/').textContent().catch(() => null);
     const btnText = await page.getByRole('button', { name: /Export GLB|Working…/ }).first().textContent().catch(() => null);
-    throw new Error(`${e.message}\n\nExportPanel error text: ${panelError || '(none)'}\nExport button text: ${btnText || '(not found)'}`);
+    const bodySnippet = await page.evaluate(() => document.body.innerText.slice(0, 800)).catch(() => null);
+    throw new Error(
+      `${e.message}\n\n` +
+      `Console/page errors captured so far:\n${errors.join('\n') || '(none)'}\n\n` +
+      `ExportPanel error text: ${panelError || '(none)'}\n` +
+      `Export button text: ${btnText || '(not found)'}\n\n` +
+      `document.body.innerText (first 800 chars): ${bodySnippet || '(could not read)'}`
+    );
   }
   expect(glbDownload.suggestedFilename()).toMatch(/\.glb$/);
   const [objDownload] = await Promise.all([
