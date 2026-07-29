@@ -20,6 +20,7 @@ import { ImageProviders, IMAGE_PROVIDER_IDS } from './image-providers.js';
 import { MEAS_KEYS, renderMeasureFields } from './measure-form.js';
 import { consumeBodyFormHandoff } from './body-handoff.js';
 import { nest as nestTruePolygon, cancelNest } from './nesting.js';
+import { stepForSize, resolveGradedPieces } from './grading.js';
 
 (() => {
   "use strict";
@@ -48,6 +49,10 @@ import { nest as nestTruePolygon, cancelNest } from './nesting.js';
     // branch and mountClothLabEmbedded() below). Defaults to "iframe" so
     // nothing changes for existing users until they opt in via Settings.
     clothLabEngine: "iframe",
+    // WP-13: industrial per-point grading. Keyed by pattern id -> piece
+    // key -> outline-index -> {dx,dy} (cm per size step). Purely additive
+    // — a pattern with no authored rules here grades exactly as before.
+    gradeRules: {}, gradeRulesPiece: null,
   };
   const state = Object.assign({}, DEF, JSON.parse(localStorage.getItem("pps") || "{}"));
   const save = () => localStorage.setItem("pps", JSON.stringify(state));
@@ -209,8 +214,140 @@ import { nest as nestTruePolygon, cancelNest } from './nesting.js';
     const bg = el("button","big-btn",IC.spark+T("autoGrade")); bg.style.marginTop="16px"; bg.onclick=()=>{grade();toast(T("graded")+" · "+(state.kids?L(KIDS_AGES.find(a=>a.id===state.kids).label):state.size));}; c.appendChild(bg);
     c.appendChild(el("div","help-note",`${T("gradedTo")}: <b id="gradeLbl"></b>`)).style.marginTop="12px";
     updateGradeLbl();
+    renderGradeRulesSection(c);
   }
   function updateGradeLbl(){ const l=$("#gradeLbl"); if(l) l.textContent = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids).label) : state.size; }
+
+  // WP-13: industrial per-point grading — an optional override table on
+  // top of the uniform formula grade above. See js/grading.js for the
+  // resolution rule (base-at-M + dx/dy*step for a ruled point, formula
+  // otherwise). Scoped to the currently loaded pattern's pieces; kids
+  // mode has no step to grade against, so the section hides there.
+  function renderGradeRulesSection(c){
+    if(!state.loaded || state.kids) return;
+    const pieces = Canvas.getPieces(); if(!pieces.length) return;
+    const patternId = state.loaded, pattern = PATTERNS[patternId];
+    c.appendChild(el("div","section-title",IC.layers+T("gradeRulesTitle")));
+    c.appendChild(el("div","help-note",T("gradeRulesHint")));
+
+    const selKey = pieces.some(p=>p.key===state.gradeRulesPiece) ? state.gradeRulesPiece : pieces[0].key;
+    state.gradeRulesPiece = selKey;
+    const pf = el("div","field"); pf.style.marginTop="10px"; pf.innerHTML=`<label>${T("gradeRulesPiece")}</label>`;
+    const pSel = el("select","select");
+    pieces.forEach(p=>{ const o=el("option",null,L(p.name)); o.value=p.key; if(p.key===selKey) o.selected=true; pSel.appendChild(o); });
+    pSel.onchange=()=>{ state.gradeRulesPiece=pSel.value; save(); renderSizePane(); };
+    pf.appendChild(pSel); c.appendChild(pf);
+
+    const baseOpts = {category:state.category,size:"M",standard:state.standard,kids:null,custom:state.custom};
+    const basePiece = pattern.pieces(computeMeasurements(baseOpts)).find(p=>p.key===selKey);
+    if(!basePiece) return;
+    const rulesForPattern = state.gradeRules[patternId] || {};
+    const rulesForPiece = rulesForPattern[selKey] || {};
+
+    const head = el("div","row"); head.style.cssText="display:flex;gap:6px;padding:4px 0;font-size:11px;font-weight:700;color:var(--ink-2)";
+    head.appendChild(el("span",null,"#")).style.flex="0 0 30%";
+    head.appendChild(el("span",null,T("gradeRulesDx"))).style.flex="1";
+    head.appendChild(el("span",null,T("gradeRulesDy"))).style.flex="1";
+    c.appendChild(head);
+
+    const table = el("div"); table.style.cssText="max-height:240px;overflow:auto";
+    basePiece.outline.forEach((pt,i)=>{
+      const r = rulesForPiece[i] || {};
+      const row = el("div","row"); row.style.cssText="display:flex;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line-2)";
+      const lbl = el("span",null,`${i} <small style="color:var(--ink-2)">(${pt[0].toFixed(1)},${pt[1].toFixed(1)})</small>`);
+      lbl.style.cssText="flex:0 0 30%;font-size:11.5px"; lbl.innerHTML=`${i} <small style="color:var(--ink-2)">(${pt[0].toFixed(1)},${pt[1].toFixed(1)})</small>`;
+      const dxI = el("input","input"); dxI.type="number"; dxI.step="0.1"; dxI.value=r.dx||0; dxI.style.flex="1";
+      const dyI = el("input","input"); dyI.type="number"; dyI.step="0.1"; dyI.value=r.dy||0; dyI.style.flex="1";
+      const commit=()=>{
+        const dx=+dxI.value||0, dy=+dyI.value||0;
+        if(!state.gradeRules[patternId]) state.gradeRules[patternId]={};
+        if(!state.gradeRules[patternId][selKey]) state.gradeRules[patternId][selKey]={};
+        if(dx===0 && dy===0) delete state.gradeRules[patternId][selKey][i];
+        else state.gradeRules[patternId][selKey][i]={dx,dy};
+        if(!Object.keys(state.gradeRules[patternId][selKey]).length) delete state.gradeRules[patternId][selKey];
+        grade();
+      };
+      dxI.onchange=commit; dyI.onchange=commit;
+      row.appendChild(lbl); row.appendChild(dxI); row.appendChild(dyI);
+      table.appendChild(row);
+    });
+    c.appendChild(table);
+
+    const nestBtn = el("button","big-btn ghost",IC.layers+T("gradeNestPreview")); nestBtn.style.marginTop="10px";
+    nestBtn.onclick=()=>openGradeNestModal(selKey);
+    c.appendChild(nestBtn);
+
+    const expBtn = el("button","big-btn ghost",T("gradeRulesExport")); expBtn.style.marginTop="8px";
+    expBtn.onclick=()=>download(`berrystudio-grade-rules-${patternId}.json`,"application/json",JSON.stringify(state.gradeRules[patternId]||{},null,2));
+    c.appendChild(expBtn);
+    const impInput = el("input"); impInput.type="file"; impInput.accept="application/json"; impInput.style.display="none";
+    impInput.onchange=()=>{
+      const f=impInput.files[0]; if(!f) return;
+      const r=new FileReader();
+      r.onload=()=>{
+        try{ state.gradeRules[patternId]=JSON.parse(r.result); grade(); renderSizePane(); toast(T("gradeRulesImported")); }
+        catch(e){ toast(T("invalidFormula")); }
+      };
+      r.readAsText(f);
+    };
+    const impBtn = el("button","big-btn ghost",T("gradeRulesImport")); impBtn.style.marginTop="8px"; impBtn.onclick=()=>impInput.click();
+    c.appendChild(impBtn); c.appendChild(impInput);
+  }
+
+  // Overlay `sizesToShow` outlines of one piece at a shared alignment
+  // point (outline[0]) with a distinct color per size — the standard
+  // "grade nest" visual every patternmaker expects, letting authored
+  // gradeRules be checked visually for a plausible size progression.
+  function drawGradeNest(canvas, outlinesBySize){
+    const ctx = canvas.getContext("2d"); const W=canvas.width, H=canvas.height;
+    ctx.clearRect(0,0,W,H);
+    const aligned = outlinesBySize.map(({size,outline})=>{
+      if(!outline || !outline.length) return {size, outline:[]};
+      const [ax,ay]=outline[0];
+      return {size, outline: outline.map(([x,y])=>[x-ax,y-ay])};
+    });
+    const allPts = aligned.flatMap(a=>a.outline);
+    if(!allPts.length) return;
+    const xs=allPts.map(p=>p[0]), ys=allPts.map(p=>p[1]);
+    const minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
+    const w=Math.max(maxX-minX,1), h=Math.max(maxY-minY,1);
+    const scale = Math.min((W-40)/w, (H-40)/h);
+    ctx.save(); ctx.translate(20-minX*scale, 20-minY*scale);
+    aligned.forEach((a,i)=>{
+      if(!a.outline.length) return;
+      const c = PALETTE[i%PALETTE.length];
+      ctx.strokeStyle=c; ctx.fillStyle=c+"1f"; ctx.lineWidth=1.6;
+      ctx.beginPath();
+      a.outline.forEach(([x,y],j)=>{ const px=x*scale, py=y*scale; j===0?ctx.moveTo(px,py):ctx.lineTo(px,py); });
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    });
+    ctx.restore();
+    ctx.font="11px Inter, sans-serif"; ctx.textBaseline="top";
+    aligned.forEach((a,i)=>{
+      const c = PALETTE[i%PALETTE.length];
+      ctx.fillStyle=c; ctx.fillRect(10, 10+i*16, 10,10);
+      ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--ink").trim()||"#1a1a1a";
+      ctx.fillText(a.size, 24, 9+i*16);
+    });
+  }
+  function openGradeNestModal(pieceKey){
+    if(!state.loaded) return;
+    const pattern = PATTERNS[state.loaded];
+    const sizesToShow = ["S","M","L","XL"];
+    const opts = {category:state.category,standard:state.standard,kids:null,custom:state.custom};
+    const outlinesBySize = sizesToShow.map(size=>{
+      const ps = resolveGradedPieces(pattern, {...opts,size}, computeMeasurements, state.gradeRules[state.loaded]);
+      const piece = ps.find(p=>p.key===pieceKey);
+      return {size, outline: piece ? piece.outline : []};
+    });
+    openModal(T("gradeNestTitle"), "", true);
+    const body = $("#genericModal .modal-body"); body.innerHTML="";
+    body.appendChild(el("div","help-note",T("gradeNestHint")));
+    const canvas = el("canvas"); canvas.width=560; canvas.height=420;
+    canvas.style.cssText="width:100%;height:auto;margin-top:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)";
+    body.appendChild(canvas);
+    drawGradeNest(canvas, outlinesBySize);
+  }
 
   // MEASURE PANE — the numeric fields + reference diagram themselves live in
   // js/measure-form.js (shared with the standalone BodyForm page, WP-10).
@@ -1688,14 +1825,20 @@ import { nest as nestTruePolygon, cancelNest } from './nesting.js';
     state.loaded=id; const p=PATTERNS[id];
     // switch category to match
     if(p.category && p.category!==state.category){ state.category=p.category; syncCategoryUI(); }
-    Canvas.setPattern(p.pieces(currentMeas()), PALETTE);
+    const opts={category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom};
+    Canvas.setPattern(resolveGradedPieces(p, opts, computeMeasurements, state.gradeRules[id]), PALETTE);
     afterLoad(L(p.name));
   }
-  function afterLoad(name){ hideEmpty(); renderLayersPane(); toast(T("patternLoaded")+" · "+name); if(state.view==="3d") build3D(); save(); }
+  function afterLoad(name){ hideEmpty(); renderLayersPane(); renderSizePane(); toast(T("patternLoaded")+" · "+name); if(state.view==="3d") build3D(); save(); }
   function grade(){
-    if(state.loaded){ const p=PATTERNS[state.loaded]; Canvas.setPattern(p.pieces(currentMeas()), PALETTE); renderLayersPane(); if(state.view==="3d") build3D(); }
+    if(state.loaded){
+      const p=PATTERNS[state.loaded];
+      const opts={category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom};
+      const pieces=resolveGradedPieces(p, opts, computeMeasurements, state.gradeRules[state.loaded]);
+      Canvas.setPattern(pieces, PALETTE); renderLayersPane(); if(state.view==="3d") build3D();
+    }
     Canvas.recomputeConstruction();   // re-resolve any formula-driven construction points to the new measurements
-    updateGradeLbl(); updateStageChips(); save();
+    updateGradeLbl(); updateStageChips(); renderSizePane(); save();
   }
 
   // ================= 3D =================

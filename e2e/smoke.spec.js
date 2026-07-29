@@ -248,3 +248,86 @@ test('BodyForm generates an avatar, exports GLB/OBJ, and hands off to Fit Studio
 
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
+
+// BerryStudio-Upgrade-Plan WP-13: industrial per-point grading. The
+// Size pane's "Grade Rules" section only renders once a pattern's pieces
+// exist (js/grading.js's resolution logic itself is covered by
+// test/grading.test.js) — this exercises the real UI wiring end-to-end:
+// authoring a dx/dy-per-step override actually changes the graded piece's
+// outline point by exactly dx*step/dy*step (not the formula's own delta),
+// and the Grade Nest preview modal renders real (non-blank) canvas content.
+test('Grade Rules: authoring a per-point override changes graded output, Grade Nest preview renders', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+  page.on('console', (msg) => {
+    if (msg.type() !== 'error') return;
+    if (/Failed to load resource.*404/.test(msg.text())) return;
+    errors.push(msg.text());
+  });
+
+  await page.goto('/index.html');
+  await dismissOnboarding(page);
+  await expect(page.locator('#patternCanvas')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Size', exact: true }).click();
+  const dxInputs = page.locator('.rail-pane[data-pane=size] .row:has(input[type=number]) input[type=number]');
+  await expect(dxInputs.first()).toBeVisible();
+
+  // Author a rule on point 0: dx=2, dy=1 per size step.
+  await dxInputs.nth(0).fill('2');
+  await dxInputs.nth(0).dispatchEvent('change');
+  await dxInputs.nth(1).fill('1');
+  await dxInputs.nth(1).dispatchEvent('change');
+
+  const rules = await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('pps'));
+    return s.gradeRules[s.loaded];
+  });
+  const firstPieceKey = await page.evaluate(() => window.Canvas.getPieces()[0].key);
+  expect(rules[firstPieceKey]['0']).toEqual({ dx: 2, dy: 1 });
+
+  // Grade up one step (M -> L) and confirm point 0 resolves to exactly
+  // base-at-M + {dx,dy}*step = [0,0] + {2,1}*1 = [2,1]. Checked against
+  // the raw (pre-layout) graded output via the same resolveGradedPieces
+  // the app itself calls — NOT Canvas.getPieces()'s post-layout outline,
+  // since layoutPieces re-normalizes each piece to its own bounding box
+  // (`place = ([x,y]) => [x-minX+px, y-minY+py]`); point 0 happens to be
+  // this piece's own (0,0) drafting origin, so overriding it shifts the
+  // piece's minY too, and the layout renormalization would silently
+  // absorb the very delta this assertion needs to see.
+  await page.getByRole('button', { name: 'L', exact: true }).click();
+  const gradedPoint0 = await page.evaluate(async () => {
+    const { PATTERNS, computeMeasurements } = await import('/js/data.js');
+    const { resolveGradedPieces } = await import('/js/grading.js');
+    const s = JSON.parse(localStorage.getItem('pps'));
+    const opts = { category: s.category, size: s.size, standard: s.standard, kids: s.kids, custom: s.custom };
+    const pieces = resolveGradedPieces(PATTERNS[s.loaded], opts, computeMeasurements, s.gradeRules[s.loaded]);
+    return pieces.find((p) => p.key === s.gradeRulesPiece).outline[0];
+  });
+  expect(gradedPoint0).toEqual([2, 1]);
+
+  // Grade Nest preview: overlays S/M/L/XL of the selected piece — real
+  // canvas content, not a blank modal.
+  await page.getByRole('button', { name: 'Preview Grade Nest' }).click();
+  await expect(page.locator('#genericModal')).toHaveClass(/show/);
+  const nonEmptyPixels = await page.evaluate(() => {
+    const canvas = document.querySelector('#genericModal canvas');
+    const ctx = canvas.getContext('2d');
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let n = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) n++;
+    return n;
+  });
+  expect(nonEmptyPixels).toBeGreaterThan(0);
+
+  // Clean up the authored rule so this test doesn't leak state via
+  // localStorage into a differently-ordered future run.
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('pps'));
+    s.gradeRules = {};
+    localStorage.setItem('pps', JSON.stringify(s));
+  });
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});
