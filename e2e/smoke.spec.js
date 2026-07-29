@@ -1,5 +1,21 @@
 import { test, expect } from '@playwright/test';
 
+// Onboarding shows after a deliberate 400ms delay (js/app.js's init(),
+// `setTimeout(startOnboarding, 400)`) — not synchronously on load. A plain
+// `isVisible()` check taken immediately after page.goto() can race ahead
+// of that timer: it correctly sees nothing yet, skips the click, and the
+// modal then appears moments later and silently intercepts every
+// subsequent click for the rest of the test (confirmed in CI — this exact
+// race, not a real app bug, caused 3 of 5 smoke tests to fail with
+// "<div id=\"onbModal\">... subtree intercepts pointer events"). Waiting
+// explicitly for the button (up to a few seconds) handles both outcomes:
+// the delayed appearance, and never appearing at all.
+async function dismissOnboarding(page) {
+  const skip = page.getByRole('button', { name: 'Skip' });
+  await skip.waitFor({ state: 'visible', timeout: 3000 }).catch(() => null);
+  if (await skip.isVisible().catch(() => false)) await skip.click();
+}
+
 // One light smoke spec (see BerryStudio-Upgrade-Plan WP-0.2): load the app,
 // pick a pattern, grade it, export SVG, open the 3D preview, and confirm no
 // console errors anywhere along the way. Deliberately not a broad E2E
@@ -19,10 +35,7 @@ test('load, grade, export SVG, open 3D preview — no console errors', async ({ 
   });
 
   await page.goto('/index.html');
-
-  // Dismiss the onboarding modal.
-  const skip = page.getByRole('button', { name: 'Skip' });
-  if (await skip.isVisible().catch(() => false)) await skip.click();
+  await dismissOnboarding(page);
 
   // A pattern is loaded by default (the app boots with one already drafted).
   await expect(page.locator('#patternCanvas')).toBeVisible();
@@ -82,8 +95,7 @@ test('AI Provider settings panel renders and a mocked Test Connection round-trip
   }));
 
   await page.goto('/index.html');
-  const skip = page.getByRole('button', { name: 'Skip' });
-  if (await skip.isVisible().catch(() => false)) await skip.click();
+  await dismissOnboarding(page);
 
   await page.locator('#settingsBtn').click();
   await expect(page.locator('#settingsModal')).toHaveClass(/show/);
@@ -115,8 +127,7 @@ test('embedded Cloth Lab engine mounts real content with no console errors', asy
   });
 
   await page.goto('/index.html');
-  const skip = page.getByRole('button', { name: 'Skip' });
-  if (await skip.isVisible().catch(() => false)) await skip.click();
+  await dismissOnboarding(page);
 
   // Flip the engine flag via the real Settings UI, not a localStorage
   // shortcut — this also exercises the toggle rendering itself.
