@@ -7,6 +7,12 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
+  // In CI, also emit GitHub Actions annotations (one per failing test, with
+  // the actual assertion error) — the job's own raw log requires repo admin
+  // rights to fetch via the API, but check-run annotations are public, so
+  // this is how a failure actually gets diagnosed without shell access to
+  // the runner. `list` stays first for a normal human-readable console log.
+  reporter: process.env.CI ? [['list'], ['github']] : [['list']],
   webServer: {
     command: 'python3 -m http.server 8793',
     url: 'http://localhost:8793/index.html',
