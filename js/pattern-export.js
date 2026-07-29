@@ -54,14 +54,24 @@ export function buildDXF(pieces) {
     push("0", "POINT", "8", "4", "10", cx.toFixed(3), "20", (-cy).toFixed(3));
     (p.notches || []).forEach((nt) => push("0", "POINT", "8", "4", "10", nt[0].toFixed(3), "20", (-nt[1]).toFixed(3)));
 
-    (p.darts || []).forEach((d) => { for (let i = 0; i < d.length - 1; i++) push("0", "LINE", "8", "8", "10", d[i][0].toFixed(3), "20", (-d[i][1]).toFixed(3), "11", d[i + 1][0].toFixed(3), "21", (-d[i + 1][1]).toFixed(3)); });
+    // Dart legs (layer 8) — this app's dart shape is [apex, legA, legC],
+    // apex at index 0 (js/canvas.js's on-canvas renderer draws
+    // `moveTo(legA=d[1]) -> lineTo(apex=d[0]) -> lineTo(legC=d[2])`; every
+    // real dart in js/data.js and js/ai.js confirms apex is index 0, not
+    // 1). Draw the two real legs (apex-to-legA, apex-to-legC) explicitly
+    // rather than a naive d[i]-to-d[i+1] chain, which would instead draw
+    // apex-to-legA plus a spurious line straight across the two leg ends.
+    (p.darts || []).forEach((d) => {
+      if (d.length < 3) return;
+      const [apex, legA, legC] = d;
+      push("0", "LINE", "8", "8", "10", apex[0].toFixed(3), "20", (-apex[1]).toFixed(3), "11", legA[0].toFixed(3), "21", (-legA[1]).toFixed(3));
+      push("0", "LINE", "8", "8", "10", apex[0].toFixed(3), "20", (-apex[1]).toFixed(3), "11", legC[0].toFixed(3), "21", (-legC[1]).toFixed(3));
+    });
 
     if (p.grain && p.grain.length === 2) push("0", "LINE", "8", "11", "10", p.grain[0][0].toFixed(3), "20", (-p.grain[0][1]).toFixed(3), "11", p.grain[1][0].toFixed(3), "21", (-p.grain[1][1]).toFixed(3));
 
-    // Dart apex — this app's dart shape is [legA, apex, legC], apex at
-    // index 1 (see js/canvas.js's own on-canvas dart renderer, which draws
-    // `moveTo(apex) -> lineTo(legA) -> lineTo(legC)`).
-    (p.darts || []).forEach((d) => { if (d[1]) push("0", "POINT", "8", "13", "10", d[1][0].toFixed(3), "20", (-d[1][1]).toFixed(3)); });
+    // Dart apex drill hole (layer 13) — apex at index 0, see above.
+    (p.darts || []).forEach((d) => { if (d[0]) push("0", "POINT", "8", "13", "10", d[0][0].toFixed(3), "20", (-d[0][1]).toFixed(3)); });
   });
   push("0", "ENDSEC", "0", "EOF");
   return out.join("\n");

@@ -9,7 +9,7 @@ import { buildDXF, buildHPGL, buildPDF, computeTileGrid, parseDXFEntities, isTur
 const RECT_PIECE = {
   name: { en: 'Test Rect' },
   outline: [[0, 0], [10, 0], [10, 20], [0, 20]],
-  darts: [[[3, 5], [3.5, 6], [4, 5]]], // [legA, apex, legC] — apex at index 1
+  darts: [[[3.5, 6], [3, 5], [4, 5]]], // [apex, legA, legC] — apex at index 0, matching js/data.js/js/ai.js's real convention
   notches: [[0, 10]],
   grain: [[5, 2], [5, 18]],
 };

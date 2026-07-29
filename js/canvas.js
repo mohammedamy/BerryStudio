@@ -4,6 +4,7 @@
    selection, snapping, measure & sketch tools, undo/redo.
    ============================================================ */
 import { buildDXF, buildHPGL, buildPDF } from './pattern-export.js';
+import { offsetPoly as offsetPolyImpl } from './geometry.js';
 export const Canvas = (() => {
   let cv, ctx, dpr = 1;
   let view = { x: 60, y: 60, scale: 3.2 };     // px per cm
@@ -113,24 +114,12 @@ export const Canvas = (() => {
   function doRedo(){ if(!redo.length) return; undo.push(snapshot()); const s=JSON.parse(redo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; promoteBuf=[]; render(); }
 
   // ---- seam allowance offset (outward polygon offset) ----
-  function offsetPoly(poly, d) {
-    const n = poly.length, out = [];
-    // signed area to know orientation
-    let area = 0;
-    for (let i=0;i<n;i++){ const [x1,y1]=poly[i], [x2,y2]=poly[(i+1)%n]; area += x1*y2 - x2*y1; }
-    const sign = area > 0 ? 1 : -1;
-    for (let i=0;i<n;i++){
-      const p0=poly[(i-1+n)%n], p1=poly[i], p2=poly[(i+1)%n];
-      const e1=norm(sub(p1,p0)), e2=norm(sub(p2,p1));
-      const nrm1=[-e1[1]*sign,e1[0]*sign], nrm2=[-e2[1]*sign,e2[0]*sign];
-      let bis=norm([nrm1[0]+nrm2[0], nrm1[1]+nrm2[1]]);
-      const cosA=Math.max(0.3, bis[0]*nrm1[0]+bis[1]*nrm1[1]);
-      out.push([p1[0]+bis[0]*d/cosA, p1[1]+bis[1]*d/cosA]);
-    }
-    return out;
-  }
-  const sub=(a,b)=>[a[0]-b[0],a[1]-b[1]];
-  const norm=(a)=>{const l=Math.hypot(a[0],a[1])||1;return[a[0]/l,a[1]/l];};
+  // WP-14: the actual algorithm now lives in js/geometry.js (pure, unit
+  // tested) so it can accept `opts.perEdge`/`opts.join` for per-edge
+  // seam allowance and round/bevel corners. Every existing call in this
+  // file passes no 3rd argument, so it still runs the byte-identical
+  // original clamped-miter algorithm — no behavior change here.
+  const offsetPoly = offsetPolyImpl;
 
   // ---- geometry helpers ----
   const centroid = poly => { const n=poly.length; let x=0,y=0; poly.forEach(p=>{x+=p[0];y+=p[1];}); return [x/n,y/n]; };

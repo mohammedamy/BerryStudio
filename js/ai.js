@@ -27,6 +27,7 @@
    random) variety so the same input always reproduces the same
    result, but different inputs actually look different.
    ============================================================ */
+import { computePleats } from './pleats.js';
 export const AIGen = (() => {
   const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
   const q = v => v / 4;
@@ -417,6 +418,16 @@ export const AIGen = (() => {
     const gh=clamp(m.inseam*0.6*style.lengthF, 20, m.inseam);
     const hem=Math.max(w, w*style.flareF);
     const wrapCut = style.wrap ? w*0.4 : 0;
+    // WP-14: knife pleats add fabric at the waist edge beyond the plain
+    // panel width `w` — the panel's own waist corner widens to panelW
+    // while the waistband (below) still measures the body's actual
+    // waist, since the extra panel width is what gets folded/pleated
+    // INTO that band, not added to it. pleatCount=0 (the default before
+    // this option existed) makes panelW===w — byte-identical output.
+    const pleatCount = style.pleatCount || 0;
+    const pleatDepthCm = pleatCount ? 3 : 0;
+    const { addedWidthCm, pleats } = computePleats(w, pleatCount, pleatDepthCm);
+    const panelW = w + addedWidthCm;
     // front/back panels get no declared role here: they're genuinely
     // half-width fold pieces whenever !style.wrap (like buildTop's front/
     // back), but roles.js's hip-panel-front/hip-panel-back have no
@@ -429,9 +440,11 @@ export const AIGen = (() => {
     // Skirt", which classify() already recognizes as skirt-front/skirt-back).
     const panel=(en,ar,side)=>{
       const hemLine = hemPts(style, side==="front"?-wrapCut:0, hem, gh, gh, side);
-      return { name:{en, ar},
+      const piece = { name:{en, ar},
         desc:{en:"Generated skirt panel — flare and hem read from the reference.", ar:"بنل تنورة مولّد — الاتساع والحاشية من المرجع."},
-        outline:[[0,0],[w,0],...hemLine], grain:[[w/2,5],[w/2,gh-5]] };
+        outline:[[0,0],[panelW,0],...hemLine], grain:[[panelW/2,5],[panelW/2,gh-5]] };
+      if (pleats.length) piece.pleats = pleats;
+      return piece;
     };
     const band={ name:{en:"Waistband", ar:"الحزام"},
       desc:{en:"Generated waistband.", ar:"حزام مولّد."},

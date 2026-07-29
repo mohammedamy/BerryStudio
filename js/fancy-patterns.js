@@ -46,13 +46,27 @@ export let FancyGen;
   // Shared S-curve for a princess seam: 4 waypoints (shoulder→bust→waist→hip→hem),
   // out at bust/hip, in at waist. Reused as the shared edge between a bodice's
   // center panel and side panel — one curve, two panels, always seam-consistent.
+  // WP-14: alongside the flattened polyline (unchanged — every existing
+  // consumer keeps reading `points`), also returns `curves`: the 4 real
+  // cubic-bezier segments this curve is built from, as
+  // {fromIdx,toIdx,c1,c2} additive metadata (js/pattern-export.js's DXF
+  // layer-3 already reads this shape from WP-12). Indices are relative
+  // to `points`' own start (index 0) — callers splicing this into a
+  // larger outline array must offset fromIdx/toIdx by wherever `points`
+  // actually lands, same as princessBodice() does below.
   function princessCurve(topX, topY, bustX, bustY, waistX, waistY, hipX, hipY, hemX, hemY) {
-    const pts = [[topX, topY]];
-    pts.push(...cBez([topX, topY], [lerp(topX,bustX,0.3), lerp(topY,bustY,0.6)], [lerp(topX,bustX,0.85), bustY-3], [bustX, bustY], 6));
-    pts.push(...cBez([bustX, bustY], [lerp(bustX,waistX,0.3), lerp(bustY,waistY,0.5)], [lerp(bustX,waistX,0.85), waistY-4], [waistX, waistY], 6));
-    pts.push(...cBez([waistX, waistY], [lerp(waistX,hipX,0.3), lerp(waistY,hipY,0.5)], [lerp(waistX,hipX,0.85), hipY-3], [hipX, hipY], 6));
-    pts.push(...cBez([hipX, hipY], [lerp(hipX,hemX,0.3), lerp(hipY,hemY,0.5)], [lerp(hipX,hemX,0.85), hemY-2], [hemX, hemY], 6));
-    return pts;
+    const points = [[topX, topY]];
+    const curves = [];
+    const addSeg = (c1, c2, p1) => {
+      const fromIdx = points.length - 1;
+      points.push(...cBez(points[fromIdx], c1, c2, p1, 6));
+      curves.push({ fromIdx, toIdx: points.length - 1, c1, c2 });
+    };
+    addSeg([lerp(topX,bustX,0.3), lerp(topY,bustY,0.6)], [lerp(topX,bustX,0.85), bustY-3], [bustX, bustY]);
+    addSeg([lerp(bustX,waistX,0.3), lerp(bustY,waistY,0.5)], [lerp(bustX,waistX,0.85), waistY-4], [waistX, waistY]);
+    addSeg([lerp(waistX,hipX,0.3), lerp(waistY,hipY,0.5)], [lerp(waistX,hipX,0.85), hipY-3], [hipX, hipY]);
+    addSeg([lerp(hipX,hemX,0.3), lerp(hipY,hemY,0.5)], [lerp(hipX,hemX,0.85), hemY-2], [hemX, hemY]);
+    return { points, curves };
   }
 
   // ---------------- reusable mechanical components ----------------
@@ -196,8 +210,8 @@ export let FancyGen;
     const fBustX = qc * 0.62 * bustOutF, fWaistX = qw * 0.55 * waistInF, fHipX = qh * 0.60 * hipOutF, fHemX = qh * 0.60 * hemOutF;
     const bBustX = qc * 0.58 * bustOutF, bWaistX = qw * 0.52 * waistInF, bHipX = qh * 0.57 * hipOutF, bHemX = qh * 0.57 * hemOutF;
 
-    const frontCurve = princessCurve(shoulderX, topY, fBustX, bustY, fWaistX, waistY, fHipX, hipY, fHemX, hemY);
-    const backCurve  = princessCurve(shoulderX, topY, bBustX, bustY, bWaistX, waistY, bHipX, hipY, bHemX, hemY);
+    const { points: frontCurve, curves: frontCurveCurves } = princessCurve(shoulderX, topY, fBustX, bustY, fWaistX, waistY, fHipX, hipY, fHemX, hemY);
+    const { points: backCurve, curves: backCurveCurves } = princessCurve(shoulderX, topY, bBustX, bustY, bWaistX, waistY, bHipX, hipY, bHemX, hemY);
 
     // Neckline: a curved cutout from center-front down to the shoulder point.
     let neckPts;
@@ -245,10 +259,31 @@ export let FancyGen;
     // deriveUnfoldedSeamEdges. frontSide/backSide are single-side pieces
     // (bilateral) representing a mirrored L/R pair; the importer duplicates
     // them and suffixes the declared seamId per copy.
+    //
+    // WP-14: frontCenter/backCenter also get real `curves` metadata (the
+    // princess seam's actual bezier control points, from princessCurve's
+    // natural, non-reversed point order — frontSide/backSide splice the
+    // SAME curve in reverse, which would need separate reversed-index
+    // math; since both pieces show the identical physical seam, only one
+    // needs to carry the authoritative curve data). Offsets account for
+    // the leading `[0,y]` point and neckPts this curve is spliced after.
+    const frontCurveOffset = 1 + neckPts.length;
+    const backCurveOffset = 1 + backNeckPts.length;
+    const offsetCurves = (curves, off) => curves.map((c) => ({ fromIdx: c.fromIdx + off, toIdx: c.toIdx + off, c1: c.c1, c2: c.c2 }));
+    // frontCenter/backCenter ALSO get a real `edges[].seamId` (alongside
+    // princessSeamId, which the cloth-lab importer's cutOnFold branch
+    // reads instead and never looks at `edges` for) — same seamId as
+    // frontSide/backSide, same fromIdx/toIdx range as the `curves` metadata
+    // above, since it's the identical physical curve. This is what makes
+    // WP-14's 2D "walk the seam" tool findable: it needs two pieces in
+    // Canvas.getPieces() sharing one seamId, and before this only
+    // frontSide/backSide (one piece each) declared edges at all.
+    const frontCenterEdge = { fromIdx: frontCurveOffset, toIdx: frontCurveOffset + frontCurve.length - 1, seamId: 'princessFront' };
+    const backCenterEdge = { fromIdx: backCurveOffset, toIdx: backCurveOffset + backCurve.length - 1, seamId: 'princessBack' };
     const meta = {
-      frontCenter: { role: 'bodice-front-center', cutOnFold: true, princessSeamId: 'princessFront' },
+      frontCenter: { role: 'bodice-front-center', cutOnFold: true, princessSeamId: 'princessFront', curves: offsetCurves(frontCurveCurves, frontCurveOffset), edges: [frontCenterEdge] },
       frontSide: { role: 'bodice-front-side', bilateral: true, edges: [{ fromIdx: 0, toIdx: frontCurve.length - 1, seamId: 'princessFront' }] },
-      backCenter: { role: 'bodice-back-center', cutOnFold: true, princessSeamId: 'princessBack' },
+      backCenter: { role: 'bodice-back-center', cutOnFold: true, princessSeamId: 'princessBack', curves: offsetCurves(backCurveCurves, backCurveOffset), edges: [backCenterEdge] },
       backSide: { role: 'bodice-back-side', bilateral: true, edges: [{ fromIdx: 0, toIdx: backCurve.length - 1, seamId: 'princessBack' }] },
     };
     return { frontCenter, frontSide, backCenter, backSide, hemY, sideX, meta };

@@ -331,3 +331,57 @@ test('Grade Rules: authoring a per-point override changes graded output, Grade N
 
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
+
+// BerryStudio-Upgrade-Plan WP-14: "walk the seam". Loads a real princess-
+// seam Fancy Collection design (the one real producer of edges[].seamId
+// metadata today), opens the Walk the Seam tool, and confirms it finds
+// the frontCenter/frontSide pair and renders a real (non-blank) preview
+// at several slider positions — the visual front-end over
+// js/geometry.js's seamPointAtFraction, itself unit-tested separately.
+test('Walk the Seam finds a real princess-seam pair and renders at multiple positions', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+  page.on('console', (msg) => {
+    if (msg.type() !== 'error') return;
+    if (/Failed to load resource.*404/.test(msg.text())) return;
+    errors.push(msg.text());
+  });
+
+  await page.goto('/index.html');
+  await dismissOnboarding(page);
+  await expect(page.locator('#patternCanvas')).toBeVisible();
+
+  // Load a princess-seam design directly via FancyGen — the one real
+  // producer of edges[].seamId metadata (see js/fancy-patterns.js's
+  // princessBodice()) — same technique the Grade Rules test above uses
+  // to reach real generated pieces without depending on the library
+  // grid's current thumbnail layout.
+  await page.evaluate(async () => {
+    const { computeMeasurements } = await import('/js/data.js');
+    const { FancyGen } = await import('/js/fancy-patterns.js');
+    const m = computeMeasurements({ category: 'women', size: 'M', standard: 'intl', kids: null, custom: null });
+    const pieces = FancyGen.build('gown', m, {});
+    window.Canvas.setPattern(pieces, ['#6d5efc', '#00c2a8', '#ff5d8f', '#e2a52b', '#4c8dff', '#c1492e']);
+  });
+
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await page.getByRole('button', { name: 'Walk the Seam' }).click();
+  await expect(page.locator('#genericModal')).toHaveClass(/show/);
+  await expect(page.locator('#genericModal')).toContainText('princessFront');
+
+  const slider = page.locator('#genericModal input[type=range]');
+  for (const v of [0, 50, 100]) {
+    await slider.fill(String(v));
+    const nonEmptyPixels = await page.evaluate(() => {
+      const canvas = document.querySelector('#genericModal canvas');
+      const ctx = canvas.getContext('2d');
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let n = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) n++;
+      return n;
+    });
+    expect(nonEmptyPixels).toBeGreaterThan(0);
+  }
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});

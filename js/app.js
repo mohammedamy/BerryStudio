@@ -21,6 +21,8 @@ import { MEAS_KEYS, renderMeasureFields } from './measure-form.js';
 import { consumeBodyFormHandoff } from './body-handoff.js';
 import { nest as nestTruePolygon, cancelNest } from './nesting.js';
 import { stepForSize, resolveGradedPieces } from './grading.js';
+import { pivotDart, slashAndSpread } from './darts.js';
+import { seamPointAtFraction } from './geometry.js';
 
 (() => {
   "use strict";
@@ -41,7 +43,7 @@ import { stepForSize, resolveGradedPieces } from './grading.js';
     aiProvider: "proxy", aiProviderCfg: null, aiKeyPersist: false,
     aiImageProvider: "proxy", aiImageProviderCfg: null,
     lastMarkerYards: null, lastMarkerWidth: null,
-    builderKind: null, builderOpts: { length:"medium", flare:"regular", fit:"regular", sleeve:"short" }, builderCustom: {},
+    builderKind: null, builderOpts: { length:"medium", flare:"regular", fit:"regular", sleeve:"short", pleats:"none" }, builderCustom: {},
     avatarGLB: { women: "", men: "", girls: "", boys: "" },
     // BerryStudio-Upgrade-Plan WP-5: "iframe" (default, unchanged behavior)
     // or "embedded" (cloth-lab's lib build mounted directly into this page,
@@ -436,6 +438,7 @@ import { stepForSize, resolveGradedPieces } from './grading.js';
       </div>
       <div class="field"><label>${T("opacityLbl")} · <b class="lp-opv">${curOp}%</b></label><input class="range lp-op" type="range" min="4" max="90" value="${curOp}"></div>
       <div class="menu-sep"></div>
+      ${(p.darts && p.darts.length) ? `<button class="menu-item lp-darts">${IC.layers}<span>${T("editDarts")}</span></button>` : ""}
       <button class="menu-item lp-del" style="color:var(--danger)">${IC.trash}<span>${T("removeLayer")}</span></button>`;
     document.body.appendChild(m);
     const r = anchor.getBoundingClientRect(), mr = m.getBoundingClientRect();
@@ -450,7 +453,52 @@ import { stepForSize, resolveGradedPieces } from './grading.js';
     q(".lp-mat").onchange = () => { Canvas.setMaterial(i,q(".lp-mat").value||null); sync3DFabric(); };
     q(".lp-op").oninput = () => { const v=+q(".lp-op").value; q(".lp-opv").textContent=v+"%"; Canvas.setPieceProps(i,{opacity:v/100}); };
     q(".lp-del").onclick = () => { Canvas.removePiece(i); closeAnyMenu(); sync3DVisibility(); renderLayersPane(); toast("✓ "+T("removeLayer")); };
+    if(q(".lp-darts")) q(".lp-darts").onclick = () => { closeAnyMenu(); openDartEditorModal(i); };
     setTimeout(()=>document.addEventListener("pointerdown",onDocDown),0);
+  }
+
+  // WP-14: dart manipulation — pivotDart/transferDart preserve intake
+  // (fabric removed), slashAndSpread deliberately adds it. Scoped here to
+  // a modal over the selected piece's own darts, committing each change
+  // via Canvas.setPieceProps(i, {darts}) (a plain Object.assign onto the
+  // piece, same mechanism opacity/color use) rather than a full
+  // interactive canvas drag-tool — see js/darts.js for the pure,
+  // independently-tested math this wraps.
+  function openDartEditorModal(pieceIdx){
+    const p = Canvas.getPieces()[pieceIdx]; if(!p || !p.darts || !p.darts.length) return;
+    openModal(T("editDarts"), "", true);
+    const body = $("#genericModal .modal-body"); body.innerHTML="";
+    body.appendChild(el("div","help-note",T("editDartsHint")));
+
+    p.darts.forEach((dart, di) => {
+      const sec = el("div","field"); sec.style.marginTop="14px";
+      sec.innerHTML = `<label>${T("dart")} ${di+1}</label>`;
+      body.appendChild(sec);
+
+      const row1 = el("div","row"); row1.style.cssText="display:flex;gap:8px;align-items:center;margin-top:6px";
+      const pivotInp = el("input","input"); pivotInp.type="number"; pivotInp.step="1"; pivotInp.value="0"; pivotInp.style.flex="1";
+      const pivotBtn = el("button","big-btn ghost",T("dartPivotApply")); pivotBtn.style.flex="0 0 auto";
+      row1.appendChild(el("span",null,T("dartPivotDeg")+":")); row1.appendChild(pivotInp); row1.appendChild(pivotBtn);
+      body.appendChild(row1);
+      pivotBtn.onclick = () => {
+        const deg = +pivotInp.value || 0;
+        const newDarts = p.darts.map((d,i)=> i===di ? pivotDart(d, deg*Math.PI/180) : d);
+        Canvas.setPieceProps(pieceIdx, {darts:newDarts});
+        toast(T("dartUpdated")); openDartEditorModal(pieceIdx);
+      };
+
+      const row2 = el("div","row"); row2.style.cssText="display:flex;gap:8px;align-items:center;margin-top:8px";
+      const spreadInp = el("input","input"); spreadInp.type="number"; spreadInp.step="0.5"; spreadInp.value="0"; spreadInp.style.flex="1";
+      const spreadBtn = el("button","big-btn ghost",T("dartSpreadApply")); spreadBtn.style.flex="0 0 auto";
+      row2.appendChild(el("span",null,T("dartSpreadCm")+":")); row2.appendChild(spreadInp); row2.appendChild(spreadBtn);
+      body.appendChild(row2);
+      spreadBtn.onclick = () => {
+        const cm = +spreadInp.value || 0;
+        const newDarts = p.darts.map((d,i)=> i===di ? slashAndSpread(d, cm) : d);
+        Canvas.setPieceProps(pieceIdx, {darts:newDarts});
+        toast(T("dartUpdated")); openDartEditorModal(pieceIdx);
+      };
+    });
   }
 
   function renderLayersPane() {
@@ -920,13 +968,18 @@ import { stepForSize, resolveGradedPieces } from './grading.js';
   };
   const KIND_STYLE = {
     dress:{length:1,flare:1,fit:1,sleeve:1}, top:{length:1,flare:1,fit:1,sleeve:1}, shirt:{length:1,flare:1,fit:1,sleeve:1},
-    skirt:{length:1,flare:1,fit:1}, trousers:{length:1,flare:1,fit:1}, robe:{length:1,flare:1,fit:1,sleeve:1},
+    skirt:{length:1,flare:1,fit:1,pleats:1}, trousers:{length:1,flare:1,fit:1}, robe:{length:1,flare:1,fit:1,sleeve:1},
     gown:{length:1,sleeve:1}, jacket:{length:1}, coat:{length:1}, suit:{},
   };
   const LEN_MAP = {short:0.65, medium:1.0, long:1.35};
   const FLARE_MAP = {slim:0.9, regular:1.15, full:1.5};
   const FIT_MAP = {fitted:0.85, regular:1.0, relaxed:1.15};
   const SLEEVE_MAP = {sleeveless:0, short:0.45, long:1.3};
+  // WP-14: knife-pleat count per waist panel; depth is fixed at a
+  // realistic 3cm per pleat (2x that in added waist-edge width — see
+  // js/pleats.js's computePleats). "none" keeps buildSkirt's output
+  // byte-identical to before this option existed.
+  const PLEAT_MAP = {none:0, light:3, full:6};
 
   function renderBuilderPane() {
     const c = $(".rail-pane[data-pane=builder]"); c.innerHTML = "";
@@ -972,6 +1025,7 @@ import { stepForSize, resolveGradedPieces } from './grading.js';
     if (st.flare) segRow(T("builderFlare"), "flare", ["slim","regular","full"]);
     if (st.fit) segRow(T("builderFit"), "fit", ["fitted","regular","relaxed"]);
     if (st.sleeve) segRow(T("builderSleeve"), "sleeve", ["sleeveless","short","long"]);
+    if (st.pleats) segRow(T("builderPleats"), "pleats", ["none","light","full"]);
 
     const genBtn = el("button","big-btn",IC.check+T("builderGenerate")); genBtn.style.marginTop="16px";
     genBtn.onclick = () => generateBuilderPattern(kind);
@@ -990,6 +1044,7 @@ import { stepForSize, resolveGradedPieces } from './grading.js';
         fitF: FIT_MAP[o.fit] ?? 1,
         sleeveLenF: KIND_STYLE[kind].sleeve ? (SLEEVE_MAP[o.sleeve] ?? 0.45) : 0,
         sleeveWideF: 1,
+        pleatCount: KIND_STYLE[kind].pleats ? (PLEAT_MAP[o.pleats] ?? 0) : 0,
       };
       pieces = AIGen.build(style, m).pieces;
     } else {
@@ -1057,6 +1112,95 @@ import { stepForSize, resolveGradedPieces } from './grading.js';
     c.appendChild(el("div","help-note",T("patternSummaryD"))).style.marginTop="6px";
     const bo=el("button","big-btn ghost",T("bom")); bo.style.marginTop="10px"; bo.onclick=()=>toast(T("bom")+" ✓"); c.appendChild(bo);
     const cp=el("button","big-btn ghost",T("checkPattern")); cp.style.marginTop="8px"; cp.onclick=()=>runCheckPattern(); c.appendChild(cp);
+    const ws=el("button","big-btn ghost",T("walkSeam")); ws.style.marginTop="8px"; ws.onclick=()=>openWalkSeamModal(); c.appendChild(ws);
+  }
+
+  // WP-14: "walk the seam" — scans currently loaded pieces for a pair
+  // sharing a declared edges[].seamId (js/fancy-patterns.js's princess-
+  // seam metadata is the one real producer of this today) and lets the
+  // user drag a single 0-100% slider to see the matching arc-length
+  // position highlighted on BOTH edges at once — the visual, interactive
+  // front-end over js/geometry.js's seamPointAtFraction (itself the same
+  // arc-length technique js/validate.js's notch-alignment check uses).
+  function findSeamPairs(pieces){
+    const bySeam = {};
+    pieces.forEach((p,i)=>{ (p.edges||[]).forEach(e=>{ (bySeam[e.seamId] ||= []).push({pieceIdx:i, edge:e}); }); });
+    const pairs = [];
+    const dist=(p,q)=>Math.hypot(p[0]-q[0],p[1]-q[1]);
+    Object.entries(bySeam).forEach(([seamId, entries])=>{
+      for(let a=0; a<entries.length; a++) for(let b=a+1; b<entries.length; b++){
+        if(entries[a].pieceIdx===entries[b].pieceIdx) continue;
+        const A=entries[a], B=entries[b];
+        const outlineA=pieces[A.pieceIdx].outline, outlineB=pieces[B.pieceIdx].outline;
+        const startA=outlineA[A.edge.fromIdx], endA=outlineA[A.edge.toIdx];
+        const startB=outlineB[B.edge.fromIdx], endB=outlineB[B.edge.toIdx];
+        // Two edges declaring the same seamId aren't guaranteed to be
+        // walked in the same direction (frontCenter's princess curve runs
+        // top->hem in its own natural point order; frontSide splices the
+        // SAME curve in reverse — hem->top). Detect this from the real
+        // endpoint positions rather than trusting fromIdx/toIdx order, and
+        // flip B's fraction at draw time so "50%" means the same physical
+        // point on both edges regardless of how each was declared.
+        const sameDir = dist(startA,startB)+dist(endA,endB);
+        const oppDir = dist(startA,endB)+dist(endA,startB);
+        pairs.push({seamId, a:A, b:B, bReversed: oppDir < sameDir});
+      }
+    });
+    return pairs;
+  }
+  function openWalkSeamModal(){
+    const pieces = Canvas.getPieces();
+    const pairs = findSeamPairs(pieces);
+    if(!pairs.length){ toast(T("walkSeamNone")); return; }
+    const pair = pairs[0];
+    const pieceA = pieces[pair.a.pieceIdx], pieceB = pieces[pair.b.pieceIdx];
+    // Pieces are drawn at their own independent layoutPieces() position
+    // on the shared cutting sheet — comparing raw coordinates between
+    // two DIFFERENT pieces would show a constant offset even for a
+    // perfectly-matching seam (confirmed: every fraction differed by the
+    // exact same distance until this alignment was added). Align pieceB
+    // by translating it so its fraction=0 point coincides with pieceA's,
+    // purely for this preview's drawing — the real Canvas.getPieces()
+    // data is never mutated.
+    const a0 = seamPointAtFraction(pieceA.outline, pair.a.edge.fromIdx, pair.a.edge.toIdx, 0);
+    const b0 = seamPointAtFraction(pieceB.outline, pair.b.edge.fromIdx, pair.b.edge.toIdx, pair.bReversed ? 1 : 0);
+    const alignOffset = [a0[0]-b0[0], a0[1]-b0[1]];
+    const pieceBOutlineAligned = pieceB.outline.map(([x,y])=>[x+alignOffset[0], y+alignOffset[1]]);
+    openModal(T("walkSeam"), "", true);
+    const body = $("#genericModal .modal-body"); body.innerHTML="";
+    body.appendChild(el("div","help-note",T("walkSeamHint")+` (${pair.seamId})`));
+    const canvas = el("canvas"); canvas.width=560; canvas.height=420;
+    canvas.style.cssText="width:100%;height:auto;margin-top:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)";
+    body.appendChild(canvas);
+    const sliderRow = el("div","row"); sliderRow.style.cssText="display:flex;align-items:center;gap:10px;margin-top:12px";
+    const slider = el("input"); slider.type="range"; slider.min="0"; slider.max="100"; slider.value="50"; slider.style.flex="1";
+    const pctLbl = el("span",null,"50%"); pctLbl.style.cssText="min-width:3em;text-align:right;font-weight:600";
+    sliderRow.appendChild(slider); sliderRow.appendChild(pctLbl); body.appendChild(sliderRow);
+
+    const draw = () => {
+      const frac = (+slider.value)/100; pctLbl.textContent = slider.value+"%";
+      const ptA = seamPointAtFraction(pieceA.outline, pair.a.edge.fromIdx, pair.a.edge.toIdx, frac);
+      const ptBraw = seamPointAtFraction(pieceB.outline, pair.b.edge.fromIdx, pair.b.edge.toIdx, pair.bReversed ? 1-frac : frac);
+      const ptB = [ptBraw[0]+alignOffset[0], ptBraw[1]+alignOffset[1]];
+      const ctx = canvas.getContext("2d"); const W=canvas.width, H=canvas.height;
+      ctx.clearRect(0,0,W,H);
+      const allPts = [...pieceA.outline, ...pieceBOutlineAligned];
+      const xs=allPts.map(p=>p[0]), ys=allPts.map(p=>p[1]);
+      const minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
+      const scale = Math.min((W-40)/Math.max(maxX-minX,1), (H-40)/Math.max(maxY-minY,1));
+      ctx.save(); ctx.translate(20-minX*scale, 20-minY*scale);
+      [ [pieceA.outline,"#6d5efc"], [pieceBOutlineAligned,"#00c2a8"] ].forEach(([outline,color])=>{
+        ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.beginPath();
+        outline.forEach(([x,y],j)=>{ const px=x*scale, py=y*scale; j===0?ctx.moveTo(px,py):ctx.lineTo(px,py); });
+        ctx.closePath(); ctx.stroke();
+      });
+      [ [ptA,"#6d5efc"], [ptB,"#00c2a8"] ].forEach(([pt,color])=>{
+        ctx.beginPath(); ctx.arc(pt[0]*scale, pt[1]*scale, 6, 0, Math.PI*2);
+        ctx.fillStyle=color; ctx.fill(); ctx.strokeStyle="#1a1a1a"; ctx.lineWidth=1.5; ctx.stroke();
+      });
+      ctx.restore();
+    };
+    slider.oninput = draw; draw();
   }
 
   function doExport(){
