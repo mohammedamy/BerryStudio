@@ -32,12 +32,17 @@ class AvatarErrorBoundary extends Component {
 // `skinColor` (WP-8.6) only ever reaches the procedural Avatar — a loaded
 // GLB carries its own baked-in skin texture/material, which this doesn't
 // touch (see body/skinTones.js's own header comment).
-export default function BodyAvatar({ dims, url, collisionRigRef, skinColor }) {
-  if (!url) return <Avatar dims={dims} skinColor={skinColor} />
+// `pose` (WP-8.5) reaches both tiers — the procedural Avatar's own static
+// geometry/rotation variants, and GLBAvatar's bone-rotation repose (with a
+// `walk` scoped to GLBs that ship embedded animation clips; the procedural
+// avatar has no skeleton to animate, so `walk` there is a no-op standing
+// pose, same honest degradation as everywhere else in this fallback chain).
+export default function BodyAvatar({ dims, url, collisionRigRef, skinColor, pose }) {
+  if (!url) return <Avatar dims={dims} skinColor={skinColor} pose={pose} />
   return (
-    <AvatarErrorBoundary fallback={<Avatar dims={dims} skinColor={skinColor} />}>
-      <Suspense fallback={<Avatar dims={dims} skinColor={skinColor} />}>
-        <GLBAvatar dims={dims} url={url} collisionRigRef={collisionRigRef} />
+    <AvatarErrorBoundary fallback={<Avatar dims={dims} skinColor={skinColor} pose={pose} />}>
+      <Suspense fallback={<Avatar dims={dims} skinColor={skinColor} pose={pose} />}>
+        <GLBAvatar dims={dims} url={url} collisionRigRef={collisionRigRef} pose={pose} />
       </Suspense>
     </AvatarErrorBoundary>
   )

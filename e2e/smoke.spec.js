@@ -142,3 +142,52 @@ test('embedded Cloth Lab engine mounts real content with no console errors', asy
 
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
+
+// BerryStudio-Upgrade-Plan WP-10: the standalone BodyForm page renders an
+// avatar from measurements (bodyOnly mode — no garment/cloth UI), exports
+// GLB/OBJ, and its "Open in Fit Studio" handoff (sessionStorage + a URL
+// flag, see js/body-handoff.js) lands the main app directly on the 3D
+// Cloth Lab with the same category and measurements.
+test('BodyForm generates an avatar, exports GLB/OBJ, and hands off to Fit Studio', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+  page.on('console', (msg) => {
+    if (msg.type() !== 'error') return;
+    if (/Failed to load resource.*404/.test(msg.text())) return;
+    errors.push(msg.text());
+  });
+
+  await page.goto('/body.html');
+  await expect(page.locator('#clothLabEmbed canvas')).toBeVisible({ timeout: 15000 });
+
+  await page.getByRole('button', { name: 'Men', exact: true }).click();
+  const chestInput = page.locator('input[data-k="chest"]');
+  await chestInput.fill('123');
+  await chestInput.dispatchEvent('change');
+  await page.getByRole('button', { name: 'Generate Avatar' }).click();
+  await page.waitForTimeout(1000);
+
+  const [glbDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Export GLB' }).click(),
+  ]);
+  expect(glbDownload.suggestedFilename()).toMatch(/\.glb$/);
+  const [objDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Export OBJ' }).click(),
+  ]);
+  expect(objDownload.suggestedFilename()).toMatch(/\.obj$/);
+
+  await page.getByRole('button', { name: 'Open in Fit Studio' }).click();
+  await expect(page).toHaveURL(/index\.html\?fromBodyForm=1/);
+
+  // Lands directly on the Cloth Lab view, not the usual 2D-pattern boot screen.
+  await expect(page.locator('#viewToggle button.active')).toHaveText('3D Cloth Lab');
+  const state = await page.evaluate(() => JSON.parse(localStorage.getItem('pps')));
+  expect(state.category).toBe('men');
+  expect(Number(state.custom.chest)).toBe(123);
+  // The handoff URL flag is consumed exactly once (history.replaceState).
+  await expect(page).toHaveURL(/index\.html$/);
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});

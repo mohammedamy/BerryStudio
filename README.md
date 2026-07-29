@@ -67,6 +67,9 @@ install it. After the first load it works **fully offline**.
 | **ES modules** — `js/*.js` are real `import`/`export` modules (was: 9 classic IIFE scripts sharing sibling browser scope) | ✅ Working (`window.X` globals kept as a temporary compat layer — see Honest notes) |
 | **Pattern Spec schema** (`schema/pattern-spec.v1.json`) — a declarative JSON Schema for future AI-generated garments | ✅ Schema + validator defined (not yet wired into the AI generator — see Honest notes) |
 | **Check Pattern validator** (`js/validate.js`, Export pane / ⌘K) — 8 patternmaking checks: closed outline, self-intersection, grainline, seam-allowance offset, cut-on-fold symmetry, seam-length parity, notch alignment, ease | ✅ 5 full-confidence, 2 heuristic, 1 deferred (see Honest notes) |
+| **3D Cloth Lab** ("3D Cloth Lab" tab) — real-time GPU cloth simulation (strain-limited structural + bend + self-collision + body collision) of your actual pattern, with fabric presets (mass/stiffness/anisotropy/PBR sheen-transmission), an avatar matching your measurements (FFD-deformed if you supply a GLB), 6 pose variants, 6 skin tones, and GLB/OBJ/USDZ/turntable export | ✅ Working — princess seams, gores, capes, hoods, tiers and other Fancy Collection shapes import as connected garments, not disjoint pieces (see Honest notes) |
+| **Cloth Lab engine** (Settings → 3D Cloth Lab engine) — "Iframe" (default) runs Cloth Lab as a separate embedded app; "Embedded" mounts it directly into this page instead, sharing this page's own React/Three.js so it starts faster and updates instantly | ⚠️ Both working; "Embedded" is newer and still being rolled out as the default |
+| **BodyForm** (`body.html`, standalone) — build a 3D avatar from measurements alone (no pattern needed), export it, or "Open in Fit Studio" to carry the category/measurements into the main app's 3D Cloth Lab | ✅ Working |
 
 ### Honest notes
 - **Fancy Collection** (`js/fancy-patterns.js`) pieces are hand-authored, not run
@@ -144,6 +147,44 @@ install it. After the first load it works **fully offline**.
   them in the repo (e.g. `avatars/women.glb`) and paste that relative path.
 - Three.js + OrbitControls load from a CDN (via an import map) on first visit,
   then are cached for offline use.
+- **3D Cloth Lab**'s cloth solver uses a distance-based hinge/fold spring for
+  bend resistance (not a true dihedral-angle constraint) and brute-force
+  O(N²) self-collision (not a GPU spatial hash) — both deliberate, documented
+  trade-offs matched to this app's particle counts, not oversights. Fabric
+  `structStiff`/`bendStiff` values are tuned "feel" sliders, not
+  Kawabata-instrument-calibrated SI values. Seams weld at mesh-build time
+  (no gradual sewing ramp-in) — a garment can show a brief pop at the seam
+  on the very first frame after a pattern change, not during normal wear.
+- **3D Cloth Lab pose variants** (Standing/A-pose/T-pose/Contrapposto/Seated/
+  Walk): all six work on the built-in procedural avatar. On a loaded GLB
+  avatar, Seated's knee bend derives "forward" from the character's own hip
+  bones, which works for any exporter's bone-axis convention but is
+  ambiguous by 180° — an unlucky third-party rig can end up seated facing
+  backward. Walk only animates a GLB that ships its own embedded walk/idle
+  clip; the procedural avatar has no skeleton to animate and stays standing
+  for Walk. Whichever pose is displayed, simulated cloth always collides
+  against the standing arms-down body — a seated body's garment drape isn't
+  re-simulated for the new pose.
+- **VRM avatar files** (a common photoreal-avatar format) are detected and
+  shown an honest "not supported yet" message rather than mis-positioned —
+  full VRM humanoid-bone retargeting is a separate spec from the Mixamo/
+  Ready Player Me bone-name convention this app parses, and wasn't built.
+- **USDZ export** (3D Cloth Lab → Export) produces a structurally valid file
+  with no runtime errors, but hasn't been confirmed to open correctly in
+  Apple Quick Look on real iOS hardware — no device was available to test
+  with. GLB/OBJ export, PNG-sequence turntables, and MP4/WebM turntable
+  recording are all confirmed working. GIF export isn't offered — every
+  JS GIF encoder is a new dependency this project avoids; use the
+  MP4/WebM/PNG-sequence export and convert externally if you need a GIF.
+- **BodyForm** (`body.html`) and the 3D Cloth Lab's "Embedded" engine both
+  share React/Three.js with the main page via an import map — this needs a
+  real browser environment with dynamic `import()` support; some headless
+  browser-automation tools have been observed to fail resolving import-map
+  entries in a dynamic `import()` call even though the map itself is
+  correctly present (confirmed not a bug in this app by reproducing the
+  identical check in real Chromium, where it passes) — if you hit "Failed
+  to resolve module specifier" only inside an automation tool, it's the
+  tool, not this app.
 - **ES modules**: every root `js/*.js` file now has real `export`s and the files
   that need them have real `import`s, replacing the previous "9 classic scripts
   sharing one browser lexical scope" pattern. Every exported symbol also still

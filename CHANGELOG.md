@@ -6,6 +6,125 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Phase 2 — 3D: fix and unify (WP-5 – WP-10)
+
+Third increment of `BerryStudio-Upgrade-Plan.md` — the largest phase: cloth-lab's
+solver, avatars, and rendering brought up to the level the pattern editor
+already was, plus the architectural work to run it as one page instead of a
+sandboxed iframe. Sequenced WP-6 → WP-7 → WP-8 → WP-9 → WP-5 → WP-10 (engine
+work first and proven stable, then one clean architectural promotion, then
+the new standalone route) rather than the document's own WP-5-first
+numbering — see the phase's own planning doc for the full reasoning.
+
+### Added
+- **Pattern metadata at the source** (WP-6) — `schema/pattern-spec.v1.json`'s
+  `role` enum extended from 13 to ~44 values (princess seams, gores, godets,
+  capes, tiers, two-piece sleeves, collars, hoods, yokes, peplums, and more),
+  old names kept as aliases. `js/data.js`, `js/ai.js`, and all 24
+  `js/fancy-patterns.js` designs now emit `role`/`cutOnFold`/`foldEdgeIndex`/
+  `edges`(seam IDs)/`grainline` at construction time. `importFromApp.js`
+  is now a thin validator over that metadata, falling back to its old
+  geometric classifier (`classifyLegacy`) only for pieces without it — never
+  silently dropped. New `seamGraphPlacement.js`: a BFS seam-graph placement
+  engine (pieces are nodes, shared seam IDs are edges) with per-role-family
+  placement primitives (gores, godets, capes, sleeves, collars, hoods,
+  yokes, peplums, pockets, waistbands, cuffs), replacing per-shape geometric
+  guessing. All 24 Fancy Collection designs now import and simulate as
+  connected garments — automated as an acceptance test.
+- **Cloth solver quality** (WP-7) — hard strain-limit clamp in the structural
+  constraint shader (per-fabric `maxStrain`); `jersey`/`scuba`/`tulle`
+  fabric presets plus warp/weft/bias anisotropy tagged from `grainline`;
+  adaptive substepping (`cloth-lab/src/perf/frameBudget.js`, an EMA
+  frame-time controller shared with WP-9's adaptive DPR) replacing a fixed
+  `SUBSTEPS=8`, with a dev-only Solver HUD (`?hud=1`); waistband pinning
+  (mirrors the existing shoulder-pin mask); a headless rest-state pre-relax
+  before the first visible frame.
+- **Avatars matching measurements** (WP-8) — arm/leg length now reads the
+  user's own sleeve/inseam measurements instead of a fixed height fraction;
+  a new FFD lattice (`body/ffdLattice.js`) deforms a loaded GLB per-region
+  (bust/waist/hip/shoulder/thigh) toward the user's measurements; a new
+  mesh-fit collision rig (`body/meshFitCollisionRig.js`) measures a loaded
+  GLB's actual cross-sections instead of using the formula-only rig; VRM
+  files are now detected and given an honest "not supported yet, showing
+  original pose" message instead of silently mis-positioning; a 6-tone skin
+  preset picker (`ui/AvatarPanel.jsx`); **a real pose-variant system** —
+  Standing/A-pose/T-pose/Contrapposto/Seated/Walk, as static geometry/
+  rotation variants on the procedural avatar (Seated is a genuine bent-knee
+  two-segment leg, not just a rotation) and world-space bone corrections on
+  a recognized GLB rig, with Walk scoped to GLBs that ship their own
+  embedded animation clip (played via drei's `useAnimations`).
+- **Rendering, performance, and export** (WP-9) — `/3d-test.html`, a
+  build-free WebGL2/float-render-target/max-texture-size capability probe;
+  PBR `transmission` (chiffon/tulle) and `anisotropy`/`anisotropyRotation`
+  (silk/satin) fabric shading; the root app's `three-view.js` gained the
+  same local HDRI environment and ACES tone mapping cloth-lab already had;
+  adaptive DPR sharing WP-7's `frameBudget.js`; GLB/OBJ/USDZ export, PNG-
+  sequence turntables, and MP4/WebM turntable recording
+  (`cloth-lab/src/export/`).
+- **One shared React/Three.js instance** (WP-5) — an import map
+  (`index.html`) resolving `react`/`react-dom`/`@react-three/fiber`/
+  `@react-three/drei` via esm.sh's `?external=` dedup and a shared
+  `three@0.185.1` (fixing a pre-existing `0.160.0`/`0.185.1` version split),
+  plus a new `cloth-lab/src/embed.js` entry point (built by
+  `vite.lib.config.js` into `dist-embed/`) that mounts cloth-lab directly
+  into the root page instead of a cross-document iframe. A new
+  `state.clothLabEngine` Settings toggle (`"iframe"` default, `"embedded"`
+  opt-in) switches between them; the iframe path is completely unchanged
+  when the flag is left at its default. CI now also builds and publishes
+  `dist-embed/`.
+- **BodyForm** (WP-10) — a new standalone `body.html`: pick a category and
+  starting size, fine-tune measurements (`js/measure-form.js`, extracted
+  out of the main app's own Measures pane rather than copy-pasted), and see
+  a live avatar via cloth-lab's embedded engine in a new `bodyOnly` mode
+  (no garment/cloth/seam UI, just the avatar — reuses the existing debug
+  view machinery rather than a new rendering path). "Open in Fit Studio"
+  (`js/body-handoff.js`, sessionStorage + a URL flag) carries the category
+  and measurements into the main app, landing directly on the 3D Cloth Lab.
+
+### Changed
+- `js/app.js`'s `buildClothLabPayload()` forwards the new WP-6 metadata
+  fields (plus the already-existing-but-previously-dropped `darts`/
+  `notches`/`grain`) to whichever cloth-lab engine is active.
+- `cloth-lab/src/index.css` scoped everything under `.cloth-lab-root`
+  instead of `:root`/`html`/`body` — a page embedding cloth-lab directly
+  (WP-5/WP-10) would otherwise have its own CSS custom properties silently
+  overwritten by cloth-lab's.
+- `.github/workflows/deploy-pages.yml`'s "Assemble combined site" step now
+  also copies `env/` and `schema/` into the deployed site — a pre-existing
+  gap (neither was ever copied) that would have silently 404'd the root
+  app's HDRI (WP-9.3) and Pattern Validator (WP-0.3) in production; found
+  and fixed while already touching this file for WP-5.6.
+
+### Known limitations (see README's Honest notes for full detail)
+- **Seam sewing ramp-in was not implemented** — seams still hard-weld at
+  mesh-build time via the pre-existing union-find pass; the plan's own text
+  explicitly permitted deferring this if the merge-after-ramp approach
+  proved too risky, and it was not attempted this pass.
+- True dihedral-angle bend constraints and a GPU spatial-hash self-collision
+  broadphase are both still the pre-existing distance-based hinge and
+  brute-force O(N²) narrowphase — deliberate, already-documented trade-offs,
+  not attempted this pass (no garment in this app approaches the particle
+  count where either would matter).
+- Fabric `structStiff`/`bendStiff` values are tuned "feel" sliders, not
+  Kawabata-instrument-calibrated SI values — an intentional, pre-existing
+  design choice, not a new gap.
+- GLB pose variants: `seated`'s knee bend derives "forward" from the
+  character's own hip-bone axis, which is robust to unknown per-exporter
+  bone-local-axis conventions but genuinely ambiguous by 180° — an unlucky
+  third-party rig can end up seated facing backward. Cloth collision/
+  placement for a GLB avatar always assumes the standing arms-down pose
+  regardless of which pose is displayed (re-deriving collision per pose is
+  a materially larger problem — a seated body needs seated-aware garment
+  draping, not just a repositioned collider — and out of scope here).
+- USDZ export runs without errors and produces valid zip/usdc bytes, but has
+  not been verified in Apple Quick Look on real iOS hardware (none was
+  available in the environment this was built in).
+- Full VRM humanoid-bone retargeting is not implemented — format detection
+  only, with an honest fallback message rather than silent mis-positioning.
+- GIF export was not added — every JS GIF encoder is a new dependency,
+  against this project's dependency-minimal posture; PNG-sequence and
+  MP4/WebM turntable export cover the same need via native browser APIs.
+
 ## Phase 1 — Bring Your Own AI (WP-1 – WP-4)
 
 Second increment of `BerryStudio-Upgrade-Plan.md` — the plan's own headline

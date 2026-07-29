@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import Header from './ui/Header'
 import MeasurementPanel from './ui/MeasurementPanel'
 import FabricPanel from './ui/FabricPanel'
-import AvatarPanel, { DEFAULT_SKIN_TONE } from './ui/AvatarPanel'
+import AvatarPanel, { DEFAULT_SKIN_TONE, DEFAULT_POSE } from './ui/AvatarPanel'
 import ExportPanel from './ui/ExportPanel'
 import SolverHUD, { isSolverHUDEnabled } from './ui/SolverHUD'
 import Scene from './scene/Scene'
@@ -34,14 +34,20 @@ const SKIRT_ROLES = { frontSkirt: 'hipPanelFront', backSkirt: 'hipPanelBack' }
 // the postMessage round-trip with a plain prop (no serialization tax, no
 // separate "is cloth-lab ready yet" handshake needed since there's no
 // cross-document boundary to wait for).
-export default function App({ embedded = false, pattern = null, onReady } = {}) {
+// WP-10: `bodyOnly` is the standalone BodyForm page's mode (body.html) — no
+// garment, cloth sim, or seam authoring, just the avatar matching the given
+// measurements. It reuses debugView's existing 'off' state (Scene.jsx
+// already renders nothing but BodyAvatar for any debugView other than
+// pieces/weld/cloth/seams) rather than adding a new rendering path.
+export default function App({ embedded = false, pattern = null, onReady, bodyOnly = false } = {}) {
   const [category, setCategory] = useState(pattern?.category || 'women')
   const [measurementsByCategory, setMeasurementsByCategory] = useState(
     pattern ? { ...DEFAULT_MEASUREMENTS, [pattern.category]: pattern.measurements } : DEFAULT_MEASUREMENTS,
   )
-  const [debugView, setDebugView] = useState('cloth')
+  const [debugView, setDebugView] = useState(bodyOnly ? 'off' : 'cloth')
   const [fabricId, setFabricId] = useState((pattern && pattern.fabricId) || DEFAULT_FABRIC)
   const [skinToneId, setSkinToneId] = useState(DEFAULT_SKIN_TONE)
+  const [poseId, setPoseId] = useState(DEFAULT_POSE)
   const [garment, setGarment] = useState(null) // null = default T-shirt; else {pieces, seams} from the seam editor
   // Per-category GLB avatar URLs from the bridge (root app's state.avatarGLB
   // dict) — keyed by category, not a single URL, because cloth-lab's own
@@ -82,7 +88,7 @@ export default function App({ embedded = false, pattern = null, onReady } = {}) 
     setGarment(null) // the previous "Simulate This Garment" result doesn't apply to a new pattern
     setImported(result)
     setGarmentVersion((v) => v + 1)
-    setDebugView('seams')
+    setDebugView(bodyOnly ? 'off' : 'seams')
   }
 
   // Legacy/standalone bridge from the root BerryStudio app when embedded
@@ -125,16 +131,18 @@ export default function App({ embedded = false, pattern = null, onReady } = {}) 
   return (
     <div className="cloth-lab-root">
       <Header
-        embedded={embedded}
+        embedded={embedded} bodyOnly={bodyOnly}
         category={category} onCategoryChange={setCategory}
         debugView={debugView} onDebugViewChange={setDebugView}
       />
       <Workspace
         key={garmentVersion}
+        bodyOnly={bodyOnly}
         dims={dims} measurements={measurements}
         onMeasurementsChange={(next) => setMeasurementsByCategory((prev) => ({ ...prev, [category]: next }))}
         fabricId={fabricId} onFabricChange={setFabricId}
         skinToneId={skinToneId} onSkinToneChange={setSkinToneId}
+        poseId={poseId} onPoseChange={setPoseId}
         debugView={debugView} garment={garment}
         imported={imported} skirtRawPieces={skirtRawPieces}
         avatarGLBUrl={avatarGLBByCategory[category]}
@@ -149,7 +157,7 @@ export default function App({ embedded = false, pattern = null, onReady } = {}) 
 // Seams view — split out from App so the whole thing can be remounted
 // (via App's key={garmentVersion}) as a unit whenever a new garment import
 // needs a fresh seam-editor rather than picking up on top of a stale one.
-function Workspace({ dims, measurements, onMeasurementsChange, fabricId, onFabricChange, skinToneId, onSkinToneChange, debugView, garment, imported, skirtRawPieces, avatarGLBUrl, onReset, onSimulate }) {
+function Workspace({ bodyOnly, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, skinToneId, onSkinToneChange, poseId, onPoseChange, debugView, garment, imported, skirtRawPieces, avatarGLBUrl, onReset, onSimulate }) {
   const rawPieces = imported ? imported.rawPieces : skirtRawPieces
   const roles = imported ? imported.roles : SKIRT_ROLES
   const seedEdges = imported ? imported.edgeInstructions : undefined
@@ -161,32 +169,34 @@ function Workspace({ dims, measurements, onMeasurementsChange, fabricId, onFabri
   return (
     <div style={{ flex: '1 1 auto', display: 'flex', minHeight: 0 }}>
       <aside style={{ width: 260, flex: '0 0 auto', borderInlineEnd: '1px solid var(--border)', background: 'var(--panel)', overflowY: 'auto' }}>
-        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: 'var(--text-2)' }}>Garment:</span>
-          <strong>{imported ? 'From your BerryStudio design' : garment ? 'Custom (seam-authored)' : 'T-shirt (default)'}</strong>
-          {(garment || imported) && (
-            <button
-              onClick={onReset}
-              style={{ marginInlineStart: 'auto', border: 'none', background: 'transparent', color: 'var(--accent-2)', fontSize: 12, cursor: 'pointer' }}
-            >
-              Reset
-            </button>
-          )}
-        </div>
-        {imported && imported.skipped.length > 0 && (
+        {!bodyOnly && (
+          <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: 'var(--text-2)' }}>Garment:</span>
+            <strong>{imported ? 'From your BerryStudio design' : garment ? 'Custom (seam-authored)' : 'T-shirt (default)'}</strong>
+            {(garment || imported) && (
+              <button
+                onClick={onReset}
+                style={{ marginInlineStart: 'auto', border: 'none', background: 'transparent', color: 'var(--accent-2)', fontSize: 12, cursor: 'pointer' }}
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        )}
+        {!bodyOnly && imported && imported.skipped.length > 0 && (
           <div style={{ padding: '8px 14px', fontSize: 11.5, color: 'var(--text-2)', borderBottom: '1px solid var(--border)', lineHeight: 1.5 }}>
             {imported.recognized.length} of {imported.recognized.length + imported.skipped.length} pieces used — skipped: {imported.skipped.map((s) => s.label).join(', ')}
           </div>
         )}
         <MeasurementPanel measurements={measurements} onChange={onMeasurementsChange} />
-        <FabricPanel fabricId={fabricId} onChange={onFabricChange} />
-        <AvatarPanel skinTone={skinToneId} onChange={onSkinToneChange} />
+        {!bodyOnly && <FabricPanel fabricId={fabricId} onChange={onFabricChange} />}
+        <AvatarPanel skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />
         <ExportPanel exportRef={exportRef} />
-        {debugView === 'seams' && <SeamEditorPanel editor={seamEditor} onSimulate={onSimulate} />}
+        {!bodyOnly && debugView === 'seams' && <SeamEditorPanel editor={seamEditor} onSimulate={onSimulate} />}
       </aside>
       <main style={{ flex: '1 1 auto', position: 'relative' }}>
         <Canvas shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
-          <Scene dims={dims} debugView={debugView} fabricId={fabricId} skinToneId={skinToneId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} />
+          <Scene dims={dims} debugView={debugView} fabricId={fabricId} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} />
         </Canvas>
         {debugView === 'cloth' && isSolverHUDEnabled() && <SolverHUD statsRef={statsRef} />}
       </main>

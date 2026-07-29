@@ -16,7 +16,10 @@ const DEBUG_VIEWS = [
 // instead — see App.jsx). The debug-view switcher (Off/Pieces/Weld/Cloth/
 // Seams) stays either way: it's genuinely unique to cloth-lab, no root-app
 // equivalent exists to defer to.
-export default function Header({ embedded = false, category, onCategoryChange, debugView, onDebugViewChange }) {
+// WP-10: `bodyOnly` (the standalone BodyForm page) additionally hides the
+// debug-view switcher — there's no garment/cloth/seams to switch between,
+// only the avatar, so every one of those buttons would be a dead end.
+export default function Header({ embedded = false, bodyOnly = false, category, onCategoryChange, debugView, onDebugViewChange }) {
   return (
     <header
       style={{
@@ -25,22 +28,24 @@ export default function Header({ embedded = false, category, onCategoryChange, d
       }}
     >
       {!embedded && <strong style={{ fontSize: 15 }}>BerryStudio 3D — Cloth Lab</strong>}
-      <div style={{ display: 'flex', gap: 4 }}>
-        {DEBUG_VIEWS.map((v) => (
-          <button
-            key={v.id}
-            onClick={() => onDebugViewChange(v.id)}
-            title={v.title}
-            style={{
-              padding: '6px 12px', borderRadius: 999, border: '1px solid var(--border)', fontSize: 13,
-              background: v.id === debugView ? 'var(--accent-2)' : 'var(--panel-2)',
-              color: v.id === debugView ? '#fff' : 'var(--text-2)',
-            }}
-          >
-            {v.label}
-          </button>
-        ))}
-      </div>
+      {!bodyOnly && (
+        <div style={{ display: 'flex', gap: 4 }}>
+          {DEBUG_VIEWS.map((v) => (
+            <button
+              key={v.id}
+              onClick={() => onDebugViewChange(v.id)}
+              title={v.title}
+              style={{
+                padding: '6px 12px', borderRadius: 999, border: '1px solid var(--border)', fontSize: 13,
+                background: v.id === debugView ? 'var(--accent-2)' : 'var(--panel-2)',
+                color: v.id === debugView ? '#fff' : 'var(--text-2)',
+              }}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+      )}
       {!embedded && (
         <div style={{ display: 'flex', gap: 4, marginInlineStart: 'auto' }}>
           {CATEGORIES.map((c) => (

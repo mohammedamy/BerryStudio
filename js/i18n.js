@@ -110,6 +110,13 @@ export const I18N = {
     clothLabEngineD: "\"Iframe\" (default) loads Cloth Lab as a separate embedded app — the safest, most isolated option. \"Embedded\" mounts it directly into this page instead, sharing this page's own React/Three.js so it starts faster and updates instantly — an experimental option, still being rolled out.",
     clothLabEngineIframe: "Iframe",
     clothLabEngineEmbedded: "Embedded",
+    // BerryStudio-Upgrade-Plan WP-10: standalone BodyForm page (body.html)
+    bodyFormTitle: "BodyForm", bodyFormTagline: "Build a 3D avatar from your measurements",
+    bodyFormIntro: "Pick a category and starting size, fine-tune any measurement, then generate your avatar.",
+    generateAvatar: "Generate Avatar",
+    openInFitStudio: "Open in Fit Studio",
+    openInFitStudioD: "Carries this category and these measurements over to the main app's 3D Cloth Lab.",
+    backToStudio: "Back to BerryStudio",
     // pattern summary export
     patternSummary: "Pattern Summary", patternSummaryD: "One-page bilingual sheet: size table, a labelled diagram per piece, and a construction note — ready to print or save as PDF.",
     summaryNote: "Note: {n} cm seam allowance is left on every cutting line — adjust to your own base measurements and your fabric's stretch.",
@@ -332,6 +339,13 @@ export const I18N = {
     clothLabEngineD: "\"إطار مضمّن\" (الافتراضي) يحمّل معمل القماش كتطبيق منفصل مضمّن — الخيار الأكثر أمانًا وعزلًا. \"مدمج\" يضمّه مباشرة في هذه الصفحة بدلًا من ذلك، مستخدمًا React/Three.js الخاصين بهذه الصفحة نفسها، فيبدأ أسرع ويتحدّث فورًا — خيار تجريبي لا يزال قيد الطرح.",
     clothLabEngineIframe: "إطار مضمّن",
     clothLabEngineEmbedded: "مدمج",
+    // BerryStudio-Upgrade-Plan WP-10: standalone BodyForm page (body.html)
+    bodyFormTitle: "بودي فورم", bodyFormTagline: "أنشئ مجسّمًا ثلاثي الأبعاد من قياساتك",
+    bodyFormIntro: "اختر الفئة والمقاس المبدئي، اضبط أي قياس، ثم أنشئ مجسّمك.",
+    generateAvatar: "إنشاء المجسّم",
+    openInFitStudio: "افتح في استوديو المقاسات",
+    openInFitStudioD: "ينقل هذه الفئة وهذه القياسات إلى معمل القماش ثلاثي الأبعاد في التطبيق الرئيسي.",
+    backToStudio: "العودة إلى بيري ستوديو",
     // pattern summary export
     patternSummary: "ملخص الباترون", patternSummaryD: "صفحة واحدة ثنائية اللغة: جدول المقاسات، رسم موضّح لكل قطعة، وملاحظة تفصيلية — جاهزة للطباعة أو الحفظ كملف PDF.",
     summaryNote: "تنبيه: تم ترك {n} سم مسافة خياطة على كل خطوط القص — يجب ضبطها وفقًا لقياساتك الأساسية ومرونة القماش.",

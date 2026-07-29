@@ -12,7 +12,7 @@ import ExportControls from './ExportControls'
 import { getAssetBase } from '../assetBase'
 
 // The actual <Canvas> contents: lighting, ground, avatar, orbit camera.
-export default function Scene({ dims, debugView, fabricId, skinToneId, garment, seamEditor, avatarGLBUrl, statsRef, exportRef }) {
+export default function Scene({ dims, debugView, fabricId, skinToneId, poseId, garment, seamEditor, avatarGLBUrl, statsRef, exportRef }) {
   // Disabled while grabbing a cloth particle — otherwise dragging the mouse
   // to move the pin also orbits the camera at the same time, fighting itself.
   const [dragging, setDragging] = useState(false)
@@ -48,7 +48,7 @@ export default function Scene({ dims, debugView, fabricId, skinToneId, garment, 
 
       <group ref={turntableGroupRef}>
         {debugView !== 'seams' && (
-          <BodyAvatar dims={dims} url={avatarGLBUrl} collisionRigRef={meshFitRigRef} skinColor={resolveSkinToneHex(skinToneId)} />
+          <BodyAvatar dims={dims} url={avatarGLBUrl} collisionRigRef={meshFitRigRef} skinColor={resolveSkinToneHex(skinToneId)} pose={poseId} />
         )}
         {debugView === 'pieces' && <StaticPiecesDebug dims={dims} pieces={garment?.pieces} seams={garment?.seams} />}
         {debugView === 'weld' && <WeldDebugView dims={dims} pieces={garment?.pieces} seams={garment?.seams} />}

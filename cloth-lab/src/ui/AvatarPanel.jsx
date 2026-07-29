@@ -2,10 +2,28 @@ import { SKIN_TONES } from '../body/skinTones'
 
 export { DEFAULT_SKIN_TONE } from '../body/skinTones'
 
+export const DEFAULT_POSE = 'standing'
+// WP-8.5: A-pose/T-pose/contrapposto are rotation-only variants on both the
+// procedural avatar (Avatar.jsx) and a recognized GLB rig (reposeGLB.js).
+// Seated bends the knee (a real geometry change, not just a rotation) on
+// the procedural avatar; on a GLB it needs the leg rig recognized too, and
+// falls back to standing legs (with a console warning) otherwise. Walk only
+// ever does anything for a GLB that ships its own embedded animation clip —
+// the procedural avatar has no skeleton to animate, so it stays in the
+// standing pose for `walk` (an honest no-op, not a crash).
+export const POSES = [
+  { id: 'standing', label: 'Standing' },
+  { id: 'apose', label: 'A-pose' },
+  { id: 'tpose', label: 'T-pose' },
+  { id: 'contrapposto', label: 'Contrapposto' },
+  { id: 'seated', label: 'Seated' },
+  { id: 'walk', label: 'Walk' },
+]
+
 // WP-8.6: a preset skin-tone picker (was a single hardcoded '#e3b08c' in
 // Avatar.jsx) — see body/skinTones.js for the actual table and why it's
 // there rather than here.
-export default function AvatarPanel({ skinTone, onChange }) {
+export default function AvatarPanel({ skinTone, onChange, pose, onPoseChange }) {
   return (
     <div style={{ padding: 14, borderTop: '1px solid var(--border)' }}>
       <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
@@ -27,6 +45,29 @@ export default function AvatarPanel({ skinTone, onChange }) {
           />
         ))}
       </div>
+      {onPoseChange && (
+        <>
+          <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5, margin: '14px 0 10px' }}>
+            Pose
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {POSES.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => onPoseChange(p.id)}
+                style={{
+                  padding: '6px 8px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  background: p.id === pose ? 'var(--accent-2)' : 'var(--panel-2)',
+                  color: p.id === pose ? '#fff' : 'var(--text)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

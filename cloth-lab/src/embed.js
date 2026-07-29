@@ -30,6 +30,8 @@ let root = null
 // embedded equivalent of the iframe path's `postMessage({type:
 // 'clothlab:ready'})` handshake, which embedded mode has no need for
 // (no cross-document boundary to wait across).
+// `bodyOnly`: WP-10's standalone BodyForm page (body.html) — renders just
+// the avatar (no garment/cloth/seam UI), see App.jsx's own `bodyOnly` prop.
 // Vite's lib build extracts the `import './index.css'` above into a
 // SEPARATE file (dist-embed/cloth-lab.css) rather than inlining it — lib
 // mode has no runtime CSS-injection helper the way a normal app build's
@@ -49,11 +51,11 @@ function injectStylesheet() {
   document.head.appendChild(link)
 }
 
-export function mount(container, { assetBase, pattern = null, onReady } = {}) {
+export function mount(container, { assetBase, pattern = null, onReady, bodyOnly = false } = {}) {
   injectStylesheet()
   if (assetBase) setAssetBase(assetBase)
   root = createRoot(container)
-  root.render(createElement(App, { embedded: true, pattern, onReady }))
+  root.render(createElement(App, { embedded: true, pattern, onReady, bodyOnly }))
   return { update, unmount }
 }
 
@@ -62,9 +64,9 @@ export function mount(container, { assetBase, pattern = null, onReady } = {}) {
 // the caller should skip calling this at all for an unchanged payload
 // (js/app.js already does this dedup for the iframe path today; reuse the
 // same check rather than sending on every measurement keystroke).
-export function update({ pattern = null, onReady } = {}) {
+export function update({ pattern = null, onReady, bodyOnly = false } = {}) {
   if (!root) return
-  root.render(createElement(App, { embedded: true, pattern, onReady }))
+  root.render(createElement(App, { embedded: true, pattern, onReady, bodyOnly }))
 }
 
 export function unmount() {
