@@ -13,7 +13,7 @@
    • Graceful fallback when WebGL / network is unavailable.
    ============================================================ */
 export const View3D = (() => {
-  let THREE, OrbitControls, GLTFLoader;
+  let THREE, OrbitControls, GLTFLoader, RGBELoader;
   let renderer, scene, camera, controls, raf = null;
   let root, bodyGroup, garmentGroup, limbs = {};
   let ready = false, spinning = true, walking = true, t = 0;
@@ -29,8 +29,39 @@ export const View3D = (() => {
       THREE = await import("three");
       ({ OrbitControls } = await import("three/addons/controls/OrbitControls.js"));
       try { ({ GLTFLoader } = await import("three/addons/loaders/GLTFLoader.js")); } catch (e) { GLTFLoader = null; }
+      try { ({ RGBELoader } = await import("three/addons/loaders/RGBELoader.js")); } catch (e) { RGBELoader = null; }
       return true;
     } catch (e) { return false; }
+  }
+
+  // WP-9.3: same CC0 studio-softbox HDRI cloth-lab already uses (see
+  // env/README.md for provenance) — set as `scene.environment` ONLY, for
+  // ambient reflection/sheen quality on fabric and skin. `scene.background`
+  // stays the existing gradient (setupLights/gradientBackdrop below) for
+  // brand consistency — this is lighting data, not a visible backdrop
+  // swap. Loaded once and cached; a load failure just leaves ambient
+  // lighting exactly as it already was (no environment map), never blocks
+  // init or breaks the fallback path.
+  let envMapPromise = null;
+  function loadEnvironmentMap() {
+    if (envMapPromise) return envMapPromise;
+    if (!RGBELoader) return Promise.resolve(null);
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    envMapPromise = new Promise((resolve) => {
+      new RGBELoader().load(
+        "env/studio_small_08_1k.hdr",
+        (hdrTex) => {
+          const envMap = pmrem.fromEquirectangular(hdrTex).texture;
+          hdrTex.dispose();
+          pmrem.dispose();
+          resolve(envMap);
+        },
+        undefined,
+        () => { pmrem.dispose(); resolve(null); },
+      );
+    });
+    return envMapPromise
   }
 
   const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -51,6 +82,7 @@ export const View3D = (() => {
 
     scene = new THREE.Scene();
     scene.background = gradientBackdrop();
+    loadEnvironmentMap().then((envMap) => { if (envMap && scene) scene.environment = envMap; });
 
     camera = new THREE.PerspectiveCamera(32, 1, 0.05, 100);
     camera.position.set(0.15, 1.0, 3.6);
@@ -138,12 +170,18 @@ export const View3D = (() => {
       clearcoat: 0.06, clearcoatRoughness: 0.6, roughnessMap: noiseTex,
     });
   }
+  // WP-9.2: transmission (chiffon)/anisotropy (silk/satin) — confirmed
+  // present on MeshPhysicalMaterial in this file's own pinned three@0.160.0
+  // (checked against the actual source at that version, not assumed), so
+  // no import-map bump needed. Mirrors cloth-lab's fabricPresets.js so the
+  // two separate 3D views agree on what each fabric looks like, same as
+  // every other field in this table already does.
   const FABRIC = {
     cotton:  { rough: 0.85, metal: 0.0,  sheen: 0.2, clear: 0.0,  om: 1 },
     denim:   { rough: 0.9,  metal: 0.02, sheen: 0.1, clear: 0.0,  om: 1 },
-    silk:    { rough: 0.26, metal: 0.05, sheen: 0.9, clear: 0.15, om: 0.98 },
-    satin:   { rough: 0.2,  metal: 0.12, sheen: 0.85,clear: 0.22, om: 1 },
-    chiffon: { rough: 0.5,  metal: 0.0,  sheen: 0.45,clear: 0.0,  om: 0.55 },
+    silk:    { rough: 0.26, metal: 0.05, sheen: 0.9, clear: 0.15, om: 0.98, anisotropy: 0.6, anisoRot: 0 },
+    satin:   { rough: 0.2,  metal: 0.12, sheen: 0.85,clear: 0.22, om: 1, anisotropy: 0.5, anisoRot: 0 },
+    chiffon: { rough: 0.5,  metal: 0.0,  sheen: 0.45,clear: 0.0,  om: 0.55, transmission: 0.18 },
     wool:    { rough: 0.96, metal: 0.0,  sheen: 0.08,clear: 0.0,  om: 1 },
     linen:   { rough: 0.82, metal: 0.0,  sheen: 0.15,clear: 0.0,  om: 1 },
     leather: { rough: 0.4,  metal: 0.2,  sheen: 0.2, clear: 0.35, om: 1 },
@@ -161,6 +199,8 @@ export const View3D = (() => {
       color: st.color, roughness: f.rough, metalness: f.metal,
       sheen: f.sheen, sheenRoughness: 0.5, clearcoat: f.clear, clearcoatRoughness: 0.4,
       transparent: op < 0.99, opacity: op, side: THREE.DoubleSide,
+      ...(f.transmission != null && { transmission: f.transmission, thickness: 0.001 }),
+      ...(f.anisotropy != null && { anisotropy: f.anisotropy, anisotropyRotation: f.anisoRot ?? 0 }),
     });
   }
 

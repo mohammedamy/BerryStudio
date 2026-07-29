@@ -138,6 +138,13 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
       sheen: fabric.sheen, sheenRoughness: 0.5, clearcoat: fabric.clear, clearcoatRoughness: 0.4,
       transparent: fabric.om < 1, opacity: fabric.om,
       side: THREE.DoubleSide,
+      // WP-9.2: only chiffon/tulle declare transmission, only silk/satin
+      // declare anisotropy (see fabricPresets.js) — Material.setValues()
+      // warns on every explicitly-`undefined` key, so these are left out
+      // of the options object entirely rather than passed as `undefined`
+      // for fabrics that don't have them (defaults to 0, i.e. off).
+      ...(fabric.transmission != null && { transmission: fabric.transmission, thickness: 0.001 }),
+      ...(fabric.anisotropy != null && { anisotropy: fabric.anisotropy, anisotropyRotation: fabric.anisotropyRotation ?? 0 }),
     })
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uSimPositionTex = { value: null }

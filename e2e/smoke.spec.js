@@ -48,6 +48,23 @@ test('load, grade, export SVG, open 3D preview — no console errors', async ({ 
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
 
+// BerryStudio-Upgrade-Plan WP-9.1: the standalone capability-check page
+// loads with no console errors and reaches a real verdict (not stuck on
+// "Checking…", the case a CSP misconfiguration or a broken import would
+// produce — see js/capability-check-3d.js's own history: an earlier inline
+// <script> version was silently blocked by this exact page's CSP).
+test('/3d-test.html loads, reaches a verdict, no console errors', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+  page.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()); });
+
+  await page.goto('/3d-test.html');
+  await expect(page.locator('#verdict')).not.toHaveText('Checking…', { timeout: 5000 });
+  await expect(page.locator('#verdict')).toHaveClass(/pass|warn|fail/);
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});
+
 // BerryStudio-Upgrade-Plan WP-1: the AI Provider settings panel renders and
 // a full provider round-trip (settings entry -> Test Connection -> real
 // adapter -> UI status line) works end-to-end. The actual provider API call

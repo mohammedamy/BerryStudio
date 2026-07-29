@@ -58,10 +58,23 @@
 // pass. Not adding stiffWarp/stiffWeft/stiffBias fields here since unused
 // preset fields that look wired up but aren't would be misleading; tracked
 // as documented future work (see CHANGELOG).
+//
+// WP-9.2 `transmission`/`anisotropy`/`anisotropyRotation`: confirmed present
+// on MeshPhysicalMaterial in the installed three@0.185.1 (and, checked
+// against the actual pinned source, in the root app's three@0.160.0 too —
+// no import-map bump needed there). `transmission` (chiffon/tulle) is kept
+// modest (0.12-0.18), not glass-like — these fabrics are already sheer via
+// `om`'s opacity cut, and transmission is a DIFFERENT physical effect
+// (refractive light transport through the surface) layered on top for a
+// soft frosted quality, not a replacement for the opacity-based sheerness.
+// `anisotropy` (silk/satin, both genuinely anisotropic weaves in reality —
+// charmeuse/satin weaves reflect light differently along vs across the
+// grain) drives the material-level micro-highlight streak; `sheen` above
+// already gives the broader soft glow, these work together, not redundantly.
 export const FABRIC_PRESETS = {
-  chiffon: { label: 'Chiffon', massDensity: 30, structStiff: 0.92, bendStiff: 0.10, maxStrain: 1.08, damping: 0.985, friction: 0.75, rough: 0.5, metal: 0.0, sheen: 0.45, clear: 0.0, om: 0.55 },
-  silk: { label: 'Silk Charmeuse', massDensity: 60, structStiff: 0.94, bendStiff: 0.15, maxStrain: 1.07, damping: 0.980, friction: 0.80, rough: 0.26, metal: 0.05, sheen: 0.9, clear: 0.15, om: 0.98 },
-  satin: { label: 'Satin', massDensity: 90, structStiff: 0.95, bendStiff: 0.20, maxStrain: 1.06, damping: 0.980, friction: 0.82, rough: 0.2, metal: 0.12, sheen: 0.85, clear: 0.22, om: 1 },
+  chiffon: { label: 'Chiffon', massDensity: 30, structStiff: 0.92, bendStiff: 0.10, maxStrain: 1.08, damping: 0.985, friction: 0.75, rough: 0.5, metal: 0.0, sheen: 0.45, clear: 0.0, om: 0.55, transmission: 0.18 },
+  silk: { label: 'Silk Charmeuse', massDensity: 60, structStiff: 0.94, bendStiff: 0.15, maxStrain: 1.07, damping: 0.980, friction: 0.80, rough: 0.26, metal: 0.05, sheen: 0.9, clear: 0.15, om: 0.98, anisotropy: 0.6, anisotropyRotation: 0 },
+  satin: { label: 'Satin', massDensity: 90, structStiff: 0.95, bendStiff: 0.20, maxStrain: 1.06, damping: 0.980, friction: 0.82, rough: 0.2, metal: 0.12, sheen: 0.85, clear: 0.22, om: 1, anisotropy: 0.5, anisotropyRotation: 0 },
   cotton: { label: 'Cotton Poplin', massDensity: 150, structStiff: 0.96, bendStiff: 0.35, maxStrain: 1.05, damping: 0.970, friction: 0.90, rough: 0.85, metal: 0.0, sheen: 0.2, clear: 0.0, om: 1 },
   linen: { label: 'Linen', massDensity: 170, structStiff: 0.96, bendStiff: 0.42, maxStrain: 1.05, damping: 0.970, friction: 0.87, rough: 0.82, metal: 0.0, sheen: 0.15, clear: 0.0, om: 1 },
   wool: { label: 'Wool Crepe', massDensity: 300, structStiff: 0.97, bendStiff: 0.58, maxStrain: 1.04, damping: 0.950, friction: 0.93, rough: 0.96, metal: 0.0, sheen: 0.08, clear: 0.0, om: 1 },
@@ -75,7 +88,7 @@ export const FABRIC_PRESETS = {
   // scaffold instead of the soft, airy mesh it should be.
   jersey: { label: 'Cotton Jersey', massDensity: 180, structStiff: 0.90, bendStiff: 0.22, maxStrain: 1.18, damping: 0.965, friction: 0.88, rough: 0.7, metal: 0.0, sheen: 0.18, clear: 0.0, om: 1 },
   scuba: { label: 'Scuba Knit', massDensity: 260, structStiff: 0.91, bendStiff: 0.45, maxStrain: 1.14, damping: 0.955, friction: 0.85, rough: 0.35, metal: 0.0, sheen: 0.35, clear: 0.05, om: 1 },
-  tulle: { label: 'Tulle', massDensity: 18, structStiff: 0.80, bendStiff: 0.06, maxStrain: 1.12, damping: 0.988, friction: 0.55, rough: 0.55, metal: 0.0, sheen: 0.3, clear: 0.0, om: 0.35 },
+  tulle: { label: 'Tulle', massDensity: 18, structStiff: 0.80, bendStiff: 0.06, maxStrain: 1.12, damping: 0.988, friction: 0.55, rough: 0.55, metal: 0.0, sheen: 0.3, clear: 0.0, om: 0.35, transmission: 0.12 },
 }
 
 export const FABRIC_IDS = Object.keys(FABRIC_PRESETS)

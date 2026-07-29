@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio — 3D Capability Check</title>
+<meta name="description" content="Checks whether this browser/device can run the GPU cloth solver (WebGL2 + float render targets) used by the 3D Cloth Lab.">
+<!--
+  BerryStudio-Upgrade-Plan WP-9.1. Build-free, root-level, no dependency on
+  the cloth-lab Vite app or three.js — every check here is plain WebGL2 API
+  surface, checked directly, so this page works even if cloth-lab itself
+  fails to load. The one exception is js/capability-probe.js's WebGPU probe
+  (Phase 1/WP-2), reused verbatim as a same-origin ES module import — it's
+  a genuinely separate capability (used for local AI model inference, not
+  the cloth solver) included here for a one-stop device readiness page.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self';">
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.5; }
+  h1 { font-size: 1.4rem; }
+  .verdict { border-radius: 12px; padding: 16px 20px; margin: 20px 0; font-weight: 700; font-size: 1.05rem; display: flex; align-items: center; gap: 10px; }
+  .verdict.pass { background: #17301f; color: #7ee2a0; border: 1px solid #2c5c3d; }
+  .verdict.warn { background: #332a12; color: #f0c05a; border: 1px solid #6b551f; }
+  .verdict.fail { background: #341717; color: #f28080; border: 1px solid #6b2828; }
+  .dot { font-size: 1.3rem; line-height: 1; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.92rem; }
+  td { padding: 7px 4px; border-bottom: 1px solid rgba(128,128,128,0.25); vertical-align: top; }
+  td:first-child { color: #888; white-space: nowrap; padding-inline-end: 16px; }
+  .ok { color: #7ee2a0; } .warnc { color: #f0c05a; } .failc { color: #f28080; }
+  code { font-size: 0.85em; opacity: 0.8; }
+</style>
+</head>
+<body>
+  <h1>BerryStudio 3D Capability Check</h1>
+  <p>Checks whether this browser/device can run the GPU cloth solver (WebGL2 <code>GPUComputationRenderer</code>) the 3D Cloth Lab depends on.</p>
+  <div id="verdict" class="verdict">Checking…</div>
+  <table id="details"></table>
+
+  <script type="module" src="js/capability-check-3d.js"></script>
+</body>
+</html>
