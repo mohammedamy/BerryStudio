@@ -16,6 +16,21 @@ async function dismissOnboarding(page) {
   if (await skip.isVisible().catch(() => false)) await skip.click();
 }
 
+// A plain `toBeVisible()` timeout gives no clue WHY a canvas never
+// appeared — if the underlying mount threw, that's a console error this
+// test's own listener already captured into `errors`, but Playwright's
+// failure message doesn't include it. Surface it explicitly so a CI-only
+// failure is diagnosable from the check-run annotation alone (no shell
+// access to the runner's job log — see the CI-diagnostics commit this
+// pass added the `github` reporter for).
+async function expectVisibleOrDumpErrors(locator, errors, timeout) {
+  try {
+    await expect(locator).toBeVisible({ timeout });
+  } catch (e) {
+    throw new Error(`${e.message}\n\nConsole errors captured during this test so far:\n${errors.join('\n') || '(none)'}`);
+  }
+}
+
 // One light smoke spec (see BerryStudio-Upgrade-Plan WP-0.2): load the app,
 // pick a pattern, grade it, export SVG, open the 3D preview, and confirm no
 // console errors anywhere along the way. Deliberately not a broad E2E
@@ -144,7 +159,7 @@ test('embedded Cloth Lab engine mounts real content with no console errors', asy
   // existing — the concrete assertion the dynamic import() + mount() call
   // succeeded rather than silently failing into the .catch() in
   // mountClothLabEmbedded() (js/app.js).
-  await expect(embedContainer.locator('canvas')).toBeVisible({ timeout: 15000 });
+  await expectVisibleOrDumpErrors(embedContainer.locator('canvas'), errors, 15000);
 
   // The iframe path must be genuinely inactive, not just visually hidden —
   // .engine-embedded's CSS rule (css/styles.css) is what proves the flag
@@ -169,7 +184,7 @@ test('BodyForm generates an avatar, exports GLB/OBJ, and hands off to Fit Studio
   });
 
   await page.goto('/body.html');
-  await expect(page.locator('#clothLabEmbed canvas')).toBeVisible({ timeout: 15000 });
+  await expectVisibleOrDumpErrors(page.locator('#clothLabEmbed canvas'), errors, 15000);
 
   await page.getByRole('button', { name: 'Men', exact: true }).click();
   const chestInput = page.locator('input[data-k="chest"]');
