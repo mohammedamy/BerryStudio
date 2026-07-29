@@ -4,9 +4,26 @@
    index.css) to actually fill the viewport. NOT imported by embed.js: the
    embedded build is mounted inside the root app's own page, which owns
    its own html/body sizing.
+
+   Bug fixed here: the chain was missing its middle link. `#root` (the
+   actual React mount div in index.html, BETWEEN body and
+   .cloth-lab-root) had no explicit height, so `height:100%` on
+   .cloth-lab-root resolved against an "auto" (shrink-to-content) parent
+   instead of the viewport — computing to `auto` itself per the CSS spec,
+   not 100%. .cloth-lab-root then sized to its OWN content (the sidebar's
+   full control-list height, ~1410px in one measured case) instead of
+   the real ~900px viewport, so `document.body.scrollHeight` exceeded
+   `window.innerHeight` and the page silently became scrollable. Since
+   R3F's <Canvas> fills its container via a ResizeObserver, the 3D
+   viewport — and every OrbitControls distance/zoom-level computed
+   against it — inherited that same wrong, overly tall size: the avatar
+   rendered too large to fit the visible (unscrolled) viewport, and
+   mouse-wheel zoom felt like it "wasn't working" because it was zooming
+   a camera framed for a canvas taller than what was actually on screen.
 */
 html,
-body {
+body,
+#root {
   height: 100%;
   margin: 0;
 }
