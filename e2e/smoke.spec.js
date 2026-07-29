@@ -385,3 +385,59 @@ test('Walk the Seam finds a real princess-seam pair and renders at multiple posi
 
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
+
+// BerryStudio-Upgrade-Plan WP-15: the local automation API
+// (window.BerryStudio, js/berry-studio-api.js) — every verb is a direct
+// pass-through to capability the rest of this suite already exercises
+// individually, so this test's job is narrower: prove the FACADE itself
+// wires correctly end-to-end against a real loaded pattern, for all five
+// verbs, not stubbed/mocked results.
+test('window.BerryStudio automation API: all five verbs return real (not stubbed) results', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+  page.on('console', (msg) => {
+    if (msg.type() !== 'error') return;
+    if (/Failed to load resource.*404/.test(msg.text())) return;
+    errors.push(msg.text());
+  });
+
+  await page.goto('/index.html');
+  await dismissOnboarding(page);
+  await expect(page.locator('#patternCanvas')).toBeVisible();
+
+  // grade() — a plain measurement resolution, no pattern needed.
+  const graded = await page.evaluate(() =>
+    window.BerryStudio.grade({ category: 'women', size: 'L', standard: 'intl', kids: null, custom: null })
+  );
+  expect(graded.chest).toBeGreaterThan(0);
+  // size L is one step above the M base grade — chest must have actually grown.
+  const gradedM = await page.evaluate(() =>
+    window.BerryStudio.grade({ category: 'women', size: 'M', standard: 'intl', kids: null, custom: null })
+  );
+  expect(graded.chest).toBeGreaterThan(gradedM.chest);
+
+  // export() — the default-loaded pattern's real SVG.
+  const svg = await page.evaluate(() => window.BerryStudio.export('svg'));
+  expect(svg).toContain('<svg');
+
+  // validate() — PatternValidator's real report shape over the loaded pieces.
+  const report = await page.evaluate(() => window.BerryStudio.validate({}));
+  expect(Array.isArray(report.perPiece)).toBe(true);
+  expect(report.perPiece.length).toBeGreaterThan(0);
+
+  // nest() — the real WP-11 polygon-nesting Worker, run over every loaded piece.
+  const nestResult = await page.evaluate(() =>
+    window.BerryStudio.nest({ matWidth: 150, allowRotate: true, minDistCm: 0.5 })
+  );
+  expect(nestResult.placements.length).toBeGreaterThan(0);
+  expect(nestResult.utilization).toBeGreaterThan(0);
+
+  // generate() — the real local (offline) silhouette+prompt pipeline, no endpoint configured.
+  const generated = await page.evaluate(() =>
+    window.BerryStudio.generate({ prompt: 'a fitted knee-length dress', category: 'women', measurements: { chest: 88, waist: 70, hips: 96, backLen: 41, sleeve: 58, bicep: 28, height: 167 } })
+  );
+  expect(generated.pieces.length).toBeGreaterThan(0);
+  expect(generated.source).toBe('local');
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});

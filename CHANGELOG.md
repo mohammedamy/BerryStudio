@@ -6,6 +6,89 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Phase 3 — Production tools (WP-11 – WP-15)
+
+Fourth increment of `BerryStudio-Upgrade-Plan.md` — true polygon nesting,
+export fidelity, industrial grading, drafting-engine upgrades, and a local
+automation API. Sequenced WP-11 → WP-12 → WP-13 → WP-14 → WP-15, the plan
+document's own order (each of the first three is independent of the other
+two; WP-15 wraps the finished state of everything before it, so it has to
+come last).
+
+### Added
+- **True polygon nesting** (WP-11) — a first-party bottom-left-fill +
+  simulated-annealing placement search (`js/nesting-core.js`) run in a Web
+  Worker (`js/workers/nesting-worker.js`, client: `js/nesting.js`), replacing
+  bounding-box packing for pieces that actually interlock into each other's
+  concave notches. The existing shelf-packer stays available as a "Fast
+  preview" mode alongside the new "Full nest" in Create Marker, with a real
+  cancelable Stop button and grainline-locked pieces restricted to 0°/180°.
+- **Export fidelity** (WP-12) — real AAMA/ASTM D6673 DXF layers (turn
+  points, curve points, grade-reference/notches, dart legs, grainline,
+  drill holes) replacing the old `CUT`/`GRAIN`/`DART` layer names; genuine
+  HPGL plotter output; PNG/JPEG rasterization at a selectable DPI (150/300/
+  600), clamped to the browser's real canvas size limits with an honest
+  "reduced" notice rather than a silent null-blob failure; tiled home-
+  printing PDF (registration marks, a real calibration square, an assembly-
+  map page) alongside the unchanged single-page default; AI as the same PDF
+  wrapped in a small `%AI` Illustrator-compatibility header. New
+  `js/pattern-export.js` (pure DXF/HPGL/PDF builders, DOM-free and unit
+  tested) and `js/geometry.js`.
+- **Industrial grading** (WP-13) — `js/grading.js`: additive per-point
+  grade-rule overrides (`piece.gradeRules`, `{dx,dy}` per outline index)
+  resolving as `base-at-M + dx/dy×step` instead of the uniform formula
+  grade, with every un-ruled point unaffected. A new Grade Rules table
+  (Size pane) with JSON import/export, and a Grade Nest preview overlaying
+  S/M/L/XL of one piece at a shared alignment point.
+- **Drafting engine upgrades** (WP-14) — `offsetPoly()` extended with
+  per-edge seam-allowance distances and real corner join styles (round
+  fillet, bevel chamfer, alongside the existing miter), reflex corners
+  always resolving via line intersection regardless of join style; real
+  bezier `piece.curves` metadata from `princessCurve()` (shared by 10+ of
+  the 24 Fancy Collection designs), consumed by WP-12's DXF curve layer;
+  `js/darts.js` (pivot, transfer, slash-and-spread — pivot/transfer
+  preserve a dart's intake, slash-and-spread deliberately adds it) with a
+  new Dart Editor UI; `js/pleats.js` wired into Quick Draft's skirt
+  builder as a real added-width option; Walk the Seam (Export pane) — a
+  slider checking two pieces' declared shared seam matches at every
+  arc-length position via `js/geometry.js`'s `seamPointAtFraction`.
+- **Local automation API** (WP-15) — `window.BerryStudio`
+  (`js/berry-studio-api.js`): `generate`/`grade`/`nest`/`export`/`validate`,
+  each a direct pass-through to the same code the UI itself calls. See the
+  README's "Automation API" section for runnable examples.
+
+### Fixed
+- **`offsetPoly()`'s seam-allowance direction was backwards** — every
+  pattern piece's dashed "seam allowance" preview, and `PatternValidator`'s
+  seamAllowance check, had been expanding inward instead of outward since
+  before this phase (confirmed against live data: offsetting a real bodice
+  by the app's own default 1cm shrank its area instead of growing it).
+  Found and fixed while extracting `offsetPoly` into `js/geometry.js` for
+  WP-14's per-edge/join-style work.
+- **Cloth Lab's standalone build was missing `#root { height: 100% }`** —
+  the CSS height chain (`html`/`body` → `#root` → `.cloth-lab-root`) had a
+  gap at `#root`, so the page silently grew taller than the viewport and
+  the 3D canvas (and every camera/zoom distance computed against it) sized
+  itself to the sidebar's content height instead of the real window —
+  reported as "the mannequin doesn't fit the view" and "zoom doesn't work."
+- A WP-12 DXF-export helper had assumed this app's dart shape was
+  `[legA, apex, legC]` (apex at index 1); every real dart in `js/data.js`
+  and `js/ai.js` — and the on-canvas dart renderer itself — actually use
+  apex at index 0. Fixed alongside `js/darts.js`.
+- Two CI flakes in the BodyForm GLB-export Playwright test (real
+  `GLTFExporter` CPU work on a slow shared runner, unrelated to any code
+  change in this phase) — timeout raised from the default, to 60s, to
+  120s across two occurrences, each confirmed not a regression by every
+  other test in the suite passing cleanly alongside it both times.
+
+### Honest notes
+See the main README's "Honest notes" section for the specific, documented
+scope calls made in this phase: a first-party nesting algorithm instead of
+a Minkowski-NFP dependency, curve metadata wired into one shared generator
+function rather than every curve call site, dart Transfer/gathers/tucks
+implemented as tested pure functions without a dedicated UI yet, and Walk
+the Seam as a slider-driven modal rather than a live canvas drag tool.
+
 ## Phase 2 — 3D: fix and unify (WP-5 – WP-10)
 
 Third increment of `BerryStudio-Upgrade-Plan.md` — the largest phase: cloth-lab's

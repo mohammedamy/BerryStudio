@@ -40,13 +40,13 @@ install it. After the first load it works **fully offline**.
 | **Help** — ? button with quick start, all tools explained, keyboard shortcuts (bilingual) | ✅ Working |
 | **Fabric & material**: 8 material presets, per-piece colour, **per-part 3D material** (bodice/sleeve/skirt/trousers) + adjustable fill transparency | ✅ Working |
 | **Illustrated body-measurement diagram** — a numbered reference figure in the Measures pane showing where each of the 11 measurements is taken | ✅ Working (collapsible, EN/AR) |
-| **Create Marker** — client-side bounding-box nesting of pattern pieces onto a virtual fabric roll (width/length/rotation/min-spacing), with a layout preview and real computed yardage | ✅ Working (simplified box-packing, not true polygon nesting — see Honest notes) |
+| **Create Marker** — nest pattern pieces onto a virtual fabric roll (width/length/rotation/min-spacing), with a layout preview and real computed yardage. "Fast preview" (instant bounding-box packing) and "Full nest" (true polygon nesting — pieces interlock into each other's concave notches, run in a Web Worker with a real Stop/cancel) | ✅ Both modes working |
 | **Size & Grading engine** XXS→6XL, Intl/Egyptian/Saudi, Kids, Custom | ✅ Proportion-perfect, live |
 | Category switcher (Women/Men/Girls/Boys) with matching avatar | ✅ Working |
 | Real multi-piece patterns w/ bilingual names + explanations | ✅ 6 patterns (dress, shirt, abaya, thobe, girls' dress, boys' trousers) |
 | **3D preview** — 4 distinct anatomical avatars (women/men/girl/boy), studio lighting + soft shadow, OrbitControls (orbit/zoom/pan, touch), auto-spin, walk cycle, live fabric material/colour/transparency, per-piece show/hide, size grading, loading state | ✅ Working (stylised character; drop-in GLB path for photoreal) |
 | **Project menu**: New · Import (.json) · Export SVG/DXF · Save PDF · Save Project · Print | ✅ Working (real SVG, DXF, PDF & print) |
-| Print & Export: A0–A4/Letter/Plotter, PDF/DXF/SVG/AI/PNG/JPEG/HPGL | ✅ SVG, DXF, PDF are native; PNG/JPEG/AI/HPGL fall back to vector |
+| Print & Export: A0–A4/Letter/Plotter, PDF/DXF/SVG/AI/PNG/JPEG/HPGL | ✅ All native — real AAMA/ASTM D6673-layered DXF, genuine HPGL plotter cut-lines, selectable-DPI PNG/JPEG rasterization, tiled home-printing PDF (registration marks + assembly map), AI as PDF + `%AI` header |
 | Fabric consumption + cost estimator + Tech Pack + BOM | ✅ Working (uses your last Create Marker nest if you've made one, else a height-based estimate) |
 | **Pattern Summary export** — one-page bilingual print sheet: size table, a labelled dimensioned diagram per piece, and a construction note (Export pane, Project menu, ⌘K) | ✅ Working |
 | **Pattern Library — 124 pre-designed patterns, 31 per category** (Women/Men/Girls/Boys), category filter chips + search + "My Patterns" | ✅ Working — every entry is a real, gradable multi-piece garment |
@@ -70,6 +70,9 @@ install it. After the first load it works **fully offline**.
 | **3D Cloth Lab** ("3D Cloth Lab" tab) — real-time GPU cloth simulation (strain-limited structural + bend + self-collision + body collision) of your actual pattern, with fabric presets (mass/stiffness/anisotropy/PBR sheen-transmission), an avatar matching your measurements (FFD-deformed if you supply a GLB), 6 pose variants, 6 skin tones, and GLB/OBJ/USDZ/turntable export | ✅ Working — princess seams, gores, capes, hoods, tiers and other Fancy Collection shapes import as connected garments, not disjoint pieces (see Honest notes) |
 | **Cloth Lab engine** (Settings → 3D Cloth Lab engine) — "Iframe" (default) runs Cloth Lab as a separate embedded app; "Embedded" mounts it directly into this page instead, sharing this page's own React/Three.js so it starts faster and updates instantly | ⚠️ Both working; "Embedded" is newer and still being rolled out as the default |
 | **BodyForm** (`body.html`, standalone) — build a 3D avatar from measurements alone (no pattern needed), export it, or "Open in Fit Studio" to carry the category/measurements into the main app's 3D Cloth Lab | ✅ Working |
+| **Industrial grading — Grade Rules** (Size pane) — per-piece, per-outline-point dx/dy-per-size-step overrides on top of the uniform formula grade, JSON import/export, and a **Grade Nest preview** overlaying S/M/L/XL of one piece at a shared alignment point | ✅ Working — a point with no authored rule keeps grading through the normal formula, unchanged |
+| **Drafting engine upgrades** — per-edge seam allowance + real corner join styles (miter/round/bevel) in the offset engine; real bezier `piece.curves` metadata (princess-seam designs) feeding DXF's curve layer; dart **Pivot** / **Slash & Spread** (Layers pane → piece properties → Edit Darts); **Walk the Seam** (Export pane) — drag one slider to check two pieces' shared seam matches at every arc-length position, not just the ends; pleats on Quick Draft skirts (real added-width math, not a label) | ✅ Working — dart **Transfer** (rotate around an external pivot) and gathers/tucks are implemented as pure, tested functions (`js/darts.js`, `js/pleats.js`) without a dedicated UI yet |
+| **Local automation API** (`window.BerryStudio`, see below) — `generate`/`grade`/`nest`/`export`/`validate`, callable from the browser console or any injected script against the currently loaded pattern | ✅ Working |
 
 ### Honest notes
 - **Fancy Collection** (`js/fancy-patterns.js`) pieces are hand-authored, not run
@@ -308,6 +311,48 @@ install it. After the first load it works **fully offline**.
   model (RMBG-1.4/U²-Net/SAM-tiny) running on the same Route B/C worker
   infrastructure — both are natural extensions of what's shipped here, not
   started this pass.
+- **True polygon nesting** (WP-11) is a first-party bottom-left-fill +
+  simulated-annealing placement search over real polygon-overlap testing
+  (`js/nesting-core.js`), not a literal Minkowski-difference no-fit-polygon
+  implementation — that's the textbook approach, but pulling in an
+  unfamiliar, unverified nesting dependency for it risked a worse outcome
+  than a well-tested first-party search that already demonstrably nests
+  pieces into each other's concave notches.
+- **Curve metadata** (`piece.curves`, WP-14) is wired into `princessCurve()`
+  only — the one curve-generating function `js/fancy-patterns.js`'s
+  `princessBodice()` shares across 10+ of the 24 Fancy Collection designs —
+  not into every individual `qBez()` call site across all 24 designs
+  (necklines, sleeve caps, collar curves, etc. stay flattened-polyline-only,
+  unchanged). DXF's curve layer (layer 3) is empty for those, exactly as it
+  was before this metadata existed anywhere.
+- **Dart Transfer** (rotate a whole dart around an *external* pivot point,
+  e.g. a fixed bust-point reference) is a real, tested pure function
+  (`js/darts.js`) but has no dedicated UI yet — it needs a "pick a point on
+  the canvas" interaction the current Dart Editor modal (Pivot/Spread only)
+  doesn't have. Gathers (`computeGatherWidth`) and tucks (`computeTucks`,
+  `js/pleats.js`) are likewise real and tested but only pleats are wired
+  into a generator (Quick Draft's skirt builder) today.
+- **Walk the Seam** (WP-14) is a modal with a single drag slider, not a
+  live interactive canvas tool that tracks a mouse drag along an edge in
+  real time — a deliberate, smaller-blast-radius choice given the existing
+  canvas's single large pointerdown/pointermove dispatch chain. It still
+  answers the real question (do these two edges match at every arc-length
+  position, not just the ends), just via a slider instead of a drag gesture.
+- **A real, pre-existing bug found and fixed along the way, not introduced
+  by this phase**: `offsetPoly()`'s seam-allowance offset had its sign
+  backwards — every pattern piece's dashed "seam allowance" preview (and
+  `PatternValidator`'s seamAllowance check) had been expanding *inward*
+  instead of outward since before this phase started, confirmed against
+  live data (offsetting a real bodice by the app's own default 1cm shrank
+  its area instead of growing it). Fixed in `js/geometry.js` when
+  `offsetPoly` was extracted there for WP-14's per-edge/join-style work.
+- **A second real, pre-existing bug found and fixed**: Cloth Lab's
+  standalone build was missing `#root { height: 100% }` in its CSS height
+  chain (`html`/`body` had it, `.cloth-lab-root` had it, the div *between*
+  them didn't), so the page silently overflowed its own viewport and the
+  3D canvas — and every camera/zoom distance computed against it — sized
+  itself to the sidebar's content height instead of the real window. This
+  is what read as "the mannequin doesn't fit" and "zoom doesn't work."
 
 ---
 
@@ -337,6 +382,15 @@ BerryStudio/                (repository root)
 │   ├── ai-fusion.js      Vision + pixel-analysis fusion for image-driven generation
 │   ├── capability-probe.js  WebGPU readiness probe for in-browser local models
 │   ├── workers/local-model-worker.js  Lazy Web Worker running a Hugging Face model in-browser
+│   ├── nesting-core.js   Pure polygon-nesting algorithm (bottom-left-fill + simulated annealing)
+│   ├── workers/nesting-worker.js  Web Worker wrapper around nesting-core.js
+│   ├── nesting.js        Main-thread client for the nesting Worker (Promise + progress + cancel)
+│   ├── pattern-export.js Pure DXF/HPGL/tiled-PDF builders (DOM-free — unlike raster, which stays in canvas.js)
+│   ├── grading.js        Per-point grade-rule resolution (Grade Rules / Grade Nest preview)
+│   ├── geometry.js       Polygon offsetting: per-edge seam allowance, miter/round/bevel joins, seam arc-length lookup
+│   ├── darts.js          Dart manipulation: pivot, transfer, slash-and-spread
+│   ├── pleats.js         Pleat/gather/tuck added-width math
+│   ├── berry-studio-api.js  `window.BerryStudio` local automation API (see "Automation API" below)
 │   ├── vendor/           Generated/vendored files (pattern-spec-validate.generated.js) — see its own README
 │   └── app.js            Application controller (wires everything)
 ├── schema/               Pattern Spec JSON Schema + example fixtures (see Honest notes)
@@ -365,6 +419,51 @@ dependency of the shipped app — see `js/vendor/README.md`):
 npm install --no-save ajv
 node scripts/generate-schema-validator.mjs
 ```
+
+## Automation API
+
+`window.BerryStudio` (`js/berry-studio-api.js`) is a small, permanent,
+documented facade over the app's own generate/grade/nest/export/validate
+capability — every method is a direct pass-through to the same code the UI
+itself calls, so the result is always exactly what you'd get by hand.
+Open the app, open the browser console, and try any of these against
+whatever pattern is currently loaded:
+
+```js
+// Resolve a measurement set for a size/standard — no pattern needed.
+const m = BerryStudio.grade({ category: "women", size: "L", standard: "intl", kids: null, custom: null });
+
+// Grading a specific LOADED pattern to that measurement set is a real,
+// separate second step — computeMeasurements() only resolves numbers:
+const colors = ["#6d5efc", "#00c2a8", "#ff5d8f", "#e2a52b", "#4c8dff", "#c1492e"];
+Canvas.setPattern(PATTERNS.womens_dress.pieces(m), colors);
+
+// Export the currently loaded pattern.
+const svg = BerryStudio.export("svg");                                   // string
+const dxf = BerryStudio.export("dxf");                                   // string (AAMA/ASTM D6673 layers)
+const { blob, dpi } = await BerryStudio.export("png", { dpi: 300 });      // Promise<{blob, dpi, clamped}>
+const pdf = BerryStudio.export("pdf", { tiled: true, pageSize: "a4" });   // tiled home-printing PDF
+
+// Run the 8 patternmaking checks over every loaded piece.
+const report = BerryStudio.validate({ seamAllowanceCm: 1 });
+
+// True polygon nesting (the same Worker "Full nest" uses) over every
+// loaded piece, onto a 150cm-wide fabric roll.
+const nested = await BerryStudio.nest({ matWidth: 150, allowRotate: true, minDistCm: 0.5 });
+console.log(`${Math.round(nested.utilization * 100)}% fabric utilization`);
+
+// Generate a new pattern from a prompt (offline heuristic unless you pass
+// `endpoint`, in which case it POSTs there and falls back to local on failure).
+const generated = await BerryStudio.generate({
+  prompt: "a fitted knee-length dress with a V-neck",
+  category: "women",
+  measurements: m,
+});
+Canvas.setPattern(generated.pieces, generated.colors);
+```
+
+See `js/berry-studio-api.js` for the exact signature and return shape of
+each of the five methods.
 
 ## Extending
 
