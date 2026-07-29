@@ -29,6 +29,28 @@ jobs:
   # (node --test, no build step needed — the app is loaded directly as ES
   # modules), cloth-lab's vitest unit tests, and one light Playwright smoke
   # spec covering load → grade → export SVG → open 3D preview.
+  #
+  # POST-MORTEM (found while investigating why the live site hadn't updated
+  # since before Phase 0, despite every phase since being pushed and
+  # reported complete): every run of this workflow since WP-0.2 introduced
+  # it had been silently FAILING at the "Root unit tests" step — root
+  # package.json's test script was `node --test "test/*.test.js"` (a
+  # quoted glob string). Node 20 (pinned here at the time) does not expand
+  # `*` in an explicit file-path argument to `--test` — it looks for a
+  # literal file named `test/*.test.js`, finds none, and exits 1, which
+  # this job never surfaced past because `npm test` was always run and
+  # verified locally against a newer Node that DOES glob-expand test
+  # runner arguments (confirmed empirically: fails on Node 20.20.2, passes
+  # on Node 24.18.0). Fixed at the source — package.json's script is now
+  # `node --test test/*.test.js` (unquoted), so the SHELL expands the glob
+  # into literal filenames before Node ever sees it, which is correct and
+  # identical on every Node version tested. node-version bumped 20→22 in
+  # this file at the same time: `cloth-lab`'s own toolchain (vite@8,
+  # vitest@4) already declares `engines.node: >=22.0.0`; npm only warns
+  # (EBADENGINE) rather than failing on the mismatch, which is why builds
+  # kept succeeding once they got this far, but it was a real, unforced
+  # gap between what CI ran and what the toolchain actually asked for —
+  # closing it rather than leaving a passing-by-luck warning in place.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -36,7 +58,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -70,7 +92,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: cloth-lab/package-lock.json
 
