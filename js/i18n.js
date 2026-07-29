@@ -148,6 +148,12 @@ export const I18N = {
     markerPreviewNote: "Simplified bounding-box preview — pieces are packed by their rectangular footprint, not their true cut outline.",
     markerYardageHint: "Set your options and click Nest to see the layout and yardage.",
     markerYardage: "Fabric needed", markerYardageSrc: "from your last marker",
+    // BerryStudio-Upgrade-Plan WP-11: true polygon nesting alongside the
+    // original instant bounding-box packer, kept as "Fast preview".
+    markerMode: "Nesting mode", markerModeFast: "Fast preview", markerModeFull: "Full nest",
+    markerFullNote: "Real polygon-tight nesting (pieces can slide into each other's concave notches) via simulated annealing — slower, but a genuinely tighter layout than the bounding-box preview.",
+    markerNesting: "Nesting…", markerCancelled: "Stopped — showing the best layout found so far.",
+    markerUtilization: "Fabric utilization",
     fabric: "Fabric", trims: "Trims", labor: "Labor", total: "Total",
     techPack: "Generate Tech Pack", bom: "Bill of Materials", exportNow: "Export",
     printNow: "Print",
@@ -374,6 +380,10 @@ export const I18N = {
     markerPreviewNote: "معاينة مبسّطة بمربعات محيطة — تُرتَّب القطع حسب مساحتها المستطيلة، وليس حسب شكل القص الحقيقي.",
     markerYardageHint: "اضبط الخيارات ثم اضغط «ترتيب القطع» لرؤية المخطط والكمية المطلوبة.",
     markerYardage: "القماش المطلوب", markerYardageSrc: "من آخر تخطيط قص",
+    markerMode: "وضع الترتيب", markerModeFast: "معاينة سريعة", markerModeFull: "ترتيب كامل",
+    markerFullNote: "ترتيب دقيق لشكل القطع الحقيقي (يمكن للقطع أن تنزلق داخل تجاويف قطع أخرى) عبر عملية تحسين تكرارية — أبطأ، لكنه تخطيط أكثر إحكامًا من معاينة المربعات المحيطة.",
+    markerNesting: "جارٍ الترتيب…", markerCancelled: "تم الإيقاف — يُعرض أفضل تخطيط تم التوصل إليه.",
+    markerUtilization: "نسبة استغلال القماش",
     fabric: "قماش", trims: "إكسسوارات", labor: "مصنعية", total: "الإجمالي",
     techPack: "توليد الحقيبة الفنية", bom: "قائمة الخامات", exportNow: "تصدير",
     printNow: "طباعة",

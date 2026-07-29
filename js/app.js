@@ -19,6 +19,7 @@ import { fuseStyle, mergeProvenance } from './ai-fusion.js';
 import { ImageProviders, IMAGE_PROVIDER_IDS } from './image-providers.js';
 import { MEAS_KEYS, renderMeasureFields } from './measure-form.js';
 import { consumeBodyFormHandoff } from './body-handoff.js';
+import { nest as nestTruePolygon, cancelNest } from './nesting.js';
 
 (() => {
   "use strict";
@@ -1392,6 +1393,32 @@ import { consumeBodyFormHandoff } from './body-handoff.js';
     });
     ctx.restore();
   }
+  // WP-11: draws the TRUE polygon-nest result (real outline shapes, not
+  // bounding boxes) — same canvas/scale-fitting approach as
+  // drawNestPreview above, but tracing each piece's actual placed
+  // polygon so a piece visibly nests into another's concave notch
+  // instead of just stacking rectangles.
+  function drawNestPreviewPolygons(canvas, placements, matWidth){
+    const ctx = canvas.getContext("2d"); const W=canvas.width, H=canvas.height;
+    ctx.clearRect(0,0,W,H);
+    const totalHeight = placements.reduce((m,p)=>Math.max(m,...p.poly.map(pt=>pt[1])), 0);
+    const h = Math.max(totalHeight, 10);
+    const scale = Math.min((W-20)/matWidth, (H-20)/h);
+    ctx.save(); ctx.translate(10,10);
+    const line = getComputedStyle(document.body).getPropertyValue("--line").trim()||"#ccc";
+    ctx.strokeStyle=line; ctx.lineWidth=1; ctx.strokeRect(0,0,matWidth*scale,totalHeight*scale);
+    placements.forEach((p,i)=>{
+      const c = PALETTE[i%PALETTE.length];
+      ctx.fillStyle = c+"33"; ctx.strokeStyle = c; ctx.lineWidth=1.5;
+      ctx.beginPath();
+      p.poly.forEach(([x,y],j)=>{ const px=x*scale, py=y*scale; j===0?ctx.moveTo(px,py):ctx.lineTo(px,py); });
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#1a1a1a"; ctx.font = "10px Inter, sans-serif"; ctx.textBaseline="top";
+      const bx = Math.min(...p.poly.map(pt=>pt[0])), by = Math.min(...p.poly.map(pt=>pt[1]));
+      ctx.fillText(p.label, bx*scale+3, by*scale+3);
+    });
+    ctx.restore();
+  }
   function openMarkerModal(){
     const pieces = Canvas.getPieces();
     if(!pieces.length){ toast(T("empty2d")); return; }
@@ -1434,10 +1461,26 @@ import { consumeBodyFormHandoff } from './body-handoff.js';
     const dInp = el("input","input"); dInp.type="number"; dInp.min="0"; dInp.step="0.1"; dInp.value="0.1"; dField.appendChild(dInp);
     row2.appendChild(rField); row2.appendChild(dField); body.appendChild(row2);
 
+    // WP-11: true polygon nesting alongside the original instant
+    // bounding-box packer — defaults to "fast" so nothing changes for an
+    // existing user until they opt into the slower, tighter mode.
+    const modeField = el("div","field"); modeField.style.marginTop="12px";
+    modeField.innerHTML = `<label>${T("markerMode")}</label>`;
+    const modeSeg = el("div","seg");
+    modeSeg.innerHTML = `<button class="active" data-mode="fast">${T("markerModeFast")}</button><button data-mode="full">${T("markerModeFull")}</button>`;
+    modeField.appendChild(modeSeg); body.appendChild(modeField);
+    const noteEl = body.appendChild(el("div","help-note",T("markerPreviewNote")));
+    noteEl.style.marginTop="6px";
+    let mode = "fast";
+    [...modeSeg.children].forEach(b=>b.onclick=()=>{
+      mode = b.dataset.mode;
+      [...modeSeg.children].forEach(x=>x.classList.toggle("active", x===b));
+      noteEl.textContent = mode==="fast" ? T("markerPreviewNote") : T("markerFullNote");
+    });
+
     const canvas = el("canvas"); canvas.width=680; canvas.height=380;
     canvas.style.cssText="width:100%;height:auto;margin-top:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)";
     body.appendChild(canvas);
-    body.appendChild(el("div","help-note",T("markerPreviewNote"))).style.marginTop="6px";
 
     const yardEl = el("div","help-note"); yardEl.style.marginTop="8px"; yardEl.textContent=T("markerYardageHint");
     const btnRow = el("div","row"); btnRow.style.cssText="display:flex;gap:8px;margin-top:12px";
@@ -1446,21 +1489,62 @@ import { consumeBodyFormHandoff } from './body-handoff.js';
     btnRow.appendChild(nestBtn); btnRow.appendChild(stopBtn);
     body.appendChild(btnRow); body.appendChild(yardEl);
 
-    stopBtn.onclick = () => toast(T("markerInstant"));
-    nestBtn.onclick = () => {
+    let fullNestRunning = false;
+    stopBtn.onclick = () => { if(fullNestRunning) cancelNest(); else toast(T("markerInstant")); };
+
+    nestBtn.onclick = async () => {
       const matFilter = body.querySelector(".mk-mat").value;
       const selected = pieces.filter((p,i)=>checks[i].checked && (!matFilter || (p.material||state.fabric3d)===matFilter));
       if(!selected.length){ toast(T("empty2d")); return; }
-      const items = selected.map(p=>{
-        const xs=p.outline.map(pt=>pt[0]), ys=p.outline.map(pt=>pt[1]);
-        return { label:L(p.name), w:Math.max(...xs)-Math.min(...xs), h:Math.max(...ys)-Math.min(...ys) };
-      });
       const matWidth = +wInp.value||160, matLength = +lInp.value||250;
-      const result = nestShelfPack(items, matWidth, rField.querySelector(".mk-rot").value==="any", +dInp.value||0);
-      drawNestPreview(canvas, result, matWidth, matLength);
-      state.lastMarkerYards = result.totalHeight/100; state.lastMarkerWidth = matWidth; save();
-      yardEl.innerHTML = `${T("markerYardage")}: <b>${state.lastMarkerYards.toFixed(2)} m</b> @ ${matWidth}cm`;
-      renderExportPane();
+      const allowRotate = rField.querySelector(".mk-rot").value==="any";
+      const minDistCm = +dInp.value||0;
+
+      if(mode==="fast"){
+        const items = selected.map(p=>{
+          const xs=p.outline.map(pt=>pt[0]), ys=p.outline.map(pt=>pt[1]);
+          return { label:L(p.name), w:Math.max(...xs)-Math.min(...xs), h:Math.max(...ys)-Math.min(...ys) };
+        });
+        const result = nestShelfPack(items, matWidth, allowRotate, minDistCm);
+        drawNestPreview(canvas, result, matWidth, matLength);
+        state.lastMarkerYards = result.totalHeight/100; state.lastMarkerWidth = matWidth; save();
+        yardEl.innerHTML = `${T("markerYardage")}: <b>${state.lastMarkerYards.toFixed(2)} m</b> @ ${matWidth}cm`;
+        renderExportPane();
+        return;
+      }
+
+      // Full nest: real polygon outlines, in a Worker (js/nesting.js) so
+      // the UI stays responsive — see WP-11's own honest-notes for why
+      // this is bottom-left-fill + simulated annealing over true overlap
+      // testing rather than literal Minkowski-NFP + convex decomposition.
+      const idToLabel = {}; selected.forEach((p,i)=>{ idToLabel[i]=L(p.name); });
+      const nestPieces = selected.map((p,i)=>({
+        id: i, outline: p.outline,
+        grainLocked: !!(p.grain && p.grain.length>=2 && p.grainline!=="bias"),
+      }));
+      fullNestRunning = true;
+      nestBtn.disabled = true; nestBtn.textContent = T("markerNesting");
+      try {
+        const result = await nestTruePolygon(
+          { pieces: nestPieces, matWidth, allowRotate, minDistCm },
+          (p)=>{ yardEl.innerHTML = `${T("markerNesting")} ${Math.round(p.utilization*100)}%`; },
+        );
+        fullNestRunning = false;
+        nestBtn.disabled = false; nestBtn.textContent = T("markerNest");
+        if(result.error){ toast(result.error); return; }
+        const placements = result.placements.map(pl=>({ ...pl, label: idToLabel[pl.id] }));
+        drawNestPreviewPolygons(canvas, placements, matWidth);
+        state.lastMarkerYards = result.totalHeight/100; state.lastMarkerWidth = matWidth; save();
+        const utilPct = Math.round(result.utilization*100);
+        yardEl.innerHTML = `${T("markerYardage")}: <b>${state.lastMarkerYards.toFixed(2)} m</b> @ ${matWidth}cm`
+          + ` · ${T("markerUtilization")}: <b>${utilPct}%</b>`
+          + (result.cancelled ? ` — ${T("markerCancelled")}` : "");
+        renderExportPane();
+      } catch(err){
+        fullNestRunning = false;
+        nestBtn.disabled = false; nestBtn.textContent = T("markerNest");
+        toast(String(err && err.message || err));
+      }
     };
   }
 
