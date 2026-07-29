@@ -175,6 +175,16 @@ test('embedded Cloth Lab engine mounts real content with no console errors', asy
 // flag, see js/body-handoff.js) lands the main app directly on the 3D
 // Cloth Lab with the same category and measurements.
 test('BodyForm generates an avatar, exports GLB/OBJ, and hands off to Fit Studio', async ({ page }) => {
+  // GLB/OBJ export walks the full scene graph through three.js's
+  // GLTFExporter/OBJExporter — real CPU work, not instant, and a shared
+  // CI runner (no real GPU, cold caches) is measurably slower than local
+  // dev. The default 30s test timeout was cutting this close in CI (a
+  // prior run timed out mid-export with no thrown error captured —
+  // ExportPanel.jsx catches export failures into React state, not
+  // console.error, so this test's own error listener can't see them
+  // either way); doubled here rather than guessing at a specific slow
+  // step to shave down.
+  test.setTimeout(60000);
   const errors = [];
   page.on('pageerror', (err) => errors.push(String(err)));
   page.on('console', (msg) => {
@@ -193,10 +203,22 @@ test('BodyForm generates an avatar, exports GLB/OBJ, and hands off to Fit Studio
   await page.getByRole('button', { name: 'Generate Avatar' }).click();
   await page.waitForTimeout(1000);
 
-  const [glbDownload] = await Promise.all([
-    page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Export GLB' }).click(),
-  ]);
+  let glbDownload;
+  try {
+    [glbDownload] = await Promise.all([
+      page.waitForEvent('download', { timeout: 45000 }),
+      page.getByRole('button', { name: 'Export GLB' }).click(),
+    ]);
+  } catch (e) {
+    // ExportPanel.jsx (cloth-lab) catches export failures into React
+    // state, not console.error — this test's own `errors` listener can't
+    // see them. Read the panel's own error text (and whether the button
+    // is still stuck on "Working…") directly so a real failure is
+    // diagnosable instead of just "timed out".
+    const panelError = await page.locator('text=/Export.+failed:/').textContent().catch(() => null);
+    const btnText = await page.getByRole('button', { name: /Export GLB|Working…/ }).first().textContent().catch(() => null);
+    throw new Error(`${e.message}\n\nExportPanel error text: ${panelError || '(none)'}\nExport button text: ${btnText || '(not found)'}`);
+  }
   expect(glbDownload.suggestedFilename()).toMatch(/\.glb$/);
   const [objDownload] = await Promise.all([
     page.waitForEvent('download'),
