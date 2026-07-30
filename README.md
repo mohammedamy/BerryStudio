@@ -193,15 +193,25 @@ in the app's own header.
   recording are all confirmed working. GIF export isn't offered — every
   JS GIF encoder is a new dependency this project avoids; use the
   MP4/WebM/PNG-sequence export and convert externally if you need a GIF.
-- **BodyForm** (`body.html`) and the 3D Cloth Lab's "Embedded" engine both
-  share React/Three.js with the main page via an import map — this needs a
-  real browser environment with dynamic `import()` support; some headless
-  browser-automation tools have been observed to fail resolving import-map
-  entries in a dynamic `import()` call even though the map itself is
-  correctly present (confirmed not a bug in this app by reproducing the
-  identical check in real Chromium, where it passes) — if you hit "Failed
-  to resolve module specifier" only inside an automation tool, it's the
-  tool, not this app.
+- **A real, previously-dismissed-too-quickly bug**: 3D Preview reported
+  blank by a real user (twice, across two phases) was originally chalked
+  up to "some browser-automation tools fail resolving import-map entries
+  in a dynamic `import()`" and left as a tooling note rather than fixed —
+  reproducing it directly (`import("three")` throws "Failed to resolve
+  module specifier" in the affected engine, while
+  `import("https://unpkg.com/.../three.module.js")` on the very same page
+  succeeds immediately after) showed this affects more than just one
+  automation tool's engine, and there was no reason a real visitor
+  couldn't hit the identical failure mode. Fixed properly in
+  `js/three-view.js`: every dynamic `import()` of a bare specifier now
+  tries the normal, version-pinned-in-one-place path first and falls back
+  to a hardcoded, version-matched CDN URL only if that throws — a genuine
+  fix, not a "some environments just can't do this" shrug. A related bug
+  found alongside it: even in a real WebGL-unavailable fallback case, the
+  "3D preview needs WebGL" message was being drawn onto a canvas still
+  sized 0×0 from app boot (before the 3D tab was ever opened) and nothing
+  ever redrew it at the correct size — `resize()` now re-attempts the
+  fallback message at the real size on every call, not just once at boot.
 - **ES modules**: every root `js/*.js` file now has real `export`s and the files
   that need them have real `import`s, replacing the previous "9 classic scripts
   sharing one browser lexical scope" pattern. Every exported symbol also still

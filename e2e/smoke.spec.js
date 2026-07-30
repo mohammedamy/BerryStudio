@@ -73,6 +73,19 @@ test('load, grade, export SVG, open 3D preview — no console errors', async ({ 
   await page.waitForTimeout(2000);
   await expect(page.locator('canvas:visible').first()).toBeVisible();
 
+  // A real, previously-shipped regression this test's own predecessor never
+  // caught: #canvas3d can be CSS-"visible" (real bounding box, correct
+  // wrapper classes) while its internal raster buffer is still 0×0 and
+  // View3D never actually finished initializing — a plain visibility
+  // check can't tell the two apart, so assert the real signal directly.
+  const state3d = await page.evaluate(() => {
+    const c = document.getElementById('canvas3d');
+    return { w: c.width, h: c.height, ready: window.View3D.isReady() };
+  });
+  expect(state3d.ready, 'View3D.isReady() should be true once the 3D tab has been open a moment').toBe(true);
+  expect(state3d.w).toBeGreaterThan(0);
+  expect(state3d.h).toBeGreaterThan(0);
+
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
 

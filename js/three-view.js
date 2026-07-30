@@ -26,13 +26,30 @@ export const View3D = (() => {
   const avatarURLs = {};                       // category -> optional GLB url
 
   // ---------- dependency loading (uses the page import map) ----------
+  // A bare specifier ("three") only resolves via the <script type="importmap">
+  // in index.html — some browser engines have been observed to throw
+  // "Failed to resolve module specifier" for a bare specifier passed to a
+  // *dynamic* import() even though the identical map correctly resolves
+  // static imports (confirmed directly: import("three") throws in that
+  // engine while import("https://unpkg.com/.../three.module.js") succeeds
+  // immediately after, same page, same load). importWithFallback() tries
+  // the bare specifier first (the normal, version-pinned-in-one-place
+  // path, and the only one that runs in engines where it already works
+  // fine) and only falls back to a hardcoded, version-matched CDN URL if
+  // that throws — so this never changes behavior where things already work.
+  const THREE_VERSION = "0.185.1";
+  const THREE_CDN = `https://unpkg.com/three@${THREE_VERSION}`;
+  async function importWithFallback(bareSpecifier, cdnPath) {
+    try { return await import(/* @vite-ignore */ bareSpecifier); }
+    catch (e) { return import(/* @vite-ignore */ `${THREE_CDN}/${cdnPath}`); }
+  }
   async function loadDeps() {
     if (THREE) return true;
     try {
-      THREE = await import("three");
-      ({ OrbitControls } = await import("three/addons/controls/OrbitControls.js"));
-      try { ({ GLTFLoader } = await import("three/addons/loaders/GLTFLoader.js")); } catch (e) { GLTFLoader = null; }
-      try { ({ RGBELoader } = await import("three/addons/loaders/RGBELoader.js")); } catch (e) { RGBELoader = null; }
+      THREE = await importWithFallback("three", "build/three.module.js");
+      ({ OrbitControls } = await importWithFallback("three/addons/controls/OrbitControls.js", "examples/jsm/controls/OrbitControls.js"));
+      try { ({ GLTFLoader } = await importWithFallback("three/addons/loaders/GLTFLoader.js", "examples/jsm/loaders/GLTFLoader.js")); } catch (e) { GLTFLoader = null; }
+      try { ({ RGBELoader } = await importWithFallback("three/addons/loaders/RGBELoader.js", "examples/jsm/loaders/RGBELoader.js")); } catch (e) { RGBELoader = null; }
       return true;
     } catch (e) { return false; }
   }
@@ -556,7 +573,13 @@ export const View3D = (() => {
 
   // ---------- misc ----------
   function resize() {
-    if (!ready) return;
+    // init() runs at app boot, before the user has ever switched to the 3D
+    // tab — if WebGL/deps genuinely aren't available, fallback() draws its
+    // message onto a canvas that's still invisible (zero-sized) at that
+    // exact moment, and nothing ever redraws it. Re-attempt with the real,
+    // now-correct size whenever a later resize (e.g. the view switch that
+    // makes the canvas visible for the first time) calls back in here.
+    if (!ready) { fallback(); return; }
     const r = host.getBoundingClientRect();
     renderer.setSize(r.width, r.height, false);
     camera.aspect = (r.width || 1) / (r.height || 1); camera.updateProjectionMatrix();
