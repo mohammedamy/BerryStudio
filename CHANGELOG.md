@@ -6,6 +6,62 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## AI Pattern Generator: romper/jumpsuit garment type (real vector pieces, not an image)
+
+### Added
+- **`AIGen.buildRomper()`** (`js/ai.js`) — a new garment kind covering a
+  one-piece romper/jumpsuit: fitted front/back bodice joined at a waist
+  seam to front/back above-knee shorts, an armhole binding strip when
+  sleeveless (the common case for this silhouette), a mock/stand
+  neckline piece, and a center-front zip facing when a zip closure is
+  described or declared. Wired into `deriveStyle()`'s prompt parser
+  (`romper|jumpsuit|playsuit|أفرول`, checked before the generic dress/top
+  patterns so it isn't misclassified), a new "mock neck" neckline
+  detection, and a new zip-closure detection (`s.zip`) — all independent
+  of the existing wrap-closure logic.
+- **`PatternSpecV1` schema** (`schema/pattern-spec.v1.json`) — added
+  `"romper"` to `garment.type`, `"mock"` to `construction.neckline`, and
+  `"shorts-front"`/`"shorts-back"` to `pieces[].role` (the schema's
+  existing `"zip"` closure and `"placket-facing"`/`"collar-stand"`/`"other"`
+  roles already covered the rest). Regenerated the precompiled
+  CSP-safe validator (`js/vendor/pattern-spec-validate.generated.js`) via
+  `scripts/generate-schema-validator.mjs` — required after any schema
+  edit, since the validator isn't compiled at runtime.
+- **Spec pipeline** (`js/ai-spec-pipeline.js`) — extended the system
+  prompt's vocabulary list and added a third few-shot example (a mock-neck
+  zip romper) so a configured text-generation provider (e.g. a real OpenAI
+  key under Settings → AI Provider → Text Generation) can emit a valid
+  romper spec; `specToStyle()` now maps `garment.closure === 'zip'` through
+  to `AIGen.build()`.
+- **Quick Draft Builder** (`js/app.js`) — "Romper" is now a pickable kind
+  alongside Dress/Top/Shirt/etc., with its own required-measurements list
+  (bodice + leg measurements) and Length/Fit/Sleeve controls.
+
+### Fixed
+- Clarified, via direct investigation, that a user describing a garment
+  in the **AI Pattern Generator** prompt box always gets real vector
+  pattern pieces (never an image) — the "I got an image back" experience
+  reported can only come from the separate **AI Fashion Billboard**
+  section further down the same rail pane (its "Draw Pattern From This"
+  step calls an image-generation endpoint by design, producing a raster
+  tech-pack illustration meant for the existing "trace as background"
+  workflow, not real geometry). No code change was needed for that path;
+  the real gap — that "romper" wasn't a recognized garment type at all,
+  so this kind of description had nowhere correct to go — is what this
+  release actually closes.
+
+### Honest notes
+- Romper shorts pieces (`Romper Front/Back Shorts`) declare no
+  `role` — cloth-lab's WP-6 placement vocabulary has no "shorts
+  front/back" entry (only full-length trouser/skirt panels), so this
+  follows `buildTrousers()`'s own established "skip what we don't
+  understand" convention rather than forcing an incorrect hip-panel
+  placement.
+- The Quick Draft Builder's romper option has no zip-closure toggle
+  (Quick Draft doesn't expose a closure control for any kind today) —
+  zip detection is prompt-only, via the AI Pattern Generator's free-text
+  description.
+
 ## Shift-drag bypasses the 1cm grid snap
 
 ### Added

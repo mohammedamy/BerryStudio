@@ -14,7 +14,7 @@
       "additionalProperties": false,
       "required": ["type", "category"],
       "properties": {
-        "type": { "enum": ["dress", "top", "shirt", "skirt", "trousers", "robe"] },
+        "type": { "enum": ["dress", "top", "shirt", "skirt", "trousers", "robe", "romper"] },
         "category": { "enum": ["women", "men", "girls", "boys"] },
         "closure": { "enum": ["none", "button", "zip", "wrap", "tie"] }
       }
@@ -34,7 +34,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "neckline": { "enum": ["v", "round", "boat", "off-shoulder", "halter", "collar"] },
+        "neckline": { "enum": ["v", "round", "boat", "off-shoulder", "halter", "collar", "mock"] },
         "necklineDepthF": { "type": "number", "minimum": 0, "maximum": 2 },
         "sleeve": {
           "type": "object",
@@ -66,7 +66,7 @@
             "description": "bodice-front/bodice-back/skirt-front/skirt-back are kept as validator-resolved aliases for the WP-6 vocabulary below (front-panel/back-panel/hip-panel-front/hip-panel-back in cloth-lab's own placement roles — see cloth-lab/src/pattern/roles.js) so existing Phase-1 AI-pipeline specs keep validating unchanged.",
             "enum": [
               "bodice-front", "bodice-back", "skirt-front", "skirt-back",
-              "front-panel", "back-panel",
+              "front-panel", "back-panel", "shorts-front", "shorts-back",
               "bodice-front-center", "bodice-front-side", "bodice-back-center", "bodice-back-side",
               "skirt-front-gore", "skirt-back-gore", "skirt-side-gore-left", "skirt-side-gore-right",
               "sleeve", "sleeve-upper", "sleeve-under", "cap-sleeve", "puff-sleeve", "butterfly-sleeve",

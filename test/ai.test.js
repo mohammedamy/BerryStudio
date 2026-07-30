@@ -27,6 +27,39 @@ test('build() is deterministic for the same style+measurements input', () => {
   assert.deepEqual(a.pieces.map((p) => p.outline), b.pieces.map((p) => p.outline));
 });
 
+test('a "mock neck sleeveless zip romper" prompt is detected as a romper with mock neckline and zip closure', () => {
+  const style = AIGen.deriveStyle({ metrics: null, prompt: 'Mock Neck Sleeveless Zip Romper', category: 'women', imageDataURL: null });
+  assert.equal(style.type, 'romper');
+  assert.equal(style.neckline, 'mock');
+  assert.equal(style.zip, true);
+  assert.equal(style.sleeveLenF, 0);
+});
+
+test('buildRomper produces a real bodice+shorts garment (front/back bodice, front/back shorts, binding, collar stand, zip facing)', () => {
+  const style = AIGen.deriveStyle({ metrics: null, prompt: 'mock neck sleeveless zip romper', category: 'women', imageDataURL: null });
+  const built = AIGen.build(style, meas);
+  const names = built.pieces.map((p) => p.name.en);
+  assert.ok(names.some((n) => /Front Bodice/.test(n)));
+  assert.ok(names.some((n) => /Back Bodice/.test(n)));
+  assert.ok(names.some((n) => /Front Shorts/.test(n)));
+  assert.ok(names.some((n) => /Back Shorts/.test(n)));
+  assert.ok(names.some((n) => /Armhole Binding/.test(n)), 'sleeveless romper should get an armhole binding, not a sleeve');
+  assert.ok(names.some((n) => /Mock Neck Stand/.test(n)));
+  assert.ok(names.some((n) => /Zip Facing/.test(n)));
+  for (const p of built.pieces) {
+    assert.ok(Array.isArray(p.outline) && p.outline.length >= 3);
+    for (const pt of p.outline) assert.ok(Number.isFinite(pt[0]) && Number.isFinite(pt[1]));
+  }
+});
+
+test('a romper with sleeves gets a real sleeve piece instead of armhole binding', () => {
+  const style = { ...AIGen.deriveStyle({ metrics: null, prompt: 'romper', category: 'women', imageDataURL: null }), sleeveLenF: 1.0 };
+  const built = AIGen.build(style, meas);
+  const names = built.pieces.map((p) => p.name.en);
+  assert.ok(names.includes('Sleeve'));
+  assert.ok(!names.some((n) => /Armhole Binding/.test(n)));
+});
+
 test('trousers and skirt types route to their own builders (different piece counts than a top)', () => {
   const topStyle = AIGen.deriveStyle('sleeveless shift dress', 'en');
   const skirtStyle = { ...AIGen.deriveStyle('pleated skirt', 'en'), type: 'skirt' };

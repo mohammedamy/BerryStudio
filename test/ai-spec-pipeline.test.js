@@ -6,6 +6,7 @@ import { generateFromSpec, specToStyle, buildSystemPrompt } from '../js/ai-spec-
 const schema = JSON.parse(readFileSync(new URL('../schema/pattern-spec.v1.json', import.meta.url)));
 const validSpec = JSON.parse(readFileSync(new URL('../schema/examples/valid.pattern-spec.json', import.meta.url)));
 const invalidSpec = JSON.parse(readFileSync(new URL('../schema/examples/invalid.pattern-spec.json', import.meta.url)));
+const romperSpec = JSON.parse(readFileSync(new URL('../schema/examples/romper.pattern-spec.json', import.meta.url)));
 const measurements = { chest: 92, waist: 74, hips: 100, backLen: 40, sleeve: 58, bicep: 28, height: 165, neck: 36, inseam: 76, thigh: 56, shoulder: 40 };
 
 function mockAdapter(responses) {
@@ -13,11 +14,20 @@ function mockAdapter(responses) {
   return { complete: async () => responses[Math.min(call++, responses.length - 1)] };
 }
 
-test('buildSystemPrompt embeds the schema vocabulary and both few-shot examples', () => {
+test('buildSystemPrompt embeds the schema vocabulary and all three few-shot examples', () => {
   const p = buildSystemPrompt('women', 'en');
-  assert.match(p, /garment\.type: dress \| top \| shirt \| skirt \| trousers \| robe/);
+  assert.match(p, /garment\.type: dress \| top \| shirt \| skirt \| trousers \| robe \| romper/);
+  assert.match(p, /construction\.neckline: v \| round \| boat \| off-shoulder \| halter \| collar \| mock/);
   assert.match(p, /Example 1 prompt/);
   assert.match(p, /Example 2 prompt/);
+  assert.match(p, /Example 3 prompt/);
+});
+
+test('specToStyle maps a zip closure', () => {
+  const style = specToStyle({ garment: { type: 'romper', closure: 'zip' }, construction: { neckline: 'mock' } });
+  assert.equal(style.zip, true);
+  assert.equal(style.wrap, false);
+  assert.equal(style.neckline, 'mock');
 });
 
 test('specToStyle maps and clamps every *F factor into AIGen\'s safe ranges', () => {
@@ -79,6 +89,22 @@ test('the proxy adapter\'s legacy {pieces} contract short-circuits schema valida
   assert.equal(result.fellBack, undefined);
   assert.equal(result.source, 'remote');
   assert.equal(result.pieces.length, 1);
+});
+
+test('a valid romper spec (mock neck, zip, attached shorts) produces real vector pieces via AIGen — not an image', async () => {
+  const adapter = mockAdapter([{ ok: true, providerId: 'test', json: romperSpec, usage: {} }]);
+  const result = await generateFromSpec({ adapter, cfg: {}, prompt: 'mock neck sleeveless zip romper', measurements, category: 'women', lang: 'en', schema });
+  assert.equal(result.fellBack, undefined);
+  assert.equal(result.source, 'spec');
+  assert.equal(result.style.type, 'romper');
+  assert.equal(result.style.zip, true);
+  assert.equal(result.style.neckline, 'mock');
+  // bodice front/back + shorts front/back + armhole binding + collar stand + zip facing
+  assert.ok(result.pieces.length >= 7, `expected at least 7 pieces, got ${result.pieces.length}`);
+  for (const p of result.pieces) {
+    assert.ok(Array.isArray(p.outline) && p.outline.length >= 3);
+    for (const pt of p.outline) assert.ok(Number.isFinite(pt[0]) && Number.isFinite(pt[1]));
+  }
 });
 
 test('the proxy adapter\'s legacy {style} contract also short-circuits and builds via AIGen', async () => {

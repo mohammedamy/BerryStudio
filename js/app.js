@@ -1020,14 +1020,15 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   // Pick a garment kind → see only the measurements that kind actually needs →
   // produce real pattern pieces. AIGen.build() drives the 6 basic kinds;
   // FancyGen.build() (js/fancy-patterns.js) drives the 4 richer, curved-seam kinds.
-  const BUILDER_KINDS = ["dress","top","shirt","skirt","trousers","robe","gown","jacket","coat","suit"];
-  const AIGEN_KINDS = ["dress","top","shirt","skirt","trousers","robe"];
+  const BUILDER_KINDS = ["dress","top","shirt","skirt","trousers","romper","robe","gown","jacket","coat","suit"];
+  const AIGEN_KINDS = ["dress","top","shirt","skirt","trousers","robe","romper"];
   const KIND_MEAS = {
     dress:["chest","waist","hips","backLen","sleeve","bicep","height"],
     top:["chest","waist","hips","backLen","sleeve","bicep"],
     shirt:["chest","waist","hips","backLen","neck","sleeve","bicep"],
     skirt:["waist","hips","inseam"],
     trousers:["waist","hips","thigh","inseam"],
+    romper:["chest","waist","hips","backLen","neck","sleeve","bicep","thigh","inseam"],
     robe:["chest","waist","hips","backLen","neck","sleeve","bicep","height"],
     gown:["chest","waist","hips","backLen","sleeve","bicep","height"],
     jacket:["chest","waist","hips","backLen","neck","sleeve","bicep"],
@@ -1036,7 +1037,8 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   };
   const KIND_STYLE = {
     dress:{length:1,flare:1,fit:1,sleeve:1}, top:{length:1,flare:1,fit:1,sleeve:1}, shirt:{length:1,flare:1,fit:1,sleeve:1},
-    skirt:{length:1,flare:1,fit:1,pleats:1}, trousers:{length:1,flare:1,fit:1}, robe:{length:1,flare:1,fit:1,sleeve:1},
+    skirt:{length:1,flare:1,fit:1,pleats:1}, trousers:{length:1,flare:1,fit:1}, romper:{length:1,fit:1,sleeve:1},
+    robe:{length:1,flare:1,fit:1,sleeve:1},
     gown:{length:1,sleeve:1}, jacket:{length:1}, coat:{length:1}, suit:{},
   };
   const LEN_MAP = {short:0.65, medium:1.0, long:1.35};

@@ -1,0 +1,26 @@
+{
+  "specVersion": "1",
+  "garment": { "type": "romper", "category": "women", "closure": "zip" },
+  "silhouette": { "lengthF": 1.0, "flareF": 1.0, "fitF": 0.85 },
+  "construction": {
+    "neckline": "mock", "necklineDepthF": 0.3,
+    "sleeve": { "kind": "none", "lengthF": 0, "widthF": 1.0 },
+    "hem": "straight",
+    "seams": ["waist", "side"]
+  },
+  "pieces": [
+    { "id": "bodice-front", "role": "bodice-front", "cutOnFold": true, "quantity": 1, "grainline": "straight" },
+    { "id": "bodice-back", "role": "bodice-back", "cutOnFold": true, "quantity": 1, "grainline": "straight" },
+    { "id": "shorts-front", "role": "shorts-front", "cutOnFold": false, "quantity": 2, "grainline": "straight" },
+    { "id": "shorts-back", "role": "shorts-back", "cutOnFold": false, "quantity": 2, "grainline": "straight" },
+    { "id": "collar-stand", "role": "collar-stand", "cutOnFold": false, "quantity": 1, "grainline": "straight" },
+    { "id": "zip-facing", "role": "placket-facing", "cutOnFold": false, "quantity": 2, "grainline": "straight" },
+    { "id": "armhole-binding", "role": "other", "cutOnFold": false, "quantity": 2, "grainline": "bias" }
+  ],
+  "seams": [],
+  "provenance": [
+    { "field": "garment.type", "source": "llm-inferred", "confidence": 0.95 },
+    { "field": "construction.neckline", "source": "llm-inferred", "confidence": 0.9 },
+    { "field": "garment.closure", "source": "llm-inferred", "confidence": 0.9 }
+  ]
+}

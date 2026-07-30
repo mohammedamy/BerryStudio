@@ -124,6 +124,30 @@ const FEW_SHOT_EXAMPLES = [
       ],
     },
   },
+  {
+    prompt: 'a mock neck sleeveless zip romper, fitted, above-knee shorts',
+    spec: {
+      specVersion: '1',
+      garment: { type: 'romper', category: 'women', closure: 'zip' },
+      silhouette: { lengthF: 1.0, flareF: 1.0, fitF: 0.85 },
+      construction: { neckline: 'mock', sleeve: { kind: 'none', lengthF: 0, widthF: 1.0 }, hem: 'straight', seams: ['waist', 'side'] },
+      pieces: [
+        { id: 'bodice-front', role: 'bodice-front', cutOnFold: true, quantity: 1, grainline: 'straight' },
+        { id: 'bodice-back', role: 'bodice-back', cutOnFold: true, quantity: 1, grainline: 'straight' },
+        { id: 'shorts-front', role: 'shorts-front', cutOnFold: false, quantity: 2, grainline: 'straight' },
+        { id: 'shorts-back', role: 'shorts-back', cutOnFold: false, quantity: 2, grainline: 'straight' },
+        { id: 'collar-stand', role: 'collar-stand', cutOnFold: false, quantity: 1, grainline: 'straight' },
+        { id: 'zip-facing', role: 'placket-facing', cutOnFold: false, quantity: 2, grainline: 'straight' },
+        { id: 'armhole-binding', role: 'other', cutOnFold: false, quantity: 2, grainline: 'bias' },
+      ],
+      seams: [],
+      provenance: [
+        { field: 'garment.type', source: 'llm-inferred', confidence: 0.95 },
+        { field: 'construction.neckline', source: 'llm-inferred', confidence: 0.9 },
+        { field: 'garment.closure', source: 'llm-inferred', confidence: 0.9 },
+      ],
+    },
+  },
 ];
 
 export function buildSystemPrompt(category, lang) {
@@ -136,14 +160,16 @@ export function buildSystemPrompt(category, lang) {
     `Garment category for this request: ${category || 'women'}. All measurements the drafting engine uses are in CENTIMETERS.`,
     '',
     'Schema field vocabulary (use exactly these values — never invent a new enum value):',
-    '- garment.type: dress | top | shirt | skirt | trousers | robe',
+    '- garment.type: dress | top | shirt | skirt | trousers | robe | romper',
     '- garment.category: women | men | girls | boys',
     '- garment.closure: none | button | zip | wrap | tie',
-    '- construction.neckline: v | round | boat | off-shoulder | halter | collar',
+    '- construction.neckline: v | round | boat | off-shoulder | halter | collar | mock',
     '- construction.sleeve.kind: none | set-in | raglan | two-piece',
     '- construction.hem: straight | curved | highlow | asymmetric',
-    '- pieces[].role: bodice-front | bodice-back | skirt-front | skirt-back | sleeve | collar | cuff | facing | waistband | yoke | pocket | lining | other',
+    '- pieces[].role: bodice-front | bodice-back | skirt-front | skirt-back | shorts-front | shorts-back | sleeve | collar | collar-stand | cuff | facing | placket-facing | waistband | yoke | pocket | lining | other',
     '- pieces[].grainline: straight | cross | bias',
+    '',
+    '"romper" (also called a jumpsuit/playsuit) is a one-piece garment combining a fitted bodice with attached above-knee shorts, joined at a waist seam — always include shorts-front/shorts-back pieces for the lower half in addition to the bodice pieces. A "mock" neckline is a short, close-fitting standing band (not a fold-over collar) — pair it with a collar-stand piece. A "zip" closure implies a placket-facing piece stabilizing the opening.',
     '',
     "Silhouette factors are multipliers on the engine's own base measurements, not absolute lengths:",
     "- silhouette.lengthF (0-3): 1.0 = the category's standard garment length; ~0.6-0.85 = short/mini; ~1.1-1.35 = long/maxi.",
@@ -178,6 +204,7 @@ export function specToStyle(spec) {
     neckline: mapNeckline(con.neckline),
     hemShape: con.hem || null,
     wrap: g.closure === 'wrap',
+    zip: g.closure === 'zip',
     color: null, twoTone: false, colorHem: null,
   };
 }

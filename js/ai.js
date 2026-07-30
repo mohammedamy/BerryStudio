@@ -35,8 +35,8 @@ export const AIGen = (() => {
   // curated fashion palette used to add colour variety when no image colour is available
   const SEED_COLORS = ["#b5495b","#2f6d6d","#c98a3e","#5b5ea6","#7a8450","#8a4f7d","#3d6b8a","#a65b3c","#4f7d5c","#8a3d5c"];
 
-  const AR_TYPE = { dress:"الفستان", robe:"العباية", top:"التوب", shirt:"القميص", trousers:"البنطلون", skirt:"التنورة" };
-  const EN_TYPE = { dress:"Dress", robe:"Robe", top:"Top", shirt:"Shirt", trousers:"Trousers", skirt:"Skirt" };
+  const AR_TYPE = { dress:"الفستان", robe:"العباية", top:"التوب", shirt:"القميص", trousers:"البنطلون", skirt:"التنورة", romper:"الأفرول" };
+  const EN_TYPE = { dress:"Dress", robe:"Robe", top:"Top", shirt:"Shirt", trousers:"Trousers", skirt:"Skirt", romper:"Romper" };
 
   // deterministic string hash → used to pick "unspecified" attributes so
   // the SAME input always reproduces the SAME result, but different
@@ -181,10 +181,14 @@ export const AIGen = (() => {
       .replace(/(كم|أكمام)\s*(طويل[ةه]?|قصير[ةه]?)/g, "$1")
       .replace(/(طويل[ةه]?|قصير[ةه]?)\s*(كم|أكمام)/g, "$2");
     const seed = `${prompt||""}|${category}|${imageDataURL?imageDataURL.length:0}`;
-    const s = { type:null, lengthF:1, flareF:1, fitF:1, sleeveLenF:1, sleeveWideF:1, neckline:null, hemShape:null, wrap:false, color:null };
+    const s = { type:null, lengthF:1, flareF:1, fitF:1, sleeveLenF:1, sleeveWideF:1, neckline:null, hemShape:null, wrap:false, zip:false, color:null };
     const hasImg = metrics && metrics.ok;
 
-    if(/shirt|بلوز|قميص/.test(t)) s.type="shirt";
+    // romper/jumpsuit must be checked BEFORE dress/top — a one-piece
+    // bodice+shorts garment would otherwise be misclassified as a plain
+    // dress by the generic /dress|gown|frock/ pattern below.
+    if(/romper|jumpsuit|playsuit|أفرول/.test(t)) s.type="romper";
+    else if(/shirt|بلوز|قميص/.test(t)) s.type="shirt";
     else if(/abaya|kaftan|caftan|robe|عباية|قفطان/.test(t)) s.type="robe";
     else if(/thobe|ثوب/.test(t)) s.type="robe";
     else if(/trouser|pant|jean|بنطلون|سروال/.test(t)) s.type="trousers";
@@ -247,6 +251,7 @@ export const AIGen = (() => {
     else if(/v[- ]?neck|فتحة V/.test(t)) s.neckline="v";
     else if(/boat neck|square neck/.test(t)) s.neckline="boat";
     else if(/round neck|crew neck/.test(t)) s.neckline="round";
+    else if(/mock[- ]?neck|stand[- ]?collar|turtleneck|ياقة قائمة|ياقة عالية/.test(t)) s.neckline="mock";
     else if(/collar|ياقة/.test(t)) s.neckline="collar";
     else if(hasImg && metrics.neckline) s.neckline = metrics.neckline;
     else {
@@ -264,6 +269,10 @@ export const AIGen = (() => {
     // wrap closure — prompt > seeded variety (dresses/tops/robes/skirts only)
     if(/wrap/.test(t)) s.wrap = true;
     else if(!/button|zip|collar/.test(t) && ["dress","top","robe","skirt"].includes(s.type)) s.wrap = pick(seed+"wrap",[false,false,false,true]);
+
+    // zip closure — prompt only; a real construction detail (front zip
+    // facing), not something worth guessing at when unspecified.
+    s.zip = /\bzip(per)?\b|سحاب|سوستة/.test(t);
 
     s.color = (hasImg && metrics.color) || null;
     if(!s.color) s.color = pick(seed+"color", SEED_COLORS);
@@ -286,6 +295,7 @@ export const AIGen = (() => {
       case "offshoulder": return [[0,y0+half*0.6],[half*1.05,y0+half*0.35]];
       case "halter": return [[0,y0+half*1.1],[half*0.3,y0-2]];
       case "collar": return [[0,y0+3],[half*0.65,y0]];
+      case "mock": return [[0,y0+2],[half*0.45,y0-1]]; // short, close, slightly raised stand neckline
       default: return [[0,y0+half*0.55],[half*0.7,y0]]; // round
     }
   }
@@ -306,6 +316,7 @@ export const AIGen = (() => {
     let pieces;
     if(style.type==="trousers") pieces = buildTrousers(style,m);
     else if(style.type==="skirt") pieces = buildSkirt(style,m);
+    else if(style.type==="romper") pieces = buildRomper(style,m);
     else pieces = buildTop(style,m);
     const colors = paletteFor(style.color, style.colorHem);
     return { pieces, colors, colorInt: style.color ? rgbToInt(style.color) : null };
@@ -457,9 +468,115 @@ export const AIGen = (() => {
     return pieces;
   }
 
+  // A fitted romper/jumpsuit: waist-length bodice (front+back) joined at a
+  // real waist seam to a pair of above-knee shorts legs — reusing buildTop's
+  // neckline/dart construction for the bodice half and a trouser-panel-style
+  // crotch curve (scaled down to shorts length) for the legs, since neither
+  // buildTop nor buildTrousers alone produces a one-piece bodice+shorts
+  // garment. Sleeveless is the common case for this silhouette, so a
+  // sleeveless bodice gets an armhole binding strip instead of a facing;
+  // a zip closure (prompt-detected or spec-declared) gets a center-front
+  // facing strip stabilizing the opening.
+  function shortsPanel(en, ar, w, len, hem, crotchDrop){
+    return {
+      name:{en, ar},
+      desc:{en:"Generated romper shorts panel — joins the bodice at the waist seam.",
+            ar:"لوحة شورت الأفرول المولّدة — تُوصل بالصدرية عند خط الخصر."},
+      outline:[[2,0],[w,0],[w+2,crotchDrop],[hem+2,len],[2,len],[-2,crotchDrop]],
+      darts:[], notches:[[w,0]],
+      grain:[[w/2,len*0.35],[w/2,len-3]],
+      // no declared role: cloth-lab's WP-6 placement vocabulary has no
+      // "shorts front/back" entry (only full-length trouser/skirt panels) —
+      // matches buildTrousers' own "skip what we don't understand" convention
+      // (see its comment above) rather than forcing a wrong hip-panel placement.
+    };
+  }
+  function buildRomper(style, m){
+    const fit=style.fitF, bodiceLen=m.backLen;
+    const chestW=(q(m.chest)+2)*fit, waistW=(q(m.waist)+3)*fit, hipW=(q(m.hips)+2)*fit;
+    const waistDart = (fit<0.92) ? [[[waistW*0.5, bodiceLen-8],[waistW*0.5-2, bodiceLen],[waistW*0.5+2, bodiceLen]]] : [];
+
+    const neckFront = necklinePts(style, chestW*0.42, 1);
+    const neckBack  = necklinePts({ ...style, neckline: style.neckline==="v"?"round":style.neckline }, chestW*0.3, 1.5);
+
+    const front = {
+      name:{en:"Romper Front Bodice", ar:"مقدمة صدرية الأفرول"},
+      desc:{en:"Fitted front bodice ending at the natural waist, joined to the shorts below.",
+            ar:"صدرية أمامية ضيقة تنتهي عند الخصر الطبيعي، تُوصل بالشورت أسفلها."},
+      outline:[...neckFront,[chestW,3],[chestW+1,bodiceLen*0.55],[waistW+1,bodiceLen],[0,bodiceLen]],
+      darts:waistDart, notches:[[chestW,3],[waistW+1,bodiceLen]],
+      grain:[[chestW*0.5,6],[chestW*0.5,bodiceLen-6]],
+      role:"bodice-front-center", cutOnFold:true,
+    };
+    const back = {
+      name:{en:"Romper Back Bodice", ar:"ظهر صدرية الأفرول"},
+      desc:{en:"Fitted back bodice, mirrors the front block.", ar:"ظهر صدرية ضيق يقابل القطعة الأمامية."},
+      outline:[...neckBack,[chestW,3.5],[chestW+1,bodiceLen*0.55],[waistW+0.5,bodiceLen],[0,bodiceLen]],
+      darts:waistDart, notches:[[chestW,3.5]],
+      grain:[[2,6],[2,bodiceLen-6]],
+      role:"bodice-back-center", cutOnFold:true,
+    };
+    const pieces=[front, back];
+
+    if(style.sleeveLenF > 0.05){
+      const slen=clamp(m.sleeve*style.sleeveLenF, 8, m.sleeve*1.35);
+      const bic=q(m.bicep)*style.sleeveWideF, cap=6*style.sleeveWideF;
+      pieces.push({
+        name:{en:"Sleeve", ar:"كم"},
+        desc:{en:"Generated sleeve — length and width read from the reference.", ar:"كم مولّد — الطول والاتساع من المرجع."},
+        outline:[[0,0],[bic,-cap],[bic*2,0],[bic*2-1,slen],[1,slen]],
+        darts:[], notches:[[bic,-cap]],
+        grain:[[bic,4],[bic,slen-4]],
+        role:"sleeve", bilateral:true,
+      });
+    } else {
+      const armholeCirc = m.bicep + 6;
+      pieces.push({
+        name:{en:"Armhole Binding", ar:"شريط تحبيك حلقة الكم"},
+        desc:{en:"Bias binding strip finishing the armhole edge on a sleeveless bodice.",
+              ar:"شريط مائل يُنهي حافة حلقة الكم في الصدرية بلا أكمام."},
+        outline:[[0,0],[armholeCirc,0],[armholeCirc,3],[0,3]],
+        darts:[], notches:[],
+        grain:[[armholeCirc*0.5,0.5],[armholeCirc*0.5,2.5]],
+        role:"other", bilateral:true,
+      });
+    }
+
+    if(style.neckline==="mock"){
+      const nc = m.neck/2+2;
+      pieces.push({
+        name:{en:"Mock Neck Stand", ar:"قاعدة الياقة القائمة"},
+        desc:{en:"Short standing band finishing the mock neckline.", ar:"شريط قائم قصير يُنهي فتحة الرقبة القائمة."},
+        outline:[[0,0],[nc,0],[nc,4.5],[0,5]],
+        darts:[], notches:[],
+        grain:[[2,1],[nc-2,1]],
+        role:"collar-stand",
+      });
+    }
+
+    if(style.zip){
+      pieces.push({
+        name:{en:"Zip Facing", ar:"بطانة السحاب"},
+        desc:{en:"Narrow facing strip stabilizing the center-front zip opening.",
+              ar:"شريط بطانة ضيق يُثبّت فتحة السحاب الأمامية."},
+        outline:[[0,0],[4,0],[4,bodiceLen],[0,bodiceLen]],
+        darts:[], notches:[],
+        grain:[[2,4],[2,bodiceLen-4]],
+        role:"placket-facing",
+      });
+    }
+
+    const shortW = hipW, shortHem = clamp(shortW*0.85*style.flareF, shortW*0.7, shortW*1.3);
+    const shortLen = clamp(m.inseam*0.16*style.lengthF, 8, 30);
+    pieces.push(shortsPanel("Romper Front Shorts","شورت الأفرول الأمامي", shortW, shortLen, shortHem, 9));
+    pieces.push(shortsPanel("Romper Back Shorts","شورت الأفرول الخلفي", shortW+2, shortLen, shortHem+2, 10));
+    return pieces;
+  }
+
   // ---------- thinking-stage summary text ----------
   const NECK_LABEL = { v:{en:"V-neck",ar:"فتحة V"}, round:{en:"round neck",ar:"فتحة دائرية"}, boat:{en:"boat neck",ar:"فتحة قارب"},
-    offshoulder:{en:"off-shoulder",ar:"كتف مكشوف"}, halter:{en:"halter",ar:"حمالة رقبة"}, collar:{en:"collared",ar:"بياقة"} };
+    offshoulder:{en:"off-shoulder",ar:"كتف مكشوف"}, halter:{en:"halter",ar:"حمالة رقبة"}, collar:{en:"collared",ar:"بياقة"},
+    mock:{en:"mock neck",ar:"ياقة قائمة"} };
   const HEM_LABEL = { straight:{en:"straight hem",ar:"حاشية مستقيمة"}, curved:{en:"curved hem",ar:"حاشية منحنية"},
     highlow:{en:"high-low hem",ar:"حاشية متدرجة"}, asymmetric:{en:"asymmetric hem",ar:"حاشية غير متماثلة"} };
 
@@ -478,15 +595,16 @@ export const AIGen = (() => {
            style.sleeveLenF>=1.2?"بأكمام طويلة":style.sleeveLenF<=0.5?"بأكمام قصيرة":"بأكمام",
       type: AR_TYPE[style.type]||"قطعة",
     };
-    const hasNeck = ["dress","top","shirt","robe"].includes(style.type) && NECK_LABEL[style.neckline];
+    const hasNeck = ["dress","top","shirt","robe","romper"].includes(style.type) && NECK_LABEL[style.neckline];
     const neck = hasNeck ? NECK_LABEL[style.neckline][lang==="ar"?"ar":"en"] : null;
     const hem = HEM_LABEL[style.hemShape] ? HEM_LABEL[style.hemShape][lang==="ar"?"ar":"en"] : null;
     const wrapTxt = style.wrap ? (lang==="ar"?"ملفوف":"wrap") : null;
+    const zipTxt = style.zip ? (lang==="ar"?"بسحاب":"zip-front") : null;
     if(lang==="ar"){
-      const bits=[ar.type, ar.len, ar.flare, wrapTxt, neck, hem, ar.slv].filter(Boolean);
+      const bits=[ar.type, ar.len, ar.flare, wrapTxt, zipTxt, neck, hem, ar.slv].filter(Boolean);
       return bits.join(" · ");
     }
-    const bits=[en.len, wrapTxt, en.flare, en.type, neck, hem, en.slv].filter(Boolean);
+    const bits=[en.len, wrapTxt, zipTxt, en.flare, en.type, neck, hem, en.slv].filter(Boolean);
     return bits.join(" · ");
   }
   // structured attribute chips for the "detected" panel in the UI.
@@ -502,12 +620,13 @@ export const AIGen = (() => {
     out.push({ k:"type", label: ar?"النوع":"Type", value: ar?(AR_TYPE[style.type]||"—"):(EN_TYPE[style.type]||"—") });
     out.push({ k:"length", label: ar?"الطول":"Length", value: style.lengthF>=1.2?(ar?"طويل":"Long"):style.lengthF<=0.82?(ar?"قصير":"Short"):(ar?"متوسط":"Regular") });
     out.push({ k:"flare", label: ar?"الاتساع":"Flare", value: style.flareF>=1.25?(ar?"واسع":"Flared"):style.flareF<=0.92?(ar?"ضيق":"Fitted"):(ar?"مستقيم":"Straight") });
-    if(["dress","top","shirt","robe"].includes(style.type)){
+    if(["dress","top","shirt","robe","romper"].includes(style.type)){
       out.push({ k:"sleeve", label: ar?"الكم":"Sleeve", value: style.sleeveLenF<=0.05?(ar?"بدون كم":"Sleeveless"):style.sleeveWideF>=1.4?(ar?"واسع":"Wide"):style.sleeveLenF>=1.2?(ar?"طويل":"Long"):style.sleeveLenF<=0.5?(ar?"قصير":"Short"):(ar?"عادي":"Regular") });
       if(NECK_LABEL[style.neckline]) out.push({ k:"neckline", label: ar?"فتحة الرقبة":"Neckline", value: NECK_LABEL[style.neckline][ar?"ar":"en"] });
     }
     if(HEM_LABEL[style.hemShape]) out.push({ k:"hem", label: ar?"الحاشية":"Hem", value: HEM_LABEL[style.hemShape][ar?"ar":"en"] });
     if(style.wrap) out.push({ k:"closure", label: ar?"الإغلاق":"Closure", value: ar?"ملفوف":"Wrap" });
+    else if(style.zip) out.push({ k:"closure", label: ar?"الإغلاق":"Closure", value: ar?"سحاب":"Zip" });
     out.push({ k:"color", label: ar?"اللون":"Colour", value: style.color, swatch:true });
     if(provenance){
       const byField = Array.isArray(provenance) ? Object.fromEntries(provenance.map(p=>[p.field,p])) : provenance;
