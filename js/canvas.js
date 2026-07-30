@@ -20,6 +20,9 @@ export const Canvas = (() => {
   let clickBuf = [];                  // buffer for two-click tools (knife, grain)
   let cursorWorld = null;             // last cursor position (for rubber-band previews)
   let snapMark = null;                // point currently snapped to (for the snap ring)
+  let selText = null;                 // id of the selected text annotation (click-to-select, Backspace-able)
+  let selNotch = null;                // {pieceIdx, idx} of the selected notch (click-to-select, Backspace-able)
+  let addPointPreview = null;         // {pieceIdx, edgeIdx, point} — live preview while hovering with the Add Point tool
   const SHOW_HANDLES = new Set(["select","move","rotate","scale","pen"]);
   let userAdjusted = false;          // true once the user zooms/pans manually
   const undo = [], redo = [];
@@ -102,7 +105,7 @@ export const Canvas = (() => {
     pushUndo();
     pieces = layoutPieces(rawPieces);
     pieces.forEach((p, i) => p.color = colors[i % colors.length]);
-    selected = -1; sketch = []; texts = [];
+    selected = -1; sketch = []; texts = []; hlPoint=null; hlCons=null; selText=null; selNotch=null;
     fit();
   }
   function getPieces(){ return pieces; }
@@ -110,8 +113,8 @@ export const Canvas = (() => {
   // ---- undo / redo ----
   function snapshot(){ return JSON.stringify({ pieces, sketch, texts, points, cons }); }
   function pushUndo(){ undo.push(snapshot()); if (undo.length>60) undo.shift(); redo.length=0; }
-  function doUndo(){ if(!undo.length) return; redo.push(snapshot()); const s=JSON.parse(undo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; promoteBuf=[]; render(); }
-  function doRedo(){ if(!redo.length) return; undo.push(snapshot()); const s=JSON.parse(redo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; promoteBuf=[]; render(); }
+  function doUndo(){ if(!undo.length) return; redo.push(snapshot()); const s=JSON.parse(undo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; hlPoint=null; hlCons=null; selText=null; selNotch=null; promoteBuf=[]; render(); }
+  function doRedo(){ if(!redo.length) return; undo.push(snapshot()); const s=JSON.parse(redo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; hlPoint=null; hlCons=null; selText=null; selNotch=null; promoteBuf=[]; render(); }
 
   // ---- seam allowance offset (outward polygon offset) ----
   // WP-14: the actual algorithm now lives in js/geometry.js (pure, unit
@@ -150,14 +153,73 @@ export const Canvas = (() => {
     return [Math.round(wx), Math.round(wy)];  // fall back to grid snap
   }
 
+  // ---- oriented selection box ----
+  // An axis-aligned bbox around a ROTATED piece always contains it, but its
+  // corners visibly float away from the piece's actual silhouette the
+  // moment the piece isn't at 0/90/180/270° — reported as "the dashed
+  // selection line sometimes appears outside the layer" while rotating
+  // ("swinging") a piece. Fixed by computing the true minimum-area
+  // *oriented* rectangle (convex hull + rotating calipers) instead, so the
+  // dashed box always hugs the piece tightly at any angle. No new
+  // per-piece state needed — this is recomputed fresh from the live
+  // outline every time, so it's correct after rotate, mirror, knife-split,
+  // undo/redo, or a freshly loaded pre-rotated pattern alike.
+  function convexHull(pts){
+    const uniq = pts.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+    const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+    const lower=[];
+    for (const p of uniq){ while(lower.length>=2 && cross(lower[lower.length-2],lower[lower.length-1],p)<=0) lower.pop(); lower.push(p); }
+    const upper=[];
+    for (let i=uniq.length-1;i>=0;i--){ const p=uniq[i]; while(upper.length>=2 && cross(upper[upper.length-2],upper[upper.length-1],p)<=0) upper.pop(); upper.push(p); }
+    lower.pop(); upper.pop();
+    return lower.concat(upper);
+  }
+  // Minimum-area rectangle enclosing a convex polygon (rotating calipers):
+  // try the rectangle aligned to each hull edge in turn, keep the smallest.
+  // Returns 4 corners in the same (world/cm) space as `hull`.
+  function minAreaRect(hull){
+    if (hull.length<3){ const b=bbox(hull.length?hull:[[0,0]]); return [[b.minX,b.minY],[b.maxX,b.minY],[b.maxX,b.maxY],[b.minX,b.maxY]]; }
+    let best=null;
+    const n=hull.length;
+    for (let i=0;i<n;i++){
+      const a=hull[i], b=hull[(i+1)%n];
+      const ang=Math.atan2(b[1]-a[1], b[0]-a[0]);
+      const cs=Math.cos(ang), sn=Math.sin(ang);
+      let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+      for (const p of hull){
+        const rx = p[0]*cs + p[1]*sn;    // rotate by -ang into this edge's local frame
+        const ry = -p[0]*sn + p[1]*cs;
+        if (rx<minX) minX=rx; if (rx>maxX) maxX=rx; if (ry<minY) minY=ry; if (ry>maxY) maxY=ry;
+      }
+      const area=(maxX-minX)*(maxY-minY);
+      if (!best || area<best.area){
+        const back=([rx,ry])=>[rx*cs-ry*sn, rx*sn+ry*cs];   // rotate back by +ang
+        best={ area, corners:[back([minX,minY]),back([maxX,minY]),back([maxX,maxY]),back([minX,maxY])] };
+      }
+    }
+    return best.corners;
+  }
+
   // ---- selection handles (screen-space geometry) ----
   function handleGeo(p){
-    const b=bbox(p.outline);
-    const corners=[[b.minX,b.minY],[b.maxX,b.minY],[b.maxX,b.maxY],[b.minX,b.maxY]].map(pt=>toScreen(pt[0],pt[1]));
-    const topMid=toScreen((b.minX+b.maxX)/2, b.minY);
-    const rotate=[topMid[0], topMid[1]-26];
+    const hull=convexHull(p.outline);
+    const corners=minAreaRect(hull.length>=3?hull:p.outline).map(pt=>toScreen(pt[0],pt[1]));
+    // "top" edge = whichever of the 4 sides currently has the smallest
+    // average screen Y, so the rotate handle stays near the piece's actual
+    // visual top regardless of which way the oriented rect is facing.
+    let topEdge=0, topY=Infinity;
+    for (let i=0;i<4;i++){ const j=(i+1)%4; const avgY=(corners[i][1]+corners[j][1])/2; if (avgY<topY){ topY=avgY; topEdge=i; } }
+    const j=(topEdge+1)%4;
+    const topMid=[(corners[topEdge][0]+corners[j][0])/2, (corners[topEdge][1]+corners[j][1])/2];
+    // rotate knob sits perpendicular to that edge, on the side away from the box center
+    const ex=corners[j][0]-corners[topEdge][0], ey=corners[j][1]-corners[topEdge][1];
+    const elen=Math.hypot(ex,ey)||1;
+    const cx=(corners[0][0]+corners[2][0])/2, cy=(corners[0][1]+corners[2][1])/2;
+    let nx=-ey/elen, ny=ex/elen;
+    if ((topMid[0]-cx)*nx + (topMid[1]-cy)*ny < 0){ nx=-nx; ny=-ny; }
+    const rotate=[topMid[0]+nx*26, topMid[1]+ny*26];
     const anchors=p.outline.map(pt=>toScreen(pt[0],pt[1]));
-    return { corners, rotate, topMid, anchors, tl:toScreen(b.minX,b.minY), br:toScreen(b.maxX,b.maxY) };
+    return { corners, rotate, topMid, anchors };
   }
   function handleHit(p, sx, sy){
     const g=handleGeo(p), near=(a,t)=>Math.hypot(a[0]-sx,a[1]-sy)<=t;
@@ -225,6 +287,107 @@ export const Canvas = (() => {
     pushUndo(); (pieces[i].notches=pieces[i].notches||[]).push([best[0],best[1]]); selected=i; return true;
   }
   function nearestVertex(poly,wx,wy){ let best=poly[0],bd=Infinity; poly.forEach(pt=>{const d=Math.hypot(pt[0]-wx,pt[1]-wy); if(d<bd){bd=d;best=pt;}}); return [best[0],best[1]]; }
+  // Hit-test an existing notch by screen position (for click-to-select + Backspace delete).
+  function hitNotch(sx,sy,thr=8){
+    for (let pi=pieces.length-1; pi>=0; pi--){
+      const p=pieces[pi]; if (!p.visible) continue;
+      const ns=p.notches||[];
+      for (let i=ns.length-1; i>=0; i--){
+        const [x,y]=toScreen(ns[i][0],ns[i][1]);
+        if (Math.hypot(x-sx,y-sy)<=thr) return { pieceIdx:pi, idx:i };
+      }
+    }
+    return null;
+  }
+  function removeNotch(pieceIdx,idx){
+    const p=pieces[pieceIdx]; if (!p || !p.notches || !p.notches[idx]) return false;
+    pushUndo(); p.notches.splice(idx,1); render(); return true;
+  }
+  // Distance from a screen point to a screen-space segment (for construction-line/arc hit-testing).
+  function distToSeg(px,py, ax,ay, bx,by){
+    const dx=bx-ax, dy=by-ay, len2=dx*dx+dy*dy;
+    let t = len2 ? ((px-ax)*dx+(py-ay)*dy)/len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px-(ax+t*dx), py-(ay+t*dy));
+  }
+  // Hit-test an existing construction line/arc/circle by screen position.
+  // Arcs are approximated by their end-to-end chord — good enough at click
+  // precision, and matches this file's existing "referential" simplicity
+  // (arcs are drawn via resolveRef(a)/resolveRef(b)/resolveRef(ctrl), not a
+  // stored curve, so an exact arc-distance test would need to re-derive the
+  // same quadratic curve rather than reuse anything already computed here).
+  function hitCons(sx,sy,thr=8){
+    for (let i=cons.length-1; i>=0; i--){
+      const c=cons[i];
+      if (c.kind==="circle"){
+        const A=resolveRef(c.a), B=resolveRef(c.b);
+        const [cx,cy]=toScreen(A[0],A[1]);
+        const r=Math.hypot(B[0]-A[0],B[1]-A[1])*view.scale;
+        if (Math.abs(Math.hypot(sx-cx,sy-cy)-r)<=thr) return c.id;
+      } else {
+        const A=resolveRef(c.a), B=resolveRef(c.b);
+        const [ax,ay]=toScreen(A[0],A[1]), [bx,by]=toScreen(B[0],B[1]);
+        if (distToSeg(sx,sy, ax,ay, bx,by)<=thr) return c.id;
+      }
+    }
+    return null;
+  }
+
+  // ---- Add Point tool: insert a new vertex into a piece's outline edge ----
+  // Finds the nearest point ON any visible/unlocked piece's outline EDGE
+  // (not just its existing vertices) to a world position, within a screen
+  // threshold. `t` is kept a little inside (0,1) so the result is never
+  // exactly on top of an existing vertex (which would be a no-op insert).
+  function findEdgeInsertion(wx, wy, thrPx=10){
+    const thr = thrPx / view.scale;
+    let best=null, bd=thr;
+    pieces.forEach((p,pi)=>{
+      if (!p.visible || p.locked) return;
+      const n=p.outline.length;
+      for (let i=0;i<n;i++){
+        const a=p.outline[i], b=p.outline[(i+1)%n];
+        const dx=b[0]-a[0], dy=b[1]-a[1], len2=dx*dx+dy*dy;
+        if (!len2) continue;
+        let t=((wx-a[0])*dx+(wy-a[1])*dy)/len2;
+        t=Math.max(0.03, Math.min(0.97, t));
+        const px=a[0]+t*dx, py=a[1]+t*dy;
+        const d=Math.hypot(px-wx, py-wy);
+        if (d<bd){ bd=d; best={ pieceIdx:pi, edgeIdx:i, point:[px,py] }; }
+      }
+    });
+    return best;
+  }
+  // Insert a new outline vertex right after edgeIdx. Any edges[].fromIdx/
+  // toIdx referencing a later vertex (used by Walk the Seam / princess-seam
+  // placement — js/app.js, js/geometry.js) must shift up by one so they
+  // still point at the same physical vertices after the splice.
+  function insertOutlinePoint(pieceIdx, edgeIdx, pt){
+    const p=pieces[pieceIdx]; if (!p) return false;
+    pushUndo();
+    p.outline.splice(edgeIdx+1, 0, pt);
+    if (Array.isArray(p.edges)){
+      p.edges.forEach(e=>{
+        if (e.fromIdx!=null && e.fromIdx>edgeIdx) e.fromIdx++;
+        if (e.toIdx!=null && e.toIdx>edgeIdx) e.toIdx++;
+      });
+    }
+    selected=pieceIdx; hlPoint=null; hlCons=null; selText=null; selNotch=null;
+    render(); return true;
+  }
+
+  // Delete whatever is currently selected on the canvas — a construction
+  // point, a construction line/arc/circle, a text annotation, a notch, or
+  // (falling back to the pre-existing behavior) a whole pattern piece.
+  // Checked in this order because it's the same precedence click-to-select
+  // uses: the smallest/most-precise targets first, piece last.
+  function deleteSelection(){
+    if (hlPoint!=null){ const id=hlPoint; hlPoint=null; removePoint(id); return true; }
+    if (hlCons!=null){ const id=hlCons; hlCons=null; removeCons(id); return true; }
+    if (selText!=null){ const id=selText; selText=null; removeText(id); return true; }
+    if (selNotch){ const {pieceIdx,idx}=selNotch; selNotch=null; return removeNotch(pieceIdx,idx); }
+    if (selected>=0) return removePiece(selected);
+    return false;
+  }
 
   // ================= RENDER =================
   function render() {
@@ -243,6 +406,7 @@ export const Canvas = (() => {
     drawMeasure();
     drawClickPreview();
     drawSnapMark();
+    drawAddPointPreview();
   }
 
   // ---- trace-over background reference image ----
@@ -340,6 +504,11 @@ export const Canvas = (() => {
       ctx.fillText(tx.text, sx, sy);
       // cache the screen bbox for hit-testing / dragging
       tx._sx = sx; tx._sy = sy; tx._w = ctx.measureText(tx.text).width; tx._h = px;
+      if (tx.id===selText){
+        ctx.save(); ctx.strokeStyle=CSS("--ok"); ctx.lineWidth=1.5; ctx.setLineDash([3,2]);
+        ctx.strokeRect(tx._sx-4, tx._sy-tx._h-4, tx._w+8, tx._h+10);
+        ctx.restore();
+      }
     });
   }
   function hitText(sx, sy){
@@ -354,9 +523,11 @@ export const Canvas = (() => {
   // Draw the selection bounding box, corner scale handles, rotate knob and anchor points.
   function drawHandles(p){
     const g=handleGeo(p), brand=CSS("--brand"), accent=CSS("--accent"), panel=CSS("--panel");
-    // bounding box
+    // bounding box — oriented to the piece's own current rotation (see handleGeo)
     ctx.strokeStyle=brand; ctx.lineWidth=1; ctx.setLineDash([4,3]);
-    ctx.strokeRect(g.tl[0], g.tl[1], g.br[0]-g.tl[0], g.br[1]-g.tl[1]);
+    ctx.beginPath(); ctx.moveTo(g.corners[0][0],g.corners[0][1]);
+    for (let i=1;i<4;i++) ctx.lineTo(g.corners[i][0],g.corners[i][1]);
+    ctx.closePath(); ctx.stroke();
     ctx.setLineDash([]);
     // rotate arm + knob
     ctx.strokeStyle=brand; ctx.beginPath(); ctx.moveTo(g.topMid[0],g.topMid[1]); ctx.lineTo(g.rotate[0],g.rotate[1]); ctx.stroke();
@@ -389,6 +560,15 @@ export const Canvas = (() => {
     ctx.strokeStyle=CSS("--ok"); ctx.lineWidth=1.5;
     ctx.beginPath(); ctx.arc(x,y,7,0,Math.PI*2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(x-9,y); ctx.lineTo(x+9,y); ctx.moveTo(x,y-9); ctx.lineTo(x,y+9); ctx.stroke();
+  }
+  // Live preview for the Add Point tool: a small ring at the spot on the
+  // nearest edge that a click would insert a vertex at.
+  function drawAddPointPreview(){
+    if (tool!=="addpoint" || !addPointPreview) return;
+    const [x,y]=toScreen(addPointPreview.point[0], addPointPreview.point[1]);
+    ctx.strokeStyle=CSS("--accent"); ctx.lineWidth=1.5; ctx.setLineDash([2,2]);
+    ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle=CSS("--accent"); ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fill();
   }
 
   function drawGrid(W,H) {
@@ -446,7 +626,14 @@ export const Canvas = (() => {
     (p.darts||[]).forEach(d=>{ ctx.beginPath(); const [a,b,c]=d.map(pt=>toScreen(pt[0],pt[1])); ctx.moveTo(b[0],b[1]); ctx.lineTo(a[0],a[1]); ctx.lineTo(c[0],c[1]); ctx.stroke(); });
 
     // notches
-    (p.notches||[]).forEach(nt=>{ const [x,y]=toScreen(nt[0],nt[1]); ctx.fillStyle=CSS("--ink"); ctx.beginPath(); ctx.moveTo(x,y-5); ctx.lineTo(x-3,y+3); ctx.lineTo(x+3,y+3); ctx.closePath(); ctx.fill(); });
+    (p.notches||[]).forEach((nt,ni)=>{
+      const [x,y]=toScreen(nt[0],nt[1]);
+      ctx.fillStyle=CSS("--ink"); ctx.beginPath(); ctx.moveTo(x,y-5); ctx.lineTo(x-3,y+3); ctx.lineTo(x+3,y+3); ctx.closePath(); ctx.fill();
+      if (selNotch && selNotch.pieceIdx===i && selNotch.idx===ni){
+        ctx.save(); ctx.strokeStyle=CSS("--ok"); ctx.lineWidth=2.5; ctx.globalAlpha=0.85;
+        ctx.beginPath(); ctx.arc(x,y,8,0,Math.PI*2); ctx.stroke(); ctx.restore();
+      }
+    });
 
     // grainline arrow
     if (p.grain && p.grain.length===2){
@@ -565,10 +752,16 @@ export const Canvas = (() => {
       const [wx,wy]=toWorld(e.offsetX,e.offsetY);
       if (e.button===1 || e.spaceKey || tool==="pan"){ pan={x:e.offsetX,y:e.offsetY,vx:view.x,vy:view.y}; userAdjusted=true; return; }
 
-      // (0) construction points take priority when dragging with Select/Move
+      // (0) construction points / lines-arcs-circles / notches — select
+      // (Backspace-able) and, for points, drag — take priority when using
+      // Select/Move, smallest/most-precise targets first.
       if (tool==="select" || tool==="move"){
         const pid = hitPointScreen(e.offsetX, e.offsetY);
-        if (pid!=null){ pushUndo(); dragPoint={id:pid, ox:wx, oy:wy}; return; }
+        if (pid!=null){ pushUndo(); dragPoint={id:pid, ox:wx, oy:wy}; hlPoint=pid; hlCons=null; selText=null; selNotch=null; selected=-1; onPick(null); render(); return; }
+        const cid = hitCons(e.offsetX, e.offsetY);
+        if (cid!=null){ hlCons=cid; hlPoint=null; selText=null; selNotch=null; selected=-1; onPick(null); render(); return; }
+        const nh = hitNotch(e.offsetX, e.offsetY);
+        if (nh){ selNotch=nh; hlPoint=null; hlCons=null; selText=null; selected=-1; onPick(null); render(); return; }
       }
 
       // construction tools: point / line / arc / circle / promote-to-piece / calibrate
@@ -641,6 +834,11 @@ export const Canvas = (() => {
       // (3) single-click tools: notch & symmetry
       if (tool==="notch"){ if(addNotch(wx,wy) && selected>=0) onPick(pieces[selected], e.clientX, e.clientY); render(); return; }
       if (tool==="symmetry"){ const h=hitPiece(wx,wy); if(h>=0){ doMirror(h); onPick(pieces[selected], e.clientX, e.clientY); } render(); return; }
+      if (tool==="addpoint"){
+        const hit=findEdgeInsertion(wx,wy);
+        if (hit){ insertOutlinePoint(hit.pieceIdx, hit.edgeIdx, hit.point); onPick(pieces[hit.pieceIdx], e.clientX, e.clientY); }
+        render(); return;
+      }
 
       // text: click empty space to place, click existing text to edit
       if (tool==="text"){
@@ -682,12 +880,15 @@ export const Canvas = (() => {
       // (5) select / move — text labels are draggable too
       if (tool==="select" || tool==="move"){
         const ti = hitText(e.offsetX, e.offsetY);
-        if (ti>=0){ pushUndo(); dragText={ i:ti, ox:wx, oy:wy }; return; }
+        if (ti>=0){ pushUndo(); dragText={ i:ti, ox:wx, oy:wy }; selText=texts[ti].id; hlPoint=null; hlCons=null; selNotch=null; selected=-1; onPick(null); render(); return; }
       }
       const hit = hitPiece(wx,wy);
-      if (hit>=0){ selected=hit; onPick(pieces[hit], e.clientX, e.clientY);
+      if (hit>=0){ selected=hit; hlPoint=null; hlCons=null; selText=null; selNotch=null; onPick(pieces[hit], e.clientX, e.clientY);
         if(tool==="select"||tool==="move"){ dragPiece={i:hit,ox:wx,oy:wy}; pushUndo(); } }
-      else { selected=-1; onPick(null); }
+      else {
+        selected=-1; onPick(null);
+        if (tool==="select"||tool==="move"){ hlPoint=null; hlCons=null; selText=null; selNotch=null; }
+      }
       render();
     });
 
@@ -722,6 +923,7 @@ export const Canvas = (() => {
       if (drawing && drawing.tool==="free"){ drawing.pts.push([wx,wy]); render(); return; }
       if (clickBuf.length && (tool==="knife"||tool==="grain"||tool==="calib")){ render(); return; }
       if (drawing && drawing.tool==="polygon"){ render(); return; }
+      if (tool==="addpoint"){ addPointPreview=findEdgeInsertion(wx,wy); render(); return; }
 
       // hover cursor feedback over handles
       if (selected>=0 && pieces[selected] && SHOW_HANDLES.has(tool)){
@@ -815,6 +1017,7 @@ export const Canvas = (() => {
   function clearHighlight(){ hlPoint=null; hlCons=null; render(); }
   function setTool(t){
     tool=t; clickBuf=[]; edit=null; snapMark=null;
+    if(t!=="addpoint") addPointPreview=null;
     if(t!=="measure")measurePts=[];
     if(t!=="promote"){ promoteBuf=[]; pendingPromoteOutline=null; }
     if(t!=="pen"&&drawing&&drawing.tool==="pen"){sketch.push(drawing);drawing=null;}
@@ -852,7 +1055,7 @@ export const Canvas = (() => {
   // ---- text annotation API ----
   function addText(props){ pushUndo(); const t={ id:textSeq++, size:4, bold:false, italic:false, ...props }; texts.push(t); render(); return t.id; }
   function updateText(id, props){ const t=texts.find(x=>x.id===id); if(!t) return false; pushUndo(); Object.assign(t, props); render(); return true; }
-  function removeText(id){ const i=texts.findIndex(x=>x.id===id); if(i<0) return false; pushUndo(); texts.splice(i,1); render(); return true; }
+  function removeText(id){ const i=texts.findIndex(x=>x.id===id); if(i<0) return false; pushUndo(); texts.splice(i,1); if (selText===id) selText=null; render(); return true; }
   function getTexts(){ return texts; }
   function onTextRequest(cb){ onText = cb || (()=>{}); }
 
@@ -987,6 +1190,7 @@ export const Canvas = (() => {
     pushUndo();
     points = points.filter(p=>p.id!==id);
     cons = cons.filter(c=> !(c.a&&c.a.pid===id) && !(c.b&&c.b.pid===id) && !(c.ctrl&&c.ctrl.pid===id));
+    if (hlPoint===id) hlPoint=null;
     render();
   }
   function getPointById(id){ return points.find(p=>p.id===id); }
@@ -1028,7 +1232,7 @@ export const Canvas = (() => {
 
   // ---- construction lines / arcs / circles (referential) ----
   function getCons(){ return cons; }
-  function removeCons(id){ pushUndo(); cons=cons.filter(c=>c.id!==id); render(); }
+  function removeCons(id){ pushUndo(); cons=cons.filter(c=>c.id!==id); if (hlCons===id) hlCons=null; render(); }
 
   // ---- "Create Pattern Piece": promote a closed loop of points ----
   function onPromoteRequest(cb){ onPromoteReq = cb || (()=>{}); }
@@ -1169,11 +1373,11 @@ export const Canvas = (() => {
     points = Array.isArray(pts) ? pts.map(p=>({ xExpr:null, yExpr:null, ...p, id: p.id || pointSeq++ })) : [];
     cons = Array.isArray(consArr) ? consArr.map(c=>({ ...c, id: c.id || consSeq++ })) : [];
     variables = {};
-    selected=-1; sketch=[]; promoteBuf=[]; pendingPromoteOutline=null; fit(); return true;
+    selected=-1; hlPoint=null; hlCons=null; selText=null; selNotch=null; sketch=[]; promoteBuf=[]; pendingPromoteOutline=null; fit(); return true;
   }
   function clearAll(){
     pushUndo(); pieces=[]; sketch=[]; texts=[]; points=[]; cons=[]; bg=null; variables={}; ghostSnap=null;
-    selected=-1; measurePts=[]; clickBuf=[]; promoteBuf=[]; pendingPromoteOutline=null;
+    selected=-1; hlPoint=null; hlCons=null; selText=null; selNotch=null; measurePts=[]; clickBuf=[]; promoteBuf=[]; pendingPromoteOutline=null;
     userAdjusted=false; render();
   }
 
@@ -1182,7 +1386,7 @@ export const Canvas = (() => {
 
   return { init, setTranslator, setPattern, getPieces, setTool, setOpt, getOpt, zoom, fit,
            doUndo, doRedo, getZoom, toggleVisible, toggleLock, setColor, setMaterial, getSelected,
-           selectPiece, clearSketch, render,
+           selectPiece, clearSketch, render, deleteSelection,
            addText, updateText, removeText, getTexts, onTextRequest,
            addPiece, removePiece, renamePiece, setPieceProps, nudgePiece,
            onZoomChange, exportSVG, exportDXF, exportHPGL, exportRaster, exportPDF, loadPieces, clearAll, screenOf,

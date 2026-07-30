@@ -538,6 +538,100 @@ test('WP-17: keyboard piece selection/nudge/delete, and modal focus management',
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
 
+// Extends WP-17's piece-only selection/delete to "anything" on the canvas —
+// a text annotation, a construction point, and a notch — each click-to-select
+// (its own highlight ring/box) then Backspace-deletable, using the same
+// Canvas.deleteSelection() the piece case already went through above.
+test('select-anything: text annotation, construction point, and notch are each click-selectable and Backspace-deletable', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+
+  await page.goto('/index.html');
+  await dismissOnboarding(page);
+  await expect(page.locator('#patternCanvas')).toBeVisible();
+  const canvasBox = await page.locator('#patternCanvas').boundingBox();
+
+  // --- text annotation ---
+  await page.evaluate(() => window.Canvas.setTool('select'));
+  await page.evaluate(() => window.Canvas.addText({ x: 55, y: 90, text: 'E2E TEST TEXT' }));
+  const textScreen = await page.evaluate(() => {
+    window.Canvas.render();
+    const t = window.Canvas.getTexts()[0];
+    return { x: t._sx + t._w / 2, y: t._sy - t._h / 2 };
+  });
+  await page.mouse.click(canvasBox.x + textScreen.x, canvasBox.y + textScreen.y);
+  await page.keyboard.press('Backspace');
+  expect(await page.evaluate(() => window.Canvas.getTexts().length)).toBe(0);
+
+  // --- construction point ---
+  const pointId = await page.evaluate(() => window.Canvas.addPoint(150, 40, 'E2E Point'));
+  const pointScreen = await page.evaluate((id) => {
+    window.Canvas.render();
+    const p = window.Canvas.getPointById(id);
+    return window.Canvas.screenOf(p.x, p.y);
+  }, pointId);
+  await page.mouse.click(canvasBox.x + pointScreen[0], canvasBox.y + pointScreen[1]);
+  await page.keyboard.press('Backspace');
+  expect(await page.evaluate((id) => !!window.Canvas.getPointById(id), pointId)).toBe(false);
+
+  // --- notch --- (added via the pre-existing Notch tool — addNotch() snaps
+  // to the nearest outline vertex of whatever piece is under the click)
+  await page.evaluate(() => window.Canvas.setTool('notch'));
+  const firstPiece = await page.evaluate(() => window.Canvas.getPieces()[0]);
+  const midOutlinePt = firstPiece.outline[Math.floor(firstPiece.outline.length / 2)];
+  const notchClickScreen = await page.evaluate((pt) => window.Canvas.screenOf(pt[0], pt[1]), midOutlinePt);
+  await page.mouse.click(canvasBox.x + notchClickScreen[0], canvasBox.y + notchClickScreen[1]);
+  const notchCountBefore = await page.evaluate(() => (window.Canvas.getPieces()[0].notches || []).length);
+  expect(notchCountBefore).toBeGreaterThan(0);
+
+  await page.evaluate(() => window.Canvas.setTool('select'));
+  const notchPt = await page.evaluate(() => {
+    const p = window.Canvas.getPieces()[0];
+    return p.notches[p.notches.length - 1];
+  });
+  const notchScreen = await page.evaluate((pt) => window.Canvas.screenOf(pt[0], pt[1]), notchPt);
+  await page.mouse.click(canvasBox.x + notchScreen[0], canvasBox.y + notchScreen[1]);
+  await page.keyboard.press('Backspace');
+  const notchCountAfter = await page.evaluate(() => (window.Canvas.getPieces()[0].notches || []).length);
+  expect(notchCountAfter).toBe(notchCountBefore - 1);
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});
+
+// The Add Point tool: clicking anywhere along a piece's outline edge inserts
+// a new vertex right there (not just at existing corners) — the piece grows
+// one outline point, positioned on the edge, not duplicating an endpoint.
+test('Add Point tool inserts a new vertex into a piece outline edge', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+
+  await page.goto('/index.html');
+  await dismissOnboarding(page);
+  await expect(page.locator('#patternCanvas')).toBeVisible();
+  const canvasBox = await page.locator('#patternCanvas').boundingBox();
+
+  const before = await page.evaluate(() => {
+    const p = window.Canvas.getPieces()[0];
+    return { count: p.outline.length, a: p.outline[0], b: p.outline[1] };
+  });
+
+  await page.evaluate(() => window.Canvas.setTool('addpoint'));
+  const mid = [(before.a[0] + before.b[0]) / 2, (before.a[1] + before.b[1]) / 2];
+  const midScreen = await page.evaluate((pt) => window.Canvas.screenOf(pt[0], pt[1]), mid);
+  await page.mouse.click(canvasBox.x + midScreen[0], canvasBox.y + midScreen[1]);
+
+  const after = await page.evaluate(() => {
+    const p = window.Canvas.getPieces()[0];
+    return { count: p.outline.length, inserted: p.outline[1] };
+  });
+  expect(after.count).toBe(before.count + 1);
+  // the new point should land ON the edge (between a and b), not on top of either endpoint
+  expect(after.inserted[0]).toBeGreaterThan(Math.min(before.a[0], before.b[0]) - 0.01);
+  expect(after.inserted[0]).toBeLessThan(Math.max(before.a[0], before.b[0]) + 0.01);
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});
+
 // BerryStudio-Upgrade-Plan WP-18: optional cloud sync. The self-hosted
 // endpoint target is the one part of this feature with no external OAuth
 // dependency, so it's the part a smoke test can exercise fully end-to-end —

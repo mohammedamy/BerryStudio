@@ -6,6 +6,54 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## 2D canvas: select-anything delete, Add Point tool, oriented selection box
+
+### Added
+- **Select-anything + Backspace delete** (`js/canvas.js`, `js/app.js`) —
+  WP-17's keyboard delete only ever worked on whole pattern pieces.
+  Construction points, construction lines/arcs/circles, text annotations,
+  and notches are now each click-to-select (with their own highlight
+  ring/box, reusing the existing Object-Browser highlight style for
+  points/lines) and Backspace/Delete-able, through a new
+  `Canvas.deleteSelection()` that checks whatever is currently selected —
+  smallest/most-precise target first, falling back to the pre-existing
+  whole-piece behavior last. New hit-tests `hitNotch()`/`hitCons()`
+  (point-to-segment / point-to-circle distance in screen space) and a new
+  `removeNotch()` back it.
+- **Add Point tool** (`js/canvas.js`, new "addpoint" tool in the tool rail)
+  — click anywhere along a piece's outline edge to insert a new vertex
+  right there, with a live hover preview (a small ring on the nearest edge
+  point under the cursor) before you commit. If the piece carries `edges[]`
+  seam metadata (Walk the Seam / princess-seam placement), every
+  `fromIdx`/`toIdx` referencing a vertex after the insertion point shifts up
+  by one so it still points at the same physical vertex — the new point
+  doesn't silently desync seam data.
+
+### Fixed
+- **Rotate ("swing") selection box drifting outside the piece** — the
+  dashed selection box was an axis-aligned bounding box of the piece's
+  outline. That always mathematically *contains* a rotated piece, but
+  visibly floats away from its actual silhouette at the corners the moment
+  it's rotated off 0/90/180/270°, reported as "the dotted line sometimes
+  appears outside the layer" while rotating ("swinging") a piece. Replaced
+  with the true minimum-area *oriented* rectangle (convex hull + rotating
+  calipers), computed fresh from the live outline every render — so it's
+  correct whether the piece was just rotated, loaded pre-rotated, mirrored,
+  or knife-split, with no new per-piece state to keep in sync. The rotate
+  handle now sits on whichever of the box's 4 sides is currently closest to
+  the piece's visual top, so it stays usable at any angle instead of
+  jumping around relative to an axis-aligned box.
+
+### Honest notes
+- Darts stay modal-only (Edit Darts), not click-selectable on the canvas —
+  they're edited by index in `openDartEditorModal`, not hit-tested against
+  screen position; adding that would mean giving darts their own on-canvas
+  geometry-based hit-test, out of scope for this pass.
+- Arc hit-testing (`hitCons`) approximates an arc by its end-to-end chord,
+  not the actual quadratic curve — good enough at click precision, and
+  consistent with this file's existing "referential" arc representation
+  (endpoints + control point via `resolveRef`, not a stored sampled curve).
+
 ## Bundled avatar gallery — grounding, garment, and a stray-geometry fix
 
 ### Fixed

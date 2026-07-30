@@ -79,7 +79,7 @@ in the app's own header.
 | **Drafting engine upgrades** — per-edge seam allowance + real corner join styles (miter/round/bevel) in the offset engine; real bezier `piece.curves` metadata (princess-seam designs) feeding DXF's curve layer; dart **Pivot** / **Slash & Spread** (Layers pane → piece properties → Edit Darts); **Walk the Seam** (Export pane) — drag one slider to check two pieces' shared seam matches at every arc-length position, not just the ends; pleats on Quick Draft skirts (real added-width math, not a label) | ✅ Working — dart **Transfer** (rotate around an external pivot) and gathers/tucks are implemented as pure, tested functions (`js/darts.js`, `js/pleats.js`) without a dedicated UI yet |
 | **Local automation API** (`window.BerryStudio`, see below) — `generate`/`grade`/`nest`/`export`/`validate`, callable from the browser console or any injected script against the currently loaded pattern | ✅ Working |
 | **Docs site** (`docs/`, book icon in the header) — bilingual quick start, tool reference, keyboard shortcuts, an AI setup guide with one page per provider (exact CORS commands included), 3D troubleshooting, and FAQ | ✅ Working — a build-free static site, no dependency beyond the app's own theme CSS |
-| **Accessibility & UX** — real keyboard operation of the canvas (`[`/`]` cycle, arrow-key nudge, Delete, scoped to whole pieces), `role=dialog`/focus-trap/return-focus on every modal, `aria-label`/`aria-pressed` on icon and toggle buttons, a real `:focus-visible` ring app-wide, `prefers-reduced-motion` honoured by both CSS transitions and 3D Preview's auto-rotate, and all 6 theme × light/dark variants verified at WCAG AA (4.5:1) for body and secondary text | ✅ Working — construction points/lines and text annotations stay mouse-only for now (see Honest notes) |
+| **Accessibility & UX** — real keyboard operation of the canvas (`[`/`]` cycle, arrow-key nudge scoped to whole pieces; Delete/Backspace now deletes whatever is selected — a piece, a construction point, a construction line/arc/circle, a text annotation, or a notch), `role=dialog`/focus-trap/return-focus on every modal, `aria-label`/`aria-pressed` on icon and toggle buttons, a real `:focus-visible` ring app-wide, `prefers-reduced-motion` honoured by both CSS transitions and 3D Preview's auto-rotate, and all 6 theme × light/dark variants verified at WCAG AA (4.5:1) for body and secondary text | ✅ Working (see Honest notes) |
 
 ### Honest notes
 - **Fancy Collection** (`js/fancy-patterns.js`) pieces are hand-authored, not run
@@ -390,14 +390,35 @@ in the app's own header.
   3D canvas — and every camera/zoom distance computed against it — sized
   itself to the sidebar's content height instead of the real window. This
   is what read as "the mannequin doesn't fit" and "zoom doesn't work."
-- **Keyboard canvas operation** (WP-17) covers whole pattern pieces —
-  `[`/`]` to select the previous/next piece, arrow keys (Shift for 0.1cm
-  fine adjustment) to nudge the selected piece, Delete/Backspace to remove
-  it. Construction points/lines/arcs/circles and text annotations are still
-  mouse-only; keyboard-only editing of those is a documented gap, not yet
-  built. `[`/`]` were chosen over Tab/Shift+Tab specifically so Tab keeps
-  doing its normal job of moving DOM focus between toolbar and panel
-  controls, rather than being hijacked for in-canvas selection.
+- **Keyboard canvas operation** (WP-17) covers whole pattern pieces for
+  cycle/nudge — `[`/`]` to select the previous/next piece, arrow keys
+  (Shift for 0.1cm fine adjustment) to nudge the selected piece. Delete/
+  Backspace was originally piece-only too; it's since been extended to
+  "select anything" — click a construction point, a construction line/arc/
+  circle, a text annotation, or a notch on the canvas (each gets its own
+  highlight ring/box) and Backspace/Delete removes whichever one is
+  currently selected, through a new `Canvas.deleteSelection()` that checks
+  in smallest-target-first order and falls back to the pre-existing
+  whole-piece delete last. Darts stay modal-only (Edit Darts) — not
+  click-selectable on the canvas, a documented boundary, not an oversight.
+  `[`/`]` were chosen over Tab/Shift+Tab specifically so Tab keeps doing
+  its normal job of moving DOM focus between toolbar and panel controls,
+  rather than being hijacked for in-canvas selection.
+- **Add Point tool** — a new tool-rail button lets you click anywhere along
+  a piece's outline edge to insert a new vertex right there (not just at
+  existing corners), with a live hover preview before you commit. If the
+  piece carries `edges[]` seam metadata (Walk the Seam / princess-seam
+  placement), the new point's insertion index shifts every later
+  `fromIdx`/`toIdx` up by one so seam data doesn't silently desync.
+- **Rotate ("swing") selection box no longer drifts outside the piece** —
+  a user report described "the dotted line sometimes appears outside the
+  layer" while rotating a piece. Root cause: the dashed selection box was
+  an axis-aligned bounding box of the outline — it always mathematically
+  contains a rotated piece, but visibly floats away from its silhouette at
+  the corners past 0/90/180/270°. Replaced with the true minimum-area
+  *oriented* rectangle (convex hull + rotating calipers), recomputed fresh
+  from the live outline every render, so it stays tight at any angle with
+  no new per-piece state to track.
 - **Reduced motion** (WP-17): `state.reduceMotion` existed before this pass
   but only ever shortened one CSS transition variable (`--med`) — it did
   nothing for the other two (`--fast`/`--slow`) and nothing at all for 3D

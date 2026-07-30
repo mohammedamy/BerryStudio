@@ -131,6 +131,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     measure:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16L16 2l6 6L8 22z"/><path d="M7 11l2 2M11 7l2 2M15 11l2 2"/></svg>',
     seam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1" stroke-dasharray="2 2"/></svg>',
     notch:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l4 8H8z"/><path d="M4 21h16"/></svg>',
+    addpoint:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18L18 6"/><circle cx="11" cy="12" r="3.4"/><path d="M11 10.2v3.6M9.2 12h3.6"/></svg>',
     grain:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M8 6l4-3 4 3M8 18l4 3 4-3"/></svg>',
     undo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>',
     redo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 1-3-7.7L21 8"/></svg>',
@@ -188,7 +189,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     { id:"circle", i:"circleTool" }, { id:"promote", i:"promote" }, "sep",
     { id:"move", i:"move" }, { id:"rotate", i:"rotate" },
     { id:"scale", i:"scale" }, { id:"measure", i:"measure" }, { id:"text", i:"text" }, "sep",
-    { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"grain", i:"grain" },
+    { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"addpoint", i:"addpoint" }, { id:"grain", i:"grain" },
   ];
 
   // ================= RENDER SHELL =================
@@ -2815,12 +2816,14 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     // tool shortcuts
     const map={v:"select",p:"pen",l:"line",a:"arc",m:"measure",r:"rotate",s:"scale",t:"text"};
     if(!meta&&map[e.key]&&!typing)setTool(map[e.key]);
-    // WP-17: keyboard operation of the canvas — cycle/nudge/delete the
-    // selected pattern piece. "[" / "]" rather than Tab, so Tab keeps doing
-    // its normal job of moving DOM focus between toolbar/panel controls
-    // instead of being hijacked for in-canvas selection. Scoped to whole
-    // pieces (see docs/shortcuts.html) — construction points/lines/text stay
-    // mouse-only for now, a documented gap.
+    // WP-17: keyboard operation of the canvas — cycle/nudge the selected
+    // pattern piece with "[" / "]" and arrow keys ("[" / "]" rather than
+    // Tab, so Tab keeps doing its normal job of moving DOM focus between
+    // toolbar/panel controls). Delete/Backspace now goes through
+    // Canvas.deleteSelection() (below), which acts on whatever is
+    // currently selected on the canvas — a piece, a construction point,
+    // a construction line/arc/circle, a text annotation, or a notch —
+    // not just whole pieces.
     if(!meta && !typing && state.view==="2d" && !$$(".overlay.show").length){
       const pieces=Canvas.getPieces(), sel=Canvas.getSelected();
       if((e.key==="["||e.key==="]") && pieces.length){
@@ -2834,9 +2837,12 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         const dx=e.key==="ArrowLeft"?-step:e.key==="ArrowRight"?step:0;
         const dy=e.key==="ArrowUp"?-step:e.key==="ArrowDown"?step:0;
         Canvas.nudgePiece(sel,dx,dy); sync3DVisibility();
-      } else if(sel>=0 && (e.key==="Delete"||e.key==="Backspace")){
-        e.preventDefault();
-        Canvas.removePiece(sel); renderLayersPane(); sync3DVisibility();
+      } else if(e.key==="Delete"||e.key==="Backspace"){
+        if (Canvas.deleteSelection()){
+          e.preventDefault();
+          renderLayersPane(); sync3DVisibility();
+          if (objBrowserOpen) renderObjectBrowser();
+        }
       }
     }
   }
