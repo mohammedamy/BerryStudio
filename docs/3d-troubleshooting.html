@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — 3D troubleshooting</title>
+<meta name="description" content="Fixes for common 3D Preview and 3D Cloth Lab problems in BerryStudio.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/styles.css">
+<link rel="stylesheet" href="docs.css">
+<link rel="icon" href="../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>3D troubleshooting</h1>
+      <p class="lede">BerryStudio has two 3D systems: <strong>3D Preview</strong> (a fast, always-available procedural avatar) and <strong>3D Cloth Lab / Fit Studio</strong> (a real GPU cloth simulation of your actual pattern). Most issues below are specific to one or the other.</p>
+
+      <h2>"My machine can't run Fit Studio" / blank canvas</h2>
+      <p>Open <a href="../3d-test.html">/3d-test.html</a> — BerryStudio's own capability probe. It reports WebGL2/WebGPU support, float-texture render support (the GPU cloth solver needs this), and max texture size, and gives you a clear verdict before you wait for a load that might fail. If it reports your device can't run the GPU solver, 3D Preview (which doesn't need it) still works fully.</p>
+
+      <h2>Zoom feels wrong, or the avatar doesn't fit the view</h2>
+      <p>This was a real, now-fixed bug (see the main <a href="../README.md">README</a>'s Honest notes): Cloth Lab's standalone build was missing one link in its CSS height chain, so the whole page silently sized itself to its sidebar's content height instead of the real window — which made every zoom/distance calculation wrong and the avatar look oversized. If you still see this after updating, hard-refresh (clear the page's cached service-worker assets) before reporting it as a new issue.</p>
+
+      <h2>GLB avatar doesn't load, or looks wrong</h2>
+      <ul>
+        <li><strong>VRM files</strong> (a common photoreal-avatar format) are detected and shown an honest "not supported yet" message rather than silently mispositioned — full VRM humanoid-bone retargeting is a different bone-naming spec from the Mixamo/Ready Player Me convention this app parses, and hasn't been built.</li>
+        <li><strong>A GLB loads but looks stretched or oddly proportioned</strong> — the loader deforms your model to match your actual measurements (bust/waist/hip/shoulder/arm/inseam move independently via a free-form lattice), so an avatar built for very different proportions than your current measurement set can look unusual. This is expected behaviour, not a bug — try adjusting your measurements or using a different source model.</li>
+        <li><strong>The model fails to load at all</strong> — check the URL is a direct, public, CORS-permitted <code>.glb</code> link (a Ready Player Me export link works well). BerryStudio falls back to its built-in procedural body automatically if the URL fails, rather than showing a broken scene.</li>
+      </ul>
+
+      <h2>Pose looks off</h2>
+      <p>Seated/A-pose/T-pose/Contrapposto/Walk all work on the built-in procedural avatar. On a loaded GLB, <strong>Seated</strong>'s knee-bend direction is derived from the character's own hip bones, which is ambiguous by 180° for some third-party rigs — an unlucky rig can end up seated facing backward. <strong>Walk</strong> only animates a GLB that ships its own embedded walk/idle clip; the procedural avatar has no skeleton to animate and stays standing. Whichever pose is shown, simulated cloth still collides against the standing arms-down body — a seated garment's drape isn't re-simulated for that pose.</p>
+
+      <h2>Cloth looks stiff, or a seam "pops" on the very first frame</h2>
+      <p>The solver uses a distance-based hinge/fold spring for bend resistance (not a true dihedral-angle constraint) and brute-force self-collision — deliberate trade-offs matched to this app's particle counts, tuned as "feel" sliders rather than lab-calibrated fabric values. Seams weld at mesh-build time without a gradual sewing ramp-in, so a garment can show a brief pop right after a pattern change — this settles within the first second and isn't visible during normal wear/draping afterward.</p>
+
+      <h2>3D export</h2>
+      <p>GLB, OBJ, PNG-sequence turntables, and MP4/WebM turntable recording are all confirmed working. <strong>USDZ</strong> (for iOS AR Quick Look) produces a structurally valid file with no runtime errors, but hasn't been confirmed on real iOS hardware in this project — if you test it, that's genuinely useful signal for a future update. GIF export isn't offered (every JS GIF encoder is a dependency this project deliberately avoids) — use MP4/WebM/PNG-sequence and convert externally if you need one.</p>
+
+      <div class="docs-callout">If you're driving BerryStudio from a browser-automation tool rather than a real browser and see <code>TypeError: Failed to resolve module specifier 'three'</code> or similar, that's a known limitation of some WebKit-based automation tools' dynamic <code>import()</code> handling of import maps — confirmed not to reproduce in real Chromium/desktop browsers. It's a tooling quirk, not an app bug.</div>
+    </div>
+
+    <div data-lang="ar">
+      <h1>حل مشاكل العرض ثلاثي الأبعاد</h1>
+      <p class="lede">يملك BerryStudio نظامين ثلاثيي الأبعاد: <strong>المعاينة ثلاثية الأبعاد</strong> (صورة رمزية إجرائية سريعة ومتاحة دائمًا) و<strong>3D Cloth Lab / Fit Studio</strong> (محاكاة قماش حقيقية بمعالج الرسوميات لباترونك الفعلي). معظم المشاكل أدناه خاصة بأحدهما.</p>
+
+      <h2>"جهازي لا يستطيع تشغيل Fit Studio" / لوحة فارغة</h2>
+      <p>افتح <a href="../3d-test.html">/3d-test.html</a> — فاحص القدرات الخاص بـBerryStudio نفسه. يُبلغ عن دعم WebGL2/WebGPU، ودعم عرض النسيج العائم (float-texture، يحتاجه محلل القماش بمعالج الرسوميات)، والحجم الأقصى للنسيج، ويعطيك حكمًا واضحًا قبل انتظار تحميل قد يفشل. إذا أفاد أن جهازك لا يستطيع تشغيل المحلل، تبقى المعاينة ثلاثية الأبعاد (التي لا تحتاجه) تعمل بالكامل.</p>
+
+      <h2>التكبير يبدو خاطئًا، أو الصورة الرمزية لا تناسب العرض</h2>
+      <p>كانت هذه علة حقيقية وتم إصلاحها الآن (راجع ملاحظات الصدق في <a href="../README.md">README</a> الرئيسي): كان بناء Cloth Lab المستقل يفتقد حلقة واحدة في سلسلة ارتفاع CSS، فكانت الصفحة بأكملها تتحجّم بصمت وفق ارتفاع محتوى الشريط الجانبي بدلًا من النافذة الحقيقية — ما جعل كل حساب تكبير/مسافة خاطئًا وجعل الصورة الرمزية تبدو كبيرة الحجم. إذا استمر ظهور هذا بعد التحديث، حدّث الصفحة بقوة (لمسح أصول عامل الخدمة (service worker) المخزّنة مؤقتًا) قبل الإبلاغ عنها كمشكلة جديدة.</p>
+
+      <h2>الصورة الرمزية GLB لا تُحمَّل، أو تبدو خاطئة</h2>
+      <ul>
+        <li><strong>ملفات VRM</strong> (صيغة صورة رمزية واقعية شائعة) تُكتشف وتُعرض برسالة صادقة "غير مدعومة بعد" بدلًا من وضعها بشكل خاطئ بصمت — إعادة توجيه العظام البشرية الكاملة لـVRM مواصفة تسمية عظام مختلفة عن اتفاقية Mixamo/Ready Player Me التي يحلّلها هذا التطبيق، ولم تُبنَ بعد.</li>
+        <li><strong>نموذج GLB يُحمَّل لكن يبدو ممطوطًا أو بنسب غريبة</strong> — يشوّه المحمّل نموذجك ليطابق قياساتك الفعلية (الصدر/الخصر/الورك/الكتف/الذراع/الفخذ تتحرك بشكل مستقل عبر شبكة حرة الشكل)، فقد تبدو صورة رمزية بُنيت لنسب مختلفة جدًا عن مجموعة قياساتك الحالية غير معتادة. هذا سلوك متوقع، وليس علة — جرّب تعديل قياساتك أو استخدام نموذج مصدر مختلف.</li>
+        <li><strong>النموذج يفشل بالتحميل كليًا</strong> — تأكد أن الرابط رابط <code>.glb</code> مباشر وعام ومسموح به عبر CORS (رابط تصدير من Ready Player Me يعمل جيدًا). يتراجع BerryStudio تلقائيًا إلى جسمه الإجرائي المدمج إذا فشل الرابط، بدلًا من عرض مشهد معطّل.</li>
+      </ul>
+
+      <h2>الوضعية (Pose) تبدو غير صحيحة</h2>
+      <p>كل من الجلوس/A-pose/T-pose/Contrapposto/المشي يعمل على الصورة الرمزية الإجرائية المدمجة. مع نموذج GLB محمّل، يُشتق اتجاه انحناء الركبة في <strong>الجلوس</strong> من عظام الورك الخاصة بالشخصية نفسها، وهذا غامض بمقدار 180° لبعض الهياكل العظمية الخارجية — قد ينتهي هيكل غير محظوظ جالسًا مواجهًا للخلف. <strong>المشي</strong> يحرّك فقط نموذج GLB يشحن مقطع مشي/خمول مدمجًا خاصًا به؛ الصورة الرمزية الإجرائية ليس لها هيكل عظمي لتحريكه وتبقى واقفة. أيًّا كانت الوضعية المعروضة، يظل القماش المحاكى يصطدم بالجسم الواقف بذراعين للأسفل — تدلي قطعة جالسة لا يُعاد محاكاته لتلك الوضعية.</p>
+
+      <h2>القماش يبدو صلبًا، أو تظهر "قفزة" في خط الخياطة في الإطار الأول</h2>
+      <p>يستخدم المحلل نابضًا للطيّ/الانحناء قائمًا على المسافة (وليس قيدًا حقيقيًا بزاوية ثنائية السطح) وتصادمًا ذاتيًا بالقوة الغاشمة — تنازلات متعمّدة تناسب أعداد الجسيمات في هذا التطبيق، مضبوطة كمنزلقات "إحساس" وليس قيمًا معايرة مخبريًا. تُلحَم الخياطات وقت بناء الشبكة دون تدرّج خياطة تدريجي، لذا قد تظهر قفزة قصيرة فور تغيير الباترون — تستقر خلال الثانية الأولى ولا تظهر أثناء الارتداء/التدلي العادي بعدها.</p>
+
+      <h2>التصدير ثلاثي الأبعاد</h2>
+      <p>تصدير GLB وOBJ ومتواليات صور PNG الدوّارة وتسجيل الفيديو الدوّار MP4/WebM كلها مؤكدة العمل. <strong>USDZ</strong> (لـiOS AR Quick Look) ينتج ملفًا صحيحًا بنيويًا بلا أخطاء تشغيل، لكن لم يُؤكَّد على جهاز iOS حقيقي في هذا المشروع — إذا جرّبته، فتلك إشارة مفيدة فعليًا لتحديث مستقبلي. تصدير GIF غير متاح (كل مُرمِّز GIF بجافاسكريبت هو تبعية يتجنّبها هذا المشروع عمدًا) — استخدم MP4/WebM/متوالية PNG وحوّلها خارجيًا إن احتجت GIF.</p>
+
+      <div class="docs-callout">إذا كنت تشغّل BerryStudio من أداة أتمتة متصفح بدلًا من متصفح حقيقي ورأيت <code>TypeError: Failed to resolve module specifier 'three'</code> أو ما شابه، فتلك محدودية معروفة في بعض أدوات الأتمتة المبنية على WebKit في التعامل مع <code>import()</code> الديناميكي لخرائط الاستيراد — مؤكَّد عدم تكرارها في متصفحات Chromium/سطح المكتب الحقيقية. إنها غرابة أداة، وليست علة في التطبيق.</div>
+    </div>
+  </main>
+</div>
+<script src="docs.js"></script>
+</body>
+</html>

@@ -6,6 +6,71 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Phase 4 — Product surface (WP-16 – WP-18)
+
+Fifth and final increment of `BerryStudio-Upgrade-Plan.md` — a docs site,
+accessibility/UX pass, and optional cloud sync. Sequenced WP-16 → WP-17 →
+WP-18: the docs site is fully self-contained and lowest-risk so it shipped
+first; WP-17 touches shared canvas/modal/theme code and needed its own
+verification pass before WP-18 (a genuinely new feature) built on top of it.
+
+### Added
+- **Docs site** (WP-16) — a build-free, bilingual static site at `docs/`
+  (reached from a new book-icon button in the header): a quick start,
+  full tool reference, keyboard shortcuts, an AI provider setup guide with
+  one page per provider (exact CORS commands included), 3D troubleshooting,
+  and FAQ. Shares the root app's own theme CSS variables rather than adding
+  a design-system dependency.
+- **Accessibility & UX** (WP-17):
+  - Real keyboard operation of the pattern canvas — `[`/`]` cycles the
+    selected piece, arrow keys (Shift for 0.1cm fine adjustment) nudge it,
+    Delete/Backspace removes it. `[`/`]` rather than Tab/Shift+Tab
+    deliberately, so Tab keeps doing its normal job of moving DOM focus
+    between toolbar and panel controls.
+  - Every modal (theme/settings/command palette/generic/onboarding) now
+    gets `role="dialog"`/`aria-modal`, moves focus in on open, traps Tab
+    inside it, and returns focus to whatever opened it on close — one
+    shared mechanism (a `MutationObserver` over each overlay's own `show`
+    class) rather than touching every different open/close call site.
+  - `aria-label`/`aria-pressed` on icon and toggle buttons (translated,
+    updates on language switch); a real `:focus-visible` ring app-wide,
+    replacing several blanket `outline: none` rules that removed keyboard
+    focus indication entirely.
+  - `prefers-reduced-motion` is now honoured for real: CSS transition
+    durations and 3D Preview's auto-rotate both respond, and a first-ever
+    visit seeds the setting from the OS media query.
+  - All 6 theme × light/dark variants verified against WCAG AA (4.5:1) for
+    body and secondary text; the Egyptian light theme's secondary text
+    colour was found under threshold and darkened.
+- **Optional cloud sync** (WP-18) — `js/cloud-sync.js`, wired into the
+  previously-dormant "Cloud Sync" Settings toggle: a self-hosted endpoint
+  (a plain PUT/GET of the project JSON, with an optional bearer token) plus
+  Google Drive (`drive.file` scope) and Microsoft OneDrive
+  (`Files.ReadWrite.AppFolder` permission) targets, both bring-your-own-
+  OAuth-client-ID like WP-1's AI provider keys. Local-first stays the
+  default forever — nothing runs unless the toggle is on and a target is
+  configured, and "Save/Load to cloud" are explicit Project-menu actions,
+  never automatic background sync.
+
+### Fixed
+- Two stale README "Honest notes" bullets from before WP-11/WP-12 shipped
+  still claimed Create Marker "does not slide and interlock" and that
+  PNG/JPEG/AI/HPGL exports "fall back to the vector output" — both were
+  fixed by those two WPs but the notes were never updated, directly
+  contradicting the status table just above them. Corrected during this
+  phase's own README pass.
+
+### Honest notes
+- Keyboard canvas operation covers whole pattern pieces only — construction
+  points/lines/arcs/circles and text annotations stay mouse-only.
+- Google Drive/OneDrive sync is structurally complete and verified as far
+  as this environment allows (Google Identity Services correctly loads and
+  constructs a real OAuth authorization request for a test client ID,
+  confirmed via console output; the actual consent flow needs a real
+  registered OAuth app + an unblocked popup context this sandbox doesn't
+  have) — the self-hosted endpoint target was verified fully end-to-end
+  against a real local server, including the save → clear → load round trip.
+
 ## Phase 3 — Production tools (WP-11 – WP-15)
 
 Fourth increment of `BerryStudio-Upgrade-Plan.md` — true polygon nesting,

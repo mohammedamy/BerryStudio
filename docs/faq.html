@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — FAQ</title>
+<meta name="description" content="Frequently asked questions about BerryStudio.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/styles.css">
+<link rel="stylesheet" href="docs.css">
+<link rel="icon" href="../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>FAQ</h1>
+
+      <h2>Does BerryStudio require an account or internet connection?</h2>
+      <p>No. It's a local-first, installable PWA — draft, grade, preview in 3D, and export entirely offline after your first visit. An internet connection is only needed if you opt in to a cloud AI provider (see <a href="ai-setup/index.html">Bring your own AI</a>) or an opt-in sync target.</p>
+
+      <h2>Where is my data stored?</h2>
+      <p>In your browser's own local storage, on your own device. Save Project (.json) lets you export a full, lossless copy any time — the same file re-imports exactly as it was.</p>
+
+      <h2>Are the Fancy Collection's 24 elaborate designs couture-accurate, or just stylised?</h2>
+      <p>They're real, gradable, exportable multi-piece patterns with genuinely curved (bezier-sampled) seams — princess seams, godets, capes, tiers, lapels, hoods. Their proportions come from heuristic ratios of your body measurements, in the same style as the app's hand-crafted base patterns, not from couture drafting-book formulas. Treat them as realistic design references to grade and export, not seam-allowance-exact sewing patterns ready for a cutting table without review.</p>
+
+      <h2>How accurate is "Check Pattern"?</h2>
+      <p>5 of its 8 checks (closed outline, self-intersection, grainline angle, seam-allowance validity, cut-on-fold symmetry) are verified with full confidence from a single piece's own geometry. 2 more (seam-length parity, notch alignment) rely on a front/back name-matching heuristic since the pattern library has no explicit seam-pairing data — they're labelled "Heuristic" in the report, and a piece with no plausible counterpart is flagged as unpairable rather than guessed at. The 8th, ease, is reported as deferred — never guessed at.</p>
+
+      <h2>Does "Full nest" (Create Marker) guarantee the tightest possible fabric layout?</h2>
+      <p>No nesting algorithm — commercial or open-source — guarantees a provably optimal layout in general (true 2D nesting is NP-hard); BerryStudio's Full nest runs a real bottom-left-fill + simulated-annealing search over genuine polygon overlap for a good, practical result within its time budget, reporting real utilisation. "Fast preview" trades that for an instant bounding-box estimate.</p>
+
+      <h2>Can I use BerryStudio's local automation API for batch work?</h2>
+      <p>Yes — <code>window.BerryStudio</code> exposes <code>generate</code>, <code>grade</code>, <code>nest</code>, <code>export</code>, and <code>validate</code>, callable from the browser console or an injected script against the currently loaded pattern. See the main <a href="../README.md">README</a>'s Automation API section for runnable examples.</p>
+
+      <h2>Why do a few Fancy Collection pieces fail Check Pattern's self-intersection or fold-symmetry checks?</h2>
+      <p>This is an honestly-reported, real finding from the validator, not a hidden issue: a handful of Fancy Collection pieces have a duplicate consecutive point at a bezier-sampling boundary, and some fold edges vary by a fraction of a millimetre from perfectly straight. These are noted candidates for a future geometry cleanup pass, not silently ignored.</p>
+    </div>
+
+    <div data-lang="ar">
+      <h1>الأسئلة الشائعة</h1>
+
+      <h2>هل يتطلّب BerryStudio حسابًا أو اتصالًا بالإنترنت؟</h2>
+      <p>لا. إنه تطبيق ويب تقدّمي (PWA) محلي أولًا وقابل للتثبيت — ارسم، درّج، عاين ثلاثيًا، وصدّر بالكامل دون اتصال بعد زيارتك الأولى. الاتصال بالإنترنت مطلوب فقط إذا فعّلت مزوّد ذكاء اصطناعي سحابيًا (راجع <a href="ai-setup/index.html">استخدم ذكاءك الاصطناعي</a>) أو وجهة مزامنة اختيارية.</p>
+
+      <h2>أين تُخزَّن بياناتي؟</h2>
+      <p>في التخزين المحلي الخاص بمتصفحك، على جهازك أنت. يتيح لك "حفظ المشروع" (.json) تصدير نسخة كاملة وبلا فقدان في أي وقت — نفس الملف يُستورد بالضبط كما كان.</p>
+
+      <h2>هل تصاميم مجموعة Fancy الـ24 المتقنة دقيقة بمعايير الأزياء الراقية، أم مجرد تصاميم شكلية؟</h2>
+      <p>هي أنماط حقيقية متعددة القطع، قابلة للتدريج والتصدير، بخياطات منحنية فعليًا (مُستخرجة من منحنيات بيزيه) — خياطات أميرة، قطع كسرات (godets)، عباءات، طبقات، ياقات، غطاء رأس. تأتي نسبها من نسب استدلالية لقياسات جسمك، بنفس أسلوب الأنماط الأساسية اليدوية في التطبيق، وليس من معادلات كتب الخياطة الراقية. تعامل معها كمراجع تصميم واقعية للتدريج والتصدير، وليست أنماط خياطة دقيقة بسماح الحياكة جاهزة لطاولة القص دون مراجعة.</p>
+
+      <h2>ما مدى دقة "فحص الباترون"؟</h2>
+      <p>5 من فحوصاته الـ8 (إغلاق الحدود، عدم التقاطع الذاتي، زاوية خط اتجاه القماش، صحة سماح الحياكة، تماثل الطية) مُتحقَّق منها بثقة كاملة من هندسة القطعة نفسها فقط. اثنان آخران (تطابق أطوال الخياطة، تطابق العلامات) يعتمدان على استدلال مطابقة أسماء أمامي/خلفي لأن مكتبة الأنماط لا تملك بيانات صريحة لإقران الخياطات — يُصنَّفان "استدلالي" في التقرير، وأي قطعة بلا نظير محتمل تُعلَّم كغير قابلة للإقران بدلًا من تخمينها. الفحص الثامن، الراحة (Ease)، يُبلَّغ كمؤجَّل — لا يُخمَّن أبدًا.</p>
+
+      <h2>هل "التعشيق الكامل" (إنشاء تخطيط القص) يضمن أضيق تخطيط قماش ممكن؟</h2>
+      <p>لا توجد خوارزمية تعشيق — تجارية أو مفتوحة المصدر — تضمن تخطيطًا مثاليًا مُثبَتًا رياضيًا بشكل عام (تعشيق ثنائي الأبعاد الحقيقي مسألة NP-صعبة)؛ يشغّل "التعشيق الكامل" في BerryStudio بحثًا حقيقيًا بملء من أسفل اليسار مع محاكاة التلدين فوق تداخل مضلعات فعلي، لنتيجة جيدة وعملية ضمن حدود وقته، ويُبلغ عن نسبة استخدام حقيقية. "المعاينة السريعة" تضحّي بذلك مقابل تقدير فوري بالمربعات المحيطة.</p>
+
+      <h2>هل يمكنني استخدام واجهة الأتمتة المحلية في BerryStudio لعمل دفعي؟</h2>
+      <p>نعم — يوفّر <code>window.BerryStudio</code> الدوال <code>generate</code> و<code>grade</code> و<code>nest</code> و<code>export</code> و<code>validate</code>، القابلة للاستدعاء من طرفية المتصفح أو من كود مُحقَن على الباترون المحمَّل حاليًا. راجع قسم "Automation API" في <a href="../README.md">README</a> الرئيسي لأمثلة قابلة للتشغيل.</p>
+
+      <h2>لماذا تفشل بعض قطع مجموعة Fancy في فحوصات التقاطع الذاتي أو تماثل الطية في فحص الباترون؟</h2>
+      <p>هذا اكتشاف حقيقي مُبلَّغ عنه بصدق من الفاحص، وليس مشكلة مخفية: عدد قليل من قطع مجموعة Fancy لديها نقطة متتالية مكررة عند حدود استخراج منحنى بيزيه، وبعض حواف الطية تختلف بجزء من مليمتر عن الاستقامة التامة. هذه مرشحات موثّقة لجولة تنظيف هندسي مستقبلية، وليست متجاهَلة بصمت.</p>
+    </div>
+  </main>
+</div>
+<script src="docs.js"></script>
+</body>
+</html>

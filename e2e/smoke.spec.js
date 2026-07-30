@@ -441,3 +441,123 @@ test('window.BerryStudio automation API: all five verbs return real (not stubbed
 
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
+
+// BerryStudio-Upgrade-Plan WP-17: accessibility & UX. Two independent checks
+// in one test — the canvas's new keyboard operations (cycle/nudge/delete a
+// selected piece), and modal focus management (focus moves in on open,
+// Escape closes and returns focus to the trigger) — both real behaviour
+// added this pass, not markup-only.
+test('WP-17: keyboard piece selection/nudge/delete, and modal focus management', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+
+  await page.goto('/index.html');
+  await dismissOnboarding(page);
+  await expect(page.locator('#patternCanvas')).toBeVisible();
+
+  // Cycle to a piece, nudge it, then delete it.
+  const pieceCountBefore = await page.evaluate(() => window.Canvas.getPieces().length);
+  await page.locator('#patternCanvas').click();
+  await page.keyboard.press(']');
+  const selected = await page.evaluate(() => window.Canvas.getSelected());
+  expect(selected).toBeGreaterThanOrEqual(0);
+
+  const beforeX = await page.evaluate((i) => window.Canvas.getPieces()[i].outline[0][0], selected);
+  await page.keyboard.press('ArrowRight');
+  const afterX = await page.evaluate((i) => window.Canvas.getPieces()[i].outline[0][0], selected);
+  expect(afterX).toBeCloseTo(beforeX + 1, 5);
+
+  await page.keyboard.press('Delete');
+  const pieceCountAfter = await page.evaluate(() => window.Canvas.getPieces().length);
+  expect(pieceCountAfter).toBe(pieceCountBefore - 1);
+
+  // Modal focus management: opening Settings moves focus inside the
+  // dialog; Escape closes it and returns focus to the button that opened it.
+  await page.locator('#settingsBtn').focus();
+  await page.locator('#settingsBtn').click();
+  await expect(page.locator('#settingsModal')).toHaveClass(/show/);
+  const focusInsideModal = await page.evaluate(() =>
+    document.querySelector('#settingsModal .modal').contains(document.activeElement)
+  );
+  expect(focusInsideModal).toBe(true);
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#settingsModal')).not.toHaveClass(/show/);
+  const focusReturned = await page.evaluate(() => document.activeElement.id === 'settingsBtn');
+  expect(focusReturned).toBe(true);
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});
+
+// BerryStudio-Upgrade-Plan WP-18: optional cloud sync. The self-hosted
+// endpoint target is the one part of this feature with no external OAuth
+// dependency, so it's the part a smoke test can exercise fully end-to-end —
+// a real HTTP PUT/GET against a throwaway server started for this test
+// alone, proving the whole round trip (Settings config → Project menu →
+// fetch → server → fetch back → Canvas.loadPieces), not just that the UI
+// renders.
+test('WP-18: self-hosted cloud sync saves and loads a real project round-trip', async ({ page }) => {
+  const http = await import('node:http');
+  let stored = null;
+  const server = http.createServer((req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+    if (req.method === 'PUT') {
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => { stored = Buffer.concat(chunks).toString(); res.writeHead(200); res.end('{"ok":true}'); });
+      return;
+    }
+    if (stored === null) { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(stored);
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+
+  try {
+    await page.goto('/index.html');
+    await dismissOnboarding(page);
+    await expect(page.locator('#patternCanvas')).toBeVisible();
+
+    // Enable Cloud Sync and point the self-hosted endpoint at the throwaway server.
+    await page.locator('#settingsBtn').click();
+    // The checkbox itself is visually hidden behind a styled `.switch` track
+    // (a real <label class="set-row"> wraps both, so clicking the visible
+    // row toggles it via native label association) — click the row, not
+    // the zero-size input Playwright's own .check() would refuse to click.
+    await page.locator('#settingsModal .set-row').nth(3).click(); // hoverHelp, highContrast, reduceMotion, cloudSync
+    await expect(page.locator('#settingsModal input[type=checkbox]').nth(3)).toBeChecked();
+    const endpointInput = page.locator('#settingsModal input[type=url]').first(); // sync endpoint renders before the avatar GLB url fields
+    await endpointInput.fill(`http://localhost:${port}/project.json`);
+    await endpointInput.dispatchEvent('change');
+    await page.locator('#settingsModal [data-close]').click();
+
+    const piecesBefore = await page.evaluate(() => window.Canvas.getPieces().length);
+
+    // Save to cloud via the Project menu, then confirm the server actually received it.
+    await page.locator('#projectBtn').click();
+    await page.getByText(/Save to cloud|حفظ في السحابة/).click();
+    await expect(page.locator('.toast').last()).toContainText(/Saved to cloud|تم الحفظ في السحابة/);
+    expect(stored).not.toBeNull();
+    expect(JSON.parse(stored).pieces.length).toBe(piecesBefore);
+
+    // Clear the canvas, then load it back and confirm the real round trip.
+    await page.evaluate(() => window.Canvas.clearAll());
+    expect(await page.evaluate(() => window.Canvas.getPieces().length)).toBe(0);
+
+    await page.locator('#projectBtn').click();
+    await page.getByText(/Load from cloud|تحميل من السحابة/).click();
+    await expect(page.locator('.toast').last()).toContainText(/Loaded from cloud|تم التحميل من السحابة/);
+    expect(await page.evaluate(() => window.Canvas.getPieces().length)).toBe(piecesBefore);
+
+    expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+  } finally {
+    server.close();
+  }
+});

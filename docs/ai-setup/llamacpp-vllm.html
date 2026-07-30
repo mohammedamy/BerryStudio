@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — llama.cpp / vLLM setup</title>
+<meta name="description" content="Configure a local llama.cpp server or vLLM server as BerryStudio's AI provider.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../css/styles.css">
+<link rel="stylesheet" href="../docs.css">
+<link rel="icon" href="../../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>llama.cpp / vLLM (local or self-hosted)</h1>
+      <p class="lede">For running your own model server — on your own machine or a server you control. Both speak the same OpenAI-compatible API shape.</p>
+      <table class="docs-table">
+        <tr><th>llama.cpp default</th><td><code>http://localhost:8080/v1</code></td></tr>
+        <tr><th>vLLM default</th><td><code>http://localhost:8000/v1</code></td></tr>
+        <tr><th>Needs a key</th><td>No by default; both support an optional API key if you've configured one on your server</td></tr>
+      </table>
+      <h2>Setup</h2>
+      <ol>
+        <li>Start your server: <code>llama-server</code> from <a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a>, or <code>vllm serve &lt;model&gt;</code> from <a href="https://github.com/vllm-project/vllm">vLLM</a>.</li>
+        <li>In BerryStudio: Settings → AI Provider → choose <strong>llama.cpp server (local)</strong> or <strong>vLLM (local or self-hosted)</strong>, and set the base URL to wherever your server actually listens.</li>
+        <li>If you set a server-side API key, paste it too. Then <strong>Test Connection</strong>.</li>
+      </ol>
+      <div class="docs-callout">If Test Connection fails with a browser-console CORS error and your server isn't on <code>localhost</code>, check that server's own CORS/allowed-origin configuration — BerryStudio can only ask it to allow this origin, not force it to. Consult your server's own documentation for the exact flag, since this varies by version and BerryStudio doesn't ship a hardcoded command for these two the way it does for Ollama.</div>
+    </div>
+
+    <div data-lang="ar">
+      <h1>llama.cpp / vLLM (محلي أو مستضاف ذاتيًا)</h1>
+      <p class="lede">لتشغيل خادم نموذج خاص بك — على جهازك أو خادم تتحكم به. كلاهما يتحدث بنفس شكل واجهة OpenAI المتوافقة.</p>
+      <table class="docs-table">
+        <tr><th>افتراضي llama.cpp</th><td><code>http://localhost:8080/v1</code></td></tr>
+        <tr><th>افتراضي vLLM</th><td><code>http://localhost:8000/v1</code></td></tr>
+        <tr><th>يحتاج مفتاحًا</th><td>لا افتراضيًا؛ كلاهما يدعم مفتاح API اختياري إن أعددت واحدًا على خادمك</td></tr>
+      </table>
+      <h2>الإعداد</h2>
+      <ol>
+        <li>شغّل خادمك: <code>llama-server</code> من <a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a>، أو <code>vllm serve &lt;model&gt;</code> من <a href="https://github.com/vllm-project/vllm">vLLM</a>.</li>
+        <li>في BerryStudio: الإعدادات ← مزوّد الذكاء الاصطناعي ← اختر <strong>llama.cpp server (local)</strong> أو <strong>vLLM (local or self-hosted)</strong>، واضبط العنوان الأساسي على مكان استماع خادمك فعليًا.</li>
+        <li>إذا أعددت مفتاح API على الخادم، الصقه أيضًا. ثم <strong>Test Connection</strong>.</li>
+      </ol>
+      <div class="docs-callout">إذا فشل الاتصال بخطأ CORS في طرفية المتصفح وخادمك ليس على <code>localhost</code>، تحقق من إعدادات CORS/المصادر المسموحة الخاصة بالخادم نفسه — يمكن لـBerryStudio أن يطلب فقط السماح لهذا المصدر، لا أن يفرضه. راجع وثائق خادمك للاطلاع على الراية (flag) الدقيقة، إذ تختلف حسب الإصدار ولا يشحن BerryStudio أمرًا ثابتًا لهذين الخادمين كما يفعل مع Ollama.</div>
+    </div>
+  </main>
+</div>
+<script src="../docs.js"></script>
+</body>
+</html>

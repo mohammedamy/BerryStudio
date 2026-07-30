@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — LM Studio setup</title>
+<meta name="description" content="Configure a local LM Studio server as BerryStudio's AI provider.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../css/styles.css">
+<link rel="stylesheet" href="../docs.css">
+<link rel="icon" href="../../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>LM Studio (local)</h1>
+      <p class="lede">Runs entirely on your own machine, using LM Studio's built-in OpenAI-compatible local server. No API key, nothing leaves your computer.</p>
+      <table class="docs-table">
+        <tr><th>Endpoint</th><td><code>http://localhost:1234/v1</code> (LM Studio's default)</td></tr>
+        <tr><th>Needs a key</th><td>No</td></tr>
+        <tr><th>Protocol</th><td>OpenAI-compatible — same request/response shape as the OpenAI adapter, just pointed at your own machine</td></tr>
+      </table>
+      <h2>Setup</h2>
+      <ol>
+        <li>Install <a href="https://lmstudio.ai/">LM Studio</a>, download a model, and start its local server (LM Studio's "Local Server" tab — start it, confirm the port matches 1234, or note the port it actually uses).</li>
+        <li>In BerryStudio: Settings → AI Provider → choose <strong>LM Studio (local)</strong>. Adjust the base URL if your instance uses a different port.</li>
+        <li><strong>Test Connection</strong> — if it fails, confirm LM Studio's local server is actually running and check its own CORS/origin settings if your browser blocks the request.</li>
+      </ol>
+    </div>
+
+    <div data-lang="ar">
+      <h1>LM Studio (محلي)</h1>
+      <p class="lede">يعمل بالكامل على جهازك الخاص، باستخدام خادم LM Studio المحلي المدمج المتوافق مع OpenAI. بلا مفتاح API، ولا شيء يغادر جهازك.</p>
+      <table class="docs-table">
+        <tr><th>نقطة النهاية</th><td><code>http://localhost:1234/v1</code> (الافتراضي في LM Studio)</td></tr>
+        <tr><th>يحتاج مفتاحًا</th><td>لا</td></tr>
+        <tr><th>البروتوكول</th><td>متوافق مع OpenAI — نفس شكل الطلب/الاستجابة الخاص بمحوّل OpenAI، لكن موجّه لجهازك أنت</td></tr>
+      </table>
+      <h2>الإعداد</h2>
+      <ol>
+        <li>ثبّت <a href="https://lmstudio.ai/">LM Studio</a>، حمّل نموذجًا، وشغّل خادمه المحلي (تبويب "Local Server" في LM Studio — شغّله، وتأكد أن المنفذ يطابق 1234، أو لاحظ المنفذ الفعلي المستخدم).</li>
+        <li>في BerryStudio: الإعدادات ← مزوّد الذكاء الاصطناعي ← اختر <strong>LM Studio (محلي)</strong>. عدّل العنوان الأساسي إذا كان تطبيقك يستخدم منفذًا مختلفًا.</li>
+        <li><strong>Test Connection</strong> — إذا فشل، تأكد أن خادم LM Studio المحلي يعمل فعليًا، وتحقق من إعدادات CORS/المصدر الخاصة به إذا كان متصفحك يحظر الطلب.</li>
+      </ol>
+    </div>
+  </main>
+</div>
+<script src="../docs.js"></script>
+</body>
+</html>

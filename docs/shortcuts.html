@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — Keyboard shortcuts</title>
+<meta name="description" content="All keyboard shortcuts in BerryStudio.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/styles.css">
+<link rel="stylesheet" href="docs.css">
+<link rel="icon" href="../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>Keyboard shortcuts</h1>
+      <p class="lede">The in-app Help panel (the <strong>?</strong> button) shows this same table live, in your current language.</p>
+
+      <h2>Tool switching</h2>
+      <table class="docs-table">
+        <tr><th>Key</th><th>Switches to</th></tr>
+        <tr><td><span class="docs-kbd">V</span></td><td>Select</td></tr>
+        <tr><td><span class="docs-kbd">P</span></td><td>Pen (Bézier)</td></tr>
+        <tr><td><span class="docs-kbd">L</span></td><td>Line</td></tr>
+        <tr><td><span class="docs-kbd">A</span></td><td>Arc</td></tr>
+        <tr><td><span class="docs-kbd">M</span></td><td>Measure</td></tr>
+        <tr><td><span class="docs-kbd">R</span></td><td>Rotate</td></tr>
+        <tr><td><span class="docs-kbd">S</span></td><td>Scale</td></tr>
+        <tr><td><span class="docs-kbd">T</span></td><td>Text</td></tr>
+      </table>
+      <p>Tool-switch keys are ignored while typing in a text field, so they never interfere with naming a piece or filling in a measurement.</p>
+
+      <h2>Canvas &amp; selection</h2>
+      <table class="docs-table">
+        <tr><th>Key</th><th>Action</th></tr>
+        <tr><td><span class="docs-kbd">[</span> / <span class="docs-kbd">]</span></td><td>Cycle the selected piece backward / forward — not Tab, so Tab keeps moving focus between toolbar and panel controls as usual</td></tr>
+        <tr><td><span class="docs-kbd">Arrow keys</span></td><td>Nudge the selected piece by 1&nbsp;cm</td></tr>
+        <tr><td><span class="docs-kbd">Shift+Arrow</span></td><td>Nudge the selected piece by 0.1&nbsp;cm (fine adjustment)</td></tr>
+        <tr><td><span class="docs-kbd">Delete</span> / <span class="docs-kbd">Backspace</span></td><td>Delete the selected piece</td></tr>
+      </table>
+
+      <h2>Global</h2>
+      <table class="docs-table">
+        <tr><th>Key</th><th>Action</th></tr>
+        <tr><td><span class="docs-kbd">Ctrl/⌘+Z</span></td><td>Undo</td></tr>
+        <tr><td><span class="docs-kbd">Ctrl/⌘+Shift+Z</span> (or <span class="docs-kbd">Ctrl+Y</span>)</td><td>Redo</td></tr>
+        <tr><td><span class="docs-kbd">Ctrl/⌘+K</span></td><td>Open the command palette</td></tr>
+        <tr><td><span class="docs-kbd">Esc</span></td><td>Close the topmost modal, menu, or text editor</td></tr>
+      </table>
+
+      <div class="docs-callout">Canvas selection/nudge/delete/cycle shortcuts (WP-17) currently operate on whole pattern pieces. Construction points, lines, arcs, and circles are edited by dragging with the mouse today — keyboard-only editing of individual construction points is a documented gap, not yet built.</div>
+    </div>
+
+    <div data-lang="ar">
+      <h1>اختصارات لوحة المفاتيح</h1>
+      <p class="lede">لوحة المساعدة داخل التطبيق (زر <strong>؟</strong>) تعرض نفس هذا الجدول مباشرة، بلغتك الحالية.</p>
+
+      <h2>تبديل الأدوات</h2>
+      <table class="docs-table">
+        <tr><th>المفتاح</th><th>يبدّل إلى</th></tr>
+        <tr><td><span class="docs-kbd">V</span></td><td>تحديد</td></tr>
+        <tr><td><span class="docs-kbd">P</span></td><td>قلم (منحنى بيزيه)</td></tr>
+        <tr><td><span class="docs-kbd">L</span></td><td>خط مستقيم</td></tr>
+        <tr><td><span class="docs-kbd">A</span></td><td>قوس</td></tr>
+        <tr><td><span class="docs-kbd">M</span></td><td>قياس</td></tr>
+        <tr><td><span class="docs-kbd">R</span></td><td>تدوير</td></tr>
+        <tr><td><span class="docs-kbd">S</span></td><td>تكبير/تصغير</td></tr>
+        <tr><td><span class="docs-kbd">T</span></td><td>نص</td></tr>
+      </table>
+      <p>يتم تجاهل مفاتيح تبديل الأدوات أثناء الكتابة في حقل نصي، فلا تتعارض أبدًا مع تسمية قطعة أو تعبئة قياس.</p>
+
+      <h2>اللوحة والتحديد</h2>
+      <table class="docs-table">
+        <tr><th>المفتاح</th><th>الإجراء</th></tr>
+        <tr><td><span class="docs-kbd">[</span> / <span class="docs-kbd">]</span></td><td>تدوير التحديد بين القطع للخلف / للأمام — وليس Tab، حتى يستمر Tab في نقل التركيز بين أدوات الشريط واللوحات كالمعتاد</td></tr>
+        <tr><td><span class="docs-kbd">مفاتيح الأسهم</span></td><td>تحريك القطعة المحددة بمقدار 1 سم</td></tr>
+        <tr><td><span class="docs-kbd">Shift+سهم</span></td><td>تحريك دقيق بمقدار 0.1 سم</td></tr>
+        <tr><td><span class="docs-kbd">Delete</span> / <span class="docs-kbd">Backspace</span></td><td>حذف القطعة المحددة</td></tr>
+      </table>
+
+      <h2>عام</h2>
+      <table class="docs-table">
+        <tr><th>المفتاح</th><th>الإجراء</th></tr>
+        <tr><td><span class="docs-kbd">Ctrl/⌘+Z</span></td><td>تراجع</td></tr>
+        <tr><td><span class="docs-kbd">Ctrl/⌘+Shift+Z</span> (أو <span class="docs-kbd">Ctrl+Y</span>)</td><td>إعادة</td></tr>
+        <tr><td><span class="docs-kbd">Ctrl/⌘+K</span></td><td>فتح لوحة الأوامر</td></tr>
+        <tr><td><span class="docs-kbd">Esc</span></td><td>إغلاق أعلى نافذة منبثقة أو قائمة أو محرر نص</td></tr>
+      </table>
+
+      <div class="docs-callout">اختصارات التحديد/التحريك/الحذف/التدوير على اللوحة (WP-17) تعمل حاليًا على قطع الباترون الكاملة. أما نقاط ونقاط وخطوط وأقواس ودوائر الإنشاء فتُحرَّر بالسحب بالماوس حاليًا — التحرير بلوحة المفاتيح فقط لعناصر الإنشاء الفردية فجوة موثّقة، لم تُبنَ بعد.</div>
+    </div>
+  </main>
+</div>
+<script src="docs.js"></script>
+</body>
+</html>

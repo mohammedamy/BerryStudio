@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — Google Gemini setup</title>
+<meta name="description" content="Configure Google Gemini as BerryStudio's AI provider.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../css/styles.css">
+<link rel="stylesheet" href="../docs.css">
+<link rel="icon" href="../../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>Google Gemini</h1>
+      <p class="lede">Hosted, needs your own Google AI Studio API key.</p>
+      <table class="docs-table">
+        <tr><th>Endpoint</th><td><code>https://generativelanguage.googleapis.com/v1beta/models/&lt;model&gt;:generateContent?key=&lt;your key&gt;</code></td></tr>
+        <tr><th>Needs a key</th><td>Yes — sent as a URL query parameter, per Google's own API design (BerryStudio never logs or exports the full URL with the key attached)</td></tr>
+        <tr><th>Structured output</th><td>Gemini's <code>responseSchema</code> field, set to BerryStudio's Pattern Spec schema</td></tr>
+      </table>
+      <h2>Setup</h2>
+      <ol>
+        <li>Get an API key at <a href="https://aistudio.google.com/">aistudio.google.com</a>.</li>
+        <li>In BerryStudio: Settings → AI Provider → choose <strong>Google Gemini</strong>.</li>
+        <li>Paste your key, pick a model (e.g. a Gemini 2.x/3.x model that supports vision if you plan to upload photos), then <strong>Test Connection</strong>.</li>
+      </ol>
+      <p>Also usable for image generation (AI Fashion Billboard) if your key has access to a Gemini image model.</p>
+    </div>
+
+    <div data-lang="ar">
+      <h1>Google Gemini</h1>
+      <p class="lede">مستضاف، يحتاج مفتاح API خاص بك من Google AI Studio.</p>
+      <table class="docs-table">
+        <tr><th>نقطة النهاية</th><td><code>https://generativelanguage.googleapis.com/v1beta/models/&lt;model&gt;:generateContent?key=&lt;مفتاحك&gt;</code></td></tr>
+        <tr><th>يحتاج مفتاحًا</th><td>نعم — يُرسَل كمعامل استعلام في الرابط، وفق تصميم واجهة Google نفسها (BerryStudio لا يسجّل أو يصدّر الرابط الكامل مع المفتاح أبدًا)</td></tr>
+        <tr><th>مخرجات منظّمة</th><td>حقل <code>responseSchema</code> في Gemini، مضبوط على مخطط الباترون (Pattern Spec) الخاص بـBerryStudio</td></tr>
+      </table>
+      <h2>الإعداد</h2>
+      <ol>
+        <li>احصل على مفتاح API من <a href="https://aistudio.google.com/">aistudio.google.com</a>.</li>
+        <li>في BerryStudio: الإعدادات ← مزوّد الذكاء الاصطناعي ← اختر <strong>Google Gemini</strong>.</li>
+        <li>الصق مفتاحك، اختر نموذجًا (مثل نموذج Gemini 2.x/3.x يدعم الرؤية إن كنت تنوي رفع صور)، ثم <strong>Test Connection</strong>.</li>
+      </ol>
+      <p>قابل للاستخدام أيضًا لتوليد الصور (إعلان الأزياء بالذكاء الاصطناعي) إذا كان مفتاحك يملك صلاحية الوصول لنموذج صور من Gemini.</p>
+    </div>
+  </main>
+</div>
+<script src="../docs.js"></script>
+</body>
+</html>

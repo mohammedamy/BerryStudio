@@ -17,6 +17,9 @@ export const View3D = (() => {
   let renderer, scene, camera, controls, raf = null;
   let root, bodyGroup, garmentGroup, limbs = {};
   let ready = false, spinning = true, walking = true, t = 0;
+  // WP-17: an OS/app-level "prefers-reduced-motion" override — always wins
+  // over the spin toggle's own saved value, never the other way around.
+  let reduceMotion = false;
   let host, curCategory = "women", curH = 1.7;
   let onLoading = () => {};
   let noiseTex = null;
@@ -91,7 +94,7 @@ export const View3D = (() => {
     controls.enableDamping = true; controls.dampingFactor = 0.08;
     controls.minDistance = 0.9; controls.maxDistance = 7;
     controls.maxPolarAngle = Math.PI * 0.92;
-    controls.autoRotate = spinning; controls.autoRotateSpeed = 1.6;
+    controls.autoRotate = spinning && !reduceMotion; controls.autoRotateSpeed = 1.6;
     controls.target.set(0, 0.92, 0);
 
     setupLights();
@@ -568,8 +571,9 @@ export const View3D = (() => {
 
   return {
     init, build, resize, setFabric, setPieceVisibility,
-    setSpin: v => { spinning = v; if (controls) controls.autoRotate = v; },
+    setSpin: v => { spinning = v; if (controls) controls.autoRotate = v && !reduceMotion; },
     setWalk: v => walking = v,
+    setReduceMotion: v => { reduceMotion = !!v; if (controls) controls.autoRotate = spinning && !reduceMotion; },
     setLoadingCallback: cb => onLoading = cb || (() => {}),
     setAvatarURL, isReady: () => ready,
   };

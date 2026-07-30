@@ -41,7 +41,7 @@
 /* ---------- THEME: EGYPTIAN ---------- */
 [data-theme="egypt"][data-mode="light"] {
   --bg:#f6efe2; --bg-2:#fdf9f0; --panel:#fdf8ee; --panel-2:#f3e8d3;
-  --ink:#3a2c17; --ink-2:#8a7350; --line:#e6d6ba; --line-2:#efe3ca;
+  --ink:#3a2c17; --ink-2:#7a6545; --line:#e6d6ba; --line-2:#efe3ca;
   --brand:#c8912e; --brand-2:#1f7a6d; --brand-ink:#fff8e9;
   --accent:#c1492e; --gold:#b8860b;
   --ok:#2f9e78; --warn:#d99a25; --danger:#c0392b;
@@ -80,7 +80,21 @@
   --shadow-1:0 0 0 1px var(--ink); --shadow-2:0 0 0 2px var(--ink);
 }
 
+/* ---------- REDUCED MOTION (WP-17) ----------
+   Defensive default for the moment between first paint and js/app.js's own
+   applyReduceMotion() call (which reads the Settings toggle, itself seeded
+   from this same media query on a first-ever visit — see js/app.js). Once
+   JS runs, its inline style on <body> always wins over this rule. */
+@media (prefers-reduced-motion: reduce) {
+  :root { --fast: 0s; --med: 0s; --slow: 0s; }
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
+/* WP-17: a real, visible keyboard-focus ring everywhere, without adding a
+   ring on mouse/touch clicks — :focus-visible already makes that distinction
+   natively in every browser this app supports. */
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+canvas:focus-visible { outline-offset: -2px; }
 html, body { height: 100%; }
 body {
   font-family: var(--font);
@@ -244,7 +258,8 @@ button { cursor: pointer; border: none; background: none; }
 .meas-row label { font-size: 12.5px; font-weight: 600; }
 .meas-row label small { display: block; color: var(--ink-2); font-weight: 500; font-size: 10.5px; }
 .meas-row input { width: 100%; padding: 8px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--panel-2); text-align: center; font-weight: 700; font-size: 13px; transition: border var(--fast); }
-.meas-row input:focus { outline: none; border-color: var(--brand); }
+.meas-row input:focus { border-color: var(--brand); }
+.meas-row input:focus:not(:focus-visible) { outline: none; }
 
 /* Illustrated measurement diagram (collapsible reference figure) */
 .meas-diagram { display: none; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel-2); }
@@ -271,6 +286,7 @@ button { cursor: pointer; border: none; background: none; }
 
 /* Range slider */
 .range { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 999px; background: var(--line); outline: none; }
+.range:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
 .range::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--brand); box-shadow: var(--shadow-1); cursor: pointer; }
 .range::-moz-range-thumb { width: 18px; height: 18px; border: none; border-radius: 50%; background: var(--brand); cursor: pointer; }
 .layer .lname { flex: 1; font-size: 12.5px; font-weight: 600; }
@@ -295,7 +311,8 @@ button { cursor: pointer; border: none; background: none; }
   width: 100%; padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--line);
   background: var(--panel-2); font-size: 13px; transition: border var(--fast);
 }
-.input:focus, .textarea:focus, .select:focus { outline: none; border-color: var(--brand); }
+.input:focus, .textarea:focus, .select:focus { border-color: var(--brand); }
+.input:focus:not(:focus-visible), .textarea:focus:not(:focus-visible), .select:focus:not(:focus-visible) { outline: none; }
 .textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 
 .help-note { font-size: 11.5px; color: var(--ink-2); line-height: 1.55; background: var(--panel-2); border: 1px dashed var(--line); border-radius: var(--r-md); padding: 10px 12px; }
@@ -422,7 +439,8 @@ button { cursor: pointer; border: none; background: none; }
 .cmdk { align-items: flex-start; padding-top: 12vh; }
 .cmdk .modal { max-width: 560px; }
 .cmd-input { width: 100%; padding: 16px 20px; font-size: 16px; border: none; background: transparent; }
-.cmd-input:focus { outline: none; }
+.cmd-input:focus:not(:focus-visible) { outline: none; }
+.cmd-input:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 .cmd-list { max-height: 50vh; overflow-y: auto; border-top: 1px solid var(--line); }
 .cmd-item { display: flex; align-items: center; gap: 12px; padding: 12px 20px; font-size: 13.5px; font-weight: 600; cursor: pointer; }
 .cmd-item.sel, .cmd-item:hover { background: var(--panel-2); }

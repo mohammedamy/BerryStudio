@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — OpenAI setup</title>
+<meta name="description" content="Configure OpenAI as BerryStudio's AI provider.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../css/styles.css">
+<link rel="stylesheet" href="../docs.css">
+<link rel="icon" href="../../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>OpenAI</h1>
+      <p class="lede">Hosted, needs your own OpenAI API key. Requests use strict JSON Schema mode so the model's output always matches BerryStudio's Pattern Spec exactly.</p>
+      <table class="docs-table">
+        <tr><th>Endpoint</th><td><code>https://api.openai.com/v1/chat/completions</code></td></tr>
+        <tr><th>Needs a key</th><td>Yes</td></tr>
+        <tr><th>Structured output</th><td><code>response_format: {type: "json_schema"}</code>, validated against BerryStudio's own schema before it's ever drafted</td></tr>
+      </table>
+      <h2>Setup</h2>
+      <ol>
+        <li>Get an API key at <a href="https://platform.openai.com/">platform.openai.com</a>.</li>
+        <li>In BerryStudio: Settings → AI Provider → choose <strong>OpenAI</strong>.</li>
+        <li>Paste your key, fetch or type a model name, then <strong>Test Connection</strong>.</li>
+      </ol>
+      <p>Also used for the <a href="../../index.html">AI Fashion Billboard</a> image-generation feature (Settings → AI Provider → Image generation), if you want AI-generated lookbook imagery alongside your patterns.</p>
+      <p>Called directly from the browser — OpenAI's API is CORS-permitted for this, no local server or extra header needed.</p>
+    </div>
+
+    <div data-lang="ar">
+      <h1>OpenAI</h1>
+      <p class="lede">مستضاف، يحتاج مفتاح API خاص بك من OpenAI. تستخدم الطلبات وضع JSON Schema الصارم بحيث يطابق مخرج النموذج مواصفة الباترون (Pattern Spec) في BerryStudio دائمًا.</p>
+      <table class="docs-table">
+        <tr><th>نقطة النهاية</th><td><code>https://api.openai.com/v1/chat/completions</code></td></tr>
+        <tr><th>يحتاج مفتاحًا</th><td>نعم</td></tr>
+        <tr><th>مخرجات منظّمة</th><td><code>response_format: {type: "json_schema"}</code>، تُتحقق مقابل مخطط BerryStudio نفسه قبل رسمها أبدًا</td></tr>
+      </table>
+      <h2>الإعداد</h2>
+      <ol>
+        <li>احصل على مفتاح API من <a href="https://platform.openai.com/">platform.openai.com</a>.</li>
+        <li>في BerryStudio: الإعدادات ← مزوّد الذكاء الاصطناعي ← اختر <strong>OpenAI</strong>.</li>
+        <li>الصق مفتاحك، اجلب أو اكتب اسم نموذج، ثم <strong>Test Connection</strong>.</li>
+      </ol>
+      <p>يُستخدم أيضًا لميزة إعلان الأزياء بالذكاء الاصطناعي (الإعدادات ← مزوّد الذكاء الاصطناعي ← توليد الصور)، إن رغبت في صور دعائية مولّدة بالذكاء الاصطناعي إلى جانب أنماطك.</p>
+      <p>يُستدعى مباشرة من المتصفح — واجهة OpenAI مسموح بها عبر CORS لذلك، دون الحاجة لخادم محلي أو ترويسة إضافية.</p>
+    </div>
+  </main>
+</div>
+<script src="../docs.js"></script>
+</body>
+</html>

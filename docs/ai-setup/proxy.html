@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — Your own proxy setup</title>
+<meta name="description" content="Configure your own server-side proxy as BerryStudio's AI provider — the safest option, key stays server-side.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../css/styles.css">
+<link rel="stylesheet" href="../docs.css">
+<link rel="icon" href="../../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>Your own proxy</h1>
+      <p class="lede">The safest option: your real provider API key never touches the browser at all — it lives only on a small server you control, which BerryStudio calls instead.</p>
+      <table class="docs-table">
+        <tr><th>Endpoint</th><td>Whatever URL you enter — your own server</td></tr>
+        <tr><th>Needs a key</th><td>No key in the browser; your server holds the real key and forwards the request</td></tr>
+        <tr><th>Contract</th><td>The same one this project's <code>server/billboard-proxy/worker.js</code> reference implementation already uses — unchanged since before BYO-AI existed</td></tr>
+      </table>
+      <h2>Setup</h2>
+      <ol>
+        <li>Deploy a small proxy (BerryStudio's repo ships a working Cloudflare Worker reference at <code>server/billboard-proxy/worker.js</code> you can adapt or deploy as-is).</li>
+        <li>In BerryStudio: Settings → AI Provider → choose <strong>Your own proxy</strong>, and enter your deployed URL.</li>
+        <li><strong>Test Connection</strong> to confirm it's reachable and responding correctly.</li>
+      </ol>
+      <div class="docs-callout">Choose this option if you don't want an API key ever present in browser memory or dev tools, even briefly — every other provider here does hold your key client-side (session-scoped by default, see the <a href="index.html">security model</a>).</div>
+    </div>
+
+    <div data-lang="ar">
+      <h1>الخادم الوسيط الخاص بك</h1>
+      <p class="lede">الخيار الأكثر أمانًا: مفتاح API الحقيقي لمزوّدك لا يلمس المتصفح إطلاقًا — يعيش فقط على خادم صغير تتحكم به، ويستدعيه BerryStudio بدلًا من ذلك.</p>
+      <table class="docs-table">
+        <tr><th>نقطة النهاية</th><td>أي عنوان تُدخله — خادمك الخاص</td></tr>
+        <tr><th>يحتاج مفتاحًا</th><td>لا مفتاح في المتصفح؛ يحتفظ خادمك بالمفتاح الحقيقي ويمرّر الطلب</td></tr>
+        <tr><th>العقد (Contract)</th><td>نفس العقد الذي يستخدمه بالفعل التنفيذ المرجعي <code>server/billboard-proxy/worker.js</code> في هذا المشروع — دون تغيير منذ ما قبل وجود ميزة "استخدم ذكاءك الاصطناعي"</td></tr>
+      </table>
+      <h2>الإعداد</h2>
+      <ol>
+        <li>انشر خادمًا وسيطًا صغيرًا (مستودع BerryStudio يشحن تنفيذًا مرجعيًا عاملًا لـCloudflare Worker في <code>server/billboard-proxy/worker.js</code> يمكنك تعديله أو نشره كما هو).</li>
+        <li>في BerryStudio: الإعدادات ← مزوّد الذكاء الاصطناعي ← اختر <strong>الخادم الوسيط الخاص بك</strong>، وأدخل عنوان النشر الخاص بك.</li>
+        <li><strong>Test Connection</strong> للتأكد من أنه قابل للوصول ويستجيب بشكل صحيح.</li>
+      </ol>
+      <div class="docs-callout">اختر هذا الخيار إذا كنت لا تريد لمفتاح API أن يوجد أبدًا في ذاكرة المتصفح أو أدوات المطوّر، ولو للحظة — كل مزوّد آخر هنا يحتفظ بمفتاحك على جهة العميل (بنطاق الجلسة افتراضيًا، راجع <a href="index.html">نموذج الأمان</a>).</div>
+    </div>
+  </main>
+</div>
+<script src="../docs.js"></script>
+</body>
+</html>

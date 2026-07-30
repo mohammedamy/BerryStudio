@@ -23,6 +23,7 @@ import { nest as nestTruePolygon, cancelNest } from './nesting.js';
 import { stepForSize, resolveGradedPieces } from './grading.js';
 import { pivotDart, slashAndSpread } from './darts.js';
 import { seamPointAtFraction } from './geometry.js';
+import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 
 (() => {
   "use strict";
@@ -55,8 +56,22 @@ import { seamPointAtFraction } from './geometry.js';
     // key -> outline-index -> {dx,dy} (cm per size step). Purely additive
     // — a pattern with no authored rules here grades exactly as before.
     gradeRules: {}, gradeRulesPiece: null,
+    // WP-18: optional cloud sync. `cloudSync` itself predates this pass (a
+    // dormant Settings toggle with no behaviour behind it) — these three
+    // fields are new. Endpoint URL and OAuth client IDs are not secrets
+    // (client IDs are public identifiers by design) so they live in normal
+    // state; the self-hosted endpoint's bearer token and Drive/OneDrive
+    // access tokens never do — see js/cloud-sync.js.
+    syncTarget: "endpoint", syncEndpointUrl: "", syncGoogleClientId: "", syncMicrosoftClientId: "",
   };
-  const state = Object.assign({}, DEF, JSON.parse(localStorage.getItem("pps") || "{}"));
+  const savedRaw = JSON.parse(localStorage.getItem("pps") || "{}");
+  const state = Object.assign({}, DEF, savedRaw);
+  // WP-17: honour the OS-level reduced-motion preference by default, but only
+  // on a first-ever visit — once a user has explicitly set the in-app toggle
+  // (savedRaw already has the key), that explicit choice always wins.
+  if (!("reduceMotion" in savedRaw) && typeof matchMedia === "function") {
+    try { state.reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { /* matchMedia unavailable */ }
+  }
   const save = () => localStorage.setItem("pps", JSON.stringify(state));
   const T = k => (I18N[state.lang][k] ?? I18N.en[k] ?? k);
   const L = o => (o ? (o[state.lang] ?? o.en) : "");
@@ -97,6 +112,8 @@ import { seamPointAtFraction } from './geometry.js';
     grid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>',
     magnet:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 3v8a6 6 0 0 0 12 0V3"/><path d="M6 3h4v4H6zM14 3h4v4h-4z"/></svg>',
     cube:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 22V12M3 7l9 5 9-5"/></svg>',
+    cloudUp:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1-1-7.9A5 5 0 0 1 16 8a4.5 4.5 0 0 1 1 8.9"/><path d="M12 21v-7M9 17l3-3 3 3"/></svg>',
+    cloudDown:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1-1-7.9A5 5 0 0 1 16 8a4.5 4.5 0 0 1 1 8.9"/><path d="M12 13v7M9 17l3 3 3-3"/></svg>',
     layers:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2l10 6-10 6L2 8z"/><path d="M2 12l10 6 10-6M2 16l10 6 10-6"/></svg>',
     cmd:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/></svg>',
     palette:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-1 1-2s0-2 1-2h2a4 4 0 0 0 4-4c0-5-4-8-8-8z"/><circle cx="7.5" cy="11.5" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="16" cy="11" r="1"/></svg>',
@@ -1237,7 +1254,7 @@ import { seamPointAtFraction } from './geometry.js';
       }).catch(()=>toast(T("rasterFailed")));
       return;
     }
-    else if(F==="JSON")download("berrystudio-project.json","application/json",JSON.stringify({app:"BerryStudio",version:1,pieces:Canvas.getPieces(),texts:Canvas.getTexts(),points:Canvas.getPoints(),cons:Canvas.getCons(),variables:Canvas.getVariables()},null,0));
+    else if(F==="JSON")download("berrystudio-project.json","application/json",JSON.stringify(projectPayload(),null,0));
     else               download(`berrystudio-pattern.${F.toLowerCase()}`,"image/svg+xml",Canvas.exportSVG());
     toast(T("exported")+" · "+F);
   }
@@ -1250,21 +1267,68 @@ import { seamPointAtFraction } from './geometry.js';
     if(state.view==="3d") build3D();
     save(); toast(T("newDone"));
   }
+  function projectPayload(){
+    return {app:"BerryStudio",version:1,pieces:Canvas.getPieces(),texts:Canvas.getTexts(),points:Canvas.getPoints(),cons:Canvas.getCons(),variables:Canvas.getVariables()};
+  }
+  // Shared by file-based Import Project and cloud-sync Load — same payload
+  // shape, same success/failure semantics, one place to keep them in sync.
+  function applyProjectPayload(data){
+    const pieces=Array.isArray(data)?data:data.pieces;
+    if(!Canvas.loadPieces(pieces, data.texts, data.points, data.cons)) return false;
+    state.loaded=null; hideEmpty(); renderLayersPane();
+    Object.entries(data.variables||{}).forEach(([name,formula])=>{ try{ Canvas.setVariable(name, formula); }catch(e){} });
+    if(state.view==="3d") build3D(); save();
+    return true;
+  }
   function importProject(){
     const inp=el("input"); inp.type="file"; inp.accept=".json,application/json";
     inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(!f) return;
       const r=new FileReader();
       r.onload=()=>{ try{
-        const data=JSON.parse(r.result);
-        const pieces=Array.isArray(data)?data:data.pieces;
-        if(Canvas.loadPieces(pieces, data.texts, data.points, data.cons)){ state.loaded=null; hideEmpty(); renderLayersPane();
-          Object.entries(data.variables||{}).forEach(([name,formula])=>{ try{ Canvas.setVariable(name, formula); }catch(e){} });
-          if(state.view==="3d") build3D(); save(); toast(T("imported")); }
+        if(applyProjectPayload(JSON.parse(r.result))) toast(T("imported"));
         else toast(T("importFail"));
       }catch(e){ toast(T("importFail")); } };
       r.readAsText(f);
     };
     inp.click();
+  }
+
+  // ---- WP-18: cloud sync (opt-in, off unless Settings → Cloud Sync is on
+  // AND a target is configured) ----
+  function syncTargetImpl(){
+    if(state.syncTarget==="googleDrive") return GoogleDriveSync;
+    if(state.syncTarget==="oneDrive") return OneDriveSync;
+    return null; // "endpoint" handled separately — it takes an explicit URL, not a singleton connection
+  }
+  async function cloudSyncSave(){
+    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
+    try{
+      if(state.syncTarget==="endpoint") await SelfHostedSync.save(state.syncEndpointUrl, projectPayload());
+      else {
+        const impl=syncTargetImpl();
+        if(!impl.isConnected()) await cloudSyncConnect();
+        await impl.save(projectPayload());
+      }
+      toast(T("syncSaved"));
+    }catch(e){ toast(T("syncFail")+": "+(e.message||e)); }
+  }
+  async function cloudSyncLoad(){
+    try{
+      let data;
+      if(state.syncTarget==="endpoint") data=await SelfHostedSync.load(state.syncEndpointUrl);
+      else {
+        const impl=syncTargetImpl();
+        if(!impl.isConnected()) await cloudSyncConnect();
+        data=await impl.load();
+      }
+      if(applyProjectPayload(data)) toast(T("syncLoaded"));
+      else toast(T("importFail"));
+    }catch(e){ toast(T("syncFail")+": "+(e.message||e)); }
+  }
+  async function cloudSyncConnect(){
+    if(state.syncTarget==="googleDrive") return GoogleDriveSync.connect(state.syncGoogleClientId);
+    if(state.syncTarget==="oneDrive") return OneDriveSync.connect(state.syncMicrosoftClientId);
+    return null;
   }
   function printPattern(){
     const svg=Canvas.exportSVG(); if(!svg){ toast(T("empty2d")); return; }
@@ -1287,6 +1351,11 @@ import { seamPointAtFraction } from './geometry.js';
     { icon:IC.printer, label:T("patternSummary"),run:exportSummary },
     { icon:IC.cube,    label:T("createMarker"),  run:openMarkerModal },
     { icon:IC.magnet,  label:T("snapshotMenu"),  run:openSnapshotPanel },
+    ...(state.cloudSync ? [
+      "sep",
+      { icon:IC.cloudUp,   label:T("syncSaveTo"),   run:cloudSyncSave },
+      { icon:IC.cloudDown, label:T("syncLoadFrom"), run:cloudSyncLoad },
+    ] : []),
     "sep",
     { icon:IC.printer, label:T("printProject"),  run:printPattern },
   ]; }
@@ -1594,7 +1663,8 @@ import { seamPointAtFraction } from './geometry.js';
     html += `<h3 style="margin:18px 0 8px">${T("helpTools")}</h3><table style="width:100%;border-collapse:collapse;font-size:12.5px">`;
     tools.forEach(k=>{ html += `<tr><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);font-weight:700;white-space:nowrap">${T("t_"+k)}</td><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--ink-2)">${T("tt_"+k)}</td></tr>`; });
     html += `</table><h3 style="margin:18px 0 8px">${T("helpShortcuts")}</h3><table style="width:100%;border-collapse:collapse;font-size:12.5px">`;
-    [["V P L A M R S T", T("sc_tools")], ["Ctrl+Z / Ctrl+Shift+Z", T("sc_undo")], ["Ctrl+K", T("sc_cmd")], ["Esc", T("sc_esc")]]
+    [["V P L A M R S T", T("sc_tools")], ["Ctrl+Z / Ctrl+Shift+Z", T("sc_undo")], ["Ctrl+K", T("sc_cmd")], ["Esc", T("sc_esc")],
+     ["[ / ]", T("sc_cycle")], ["Arrow keys", T("sc_nudge")], ["Shift+Arrow", T("sc_nudgeFine")], ["Delete / Backspace", T("sc_delete")]]
       .forEach(([k,d])=>{ html += `<tr><td style="padding:6px 8px;border-bottom:1px solid var(--line-2)"><code style="background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-weight:700">${k}</code></td><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--ink-2)">${d}</td></tr>`; });
     html += "</table>";
     openModal(T("helpTitle"), html, true);
@@ -2031,7 +2101,7 @@ import { seamPointAtFraction } from './geometry.js';
     $("#viewClothLab").classList.toggle("engine-embedded", state.clothLabEngine==="embedded");
     document.querySelector(".canvas-wrap").classList.toggle("threed", v==="3d");
     document.querySelector(".canvas-wrap").classList.toggle("clothlab", v==="clothlab");
-    $$("#viewToggle button").forEach(b=>b.classList.toggle("active",b.dataset.v===v));
+    $$("#viewToggle button").forEach(b=>{ const on=b.dataset.v===v; b.classList.toggle("active",on); b.setAttribute("aria-pressed",on); });
     if(v==="3d"){ View3D.resize(); build3D(); }
     else if(v==="clothlab"){ loadClothLab(); syncClothLab(); }
     else Canvas.render();
@@ -2155,7 +2225,7 @@ import { seamPointAtFraction } from './geometry.js';
   function showEmpty(){ $("#emptyState").classList.remove("hidden"); }
 
   // ================= HEADER / CATEGORY =================
-  function syncCategoryUI(){ $$("#catSeg button").forEach(b=>b.classList.toggle("active",b.dataset.cat===state.category)); }
+  function syncCategoryUI(){ $$("#catSeg button").forEach(b=>{ const on=b.dataset.cat===state.category; b.classList.toggle("active",on); b.setAttribute("aria-pressed",on); }); }
   const DEFAULT_PATTERN_BY_CATEGORY = {women:"womens_dress",men:"mens_shirt",girls:"girls_dress",boys:"boys_trousers"};
   function setCategory(cat){
     state.category=cat; syncCategoryUI();
@@ -2163,6 +2233,21 @@ import { seamPointAtFraction } from './geometry.js';
     const def=DEFAULT_PATTERN_BY_CATEGORY[cat];
     if(state.loaded) loadPattern(def); else { renderMeasurePane(); grade(); }
     renderLibraryPane();
+  }
+
+  // ================= MOTION (WP-17) =================
+  // Defaults from the OS `prefers-reduced-motion` media query on a first-ever
+  // visit (see state init above); always overridable via the Settings toggle.
+  // Covers CSS transition durations and 3D Preview's ambient auto-rotate —
+  // deliberately NOT the Walk pose animation, which is content the user
+  // explicitly selected, not decorative background motion — and Cloth Lab
+  // has no continuous ambient motion of its own to reduce (its camera only
+  // spins during an explicit turntable export, not while viewing).
+  function applyReduceMotion(on){
+    document.body.style.setProperty("--fast", on?"0s":".16s");
+    document.body.style.setProperty("--med", on?"0s":".28s");
+    document.body.style.setProperty("--slow", on?"0s":".5s");
+    View3D.setReduceMotion(on);
   }
 
   // ================= THEME / LANG =================
@@ -2180,6 +2265,7 @@ import { seamPointAtFraction } from './geometry.js';
     document.documentElement.lang=state.lang; document.documentElement.dir=d;
     $$("[data-i18n]").forEach(e=>e.textContent=T(e.dataset.i18n));
     $$("[data-i18n-ph]").forEach(e=>e.placeholder=T(e.dataset.i18nPh));
+    $$("[data-i18n-aria]").forEach(e=>e.setAttribute("aria-label",T(e.dataset.i18nAria)));
     Canvas.setTranslator(T);
     buildToolRail(); buildRail(); syncCategoryUI(); updateStageChips();
     $("#brandName").textContent=T("appName"); $("#brandSub").textContent=T("tagline");
@@ -2210,6 +2296,45 @@ import { seamPointAtFraction } from './geometry.js';
   // ================= MODALS =================
   function openModal(title,body,wide){ const o=$("#genericModal"); o.querySelector(".modal").classList.toggle("wide",!!wide); o.querySelector("h2").textContent=title; o.querySelector(".modal-body").innerHTML=body; o.classList.add("show"); }
   function closeModal(id){ $(id).classList.remove("show"); }
+
+  // ================= MODAL ACCESSIBILITY (WP-17) =================
+  // Every ".overlay" in index.html (theme/settings/command palette/generic/
+  // onboarding) is opened by a different function and closed by a shared
+  // data-close/"click outside" mechanism — rather than touch every call
+  // site individually, watch the shared "show" class itself: focus moves
+  // into the dialog when it appears and back to whatever triggered it when
+  // it's gone, and Tab is trapped inside the visible dialog throughout.
+  let modalReturnFocus = null;
+  function focusablesIn(root){
+    // NOTE: $$() always queries the whole document and ignores a second
+    // argument (see its definition above) — querySelectorAll directly on
+    // root is required here to actually scope this to the open dialog.
+    return [...root.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter(el => !el.disabled && el.offsetParent !== null);
+  }
+  function initModalA11y(){
+    $$(".overlay").forEach(overlay=>{
+      new MutationObserver(()=>{
+        const modal = overlay.querySelector(".modal");
+        if(overlay.classList.contains("show")){
+          modalReturnFocus = document.activeElement;
+          const first = modal && focusablesIn(modal)[0];
+          (first || modal || overlay).focus({ preventScroll:true });
+        } else if(modalReturnFocus){
+          modalReturnFocus.focus({ preventScroll:true });
+          modalReturnFocus = null;
+        }
+      }).observe(overlay, { attributes:true, attributeFilter:["class"] });
+    });
+  }
+  function trapModalTab(e){
+    const overlay = $$(".overlay.show")[0]; if(!overlay) return;
+    const modal = overlay.querySelector(".modal"); if(!modal) return;
+    const items = focusablesIn(modal); if(!items.length) return;
+    const first=items[0], last=items[items.length-1];
+    if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+  }
 
   // Theme picker
   function openThemePicker(){
@@ -2256,6 +2381,57 @@ import { seamPointAtFraction } from './geometry.js';
       if(pass){ try{ await KeyStore.unlock(pass); apiKey = await KeyStore.resolve(providerId); }catch(e){ toast(T("keyPassphraseWrong")); } }
     }
     return { baseUrl: cfg.baseUrl||undefined, apiKey: apiKey||undefined, model: (useVisionModel? cfg.visionModel : cfg.model)||undefined };
+  }
+
+  // WP-18: cloud sync target configuration. Rendered only while Settings'
+  // "Cloud Sync" toggle is on — off by default, matching the plan's "local
+  // -first stays the default forever" requirement.
+  function renderSyncSettings(body){
+    const wrap=el("div","field"); wrap.style.marginTop="14px";
+    wrap.innerHTML=`<label>${T("syncTargetLabel")}</label>`;
+    const sel=el("select","select");
+    [["endpoint",T("syncTargetEndpoint")],["googleDrive",T("syncTargetDrive")],["oneDrive",T("syncTargetOneDrive")]].forEach(([id,label])=>{
+      const opt=document.createElement("option"); opt.value=id; opt.textContent=label; if(id===state.syncTarget) opt.selected=true;
+      sel.appendChild(opt);
+    });
+    sel.onchange=()=>{ state.syncTarget=sel.value; save(); openSettings(); };
+    wrap.appendChild(sel); body.appendChild(wrap);
+
+    if(state.syncTarget==="endpoint"){
+      const urlField=el("div","field"); urlField.style.marginTop="10px";
+      urlField.innerHTML=`<label>${T("syncEndpointUrlLabel")}</label>`;
+      const urlInp=el("input","input"); urlInp.type="url"; urlInp.dir="ltr"; urlInp.placeholder="https://your-server.example/berrystudio-project.json";
+      urlInp.value=state.syncEndpointUrl||"";
+      urlInp.onchange=()=>{ state.syncEndpointUrl=urlInp.value.trim(); save(); };
+      urlField.appendChild(urlInp); body.appendChild(urlField);
+
+      const tokField=el("div","field"); tokField.style.marginTop="10px";
+      tokField.innerHTML=`<label>${T("syncEndpointTokenLabel")}</label>`;
+      const tokInp=el("input","input"); tokInp.type="password"; tokInp.dir="ltr"; tokInp.placeholder=T("optional");
+      tokInp.value=SelfHostedSync.getToken();
+      tokInp.onchange=()=>SelfHostedSync.setToken(tokInp.value.trim());
+      tokField.appendChild(tokInp); body.appendChild(tokField);
+      body.appendChild(el("div","help-note",T("syncEndpointHint")));
+    } else {
+      const isDrive=state.syncTarget==="googleDrive";
+      const idField=el("div","field"); idField.style.marginTop="10px";
+      idField.innerHTML=`<label>${isDrive?T("syncGoogleClientIdLabel"):T("syncMicrosoftClientIdLabel")}</label>`;
+      const idInp=el("input","input"); idInp.dir="ltr"; idInp.placeholder=T("syncClientIdPlaceholder");
+      idInp.value=isDrive?(state.syncGoogleClientId||""):(state.syncMicrosoftClientId||"");
+      idInp.onchange=()=>{ if(isDrive) state.syncGoogleClientId=idInp.value.trim(); else state.syncMicrosoftClientId=idInp.value.trim(); save(); };
+      idField.appendChild(idInp); body.appendChild(idField);
+      body.appendChild(el("div","help-note",isDrive?T("syncDriveHint"):T("syncOneDriveHint")));
+
+      const impl=isDrive?GoogleDriveSync:OneDriveSync;
+      const connectBtn=el("button","big-btn ghost",impl.isConnected()?T("syncConnected"):T("syncConnect"));
+      connectBtn.style.marginTop="10px";
+      connectBtn.disabled=impl.isConnected();
+      connectBtn.onclick=async()=>{
+        try{ await cloudSyncConnect(); toast(T("syncConnected")); openSettings(); }
+        catch(e){ toast(T("syncFail")+": "+(e.message||e)); }
+      };
+      body.appendChild(connectBtn);
+    }
   }
 
   function renderAISettings(body){
@@ -2417,9 +2593,10 @@ import { seamPointAtFraction } from './geometry.js';
     toggles.forEach(([k,d])=>{
       const r=el("label","set-row"); r.innerHTML=`<span class="sl">${T(k)}<small>${T(d)}</small></span>`;
       const sw=el("span","switch",`<input type="checkbox" ${state[k]?"checked":""}><span class="track"></span>`);
-      sw.querySelector("input").onchange=e=>{ state[k]=e.target.checked; save(); if(k==="highContrast")applyTheme(); if(k==="reduceMotion")document.body.style.setProperty("--med",e.target.checked?"0s":".28s"); toast("✓"); };
+      sw.querySelector("input").onchange=e=>{ state[k]=e.target.checked; save(); if(k==="highContrast")applyTheme(); if(k==="reduceMotion")applyReduceMotion(e.target.checked); if(k==="cloudSync")openSettings(); else toast("✓"); };
       r.appendChild(sw); body.appendChild(r);
     });
+    if(state.cloudSync) renderSyncSettings(body);
     const units=el("label","set-row"); units.innerHTML=`<span class="sl">${T("tab_measure")}<small>cm / inch</small></span>`;
     const seg=el("div","seg",`<button ${state.unitsCm?'class="active"':''}>cm</button><button ${!state.unitsCm?'class="active"':''}>inch</button>`);
     seg.children[0].onclick=()=>{state.unitsCm=true;Canvas.setOpt("unitsCm",true);save();openSettings();updateStageChips();};
@@ -2549,6 +2726,7 @@ import { seamPointAtFraction } from './geometry.js';
   // ================= KEYBOARD =================
   function keys(e){
     const meta=e.ctrlKey||e.metaKey;
+    if(e.key==="Tab" && $$(".overlay.show").length){ trapModalTab(e); return; }
     if(meta&&e.key==="k"){e.preventDefault();openCmd();return;}
     if(meta&&e.key==="z"&&!e.shiftKey){e.preventDefault();Canvas.doUndo();renderLayersPane();return;}
     if(meta&&(e.key==="y"||(e.shiftKey&&e.key.toLowerCase()==="z"))){e.preventDefault();Canvas.doRedo();renderLayersPane();return;}
@@ -2560,9 +2738,34 @@ import { seamPointAtFraction } from './geometry.js';
       return;
     }
     if(e.key==="Escape"){ $$(".overlay.show").forEach(o=>o.classList.remove("show")); closeAnyMenu(); closeTextEditor(); }
+    const typing = document.activeElement.tagName==="INPUT" || document.activeElement.tagName==="TEXTAREA" || document.activeElement.isContentEditable;
     // tool shortcuts
     const map={v:"select",p:"pen",l:"line",a:"arc",m:"measure",r:"rotate",s:"scale",t:"text"};
-    if(!meta&&map[e.key]&&document.activeElement.tagName!=="INPUT"&&document.activeElement.tagName!=="TEXTAREA")setTool(map[e.key]);
+    if(!meta&&map[e.key]&&!typing)setTool(map[e.key]);
+    // WP-17: keyboard operation of the canvas — cycle/nudge/delete the
+    // selected pattern piece. "[" / "]" rather than Tab, so Tab keeps doing
+    // its normal job of moving DOM focus between toolbar/panel controls
+    // instead of being hijacked for in-canvas selection. Scoped to whole
+    // pieces (see docs/shortcuts.html) — construction points/lines/text stay
+    // mouse-only for now, a documented gap.
+    if(!meta && !typing && state.view==="2d" && !$$(".overlay.show").length){
+      const pieces=Canvas.getPieces(), sel=Canvas.getSelected();
+      if((e.key==="["||e.key==="]") && pieces.length){
+        e.preventDefault();
+        const dir=e.key==="]"?1:-1;
+        const next=sel<0 ? (dir>0?0:pieces.length-1) : (sel+dir+pieces.length)%pieces.length;
+        Canvas.selectPiece(next); renderLayersPane();
+      } else if(sel>=0 && (e.key==="ArrowUp"||e.key==="ArrowDown"||e.key==="ArrowLeft"||e.key==="ArrowRight")){
+        e.preventDefault();
+        const step=e.shiftKey?0.1:1;
+        const dx=e.key==="ArrowLeft"?-step:e.key==="ArrowRight"?step:0;
+        const dy=e.key==="ArrowUp"?-step:e.key==="ArrowDown"?step:0;
+        Canvas.nudgePiece(sel,dx,dy); sync3DVisibility();
+      } else if(sel>=0 && (e.key==="Delete"||e.key==="Backspace")){
+        e.preventDefault();
+        Canvas.removePiece(sel); renderLayersPane(); sync3DVisibility();
+      }
+    }
   }
   function hiCmd(){ $$("#cmdList .cmd-item").forEach((x,i)=>x.classList.toggle("sel",i===cmdSel)); const s=$$("#cmdList .cmd-item")[cmdSel]; if(s)s.scrollIntoView({block:"nearest"}); }
 
@@ -2579,6 +2782,7 @@ import { seamPointAtFraction } from './geometry.js';
     $("#langBtn").onclick=toggleLang; tip($("#langBtn"),T("language"),T("tt_lang"));
     $("#modeBtn").onclick=toggleMode; tip($("#modeBtn"),T("appearance"),T("tt_mode"));
     $("#settingsBtn").onclick=openSettings; tip($("#settingsBtn"),T("settings"),T("tt_settings"));
+    tip($("#docsBtn"),T("docs"),T("tt_docs"));
     $("#helpBtn").onclick=openHelp; tip($("#helpBtn"),T("help"),T("helpTitle"));
     $("#installBtn").onclick=installApp;
     $("#unitsPill").onclick=()=>{state.unitsCm=!state.unitsCm;Canvas.setOpt("unitsCm",state.unitsCm);save();updateUnitsPill();updateStageChips();};
@@ -2636,6 +2840,8 @@ import { seamPointAtFraction } from './geometry.js';
     Canvas.onZoomChange(()=>{ $("#zval").textContent=Canvas.getZoom()+"%"; });
     View3D.init($("#canvas3d"));
     View3D.setLoadingCallback(v => { const o=$("#v3dLoading"); if(o) o.classList.toggle("show", v); });
+    applyReduceMotion(state.reduceMotion);
+    initModalA11y();
     // photoreal GLB avatars saved in Settings (per category)
     Object.entries(state.avatarGLB || {}).forEach(([cat,url]) => { if(url) View3D.setAvatarURL(cat, url); });
     Canvas.onTextRequest(openTextEditor);

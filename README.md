@@ -21,6 +21,11 @@ python3 -m http.server 8791
 Then use the browser's **Install app** action (or the ⬇ button in the header) to
 install it. After the first load it works **fully offline**.
 
+**Full documentation** (bilingual, quick start / tool reference / keyboard
+shortcuts / AI provider setup with exact CORS commands / 3D troubleshooting /
+FAQ) lives at [`docs/`](docs/index.html) — also reachable from the book icon
+in the app's own header.
+
 ---
 
 ## What's implemented
@@ -73,6 +78,8 @@ install it. After the first load it works **fully offline**.
 | **Industrial grading — Grade Rules** (Size pane) — per-piece, per-outline-point dx/dy-per-size-step overrides on top of the uniform formula grade, JSON import/export, and a **Grade Nest preview** overlaying S/M/L/XL of one piece at a shared alignment point | ✅ Working — a point with no authored rule keeps grading through the normal formula, unchanged |
 | **Drafting engine upgrades** — per-edge seam allowance + real corner join styles (miter/round/bevel) in the offset engine; real bezier `piece.curves` metadata (princess-seam designs) feeding DXF's curve layer; dart **Pivot** / **Slash & Spread** (Layers pane → piece properties → Edit Darts); **Walk the Seam** (Export pane) — drag one slider to check two pieces' shared seam matches at every arc-length position, not just the ends; pleats on Quick Draft skirts (real added-width math, not a label) | ✅ Working — dart **Transfer** (rotate around an external pivot) and gathers/tucks are implemented as pure, tested functions (`js/darts.js`, `js/pleats.js`) without a dedicated UI yet |
 | **Local automation API** (`window.BerryStudio`, see below) — `generate`/`grade`/`nest`/`export`/`validate`, callable from the browser console or any injected script against the currently loaded pattern | ✅ Working |
+| **Docs site** (`docs/`, book icon in the header) — bilingual quick start, tool reference, keyboard shortcuts, an AI setup guide with one page per provider (exact CORS commands included), 3D troubleshooting, and FAQ | ✅ Working — a build-free static site, no dependency beyond the app's own theme CSS |
+| **Accessibility & UX** — real keyboard operation of the canvas (`[`/`]` cycle, arrow-key nudge, Delete, scoped to whole pieces), `role=dialog`/focus-trap/return-focus on every modal, `aria-label`/`aria-pressed` on icon and toggle buttons, a real `:focus-visible` ring app-wide, `prefers-reduced-motion` honoured by both CSS transitions and 3D Preview's auto-rotate, and all 6 theme × light/dark variants verified at WCAG AA (4.5:1) for body and secondary text | ✅ Working — construction points/lines and text annotations stay mouse-only for now (see Honest notes) |
 
 ### Honest notes
 - **Fancy Collection** (`js/fancy-patterns.js`) pieces are hand-authored, not run
@@ -124,12 +131,14 @@ install it. After the first load it works **fully offline**.
   trousers — so two 2D pieces that map to the same part (e.g. Front Bodice and Back
   Bodice) share one 3D material (whichever visible piece for that part was set last
   wins). The 2D canvas itself still shows true per-piece colour and material.
-- **Create Marker** packs each piece's rectangular bounding box onto shelves (a
-  shelf/first-fit-decreasing-height heuristic), rotating by 0°/90° when "Any" rotation
-  is allowed — it does **not** slide and interlock the true cut outlines the way
-  professional nesting software does, so the yardage is a good real estimate, not a
-  millimetre-exact cutting layout. The preview is explicitly labelled as a simplified
-  box approximation for this reason.
+- **Create Marker** — as of WP-11, "Full nest" runs a real polygon-overlap
+  bottom-left-fill + simulated-annealing search in a Web Worker (`js/nesting-core.js`),
+  so pieces genuinely slide and interlock into each other's concave notches rather
+  than only stacking rectangular bounding boxes. "Fast preview" keeps the original
+  instant shelf/bounding-box heuristic available side-by-side for a quick estimate
+  before committing to a full nest. See the WP-11 note further below for the one
+  documented scope call (first-party search vs. a textbook NFP/Minkowski-difference
+  implementation).
 - **Snapshot** is a single frozen ghost, not a multi-version history — freezing again
   replaces the previous ghost. It's meant for "compare my current edit against the
   version I started from," not an undo tree (Undo/Redo already covers step-by-step
@@ -137,9 +146,14 @@ install it. After the first load it works **fully offline**.
 - **Object Browser** is a read-only inspection + jump-to-focus panel in this release —
   it doesn't rename/delete objects itself (use the existing point editor, Layers pane,
   or text editor for that).
-- **SVG, DXF and PDF** exports are native and CAD/print-ready (the PDF is a
-  hand-built, valid PDF-1.4 with vector cutting lines). PNG/JPEG/AI/HPGL still
-  fall back to the vector output — the natural next integration points.
+- **SVG, DXF, HPGL, PNG/JPEG and PDF** exports are all native as of WP-12 — DXF
+  uses real AAMA/ASTM D6673 layer numbering, HPGL emits genuine `IN;SP1;PU;PD;`
+  plotter output, PNG/JPEG rasterize at a selectable DPI (clamped to the
+  browser's real canvas limits, with an honest "reduced" notice rather than a
+  silent failure), and PDF supports tiled home-printing (registration marks +
+  assembly map) alongside the original single-page mode. AI is the same PDF
+  wrapped in a small `%AI` compatibility header. None of these fall back to
+  the vector SVG payload under a different extension any more.
 - **Projects** round-trip losslessly via `Save Project (.json)` → `Import Project`.
 - **3D avatars** are high-quality *procedural stylised* characters (not photoreal
   humans — that needs sculpted, rigged GLB models an in-browser script can't
@@ -353,6 +367,41 @@ install it. After the first load it works **fully offline**.
   3D canvas — and every camera/zoom distance computed against it — sized
   itself to the sidebar's content height instead of the real window. This
   is what read as "the mannequin doesn't fit" and "zoom doesn't work."
+- **Keyboard canvas operation** (WP-17) covers whole pattern pieces —
+  `[`/`]` to select the previous/next piece, arrow keys (Shift for 0.1cm
+  fine adjustment) to nudge the selected piece, Delete/Backspace to remove
+  it. Construction points/lines/arcs/circles and text annotations are still
+  mouse-only; keyboard-only editing of those is a documented gap, not yet
+  built. `[`/`]` were chosen over Tab/Shift+Tab specifically so Tab keeps
+  doing its normal job of moving DOM focus between toolbar and panel
+  controls, rather than being hijacked for in-canvas selection.
+- **Reduced motion** (WP-17): `state.reduceMotion` existed before this pass
+  but only ever shortened one CSS transition variable (`--med`) — it did
+  nothing for the other two (`--fast`/`--slow`) and nothing at all for 3D
+  Preview's continuous auto-rotate, so a user with the OS-level "reduce
+  motion" preference set (or the in-app toggle on) still saw the avatar
+  spinning. Now all three CSS timing tokens respond, `View3D.setReduceMotion`
+  forces auto-rotate off regardless of the spin toggle, and a first-ever
+  visit seeds the setting from `matchMedia('(prefers-reduced-motion: reduce)')`
+  rather than always defaulting to "on." 3D Cloth Lab has no continuous
+  ambient motion of its own to reduce — its camera only spins during an
+  explicit turntable export, never during normal viewing — so there was
+  nothing to wire there.
+- **Modal accessibility** (WP-17): every `.overlay` (theme/settings/command
+  palette/generic/onboarding) now gets `role="dialog"`/`aria-modal`, moves
+  focus to its first control on open, traps Tab inside it while open, and
+  returns focus to whatever triggered it on close — implemented once via a
+  shared `MutationObserver` over each overlay's own `show` class rather than
+  touching every different open/close call site individually.
+- **Colour contrast** (WP-17): a computed WCAG audit of all 6 theme × light/
+  dark combinations found the Egyptian light theme's secondary text colour
+  (`--ink-2: #8a7350`) at 3.95:1 against its background and 4.27:1 against
+  panels — both below the 4.5:1 AA threshold for normal text. Darkened to
+  `#7a6545` (4.86:1 / 4.58:1); every other theme variant already cleared
+  4.5:1 and was left unchanged.
+- **Google Drive/OneDrive sync** (WP-18) is a bring-your-own-OAuth-client-ID
+  integration — see the note further below — not a BerryStudio-hosted
+  service, the same honesty pattern as WP-1's bring-your-own-AI-key design.
 
 ---
 
@@ -391,10 +440,12 @@ BerryStudio/                (repository root)
 │   ├── darts.js          Dart manipulation: pivot, transfer, slash-and-spread
 │   ├── pleats.js         Pleat/gather/tuck added-width math
 │   ├── berry-studio-api.js  `window.BerryStudio` local automation API (see "Automation API" below)
+│   ├── cloud-sync.js     Optional cloud sync: self-hosted endpoint, Google Drive, OneDrive (BYO OAuth client ID)
 │   ├── vendor/           Generated/vendored files (pattern-spec-validate.generated.js) — see its own README
 │   └── app.js            Application controller (wires everything)
 ├── schema/               Pattern Spec JSON Schema + example fixtures (see Honest notes)
 ├── scripts/              Dev-only tooling (schema validator codegen)
+├── docs/                 Bilingual docs site (quick start, tools, shortcuts, AI setup, 3D troubleshooting, FAQ)
 ├── test/                 node --test unit tests for the root app (`npm test`)
 ├── e2e/                  Playwright smoke + AI settings specs (`npm run test:e2e`)
 └── icons/                App icons (SVG + PNG 192/512)

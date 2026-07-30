@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — Quick start</title>
+<meta name="description" content="Quick start guide for BerryStudio, the bilingual fashion pattern design & grading app.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/styles.css">
+<link rel="stylesheet" href="docs.css">
+<link rel="icon" href="../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>Quick start</h1>
+      <p class="lede">Three steps from a blank tab to a graded, exportable pattern.</p>
+      <ol>
+        <li><strong>Pick a pattern</strong> from the Library (124 pre-designed patterns, or the 24-design Fancy Collection), or describe one in the AI tab — either your own offline heuristic reading of a photo, or a configured AI provider (see <a href="ai-setup/index.html">Bring your own AI</a>).</li>
+        <li><strong>Choose the category, size, standard, or custom measurements</strong> — the pattern regrades instantly, live, with no re-generation step.</li>
+        <li><strong>Refine with the tools</strong> (see the <a href="tools.html">tool reference</a>), check it in 3D Preview or the 3D Cloth Lab, then print or export from the Project menu — SVG, DXF, HPGL, PNG/JPEG, tiled PDF, or AI.</li>
+      </ol>
+
+      <h2>The two pattern paths</h2>
+      <p><strong>Grade an existing pattern</strong> is the fastest path: pick anything from the Library or Fancy Collection, then use the Size pane to grade it to any size, standard, or custom measurement set. Every piece — outline, darts, notches, grainline — re-resolves automatically.</p>
+      <p><strong>Draft your own</strong> starts from a blank canvas: use the vector tools (Pen, Line, Arc, Freehand) or the associative construction tools (Point/Line/Arc/Circle with named, formula-driven coordinates) to build a piece from scratch, then "Create Pattern Piece" to promote it into a real, gradable, exportable shape.</p>
+
+      <h2>Quick Draft builder</h2>
+      <p>For a fast real pattern without drawing anything: pick a garment kind (Dress, Top, Shirt, Skirt, Trousers, Robe, Gown, Jacket, Coat, Suit), and the builder shows only the measurements that kind actually needs. Adjust Length/Flare/Fit/Sleeve (and, for skirts, Pleats) and it produces real, gradable pattern pieces immediately.</p>
+
+      <h2>Checking your work</h2>
+      <p>Before cutting or exporting, run <strong>Check Pattern</strong> (Export pane, or ⌘K) — it verifies closed outlines, self-intersection, grainline angle, seam-allowance validity, cut-on-fold symmetry, seam-length parity between paired edges, notch alignment, and ease, with pass/warn/fail chips per piece. It's a real patternmaking checklist, not a cosmetic linter — see the <a href="faq.html">FAQ</a> for what each check actually verifies.</p>
+
+      <div class="docs-callout"><strong>Everything here works fully offline.</strong> BerryStudio is a local-first, installable PWA — no account, no sign-in, and (unless you opt in to a cloud AI provider or a sync target) no data ever leaves your device.</div>
+
+      <h2>Automation</h2>
+      <p>Everything above is also scriptable: open the browser console on the running app and call <code>window.BerryStudio.generate/grade/nest/export/validate(...)</code> directly. See the main <a href="../README.md">README</a>'s Automation API section for runnable examples.</p>
+    </div>
+
+    <div data-lang="ar">
+      <h1>البداية السريعة</h1>
+      <p class="lede">ثلاث خطوات من تبويب فارغ إلى باترون متدرّج وجاهز للتصدير.</p>
+      <ol>
+        <li><strong>اختر باترونًا</strong> من المكتبة (124 تصميمًا جاهزًا، أو مجموعة Fancy المكوّنة من 24 تصميمًا)، أو صِفه في تبويب الذكاء الاصطناعي — إمّا بالتحليل التلقائي غير المتصل للصورة، أو عبر مزوّد ذكاء اصطناعي تُعِدّه بنفسك (راجع <a href="ai-setup/index.html">استخدم ذكاءك الاصطناعي</a>).</li>
+        <li><strong>اختر الفئة والمقاس والمعيار أو قياسات مخصّصة</strong> — يتدرّج الباترون فورًا دون أي خطوة إعادة توليد.</li>
+        <li><strong>عدّل بالأدوات</strong> (راجع <a href="tools.html">دليل الأدوات</a>)، عاينه في المعاينة ثلاثية الأبعاد أو في 3D Cloth Lab، ثم اطبع أو صدّر من قائمة المشروع — SVG أو DXF أو HPGL أو PNG/JPEG أو PDF مُقسّم للطباعة المنزلية، أو AI.</li>
+      </ol>
+
+      <h2>مساران لإنشاء الباترون</h2>
+      <p><strong>تدريج باترون موجود</strong> هو الأسرع: اختر أي تصميم من المكتبة أو مجموعة Fancy، ثم استخدم لوحة المقاسات لتدريجه إلى أي مقاس أو معيار أو قياسات مخصّصة. كل قطعة — الحدود الخارجية، البنسات، علامات التطابق، خط اتجاه القماش — تُعاد حسابها تلقائيًا.</p>
+      <p><strong>ارسم باترونك الخاص</strong> يبدأ من لوحة فارغة: استخدم أدوات المتجهات (قلم، خط، قوس، رسم حر) أو أدوات الإنشاء الترابطية (نقطة/خط/قوس/دائرة بإحداثيات مسمّاة ومرتبطة بمعادلات) لبناء قطعة من الصفر، ثم "إنشاء قطعة باترون" لترقيتها إلى شكل حقيقي قابل للتدريج والتصدير.</p>
+
+      <h2>أداة الرسم السريع</h2>
+      <p>لباترون حقيقي وسريع دون رسم أي شيء: اختر نوع القطعة (فستان، بلوزة، قميص، تنورة، بنطال، جلباب، فستان سهرة، جاكيت، معطف، بدلة)، وتعرض الأداة فقط القياسات التي يحتاجها هذا النوع فعليًا. عدّل الطول/الاتساع/القصة/الكم (وللتنانير، الكسرات) لتحصل فورًا على قطع باترون حقيقية وقابلة للتدريج.</p>
+
+      <h2>التحقق من عملك</h2>
+      <p>قبل القص أو التصدير، شغّل <strong>فحص الباترون</strong> (لوحة التصدير، أو ⌘K) — يتحقق من إغلاق الحدود الخارجية، وعدم التقاطع الذاتي، وزاوية خط اتجاه القماش، وصحة سماح الحياكة، وتماثل الطية، وتطابق أطوال خطوط الخياطة المتقابلة، وتطابق علامات التطابق، والراحة (Ease) — بعلامات نجاح/تحذير/فشل لكل قطعة. إنها قائمة تحقق حقيقية في صناعة الأنماط، وليست فحصًا شكليًا — راجع <a href="faq.html">الأسئلة الشائعة</a> لمعرفة ما يتحقق منه كل فحص فعليًا.</p>
+
+      <div class="docs-callout"><strong>كل ما سبق يعمل بالكامل دون اتصال بالإنترنت.</strong> BerryStudio تطبيق ويب تقدّمي (PWA) محلي أولًا وقابل للتثبيت — بلا حساب، بلا تسجيل دخول، ودون مغادرة أي بيانات جهازك (ما لم تفعّل بنفسك مزوّد ذكاء اصطناعي سحابيًا أو وجهة مزامنة).</div>
+
+      <h2>الأتمتة</h2>
+      <p>كل ما سبق قابل للبرمجة أيضًا: افتح طرفية المتصفح (console) في التطبيق قيد التشغيل ونادِ <code>window.BerryStudio.generate/grade/nest/export/validate(...)</code> مباشرة. راجع قسم "Automation API" في <a href="../README.md">README</a> الرئيسي لأمثلة قابلة للتشغيل.</p>
+    </div>
+  </main>
+</div>
+<script src="docs.js"></script>
+</body>
+</html>

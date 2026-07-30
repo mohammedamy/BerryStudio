@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — Tool reference</title>
+<meta name="description" content="Every drafting, grading, and export tool in BerryStudio, explained.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/styles.css">
+<link rel="stylesheet" href="docs.css">
+<link rel="icon" href="../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>Tool reference</h1>
+      <p class="lede">Every tool on the stage toolbar, plus the drafting, grading, and construction features layered on top.</p>
+
+      <h2>Vector drafting tools</h2>
+      <table class="docs-table">
+        <tr><th>Tool</th><th>What it does</th></tr>
+        <tr><td><strong>Select</strong></td><td>Click pieces to select, drag to move. Shift-click for multi-select.</td></tr>
+        <tr><td><strong>Pen (Bézier)</strong></td><td>Draw precise Bézier curves. Click for corner points, drag for smooth handles.</td></tr>
+        <tr><td><strong>Line</strong></td><td>Draw perfectly straight construction lines between two points.</td></tr>
+        <tr><td><strong>Arc</strong></td><td>Draw curved seams like armholes and necklines (curved, 3-click).</td></tr>
+        <tr><td><strong>Freehand</strong></td><td>Sketch freely with the mouse — for loose creative drafting.</td></tr>
+        <tr><td><strong>Filled Shape</strong></td><td>Draw a closed polygon directly.</td></tr>
+        <tr><td><strong>Symmetry</strong></td><td>Mirror everything across a centre axis — for bodices and other fold-symmetric pieces.</td></tr>
+        <tr><td><strong>Knife</strong></td><td>Slit or split a pattern piece to add darts or style lines.</td></tr>
+        <tr><td><strong>Move</strong></td><td>Nudge selected geometry with pixel precision.</td></tr>
+        <tr><td><strong>Rotate</strong></td><td>Rotate a piece around a pivot — e.g. for rotating darts.</td></tr>
+        <tr><td><strong>Scale</strong></td><td>Scale a piece up or down proportionally.</td></tr>
+        <tr><td><strong>Measure</strong></td><td>Measure any distance on the pattern, in cm or inches.</td></tr>
+        <tr><td><strong>Seam Allowance</strong></td><td>Add an automatic seam allowance around the cutting edge — uniform, or per-edge with miter/round/bevel corner joins (WP-14).</td></tr>
+        <tr><td><strong>Notch</strong></td><td>Place alignment notches so pieces match when sewing.</td></tr>
+        <tr><td><strong>Grainline</strong></td><td>Set the grainline so fabric is cut in the right direction.</td></tr>
+        <tr><td><strong>Text</strong></td><td>Click the canvas to place a formatted label; click existing text to edit it. Drag with Select to move.</td></tr>
+      </table>
+
+      <h2>Associative construction tools</h2>
+      <p>A real, live-linked CAD layer beneath the vector tools: <strong>Point</strong>, <strong>Line</strong>, <strong>Arc</strong>, and <strong>Circle</strong> reference each other by ID, not frozen coordinates — dragging a point (or giving it a formula that references a Variable or a body measurement) updates everything built on it, including after grading. <strong>Variables</strong> are named formulas reusable in any point's X/Y. A <strong>background trace image</strong> with two-point calibration lets you draft over a reference photo at the correct real-world scale. <strong>Create Pattern Piece</strong> promotes a closed loop of points into a real, exportable piece — a one-time snapshot, not a live link: editing the original points afterwards no longer reshapes the promoted piece.</p>
+
+      <h2>Grading &amp; nesting</h2>
+      <table class="docs-table">
+        <tr><th>Feature</th><th>What it does</th></tr>
+        <tr><td><strong>Auto Grade</strong> (Size pane)</td><td>Proportional grading across XXS→6XL, Intl/Egyptian/Saudi standards, Kids ages, and fully custom measurements — live, no re-generation.</td></tr>
+        <tr><td><strong>Grade Rules</strong> (Size pane, WP-13)</td><td>Per-piece, per-outline-point dx/dy-per-size-step overrides on top of the proportional grade, for industrial-style control over exactly how a piece grows between sizes. Import/export as JSON. A point with no authored rule keeps grading through the normal proportional formula, unchanged.</td></tr>
+        <tr><td><strong>Grade Nest preview</strong> (WP-13)</td><td>Overlays every size of one piece at a shared alignment point — the standard visual professional patternmakers use to sanity-check a grade.</td></tr>
+        <tr><td><strong>Create Marker</strong></td><td>Nest pattern pieces onto a virtual fabric roll. <strong>Fast preview</strong> is instant bounding-box packing; <strong>Full nest</strong> (WP-11) runs a real polygon-interlocking search in a background Web Worker, with a genuine cancelable Stop button, and reports real fabric utilisation and yardage.</td></tr>
+      </table>
+
+      <h2>Dart manipulation &amp; drafting upgrades (WP-14)</h2>
+      <table class="docs-table">
+        <tr><th>Feature</th><th>What it does</th></tr>
+        <tr><td><strong>Edit Darts</strong> (Layers → piece properties)</td><td><strong>Pivot</strong> rotates a dart's legs around its apex while preserving the intake angle; <strong>Slash &amp; Spread</strong> widens a dart by a fixed amount at the apex.</td></tr>
+        <tr><td><strong>Walk the Seam</strong> (Export pane)</td><td>Pick a declared seam pair and drag one slider to check that both edges match at every position along their length, not just at the ends — the visual, interactive front-end to the same arc-length math Check Pattern's seam-length-parity check uses.</td></tr>
+        <tr><td><strong>Pleats</strong> (Quick Draft, skirts)</td><td>None / Light / Full pleat presets add real, computed extra fabric width to the panel — not just a cosmetic label.</td></tr>
+      </table>
+
+      <h2>Export &amp; validation</h2>
+      <table class="docs-table">
+        <tr><th>Feature</th><th>What it does</th></tr>
+        <tr><td><strong>Check Pattern</strong> (⌘K)</td><td>8 patternmaking checks — closed outline, self-intersection, grainline, seam-allowance validity, cut-on-fold symmetry, seam-length parity, notch alignment, ease — with pass/warn/fail chips.</td></tr>
+        <tr><td><strong>Export</strong></td><td>SVG, DXF (real AAMA/ASTM D6673 layers), HPGL (genuine plotter cut-lines), PNG/JPEG (selectable DPI), PDF (single-page or tiled home-printing with registration marks and an assembly map), AI (PDF + <code>%AI</code> header).</td></tr>
+        <tr><td><strong>Pattern Summary</strong></td><td>A one-page bilingual print sheet: size table, a dimensioned diagram per piece, and construction notes.</td></tr>
+        <tr><td><strong>Tech Pack</strong></td><td>Piece list with EN/AR names and the full custom-measurement set for the current grade.</td></tr>
+      </table>
+
+      <h2>Other panels</h2>
+      <p><strong>Layers</strong> — add/delete/rename pieces (EN+AR), per-layer colour and fill opacity, lock/unlock, show/hide. <strong>Object Browser</strong> — a read-only list of every point/line/arc/circle/piece/text with a name filter; click a row to jump the canvas to it. <strong>Snapshot</strong> — freeze the pattern's current state as a translucent ghost layer to compare later edits against. <strong>3D Preview / 3D Cloth Lab</strong> — see the <a href="3d-troubleshooting.html">3D troubleshooting</a> page.</p>
+    </div>
+
+    <div data-lang="ar">
+      <h1>دليل الأدوات</h1>
+      <p class="lede">كل أداة في شريط أدوات اللوحة، إضافة إلى ميزات الرسم والتدريج والإنشاء المبنية فوقها.</p>
+
+      <h2>أدوات الرسم المتجهي</h2>
+      <table class="docs-table">
+        <tr><th>الأداة</th><th>ماذا تفعل</th></tr>
+        <tr><td><strong>تحديد</strong></td><td>اضغط على القطعة لتحديدها، واسحب لتحريكها. Shift للتحديد المتعدد.</td></tr>
+        <tr><td><strong>قلم (منحنى بيزيه)</strong></td><td>ارسم منحنيات بيزيه دقيقة. اضغط لنقطة زاوية، واسحب لمنحنى ناعم.</td></tr>
+        <tr><td><strong>خط مستقيم</strong></td><td>ارسم خطوط إنشاء مستقيمة تمامًا بين نقطتين.</td></tr>
+        <tr><td><strong>قوس</strong></td><td>ارسم الخياطات المنحنية مثل فتحة الإبط وفتحة الرقبة (منحني، بثلاث نقرات).</td></tr>
+        <tr><td><strong>رسم حر</strong></td><td>ارسم بحرية بالماوس — للتصميم الإبداعي الحر.</td></tr>
+        <tr><td><strong>شكل مملوء</strong></td><td>ارسم مضلعًا مغلقًا مباشرة.</td></tr>
+        <tr><td><strong>تماثل</strong></td><td>اعكس كل شيء حول محور مركزي — مناسب لقطع الصدر والقطع المتماثلة عند الطيّة.</td></tr>
+        <tr><td><strong>قص/تقسيم</strong></td><td>افتح أو قسّم القطعة لإضافة بنس أو خطوط تصميم.</td></tr>
+        <tr><td><strong>تحريك</strong></td><td>حرّك العناصر المحددة بدقة عالية.</td></tr>
+        <tr><td><strong>تدوير</strong></td><td>دوّر القطعة حول محور — مثلًا لتدوير البنسات.</td></tr>
+        <tr><td><strong>تكبير/تصغير</strong></td><td>كبّر أو صغّر القطعة بنسبة متناسقة.</td></tr>
+        <tr><td><strong>قياس</strong></td><td>قِس أي مسافة على الباترون بالسنتيمتر أو البوصة.</td></tr>
+        <tr><td><strong>سماح الحياكة</strong></td><td>أضف سماح حياكة تلقائي حول خط القص — موحّد، أو لكل حافة على حدة بزوايا التقاء دائرية/مشطوفة (WP-14).</td></tr>
+        <tr><td><strong>علامة تطابق</strong></td><td>ضع علامات تطابق لتتقابل القطع أثناء الخياطة.</td></tr>
+        <tr><td><strong>خط اتجاه القماش</strong></td><td>حدد اتجاه القماش ليتم القص في الاتجاه الصحيح.</td></tr>
+        <tr><td><strong>نص</strong></td><td>اضغط على اللوحة لإضافة نص منسّق؛ اضغط على نص موجود لتعديله. اسحبه بأداة التحديد لتحريكه.</td></tr>
+      </table>
+
+      <h2>أدوات الإنشاء الترابطية</h2>
+      <p>طبقة CAD حقيقية ومرتبطة تحت أدوات المتجهات: <strong>نقطة</strong> و<strong>خط</strong> و<strong>قوس</strong> و<strong>دائرة</strong> تشير إلى بعضها بمعرّفات وليس بإحداثيات ثابتة — سحب نقطة (أو ربطها بمعادلة تشير إلى متغيّر أو قياس جسم) يحدّث كل ما بُني عليها، بما في ذلك بعد التدريج. <strong>المتغيّرات</strong> هي معادلات مسمّاة قابلة لإعادة الاستخدام في إحداثيات X/Y لأي نقطة. تتيح <strong>صورة مرجعية خلفية</strong> مع معايرة بنقطتين الرسم فوق صورة مرجعية بالمقياس الحقيقي الصحيح. <strong>إنشاء قطعة باترون</strong> يرقّي حلقة نقاط مغلقة إلى قطعة حقيقية قابلة للتصدير — لقطة لمرة واحدة، وليست رابطًا حيًّا: تعديل النقاط الأصلية لاحقًا لا يغيّر شكل القطعة المُرقّاة.</p>
+
+      <h2>التدريج والتعشيق</h2>
+      <table class="docs-table">
+        <tr><th>الميزة</th><th>ماذا تفعل</th></tr>
+        <tr><td><strong>التدريج التلقائي</strong> (لوحة المقاسات)</td><td>تدريج تناسبي عبر XXS→6XL، ومعايير دولية/مصرية/سعودية، وأعمار الأطفال، وقياسات مخصّصة بالكامل — فوريًّا دون إعادة توليد.</td></tr>
+        <tr><td><strong>قواعد التدريج</strong> (لوحة المقاسات، WP-13)</td><td>تجاوزات dx/dy لكل نقطة في كل قطعة فوق التدريج التناسبي، لتحكم بصناعي بكيفية نمو القطعة بين المقاسات بدقة. استيراد/تصدير كملف JSON. أي نقطة بلا قاعدة مُعرَّفة تستمر بالتدريج عبر الصيغة التناسبية العادية دون تغيير.</td></tr>
+        <tr><td><strong>معاينة تعشيق التدريج</strong> (WP-13)</td><td>تراكب كل مقاسات قطعة واحدة عند نقطة محاذاة مشتركة — العرض المرئي المعياري الذي يعتمده صانعو الأنماط المحترفون للتحقق من التدريج.</td></tr>
+        <tr><td><strong>إنشاء تخطيط قص (Marker)</strong></td><td>عشّق قطع الباترون على لفة قماش افتراضية. <strong>المعاينة السريعة</strong> تعشيق فوري بالمربعات المحيطة؛ <strong>التعشيق الكامل</strong> (WP-11) يشغّل بحثًا حقيقيًا بتداخل المضلعات في Web Worker بالخلفية، بزر إيقاف فعلي قابل للإلغاء، ويُبلغ عن نسبة استخدام القماش والمتر الفعلي.</td></tr>
+      </table>
+
+      <h2>تعديل البنسات وتحسينات الرسم (WP-14)</h2>
+      <table class="docs-table">
+        <tr><th>الميزة</th><th>ماذا تفعل</th></tr>
+        <tr><td><strong>تعديل البنسات</strong> (الطبقات ← خصائص القطعة)</td><td><strong>Pivot</strong> يدوّر أرجل البنس حول قمته مع الحفاظ على زاوية الفتحة؛ <strong>Slash &amp; Spread</strong> يوسّع البنس بمقدار ثابت عند القمة.</td></tr>
+        <tr><td><strong>تتبّع خط الخياطة</strong> (لوحة التصدير)</td><td>اختر زوج خياطة معلن واسحب شريط تمرير للتحقق من تطابق الحافتين عند كل نقطة على طول الخياطة، وليس عند الطرفين فقط.</td></tr>
+        <tr><td><strong>الكسرات (Pleats)</strong> (الرسم السريع، التنانير)</td><td>إعدادات بلا/خفيف/كامل تضيف عرض قماش إضافي محسوبًا فعليًا للقطعة — وليس مجرد تسمية شكلية.</td></tr>
+      </table>
+
+      <h2>التصدير والتحقق</h2>
+      <table class="docs-table">
+        <tr><th>الميزة</th><th>ماذا تفعل</th></tr>
+        <tr><td><strong>فحص الباترون</strong> (⌘K)</td><td>8 فحوصات في صناعة الأنماط — إغلاق الحدود، التقاطع الذاتي، خط اتجاه القماش، صحة سماح الحياكة، تماثل الطية، تطابق أطوال الخياطة، تطابق العلامات، الراحة — بعلامات نجاح/تحذير/فشل.</td></tr>
+        <tr><td><strong>التصدير</strong></td><td>SVG، وDXF (طبقات AAMA/ASTM D6673 حقيقية)، وHPGL (خطوط قص حقيقية للراسمة)، وPNG/JPEG (دقة قابلة للاختيار)، وPDF (صفحة واحدة أو مُقسّم للطباعة المنزلية بعلامات تسجيل وخريطة تجميع)، وAI (PDF مع ترويسة <code>%AI</code>).</td></tr>
+        <tr><td><strong>ملخص الباترون</strong></td><td>ورقة طباعة ثنائية اللغة من صفحة واحدة: جدول مقاسات، ورسم مُقاس لكل قطعة، وملاحظات إنشاء.</td></tr>
+        <tr><td><strong>حزمة تقنية (Tech Pack)</strong></td><td>قائمة القطع بأسمائها بالإنجليزية والعربية، وكامل مجموعة القياسات المخصّصة للتدريج الحالي.</td></tr>
+      </table>
+
+      <h2>لوحات أخرى</h2>
+      <p><strong>الطبقات</strong> — إضافة/حذف/إعادة تسمية القطع (بالإنجليزية والعربية)، لون وشفافية تعبئة لكل طبقة، قفل/فتح، إظهار/إخفاء. <strong>متصفح العناصر</strong> — قائمة للقراءة فقط بكل نقطة/خط/قوس/دائرة/قطعة/نص مع فلتر بالاسم؛ اضغط على صف للقفز إليه في اللوحة. <strong>لقطة (Snapshot)</strong> — جمّد حالة الباترون الحالية كطبقة شبح شفافة لمقارنة التعديلات اللاحقة بها. <strong>المعاينة ثلاثية الأبعاد / 3D Cloth Lab</strong> — راجع صفحة <a href="3d-troubleshooting.html">حل مشاكل العرض ثلاثي الأبعاد</a>.</p>
+    </div>
+  </main>
+</div>
+<script src="docs.js"></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — OpenAI-compatible provider setup</title>
+<meta name="description" content="Configure an OpenAI-compatible provider (OpenRouter, Groq, Together, Mistral, Azure, DeepSeek...) in BerryStudio.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../css/styles.css">
+<link rel="stylesheet" href="../docs.css">
+<link rel="icon" href="../../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>OpenAI-compatible</h1>
+      <p class="lede">For any provider that speaks the OpenAI <code>/chat/completions</code> API shape — OpenRouter, Groq, Together AI, Mistral, Azure OpenAI, DeepSeek, and others. You type the base URL yourself.</p>
+      <table class="docs-table">
+        <tr><th>Endpoint</th><td>Whatever base URL you enter, e.g. <code>https://openrouter.ai/api/v1</code></td></tr>
+        <tr><th>Needs a key</th><td>Usually yes (provider-dependent) — the field is optional here since some self-hosted OpenAI-compatible servers don't require one</td></tr>
+        <tr><th>Structured output</th><td>Attempted via <code>response_format: {type: "json_schema"}</code> where the provider supports it; falls back gracefully otherwise</td></tr>
+      </table>
+      <h2>Setup</h2>
+      <ol>
+        <li>Get an API key and base URL from your chosen provider's docs.</li>
+        <li>In BerryStudio: Settings → AI Provider → choose <strong>OpenAI-compatible</strong>.</li>
+        <li>Enter the base URL and key, fetch or type a model name, then <strong>Test Connection</strong>.</li>
+      </ol>
+      <div class="docs-callout warn">Because this adapter accepts <em>any</em> URL you type, BerryStudio's CSP allows outbound requests to <code>https:</code> generally (plus <code>localhost</code>) rather than a short fixed list — see the <a href="index.html">AI setup overview</a>'s security note.</div>
+    </div>
+
+    <div data-lang="ar">
+      <h1>متوافق مع OpenAI</h1>
+      <p class="lede">لأي مزوّد يتحدث بنفس شكل واجهة <code>/chat/completions</code> الخاصة بـOpenAI — OpenRouter، Groq، Together AI، Mistral، Azure OpenAI، DeepSeek، وغيرها. تكتب العنوان الأساسي بنفسك.</p>
+      <table class="docs-table">
+        <tr><th>نقطة النهاية</th><td>أي عنوان أساسي تُدخله، مثل <code>https://openrouter.ai/api/v1</code></td></tr>
+        <tr><th>يحتاج مفتاحًا</th><td>عادةً نعم (يعتمد على المزوّد) — الحقل اختياري هنا لأن بعض خوادم OpenAI المتوافقة ذاتية الاستضافة لا تتطلب مفتاحًا</td></tr>
+        <tr><th>مخرجات منظّمة</th><td>تُحاوَل عبر <code>response_format: {type: "json_schema"}</code> حيث يدعمها المزوّد؛ وإلا فتراجع سلس بدونها</td></tr>
+      </table>
+      <h2>الإعداد</h2>
+      <ol>
+        <li>احصل على مفتاح API وعنوان أساسي من وثائق المزوّد الذي اخترته.</li>
+        <li>في BerryStudio: الإعدادات ← مزوّد الذكاء الاصطناعي ← اختر <strong>متوافق مع OpenAI</strong>.</li>
+        <li>أدخل العنوان الأساسي والمفتاح، اجلب أو اكتب اسم نموذج، ثم <strong>Test Connection</strong>.</li>
+      </ol>
+      <div class="docs-callout warn">بما أن هذا المحوّل يقبل <em>أي</em> عنوان تكتبه، فإن سياسة أمان المحتوى في BerryStudio تسمح بطلبات صادرة إلى <code>https:</code> عمومًا (إضافة إلى <code>localhost</code>) بدلًا من قائمة قصيرة ثابتة — راجع ملاحظة الأمان في <a href="index.html">نظرة عامة على إعداد الذكاء الاصطناعي</a>.</div>
+    </div>
+  </main>
+</div>
+<script src="../docs.js"></script>
+</body>
+</html>

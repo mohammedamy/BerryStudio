@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — Bring your own AI</title>
+<meta name="description" content="How to configure an AI provider in BerryStudio: security model and provider list.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../css/styles.css">
+<link rel="stylesheet" href="../docs.css">
+<link rel="icon" href="../../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>Bring your own AI</h1>
+      <p class="lede">BerryStudio's AI pattern generator works fully offline with a built-in heuristic. Configuring a real AI provider (Settings → AI Provider) fuses that heuristic with actual vision/language understanding — you supply your own key, nothing is billed or brokered by BerryStudio itself.</p>
+
+      <h2>Pick a route</h2>
+      <div class="docs-grid">
+        <a class="docs-card" href="anthropic.html"><div class="t">Anthropic (Claude)</div><div class="d">Hosted, needs an API key</div></a>
+        <a class="docs-card" href="openai.html"><div class="t">OpenAI</div><div class="d">Hosted, needs an API key</div></a>
+        <a class="docs-card" href="gemini.html"><div class="t">Google Gemini</div><div class="d">Hosted, needs an API key</div></a>
+        <a class="docs-card" href="openai-compatible.html"><div class="t">OpenAI-compatible</div><div class="d">OpenRouter, Groq, Together, Mistral, Azure, DeepSeek…</div></a>
+        <a class="docs-card" href="ollama.html"><div class="t">Ollama (local)</div><div class="d">No key, runs on your machine</div></a>
+        <a class="docs-card" href="lmstudio.html"><div class="t">LM Studio (local)</div><div class="d">No key, runs on your machine</div></a>
+        <a class="docs-card" href="llamacpp-vllm.html"><div class="t">llama.cpp / vLLM (local)</div><div class="d">No key, runs on your machine or your own server</div></a>
+        <a class="docs-card" href="proxy.html"><div class="t">Your own proxy</div><div class="d">Safest — your key stays server-side, never in the browser</div></a>
+      </div>
+
+      <h2>Security model — the same everywhere</h2>
+      <ul>
+        <li><strong>Session storage by default.</strong> API keys live in <code>sessionStorage</code> and are cleared the moment you close the tab. They never enter the app's saved project state or <code>localStorage</code>'s main blob.</li>
+        <li><strong>Optional encrypted persistence.</strong> "Remember this key on this device" asks for a passphrase and encrypts the key with WebCrypto (PBKDF2, 250,000 iterations, SHA-256 → AES-GCM) before it ever touches <code>localStorage</code>. The derived key lives in memory only — a fresh page load always re-prompts for the passphrase.</li>
+        <li><strong>Keys are stripped everywhere they could leak</strong> — Save Project exports, the service worker's cache, every log line and toast (redacted to <code>sk-…abcd</code>).</li>
+        <li><strong>A real Content-Security-Policy</strong> restricts what the page can even talk to — see <code>index.html</code>'s <code>&lt;meta&gt;</code> CSP tag.</li>
+        <li><strong>Test Connection always shows the adapter's real error text</strong> (e.g. an actual <code>401 invalid x-api-key</code>), never a generic "failed" message — so a misconfiguration is diagnosable from inside the app.</li>
+      </ul>
+
+      <div class="docs-callout warn"><strong>Local servers with an arbitrary base URL</strong> (OpenAI-compatible / llama.cpp / vLLM) mean the page's CSP <code>connect-src</code> is deliberately broadened to <code>https:</code> + <code>http(s)://localhost:*</code> rather than a short fixed list — a stricter list would silently break those adapters the moment you pointed them anywhere not already on it. This is a documented trade-off, not an oversight — see the main <a href="../../README.md">README</a>'s Honest notes.</div>
+
+      <h2>Local model support beyond a server</h2>
+      <p>Besides talking to a local server (Ollama/LM Studio/llama.cpp/vLLM), BerryStudio can also run a small vision model directly in your browser via WebGPU/WASM (a Hugging Face model ID, streamed and cached by <code>transformers.js</code>) — the Settings → AI Provider tab includes a Capability Probe that checks whether your device can do this before offering it. Picking a local <code>.onnx</code>/<code>.gguf</code> file from disk is not wired up yet; the UI says so honestly rather than pretending to accept it.</p>
+    </div>
+
+    <div data-lang="ar">
+      <h1>استخدم ذكاءك الاصطناعي الخاص</h1>
+      <p class="lede">مولّد الأنماط بالذكاء الاصطناعي في BerryStudio يعمل بالكامل دون اتصال بالإنترنت بتحليل تلقائي مدمج. إعداد مزوّد ذكاء اصطناعي حقيقي (الإعدادات ← مزوّد الذكاء الاصطناعي) يدمج ذلك التحليل مع فهم رؤية/لغة حقيقي — أنت من يوفّر مفتاحك الخاص، ولا تُحاسِبك BerryStudio نفسها ولا تتوسّط في أي فوترة.</p>
+
+      <h2>اختر مسارًا</h2>
+      <div class="docs-grid">
+        <a class="docs-card" href="anthropic.html"><div class="t">Anthropic (Claude)</div><div class="d">مستضاف، يحتاج مفتاح API</div></a>
+        <a class="docs-card" href="openai.html"><div class="t">OpenAI</div><div class="d">مستضاف، يحتاج مفتاح API</div></a>
+        <a class="docs-card" href="gemini.html"><div class="t">Google Gemini</div><div class="d">مستضاف، يحتاج مفتاح API</div></a>
+        <a class="docs-card" href="openai-compatible.html"><div class="t">متوافق مع OpenAI</div><div class="d">OpenRouter، Groq، Together، Mistral، Azure، DeepSeek…</div></a>
+        <a class="docs-card" href="ollama.html"><div class="t">Ollama (محلي)</div><div class="d">بلا مفتاح، يعمل على جهازك</div></a>
+        <a class="docs-card" href="lmstudio.html"><div class="t">LM Studio (محلي)</div><div class="d">بلا مفتاح، يعمل على جهازك</div></a>
+        <a class="docs-card" href="llamacpp-vllm.html"><div class="t">llama.cpp / vLLM (محلي)</div><div class="d">بلا مفتاح، على جهازك أو خادمك الخاص</div></a>
+        <a class="docs-card" href="proxy.html"><div class="t">الخادم الوسيط الخاص بك</div><div class="d">الأكثر أمانًا — مفتاحك يبقى على الخادم، لا يصل للمتصفح أبدًا</div></a>
+      </div>
+
+      <h2>نموذج الأمان — نفسه في كل مكان</h2>
+      <ul>
+        <li><strong>تخزين الجلسة افتراضيًا.</strong> مفاتيح API تعيش في <code>sessionStorage</code> وتُمسح فور إغلاق التبويب. لا تدخل أبدًا في حالة المشروع المحفوظة أو كتلة <code>localStorage</code> الرئيسية.</li>
+        <li><strong>تخزين مشفّر اختياري.</strong> خيار "تذكّر هذا المفتاح على هذا الجهاز" يطلب عبارة مرور ويشفّر المفتاح عبر WebCrypto (PBKDF2، 250,000 تكرار، SHA-256 ← AES-GCM) قبل أن يلمس <code>localStorage</code>. المفتاح المُشتق يعيش في الذاكرة فقط — أي تحميل جديد للصفحة يطلب عبارة المرور من جديد.</li>
+        <li><strong>تُزال المفاتيح من كل مكان قد تتسرب منه</strong> — تصدير حفظ المشروع، ذاكرة تخزين عامل الخدمة (service worker)، وكل سطر سجل وإشعار (تُخفى إلى <code>sk-…abcd</code>).</li>
+        <li><strong>سياسة أمان محتوى حقيقية (CSP)</strong> تقيّد ما يمكن للصفحة الاتصال به أصلًا — راجع وسم <code>&lt;meta&gt;</code> الخاص بـCSP في <code>index.html</code>.</li>
+        <li><strong>اختبار الاتصال يعرض دائمًا نص الخطأ الحقيقي</strong> من المزوّد (مثل <code>401 invalid x-api-key</code> فعليًا)، وليس رسالة "فشل" عامة — بحيث يمكن تشخيص أي خطأ إعداد من داخل التطبيق نفسه.</li>
+      </ul>
+
+      <div class="docs-callout warn"><strong>الخوادم المحلية ذات عنوان أساسي حر</strong> (متوافق مع OpenAI / llama.cpp / vLLM) تعني أن <code>connect-src</code> الخاصة بسياسة أمان المحتوى للصفحة موسّعة عمدًا إلى <code>https:</code> + <code>http(s)://localhost:*</code> بدلًا من قائمة قصيرة ثابتة — قائمة أكثر تشددًا كانت ستكسر هذه المحوّلات بصمت فور توجيهها لأي مكان ليس عليها مسبقًا. هذا تنازل موثّق، وليس إغفالًا — راجع ملاحظات الصدق في <a href="../../README.md">README</a> الرئيسي.</div>
+
+      <h2>دعم النماذج المحلية بخلاف الخادم</h2>
+      <p>إلى جانب التحدث مع خادم محلي (Ollama/LM Studio/llama.cpp/vLLM)، يمكن لـBerryStudio أيضًا تشغيل نموذج رؤية صغير مباشرة في متصفحك عبر WebGPU/WASM (بمعرّف نموذج من Hugging Face، يُبَث ويُخزَّن مؤقتًا بواسطة <code>transformers.js</code>) — يتضمن تبويب الإعدادات ← مزوّد الذكاء الاصطناعي فاحص قدرات يتحقق من إمكانية جهازك قبل عرض هذا الخيار. اختيار ملف <code>.onnx</code>/<code>.gguf</code> محلي من القرص غير مُفعّل بعد؛ تقول الواجهة ذلك بصدق بدلًا من التظاهر بقبوله.</p>
+    </div>
+  </main>
+</div>
+<script src="../docs.js"></script>
+</body>
+</html>

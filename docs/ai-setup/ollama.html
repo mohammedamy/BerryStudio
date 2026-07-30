@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — Ollama setup</title>
+<meta name="description" content="Configure a local Ollama server as BerryStudio's AI provider, including the CORS command it needs.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../css/styles.css">
+<link rel="stylesheet" href="../docs.css">
+<link rel="icon" href="../../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>Ollama (local)</h1>
+      <p class="lede">Runs entirely on your own machine. No API key, no data ever leaves your computer. Supports vision with a vision-capable model (e.g. <code>llava</code>, <code>llama3.2-vision</code>, <code>qwen2-vl</code>).</p>
+      <table class="docs-table">
+        <tr><th>Endpoint</th><td><code>http://localhost:11434</code></td></tr>
+        <tr><th>Needs a key</th><td>No</td></tr>
+        <tr><th>Model list</th><td>Fetched live from Ollama's own <code>/api/tags</code> — only models you've already pulled show up</td></tr>
+      </table>
+      <h2>Setup</h2>
+      <ol>
+        <li>Install Ollama from <a href="https://ollama.com/">ollama.com</a> and pull a model, e.g. <code>ollama pull llama3.2-vision</code>.</li>
+        <li><strong>Start Ollama with browser access enabled</strong> — by default it blocks requests from a web page origin. Run:
+          <span class="docs-code">OLLAMA_ORIGINS="https://mohammedamy.github.io,http://localhost:8791" ollama serve</span>
+          Adjust the second origin to whatever local port you're actually serving BerryStudio from during development.
+        </li>
+        <li>In BerryStudio: Settings → AI Provider → choose <strong>Ollama (local)</strong>. Click <strong>Fetch Models</strong> to list what you've pulled.</li>
+        <li><strong>Test Connection</strong> — if it fails with a CORS-shaped error, double-check step 2's <code>OLLAMA_ORIGINS</code> value matches the exact origin BerryStudio is running from.</li>
+      </ol>
+    </div>
+
+    <div data-lang="ar">
+      <h1>Ollama (محلي)</h1>
+      <p class="lede">يعمل بالكامل على جهازك الخاص. بلا مفتاح API، ولا تغادر أي بيانات جهازك أبدًا. يدعم الرؤية مع نموذج يدعم الرؤية (مثل <code>llava</code>، <code>llama3.2-vision</code>، <code>qwen2-vl</code>).</p>
+      <table class="docs-table">
+        <tr><th>نقطة النهاية</th><td><code>http://localhost:11434</code></td></tr>
+        <tr><th>يحتاج مفتاحًا</th><td>لا</td></tr>
+        <tr><th>قائمة النماذج</th><td>تُجلب مباشرة من <code>/api/tags</code> الخاصة بـOllama — تظهر فقط النماذج التي سبق تنزيلها</td></tr>
+      </table>
+      <h2>الإعداد</h2>
+      <ol>
+        <li>ثبّت Ollama من <a href="https://ollama.com/">ollama.com</a> وحمّل نموذجًا، مثل <code>ollama pull llama3.2-vision</code>.</li>
+        <li><strong>شغّل Ollama مع تفعيل الوصول من المتصفح</strong> — فهو يمنع طلبات صفحة الويب افتراضيًا. نفّذ:
+          <span class="docs-code">OLLAMA_ORIGINS="https://mohammedamy.github.io,http://localhost:8791" ollama serve</span>
+          عدّل العنوان الثاني ليطابق المنفذ المحلي الذي تشغّل BerryStudio عليه فعليًا أثناء التطوير.
+        </li>
+        <li>في BerryStudio: الإعدادات ← مزوّد الذكاء الاصطناعي ← اختر <strong>Ollama (محلي)</strong>. اضغط <strong>Fetch Models</strong> لعرض ما حمّلته.</li>
+        <li><strong>Test Connection</strong> — إذا فشل بخطأ يشبه CORS، تحقق من أن قيمة <code>OLLAMA_ORIGINS</code> في الخطوة 2 تطابق العنوان الفعلي الذي يعمل عليه BerryStudio تمامًا.</li>
+      </ol>
+    </div>
+  </main>
+</div>
+<script src="../docs.js"></script>
+</body>
+</html>

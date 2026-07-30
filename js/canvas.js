@@ -879,6 +879,23 @@ export const Canvas = (() => {
   function renamePiece(i, name){ if(!pieces[i]) return false; pushUndo(); pieces[i].name={ ...pieces[i].name, ...name }; render(); return true; }
   function setPieceProps(i, props){ if(!pieces[i]) return false; Object.assign(pieces[i], props); render(); return true; }
 
+  // WP-17: keyboard nudge for the selected piece (arrow keys in js/app.js's
+  // keys() handler). Translates every coordinate-bearing field a piece can
+  // have, not just outline — darts/notches/grain/curves would otherwise
+  // visually detach from a moved outline.
+  function nudgePiece(i, dx, dy){
+    const p = pieces[i]; if(!p) return false;
+    pushUndo();
+    const shift = ([x,y]) => [x+dx, y+dy];
+    p.outline = p.outline.map(shift);
+    if (p.darts) p.darts = p.darts.map(d => d.map(shift));
+    if (p.notches) p.notches = p.notches.map(shift);
+    if (p.grain) p.grain = p.grain.map(shift);
+    if (p.curves) p.curves = p.curves.map(c => ({ ...c, c1: shift(c.c1), c2: shift(c.c2) }));
+    render();
+    return true;
+  }
+
   // ============================================================
   // CONSTRUCTION GEOMETRY — points, referential lines/arcs/circles,
   // custom parametric variables, "promote to pattern piece", trace image.
@@ -1167,7 +1184,7 @@ export const Canvas = (() => {
            doUndo, doRedo, getZoom, toggleVisible, toggleLock, setColor, setMaterial, getSelected,
            selectPiece, clearSketch, render,
            addText, updateText, removeText, getTexts, onTextRequest,
-           addPiece, removePiece, renamePiece, setPieceProps,
+           addPiece, removePiece, renamePiece, setPieceProps, nudgePiece,
            onZoomChange, exportSVG, exportDXF, exportHPGL, exportRaster, exportPDF, loadPieces, clearAll, screenOf,
            // construction geometry
            addPoint, removePoint, getPointById, getPoints, setPointName, setPointXY, setPointFormula, onPointRequest,

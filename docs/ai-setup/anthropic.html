@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BerryStudio Docs — Anthropic (Claude) setup</title>
+<meta name="description" content="Configure Anthropic Claude as BerryStudio's AI provider.">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../css/styles.css">
+<link rel="stylesheet" href="../docs.css">
+<link rel="icon" href="../../icons/icon-512.png" type="image/png">
+</head>
+<body class="docs">
+<div class="docs-shell">
+  <nav class="docs-side" aria-label="Docs navigation">
+    <a class="docs-brand" href="../../index.html"><span class="dot"></span> BerryStudio</a>
+    <div id="docsNav" class="docs-nav"></div>
+  </nav>
+  <main class="docs-main">
+    <div class="docs-topbar"><button id="docsLangBtn" class="docs-lang-btn" type="button">العربية</button></div>
+
+    <div data-lang="en">
+      <h1>Anthropic (Claude)</h1>
+      <p class="lede">Hosted, needs your own Anthropic API key. Supports both text-only and vision (image) generation.</p>
+      <table class="docs-table">
+        <tr><th>Endpoint</th><td><code>https://api.anthropic.com/v1/messages</code></td></tr>
+        <tr><th>Needs a key</th><td>Yes</td></tr>
+        <tr><th>Vision</th><td>Yes — the photo is sent as base64-encoded image content alongside your prompt</td></tr>
+      </table>
+      <h2>Setup</h2>
+      <ol>
+        <li>Get an API key at <a href="https://console.anthropic.com/">console.anthropic.com</a>.</li>
+        <li>In BerryStudio: Settings → AI Provider → choose <strong>Anthropic (Claude)</strong>.</li>
+        <li>Paste your key. Click <strong>Fetch Models</strong> to populate the model list, or type one directly.</li>
+        <li>Click <strong>Test Connection</strong> — a green result confirms the key and model work; a red one shows the real error (e.g. an invalid key, or a model name typo).</li>
+      </ol>
+      <div class="docs-callout">Anthropic's API requires an extra browser-specific header to allow direct in-browser calls (rather than only server-to-server). BerryStudio's adapter sends this automatically — you don't need to configure anything beyond the key.</div>
+      <p>No local server, no CORS setup needed — Anthropic's API already permits direct browser requests with the header BerryStudio sends.</p>
+    </div>
+
+    <div data-lang="ar">
+      <h1>Anthropic (Claude)</h1>
+      <p class="lede">مستضاف، يحتاج مفتاح API خاص بك من Anthropic. يدعم التوليد النصي فقط وكذلك التوليد بالرؤية (الصور).</p>
+      <table class="docs-table">
+        <tr><th>نقطة النهاية</th><td><code>https://api.anthropic.com/v1/messages</code></td></tr>
+        <tr><th>يحتاج مفتاحًا</th><td>نعم</td></tr>
+        <tr><th>الرؤية</th><td>نعم — تُرسَل الصورة كمحتوى مُرمَّز base64 مع طلبك النصي</td></tr>
+      </table>
+      <h2>الإعداد</h2>
+      <ol>
+        <li>احصل على مفتاح API من <a href="https://console.anthropic.com/">console.anthropic.com</a>.</li>
+        <li>في BerryStudio: الإعدادات ← مزوّد الذكاء الاصطناعي ← اختر <strong>Anthropic (Claude)</strong>.</li>
+        <li>الصق مفتاحك. اضغط <strong>Fetch Models</strong> لملء قائمة النماذج، أو اكتب اسم نموذج مباشرة.</li>
+        <li>اضغط <strong>Test Connection</strong> — نتيجة خضراء تؤكد أن المفتاح والنموذج يعملان؛ نتيجة حمراء تعرض الخطأ الحقيقي (مثل مفتاح غير صالح، أو خطأ إملائي في اسم النموذج).</li>
+      </ol>
+      <div class="docs-callout">تتطلب واجهة برمجة تطبيقات Anthropic ترويسة إضافية خاصة بالمتصفح للسماح بطلبات مباشرة من داخل المتصفح (بدلًا من خادم إلى خادم فقط). محوّل BerryStudio يرسلها تلقائيًا — لا تحتاج لإعداد أي شيء غير المفتاح.</div>
+      <p>لا حاجة لخادم محلي أو إعداد CORS — واجهة Anthropic تسمح بالفعل بطلبات المتصفح المباشرة مع الترويسة التي يرسلها BerryStudio.</p>
+    </div>
+  </main>
+</div>
+<script src="../docs.js"></script>
+</body>
+</html>
