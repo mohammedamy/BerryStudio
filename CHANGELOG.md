@@ -6,7 +6,54 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
-## Bundled avatar gallery
+## Bundled avatar gallery — grounding, garment, and a stray-geometry fix
+
+### Fixed
+- **Avatars appearing "50% under the ground"** — 3 of the 8 bundled models
+  (`girl.glb`, `girl3.glb`, `boy2.glb`) have a flat circular turntable base
+  baked into the same single mesh as the body (confirmed via direct glTF
+  vertex inspection). `loadGLB()` grounds the whole mesh's bounding box, so
+  the disc's bottom — not the feet — was landing at floor level, pushing
+  the disc up through the ankles. Fixed with a new heuristic
+  `stripPedestal()` in `js/three-view.js`: detect the anomalous bottom
+  band per-mesh (vertex density/radius several times the leg cross-section
+  right above it), then clip everything below it by Y. The other 5 models
+  were unaffected and still render exactly as before.
+- **A second, unrelated model defect found while fixing the above** —
+  `girl3.glb` has a ~3200-vertex disconnected island near the shoulder/head
+  with over 2x the body's own radius, rendering as a long diagonal spike; a
+  reconstruction artifact from the source pipeline, not caused by the
+  grounding fix. Fixed via a new `keepLargestComponent()` (connected-
+  component analysis, size-relative threshold so small legitimate details
+  like an unwelded eyelash bit on other models aren't also deleted).
+- **Avatars appearing completely naked** — `loadGLB()` never called the
+  garment-building code (`buildGarment()`, the bodice/skirt/trousers/sleeve
+  shells sized from your measurements); it only ran for the procedural
+  body. Extracted the sizing math into `computeBodyDims()` and now call
+  `buildGarment()` from `loadGLB()` too, so a custom GLB avatar shows
+  whatever pattern is actually loaded, through the same existing
+  visibility/fabric wiring used by the procedural body.
+- **Sleeve capsules mispositioned on GLB avatars** — a bug introduced (and
+  caught before shipping) while wiring `buildGarment()` into `loadGLB()`:
+  sleeves are normally parented to procedural arm-pivot groups that don't
+  exist on a GLB body, silently falling back to garmentGroup's own
+  (0,0,0) origin instead of the shoulder. Fixed by computing the
+  equivalent absolute shoulder position directly when no arm pivot exists.
+
+### Honest notes
+- **Garment fit on a GLB avatar is approximate, not measured from the
+  mesh** — the garment shell is sized from your entered measurements, not
+  the loaded model's actual proportions. On a build stockier than that
+  generic assumption (`boy2.glb`) the shell can end up mostly *inside* the
+  skin and only partially visible. A per-mesh auto-fit (measuring the
+  mesh's own torso radius to rescale the shell) was implemented and
+  reverted: these AI-generated avatars don't share one rest pose (arm
+  position relative to the torso varies model to model, confirmed by
+  direct vertex inspection), so no single Y-band was safe from sampling
+  outstretched-arm geometry on at least one bundled model — the first
+  attempt scaled the garment to several times the body's real size.
+  Reverted to the simpler, always-correctly-sized generic version rather
+  than ship a fragile fit heuristic.
 
 ### Added
 - **8 real GLB avatar models** (`avatars/`) selectable per category in

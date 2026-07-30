@@ -455,6 +455,54 @@ in the app's own header.
   than shipped as-is. Not precached by the service worker (same
   network-first-then-cache behaviour as any other same-origin asset) —
   only fetched when a user actually picks one.
+- **Bundled avatar gallery — grounding, garment, and a pre-existing model
+  defect fixed** (`js/three-view.js`). A user reported avatars from the
+  gallery above looking "50% under the ground" and completely naked.
+  Both were real:
+  - **Grounding**: 3 of the 8 models (`girl.glb`, `girl3.glb`, `boy2.glb`)
+    have a flat circular turntable base baked into the same single mesh as
+    the body — confirmed by direct glTF vertex inspection (a bottom Y-band
+    with several times the vertex density/radius of the leg cross-section
+    right above it). `loadGLB()`'s auto-scale-to-height math grounds the
+    *whole* mesh's bounding box, so the disc's bottom — not the character's
+    feet — was landing at floor level, pushing the disc up through the
+    ankles. Fixed with a heuristic `stripPedestal()`: detect the anomalous
+    bottom band per-mesh, then clip everything below it by Y (not by
+    radius — a disc is a smooth surface welded into the body, so a
+    radius-only cut left the disc's narrower center behind as a stub;
+    tried and reverted). A **separate, unrelated** defect turned up on
+    `girl3.glb` while fixing this: a ~3200-vertex island floating near the
+    shoulder/head with over 2x the body's own radius, rendering as a long
+    diagonal spike — a disconnected reconstruction artifact from the
+    source pipeline, not caused by the grounding fix. Fixed alongside it
+    via `keepLargestComponent()` (connected-component analysis, dropping
+    any non-body island above a size-relative threshold so real small
+    details like an unwelded eyelash bit elsewhere aren't quietly deleted
+    too). The other 5 models needed neither fix — no pedestal, no stray
+    island.
+  - **Naked avatars**: `loadGLB()`'s body-loading path never called the
+    garment-building code at all — `buildGarment()` (bodice/skirt/
+    trousers/sleeve capsule shells sized from your measurements) only ran
+    for the procedural body. Fixed by extracting the measurement-sizing
+    math into `computeBodyDims()` and calling `buildGarment()` from
+    `loadGLB()` too, once the body is scaled and grounded — the existing
+    per-piece visibility/fabric wiring (`pieceVisMap`/`applyFabric`) then
+    picks up and shows the garment that matches whatever pattern is
+    actually loaded, unchanged.
+  - **Known limitation, not fixed this pass**: the garment shell's size
+    comes from your entered measurements, not from the loaded GLB mesh
+    itself, so fit is approximate. On a build stockier than that generic
+    assumption (`boy2.glb` in particular) the shell can end up mostly
+    *inside* the skin surface and only partially visible, rather than
+    fully clipped-through-naked as before, but still not a clean fit. A
+    per-mesh auto-fit was attempted and reverted: these AI-generated
+    avatars don't share one rest pose (arm position relative to the torso
+    varies model to model, confirmed by direct inspection), so no single
+    "safe" Y-band for measuring torso-only girth avoided sampling
+    outstretched-arm geometry on at least one bundled model — one attempt
+    scaled the garment to several times the body's size instead of
+    fixing it. Reverted in favor of the simpler, always-correctly-sized
+    (if occasionally under-fitting) generic version.
 
 ---
 

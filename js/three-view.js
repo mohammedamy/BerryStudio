@@ -260,17 +260,13 @@ export const View3D = (() => {
   }
   function sphere(r, mat) { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), mat); m.castShadow = true; return m; }
 
-  // ---------- procedural body ----------
-  function buildProcedural(category, m) {
-    curCategory = category;
-    root.clear(); limbs = {};
-    bodyGroup = new THREE.Group(); root.add(bodyGroup);
-
+  // Measurement-only body proportions — independent of which mesh (procedural
+  // or a loaded GLB) they get applied to, so loadGLB() can reuse it to size
+  // and place a garment on a custom avatar the same way buildProcedural() does.
+  function computeBodyDims(category, m) {
     const female = category === "women" || category === "girls";
     const kid = category === "girls" || category === "boys";
-    const skin = skinMat(category);
-
-    const H = cm(m.height); curH = H;
+    const H = cm(m.height);
     const headH = H * (kid ? 0.16 : 0.128);
     const neckTopY = H - headH;
     const shoulderY = H * (kid ? 0.80 : 0.82);
@@ -284,6 +280,23 @@ export const View3D = (() => {
     if (kid) { waistR = (waistR + chestR) / 2 * 0.96; hipR *= 0.97; shoulderHalf *= 0.98; }
 
     const span = shoulderY - hipY;
+    const armLen = H * (kid ? 0.40 : 0.44);
+    const upperR = R(m.bicep) * (female ? 0.9 : 1.0);
+    const legLen = hipY;
+    const thighR = R(m.thigh) * (female ? 1.0 : 0.98);
+    return { female, kid, H, headH, neckTopY, shoulderY, hipY, chestR, waistR, hipR, shoulderHalf, neckR, span, armLen, upperR, legLen, thighR };
+  }
+
+  // ---------- procedural body ----------
+  function buildProcedural(category, m) {
+    curCategory = category;
+    root.clear(); limbs = {};
+    bodyGroup = new THREE.Group(); root.add(bodyGroup);
+
+    const d0 = computeBodyDims(category, m);
+    const { female, kid, H, headH, neckTopY, shoulderY, hipY, chestR, waistR, hipR, shoulderHalf, neckR, span } = d0;
+    curH = H;
+    const skin = skinMat(category);
     // torso lathe (round) then flattened front-to-back
     const torso = lathe([
       [hipR * 0.55, hipY - span * 0.16],
@@ -329,8 +342,7 @@ export const View3D = (() => {
     });
 
     // arms — pivot groups at the shoulder so the walk swings naturally
-    const armLen = H * (kid ? 0.40 : 0.44);
-    const upperR = R(m.bicep) * (female ? 0.9 : 1.0);
+    const { armLen, upperR } = d0;
     [-1, 1].forEach(s => {
       const g = new THREE.Group(); g.position.set(s * shoulderHalf * 0.95, shoulderY - span * 0.04, 0);
       const upper = capsule(upperR, armLen * 0.42, skin); upper.position.y = -armLen * 0.26; g.add(upper);
@@ -341,8 +353,7 @@ export const View3D = (() => {
     });
 
     // legs — pivot groups at the hip
-    const legLen = hipY;
-    const thighR = R(m.thigh) * (female ? 1.0 : 0.98);
+    const { legLen, thighR } = d0;
     [-1, 1].forEach(s => {
       const g = new THREE.Group(); g.position.set(s * hipR * 0.5, hipY - span * 0.05, 0);
       const thigh = capsule(thighR, legLen * 0.4, skin); thigh.position.y = -legLen * 0.24; g.add(thigh);
@@ -352,7 +363,7 @@ export const View3D = (() => {
       bodyGroup.add(g); limbs["leg" + s] = g;
     });
 
-    buildGarment(category, m, { chestR, waistR, hipR, shoulderHalf, shoulderY, hipY, span, H, armLen, upperR, legLen, thighR });
+    buildGarment(category, m, d0);
     controls.target.set(0, H * 0.5, 0);
     frameCamera(H);
   }
@@ -461,25 +472,180 @@ export const View3D = (() => {
     const slR = category === "girls" ? 1.4 : category === "boys" ? 1.15 : 1.03;
     [-1, 1].forEach(s => {
       const sl = capsule(d.upperR * slR + t, slLen, fabricMat("sleeve"));
-      sl.position.y = -slLen * 0.5 - d.armLen * 0.02;
       sl.name = "sleeve";
-      (limbs["arm" + s] || garmentGroup).add(sl);
+      const armPivot = limbs["arm" + s];
+      if (armPivot) {
+        sl.position.y = -slLen * 0.5 - d.armLen * 0.02;
+        armPivot.add(sl);
+      } else {
+        // No arm-pivot group to hang the sleeve under — a GLB avatar body
+        // (loadGLB() has no procedural limb rig). Place it in garmentGroup's
+        // own (world) space instead, at the same spot the pivot group itself
+        // would sit in buildProcedural() plus the same local offset — static,
+        // no walk-swing, but correctly at the shoulder instead of collapsing
+        // to the origin (mid-body) the way parenting to garmentGroup with a
+        // pivot-relative position previously did.
+        sl.position.set(s * d.shoulderHalf * 0.95, d.shoulderY - d.span * 0.04 - slLen * 0.5 - d.armLen * 0.02, 0);
+        garmentGroup.add(sl);
+      }
     });
     applyPieceVisibility();
+  }
+
+  // Some single-mesh AI-generated avatars (image-to-3D pipelines like the
+  // ComfyUI exports bundled in avatars/) bake in a flat circular turntable
+  // base under the feet, in the same mesh as the body (confirmed by direct
+  // glTF POSITION-accessor inspection: girl.glb, girl3.glb, boy2.glb each
+  // have a bottom Y-band with several times the vertex density and radius
+  // of the leg cross-section directly above it; man/fatman/boy/girl2/woman2
+  // don't). Left in place, the whole bounding box — including the disc —
+  // gets grounded, which pushes the disc up through the ankles and reads as
+  // the avatar being "sunk into the ground". This scans the mesh's local Y
+  // histogram for that signature and drops the offending triangles before
+  // grounding. Heuristic, not a general mesh-cleanup tool — tuned against
+  // the 8 bundled models (see the "50%-under-the-ground" fix in CHANGELOG).
+  function stripPedestal(group) {
+    group.traverse(o => {
+      if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+      const geo = o.geometry;
+      const pos = geo.attributes.position;
+      geo.computeBoundingBox();
+      const bb = geo.boundingBox;
+      const height = bb.max.y - bb.min.y;
+      if (height <= 0) return;
+      const nBins = 20;
+      const counts = new Array(nBins).fill(0);
+      const maxR = new Array(nBins).fill(0);
+      for (let i = 0; i < pos.count; i++) {
+        const y = pos.getY(i);
+        let bin = Math.floor((y - bb.min.y) / height * nBins);
+        if (bin >= nBins) bin = nBins - 1; if (bin < 0) bin = 0;
+        counts[bin]++;
+        const r = Math.hypot(pos.getX(i), pos.getZ(i));
+        if (r > maxR[bin]) maxR[bin] = r;
+      }
+      // reference radius/density: a band clearly on the leg (above any
+      // pedestal, below the hips) — 15%-30% of the mesh's own height.
+      let refN = 0, refR = 0, n = 0;
+      for (let b = 3; b < 6; b++) { if (counts[b] > 0) { refN += counts[b]; refR += maxR[b]; n++; } }
+      if (!n) return;
+      refN /= n; refR /= n;
+      if (!refR || !refN) return;
+      // contiguous wide/dense bins from the very bottom = the pedestal.
+      const pedestalBins = [];
+      for (let b = 0; b < 3; b++) {
+        if (counts[b] / refN > 3.5 || maxR[b] / refR > 1.8) pedestalBins.push(b);
+        else break;
+      }
+      if (!pedestalBins.length) return;
+      const cutoffY = bb.min.y + height * (pedestalBins[pedestalBins.length - 1] + 1) / nBins;
+      // The radius test above is only used to DETECT that a pedestal band
+      // exists — a solid disc is a smooth, continuous surface welded right
+      // into the body mesh (confirmed: single connected component, not a
+      // separate object), so its interior spans every radius from the rim
+      // down to ~0 at the center, same as a real ankle's cross-section. A
+      // radius test at removal time can only ever catch the wide rim,
+      // leaving the disc's narrower center intact as a stray stub/spike.
+      // Once a pedestal band is flagged, clip it by Y alone — drop the
+      // whole triangle if any vertex falls below cutoffY, full stop.
+      const idx = geo.getIndex();
+      const triCount = idx ? idx.count / 3 : pos.count / 3;
+      const vIdx = (k) => idx ? idx.getX(k) : k;
+      const keep = [];
+      for (let t = 0; t < triCount; t++) {
+        const i0 = vIdx(t * 3), i1 = vIdx(t * 3 + 1), i2 = vIdx(t * 3 + 2);
+        if (pos.getY(i0) < cutoffY || pos.getY(i1) < cutoffY || pos.getY(i2) < cutoffY) continue; // pedestal band — drop
+        keep.push(i0, i1, i2);
+      }
+      if (keep.length === triCount * 3) return; // nothing matched — leave geometry untouched
+      const Arr = pos.count > 65535 ? Uint32Array : Uint16Array;
+      geo.setIndex(new THREE.BufferAttribute(new Arr(keep), 1));
+      geo.computeBoundingBox();
+      geo.computeBoundingSphere();
+    });
+  }
+
+  // Separate, pre-existing defect confirmed on top of the pedestal: girl3.glb
+  // has a ~3200-vertex island (plus a couple of smaller ones) with over 2x
+  // the body's own radius, floating near the shoulder/head — a disconnected
+  // reconstruction artifact from the source pipeline, rendering as a long
+  // diagonal spike. The disc handled by stripPedestal() is welded into the
+  // body's own connected component (confirmed above) so this needs a
+  // different test: any island that is NOT the body itself. Real character
+  // geometry is one connected surface in every bundled model; small genuine
+  // extra bits (an unwelded eyelash/accessory island, seen as 60-190
+  // vertices in a couple of the clean models) are kept via a size-relative
+  // threshold so this doesn't quietly delete legitimate detail.
+  function keepLargestComponent(group) {
+    group.traverse(o => {
+      if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+      const geo = o.geometry;
+      const pos = geo.attributes.position;
+      const idx = geo.getIndex();
+      const triCount = idx ? idx.count / 3 : pos.count / 3;
+      const vIdx = (k) => idx ? idx.getX(k) : k;
+      const parent = new Int32Array(pos.count);
+      for (let i = 0; i < parent.length; i++) parent[i] = i;
+      const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+      const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
+      const tris = new Array(triCount);
+      for (let t = 0; t < triCount; t++) {
+        const i0 = vIdx(t * 3), i1 = vIdx(t * 3 + 1), i2 = vIdx(t * 3 + 2);
+        tris[t] = [i0, i1, i2];
+        union(i0, i1); union(i1, i2);
+      }
+      const sizes = new Map();
+      for (let i = 0; i < parent.length; i++) { const r = find(i); sizes.set(r, (sizes.get(r) || 0) + 1); }
+      let largestRoot = -1, largestSize = -1;
+      sizes.forEach((size, root) => { if (size > largestSize) { largestSize = size; largestRoot = root; } });
+      if (largestRoot < 0) return;
+      const dropThreshold = pos.count * 0.005; // >0.5% of the mesh's own vertices
+      const keep = [];
+      let dropped = false;
+      for (const [i0, i1, i2] of tris) {
+        const root = find(i0);
+        if (root !== largestRoot && sizes.get(root) > dropThreshold) { dropped = true; continue; }
+        keep.push(i0, i1, i2);
+      }
+      if (!dropped) return;
+      const Arr = pos.count > 65535 ? Uint32Array : Uint16Array;
+      geo.setIndex(new THREE.BufferAttribute(new Arr(keep), 1));
+      geo.computeBoundingBox();
+      geo.computeBoundingSphere();
+    });
   }
 
   // ---------- optional GLB avatar ----------
   async function loadGLB(category, m) {
     if (!GLTFLoader) throw new Error("no loader");
     const gltf = await new Promise((res, rej) => new GLTFLoader().load(avatarURLs[category], res, undefined, rej));
-    root.clear(); bodyGroup = gltf.scene; root.add(bodyGroup);
+    root.clear(); limbs = {}; bodyGroup = gltf.scene; root.add(bodyGroup);
     bodyGroup.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    stripPedestal(bodyGroup);
+    keepLargestComponent(bodyGroup);
     // normalise to the requested height
     const box = new THREE.Box3().setFromObject(bodyGroup);
     const size = new THREE.Vector3(); box.getSize(size);
     const H = cm(m.height); curH = H;
     const sc = H / (size.y || 1); bodyGroup.scale.setScalar(sc);
     const box2 = new THREE.Box3().setFromObject(bodyGroup); bodyGroup.position.y -= box2.min.y;
+    // Wear the currently loaded pattern: the same measurement-derived garment
+    // shapes buildProcedural() uses, placed in the same absolute-Y frame
+    // (feet ~0, head ~H) that grounding just put this GLB body into. Visible
+    // parts/fabric are decided by the existing pieceVisMap()/applyFabric()
+    // plumbing, unchanged — this just gives it a garmentGroup to act on.
+    // The garment shell is sized from generic measurements, not this specific
+    // mesh, so its fit is approximate — on a build stockier than that generic
+    // assumption the shell can sit partly inside the skin surface rather than
+    // hugging it exactly (see the Honest note in README/CHANGELOG). A
+    // per-mesh auto-fit was tried and reverted: these AI-generated avatars
+    // don't share one rest pose (some hold arms out near shoulder height,
+    // others lower, closer to the waist — confirmed by direct vertex
+    // inspection), so any fixed "safe" Y-band for measuring torso-only girth
+    // ends up sampling outstretched-arm geometry on at least one bundled
+    // model, which blew the garment size up several times over. Approximate
+    // but stable beats precise but occasionally wildly wrong.
+    buildGarment(category, m, computeBodyDims(category, m));
     controls.target.set(0, H * 0.5, 0); frameCamera(H);
   }
 
