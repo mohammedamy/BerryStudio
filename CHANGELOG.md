@@ -6,6 +6,65 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Tech-pack tracing: read a technical flat-sketch image's actual measured pieces, not a style-factor guess
+
+### Fixed
+- The previous "Generate Pattern Pieces From This" pipeline (sourced from
+  the billboard's worn-garment **photo**) was the wrong tool for a
+  **technical flat-sketch / tech-pack image** — an AI-drawn spec sheet with
+  individual piece diagrams and printed dimensions (front bodice, back
+  bodice, sleeve, neck facing, front placket, drawstring cord/tunnel, hem
+  curve, etc.). A photo of a worn garment only ever yields *relative*
+  proportions (longer/shorter, fuller/slimmer); it cannot give exact
+  measurements, and running the local silhouette heuristic against one
+  produced a generic, unrelated pattern (reported directly: "a completely
+  irrelevant useless pattern"). Tech-pack images need their printed numbers
+  *read*, not guessed.
+
+### Added
+- **`pieces[].outlineCm`, `pieces[].label`, `garment.referenceMeasurementsCm`**
+  (`schema/pattern-spec.v1.json`) — an opt-in, schema-validated exception
+  for technical flat-sketch images specifically: a vision-capable provider
+  can emit a piece's actual traced outline in centimeters (read directly off
+  the image's own printed dimensions) instead of a relative style factor,
+  plus a proper garment-specific label (e.g. "Front Placket") and, if the
+  reference image prints its own body-measurement table, the measurements
+  that table was drafted for.
+- **`AIGen.buildFromMeasuredPieces(spec, measurements)`** (`js/ai.js`) — turns
+  traced `outlineCm` pieces into real pattern pieces: non-uniform 2-axis
+  scaling (`scaleFactors()`) rescales the reference sheet's own body to the
+  actual wearer's measurements when `referenceMeasurementsCm` is given
+  (chest/waist/hips-driven width, backLen/height-driven length), or uses the
+  traced coordinates exactly as given otherwise. Runs through the same
+  `PatternValidator` every other AIGen-built piece does.
+- **`generateFromSpec()` measured-pieces routing** (`js/ai-spec-pipeline.js`)
+  — detects `pieces[].outlineCm` in a validated spec and routes to
+  `buildFromMeasuredPieces()` instead of `specToStyle()`+`AIGen.build()`,
+  with its own one-time geometry-validation retry (distinct from the
+  existing JSON-schema-validation retry): if the traced geometry fails
+  `PatternValidator` (self-intersection, non-closed outline, etc.), the
+  specific failing checks are fed back to the provider for one corrective
+  attempt before honestly falling back.
+- System prompt now explains **two distinct modes** to the model — relative
+  style factors for a photo/text-only prompt, versus literal `outlineCm`
+  tracing for a technical flat-sketch/tech-pack image — plus a 4th few-shot
+  example demonstrating the tech-pack mode.
+- **"Read Pattern Pieces From This Tech-Pack"** — a new button on the
+  Fashion Billboard's *drawn pattern* card (`bbPattern`, the AI-drawn
+  tech-pack image), sourced from that image rather than the worn-garment
+  photo, with a prompt that steers the provider toward literal tracing. The
+  existing "Generate Pattern Pieces From This" button (photo card) is
+  untouched and still uses relative style factors, now documented honestly
+  as such in its own hint text.
+
+### Note
+This mode is only as good as the configured **Text Generation** provider's
+vision capability — it needs a real, vision-capable model actually reading
+the image's printed numbers, not the local pixel-analysis fallback (which
+cannot read text/dimensions off an image at all). No provider configured,
+or a non-vision model selected, falls back to the existing photo-heuristic
+behavior with an honest toast, never a silently wrong pattern.
+
 ## Fashion Billboard: generate real pattern pieces from the AI photo, not just a background trace
 
 ### Added

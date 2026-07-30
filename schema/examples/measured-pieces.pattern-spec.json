@@ -1,0 +1,31 @@
+{
+  "specVersion": "1",
+  "garment": {
+    "type": "top",
+    "category": "women",
+    "closure": "button",
+    "referenceMeasurementsCm": { "chest": 85, "waist": 68, "backLen": 63, "height": 168 }
+  },
+  "pieces": [
+    {
+      "id": "front-bodice", "role": "bodice-front", "cutOnFold": true, "quantity": 1, "grainline": "straight",
+      "label": { "en": "Front Bodice", "ar": "صدرية أمامية" },
+      "outlineCm": [[0, 0], [21, 0], [22, 62], [0, 62]]
+    },
+    {
+      "id": "back-bodice", "role": "bodice-back", "cutOnFold": true, "quantity": 1, "grainline": "straight",
+      "label": { "en": "Back Bodice", "ar": "صدرية خلفية" },
+      "outlineCm": [[0, 0], [21, 0], [21, 62], [0, 62]]
+    },
+    {
+      "id": "front-placket", "role": "placket-facing", "cutOnFold": false, "quantity": 2, "grainline": "straight",
+      "label": { "en": "Front Placket", "ar": "باتة أمامية" },
+      "outlineCm": [[0, 0], [4, 0], [4, 40], [0, 40]]
+    }
+  ],
+  "seams": [],
+  "provenance": [
+    { "field": "garment.type", "source": "llm-inferred", "confidence": 0.92 },
+    { "field": "pieces", "source": "llm-inferred", "confidence": 0.9 }
+  ]
+}

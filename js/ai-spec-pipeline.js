@@ -48,6 +48,11 @@ import { AIGen } from './ai.js';
 import { PatternSpecValidator } from './schema-validate.js';
 import { PatternValidator } from './validate.js';
 
+// Mirrors AIGen.build()'s own default palette (js/ai.js's DEFAULT_COLORS) —
+// the schema has no colour field, measured/traced pieces have no colour
+// concept either, and Canvas.setPattern() indexes into this array per piece.
+const MEASURED_DEFAULT_COLORS = ['#6d5efc', '#00c2a8', '#ff5d8f', '#e2a52b', '#4c8dff', '#c1492e'];
+
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const num = (v, d) => (typeof v === 'number' && !Number.isNaN(v)) ? v : d;
 
@@ -148,6 +153,22 @@ const FEW_SHOT_EXAMPLES = [
       ],
     },
   },
+  {
+    prompt: 'read the pattern pieces and measurements directly from this attached tech-pack image (a wrap skirt with a front panel and a waistband, with its own printed body-measurement table)',
+    spec: {
+      specVersion: '1',
+      garment: { type: 'skirt', category: 'women', referenceMeasurementsCm: { chest: 88, waist: 70, hips: 96, backLen: 41, height: 167 } },
+      pieces: [
+        { id: 'skirt-front', role: 'skirt-front', cutOnFold: true, quantity: 1, grainline: 'straight',
+          label: { en: 'Front Panel', ar: 'اللوحة الأمامية' },
+          outlineCm: [[0, 0], [35, 0], [38, 60], [0, 60]] },
+        { id: 'waistband', role: 'waistband', cutOnFold: false, quantity: 2, grainline: 'straight',
+          outlineCm: [[0, 0], [74, 0], [74, 6], [0, 6]] },
+      ],
+      seams: [],
+      provenance: [{ field: 'garment.type', source: 'llm-inferred', confidence: 0.9 }],
+    },
+  },
 ];
 
 export function buildSystemPrompt(category, lang) {
@@ -171,7 +192,11 @@ export function buildSystemPrompt(category, lang) {
     '',
     '"romper" (also called a jumpsuit/playsuit) is a one-piece garment combining a fitted bodice with attached above-knee shorts, joined at a waist seam — always include shorts-front/shorts-back pieces for the lower half in addition to the bodice pieces. A "mock" neckline is a short, close-fitting standing band (not a fold-over collar) — pair it with a collar-stand piece. A "zip" closure implies a placket-facing piece stabilizing the opening.',
     '',
-    "Silhouette factors are multipliers on the engine's own base measurements, not absolute lengths:",
+    'TWO different modes, depending on what the reference image actually is:',
+    '1) A PHOTO of a worn garment, or a text-only description with no image: use the relative silhouette/construction factors below — you cannot read exact measurements off a photo, only relative proportions (longer/shorter, fuller/slimmer than the category standard).',
+    "2) A TECHNICAL FLAT-SKETCH / tech-pack / spec-sheet image — one that shows individual pattern pieces as line drawings with printed dimension numbers and a body-measurement table (e.g. 'Front Bodice', 'Chest: 85', 'Length: 63') — READ THE ACTUAL NUMBERS off the diagram instead of guessing a style factor. For each piece whose shape and dimensions you can read, set `pieces[].outlineCm` to its traced outline as [x,y] corner coordinates in centimeters (start near a top corner, trace in one direction — clockwise or counterclockwise — using the printed widths/heights/curve depths as the coordinate deltas; a simple rectangle strip is 4 points, a tapered panel is as many corners as it visibly has). Give the piece a proper `label:{en,ar}` (e.g. 'Front Placket', not a generic role name). If the image prints its own body-measurement table (chest/waist/hips/height/etc.), copy those into `garment.referenceMeasurementsCm` so the traced piece gets correctly rescaled to the actual wearer instead of only ever fitting the reference sheet's own size. `silhouette`/`construction` factors are optional and ignored for any piece that has `outlineCm` — do not spend effort guessing them for a piece you already traced exactly.",
+    '',
+    "Silhouette factors (mode 1 only) are multipliers on the engine's own base measurements, not absolute lengths:",
     "- silhouette.lengthF (0-3): 1.0 = the category's standard garment length; ~0.6-0.85 = short/mini; ~1.1-1.35 = long/maxi.",
     '- silhouette.flareF (0-3): 1.0 = straight; >1.25 = flared/A-line; <0.92 = fitted/slim.',
     '- silhouette.fitF (0-3): 1.0 = regular ease; <0.85 = fitted/tailored; >1.15 = loose/relaxed.',
@@ -183,7 +208,7 @@ export function buildSystemPrompt(category, lang) {
     'Add a `provenance` entry for every field you inferred rather than copied verbatim from the prompt, with source "llm-inferred" and an honest confidence between 0 and 1 — never claim confidence 1.0 for a guess. Use a dotted path for `field` (e.g. "garment.type", "silhouette.flareF", "construction.neckline"), matching the field\'s actual location in the JSON you emit.',
     localeNote,
     '',
-    'Two examples:',
+    'Four examples:',
     ...FEW_SHOT_EXAMPLES.flatMap((ex, i) => [`Example ${i + 1} prompt: "${ex.prompt}"`, `Example ${i + 1} JSON: ${JSON.stringify(ex.spec)}`]),
   ].join('\n');
 }
@@ -249,20 +274,27 @@ export async function generateFromSpec({ adapter, cfg, prompt, measurements, cat
   if (!res.json) return { fellBack: true, fallbackReason: 'the provider did not return structured JSON output' };
 
   let spec = res.json;
+  let convo = messages;
   let { valid, errors } = PatternSpecValidator.validate(spec);
   if (!valid) {
-    const retryMessages = [
+    convo = [
       ...messages,
       { role: 'assistant', content: JSON.stringify(spec) },
       { role: 'user', content: `That JSON failed schema validation: ${summarizeErrors(errors)}. Return corrected JSON only, matching the schema exactly.` },
     ];
     let res2;
-    try { res2 = await adapter.complete(cfg, { system, messages: retryMessages, images, schema, kind: 'text' }); }
+    try { res2 = await adapter.complete(cfg, { system, messages: convo, images, schema, kind: 'text' }); }
     catch (e) { return { fellBack: true, fallbackReason: String((e && e.message) || e) }; }
     if (!res2.ok || !res2.json) return { fellBack: true, fallbackReason: (res2 && res2.error) || 'retry did not return structured JSON output' };
     const retryValidation = PatternSpecValidator.validate(res2.json);
     if (!retryValidation.valid) return { fellBack: true, fallbackReason: `validation failed twice: ${summarizeErrors(retryValidation.errors)}` };
     spec = res2.json;
+    convo = [...convo, { role: 'assistant', content: JSON.stringify(spec) }];
+  }
+
+  const hasMeasuredPieces = (spec.pieces || []).some((p) => Array.isArray(p.outlineCm) && p.outlineCm.length >= 3);
+  if (hasMeasuredPieces) {
+    return finishMeasuredPieces({ adapter, cfg, system, convo, images, schema, spec, measurements, lang });
   }
 
   const style = specToStyle(spec);
@@ -272,4 +304,44 @@ export async function generateFromSpec({ adapter, cfg, prompt, measurements, cat
   const validation = PatternValidator.run(built.pieces, {});
 
   return { ...built, summary: AIGen.summary(style, lang), style, attributes: attrs, source: 'spec', spec, validation };
+}
+
+// A tech-pack image's traced pieces (spec.pieces[].outlineCm) build real
+// geometry directly instead of via style factors — see AIGen.buildFromMeasuredPieces().
+// Literal LLM-traced coordinates are more failure-prone than the vetted
+// style-factor path (a mistraced corner can self-intersect), so this gets
+// its own one-time geometry-validation retry, feeding PatternValidator's
+// actual failure messages back to the model — mirroring the schema-
+// validation retry in generateFromSpec() but checking real geometry
+// (self-intersection, closed outline, etc.) instead of JSON Schema shape.
+async function finishMeasuredPieces({ adapter, cfg, system, convo, images, schema, spec, measurements, lang }) {
+  let pieces = AIGen.buildFromMeasuredPieces(spec, measurements);
+  let validation = PatternValidator.run(pieces, {});
+  if (validation.summary.fail > 0) {
+    const failMsgs = [];
+    validation.perPiece.forEach((p) => Object.entries(p.checks).forEach(([k, r]) => { if (r.status === 'fail') failMsgs.push(`${p.label} ${k}: ${r.message}`); }));
+    const retryReason = `traced piece geometry failed validation twice: ${failMsgs.slice(0, 3).join('; ')}`;
+    const retryMessages = [
+      ...convo,
+      { role: 'user', content: `The traced piece outlines produced invalid geometry: ${failMsgs.slice(0, 6).join('; ')}. Return corrected JSON with fixed outlineCm coordinates (same schema), tracing the reference image's piece shapes more carefully.` },
+    ];
+    let res2;
+    try { res2 = await adapter.complete(cfg, { system, messages: retryMessages, images, schema, kind: 'text' }); }
+    catch (e) { return { fellBack: true, fallbackReason: String((e && e.message) || e) }; }
+    if (!res2.ok || !res2.json || res2.json.legacy) return { fellBack: true, fallbackReason: retryReason };
+    const retryValidation = PatternSpecValidator.validate(res2.json);
+    if (!retryValidation.valid) return { fellBack: true, fallbackReason: retryReason };
+    const pieces2 = AIGen.buildFromMeasuredPieces(res2.json, measurements);
+    const validation2 = PatternValidator.run(pieces2, {});
+    if (validation2.summary.fail > 0) return { fellBack: true, fallbackReason: retryReason };
+    spec = res2.json; pieces = pieces2; validation = validation2;
+  }
+  const style = specToStyle(spec);
+  const provenance = provenanceMapFromSpec(spec);
+  const attrs = AIGen.attributes(style, lang, provenance);
+  return {
+    pieces, colors: MEASURED_DEFAULT_COLORS.slice(), colorInt: null,
+    summary: AIGen.summary(style, lang), style, attributes: attrs,
+    source: 'spec-measured', spec, validation,
+  };
 }

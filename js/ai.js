@@ -573,6 +573,67 @@ export const AIGen = (() => {
     return pieces;
   }
 
+  // ---------- measured-piece builder (vision-read tech-pack pieces) ----------
+  // A worn-garment photo only ever supports a relative style factor (this
+  // silhouette is "about 1.3x longer than usual") — a technical flat-sketch/
+  // tech-pack image is different: it has its OWN printed piece diagrams and
+  // dimensions, and a vision-capable provider can read them directly. When a
+  // spec's pieces carry `outlineCm` (schema/pattern-spec.v1.json), this
+  // builds real geometry straight from those traced coordinates instead of
+  // guessing via style factors — a front placket, a curved hem, a
+  // drawstring tunnel end up looking like the actual reference piece, not a
+  // generic robe/top silhouette. Non-uniform 2-axis scaling (width by
+  // chest/waist/hip ratio, length by height/backLen ratio) regrades the
+  // traced piece from the spec's own `garment.referenceMeasurementsCm` (the
+  // tech-pack's own body-measurement table, if given) to the wearer's
+  // actual measurements; without a reference table, coordinates are used
+  // exactly as traced — an honest "this fits the reference size" result,
+  // not a silently-wrong rescale.
+  const ROLE_LABEL = {
+    "bodice-front":{en:"Front Bodice",ar:"صدرية أمامية"}, "bodice-back":{en:"Back Bodice",ar:"صدرية خلفية"},
+    "front-panel":{en:"Front Panel",ar:"لوحة أمامية"}, "back-panel":{en:"Back Panel",ar:"لوحة خلفية"},
+    "skirt-front":{en:"Skirt Front",ar:"تنورة أمامية"}, "skirt-back":{en:"Skirt Back",ar:"تنورة خلفية"},
+    "shorts-front":{en:"Shorts Front",ar:"شورت أمامي"}, "shorts-back":{en:"Shorts Back",ar:"شورت خلفي"},
+    sleeve:{en:"Sleeve",ar:"كم"}, "sleeve-upper":{en:"Sleeve Upper",ar:"الكم العلوي"}, "sleeve-under":{en:"Sleeve Under",ar:"الكم السفلي"},
+    collar:{en:"Collar",ar:"ياقة"}, undercollar:{en:"Undercollar",ar:"تحت الياقة"}, "collar-stand":{en:"Collar Stand",ar:"قاعدة الياقة"},
+    facing:{en:"Facing",ar:"بطانة"}, "placket-facing":{en:"Placket",ar:"باتة"}, "lapel-facing":{en:"Lapel Facing",ar:"بطانة الصدر"},
+    yoke:{en:"Yoke",ar:"كتافة"}, pocket:{en:"Pocket",ar:"جيب"}, waistband:{en:"Waistband",ar:"حزام"},
+    cuff:{en:"Cuff",ar:"أسورة"}, "rib-cuff":{en:"Rib Cuff",ar:"أسورة مضلعة"}, "hem-band":{en:"Hem Band",ar:"شريط الحاشية"},
+    belt:{en:"Belt",ar:"حزام"}, sash:{en:"Sash",ar:"حزام ربط"}, "wrap-tie":{en:"Tie",ar:"رباط"}, lining:{en:"Lining",ar:"بطانة"},
+    hood:{en:"Hood",ar:"قبعة"}, other:{en:"Piece",ar:"قطعة"},
+  };
+  function labelFor(piece){
+    if(piece.label && piece.label.en && piece.label.ar) return piece.label;
+    return ROLE_LABEL[piece.role] || { en: piece.id, ar: piece.id };
+  }
+  function scaleFactors(ref, m){
+    if(!ref) return { sx:1, sy:1 };
+    const widthRef = ref.chest || ref.waist || ref.hips;
+    const widthNow = m.chest || m.waist || m.hips;
+    const lenRef = ref.backLen || ref.height;
+    const lenNow = m.backLen || m.height;
+    const sx = (widthRef && widthNow) ? widthNow/widthRef : 1;
+    const sy = (lenRef && lenNow) ? lenNow/lenRef : 1;
+    return { sx: clamp(sx,0.6,1.7), sy: clamp(sy,0.6,1.7) };
+  }
+  function buildFromMeasuredPieces(spec, m){
+    const { sx, sy } = scaleFactors(spec.garment && spec.garment.referenceMeasurementsCm, m);
+    return (spec.pieces||[]).filter(p=>Array.isArray(p.outlineCm) && p.outlineCm.length>=3).map(p=>{
+      const outline = p.outlineCm.map(([x,y])=>[+(x*sx).toFixed(2), +(y*sy).toFixed(2)]);
+      const xs = outline.map(pt=>pt[0]), ys = outline.map(pt=>pt[1]);
+      const cx = (Math.min(...xs)+Math.max(...xs))/2, minY=Math.min(...ys), maxY=Math.max(...ys);
+      const pad = Math.max(1, (maxY-minY)*0.08);
+      return {
+        name: labelFor(p),
+        desc:{ en:"Traced from a reference tech-pack image — real measurements, not a style-factor guess.",
+               ar:"مُستخرجة من صورة كراسة قياسات مرجعية — قياسات حقيقية وليست تخمينًا نسبيًا." },
+        outline, darts:[], notches:[],
+        grain:[[cx, minY+pad], [cx, maxY-pad]],
+        role: p.role, cutOnFold: !!p.cutOnFold,
+      };
+    });
+  }
+
   // ---------- thinking-stage summary text ----------
   const NECK_LABEL = { v:{en:"V-neck",ar:"فتحة V"}, round:{en:"round neck",ar:"فتحة دائرية"}, boat:{en:"boat neck",ar:"فتحة قارب"},
     offshoulder:{en:"off-shoulder",ar:"كتف مكشوف"}, halter:{en:"halter",ar:"حمالة رقبة"}, collar:{en:"collared",ar:"بياقة"},
@@ -699,7 +760,7 @@ export const AIGen = (() => {
              source:"local", usedImage: !!(metrics && metrics.ok) };
   }
 
-  return { analyzeImage, deriveStyle, build, summary, attributes, generate };
+  return { analyzeImage, deriveStyle, build, buildFromMeasuredPieces, summary, attributes, generate };
 })();
 // TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.
 if (typeof window !== 'undefined') window.AIGen = AIGen;

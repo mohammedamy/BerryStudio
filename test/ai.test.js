@@ -69,3 +69,63 @@ test('trousers and skirt types route to their own builders (different piece coun
   const trousers = AIGen.build(trouserStyle, meas);
   assert.ok(top.pieces.length > 0 && skirt.pieces.length > 0 && trousers.pieces.length > 0);
 });
+
+test('buildFromMeasuredPieces traces literal outlineCm coordinates instead of a style-factor guess', () => {
+  const spec = {
+    garment: { type: 'top', category: 'women' },
+    pieces: [
+      { id: 'front-bodice', role: 'bodice-front', cutOnFold: true, quantity: 1, grainline: 'straight',
+        label: { en: 'Front Bodice', ar: 'صدرية أمامية' },
+        outlineCm: [[0, 0], [21, 0], [22, 63], [0, 60]] },
+      { id: 'placket', role: 'placket-facing', cutOnFold: false, quantity: 2, grainline: 'straight',
+        label: { en: 'Front Placket', ar: 'باتة' },
+        outlineCm: [[0, 0], [4, 0], [4, 40], [0, 40]] },
+    ],
+  };
+  const built = AIGen.buildFromMeasuredPieces(spec, meas);
+  assert.equal(built.length, 2);
+  assert.equal(built[0].name.en, 'Front Bodice');
+  assert.equal(built[1].name.en, 'Front Placket');
+  // no referenceMeasurementsCm given -> traced exactly, sx=sy=1
+  assert.deepEqual(built[0].outline, [[0, 0], [21, 0], [22, 63], [0, 60]]);
+  assert.equal(built[0].cutOnFold, true);
+  assert.ok(Array.isArray(built[0].grain) && built[0].grain.length === 2);
+});
+
+test('buildFromMeasuredPieces scales traced coordinates to the wearer when referenceMeasurementsCm is given', () => {
+  const spec = {
+    garment: {
+      type: 'top', category: 'women',
+      referenceMeasurementsCm: { chest: 80, backLen: 60 },
+    },
+    pieces: [
+      { id: 'front-bodice', role: 'bodice-front', cutOnFold: true, quantity: 1, grainline: 'straight',
+        outlineCm: [[0, 0], [20, 0], [20, 60], [0, 60]] },
+    ],
+  };
+  // wearer's own chest/backLen differ from the reference sheet's 80/60
+  const wearerMeas = { ...meas, chest: 88, backLen: 66 };
+  const built = AIGen.buildFromMeasuredPieces(spec, wearerMeas);
+  const sx = 88 / 80, sy = 66 / 60;
+  assert.equal(built[0].outline[1][0], +(20 * sx).toFixed(2));
+  assert.equal(built[0].outline[2][1], +(60 * sy).toFixed(2));
+  // falls back to a role-derived label when no explicit label given
+  assert.equal(built[0].name.en, 'Front Bodice');
+});
+
+test('buildFromMeasuredPieces output passes PatternValidator with no failures', () => {
+  const spec = {
+    garment: { type: 'top', category: 'women' },
+    pieces: [
+      { id: 'front-bodice', role: 'bodice-front', cutOnFold: true, quantity: 1, grainline: 'straight',
+        outlineCm: [[0, 0], [21, 0], [22, 62], [0, 62]] },
+      { id: 'back-bodice', role: 'bodice-back', cutOnFold: true, quantity: 1, grainline: 'straight',
+        outlineCm: [[0, 0], [21, 0], [21, 62], [0, 62]] },
+    ],
+  };
+  const built = AIGen.buildFromMeasuredPieces(spec, meas);
+  return import('../js/validate.js').then(({ PatternValidator }) => {
+    const validation = PatternValidator.run(built, {});
+    assert.equal(validation.summary.fail, 0);
+  });
+});

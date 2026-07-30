@@ -16,7 +16,25 @@
       "properties": {
         "type": { "enum": ["dress", "top", "shirt", "skirt", "trousers", "robe", "romper"] },
         "category": { "enum": ["women", "men", "girls", "boys"] },
-        "closure": { "enum": ["none", "button", "zip", "wrap", "tie"] }
+        "closure": { "enum": ["none", "button", "zip", "wrap", "tie"] },
+        "referenceMeasurementsCm": {
+          "description": "The body measurements a REFERENCE tech-pack/spec-sheet image was itself drafted for (its own printed 'Body Measurements' table), if the source image is that kind of technical flat-sketch rather than a worn-garment photo. Lets pieces[].outlineCm be scaled from this reference body to the wearer's own measurements instead of only ever fitting the reference size verbatim. Omit entirely for a photo/text-only generation with no printed measurement table to read.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "chest": { "type": "number", "minimum": 20, "maximum": 200 },
+            "waist": { "type": "number", "minimum": 20, "maximum": 200 },
+            "hips": { "type": "number", "minimum": 20, "maximum": 200 },
+            "backLen": { "type": "number", "minimum": 5, "maximum": 120 },
+            "shoulder": { "type": "number", "minimum": 5, "maximum": 60 },
+            "sleeve": { "type": "number", "minimum": 5, "maximum": 100 },
+            "neck": { "type": "number", "minimum": 5, "maximum": 80 },
+            "bicep": { "type": "number", "minimum": 5, "maximum": 80 },
+            "inseam": { "type": "number", "minimum": 5, "maximum": 120 },
+            "thigh": { "type": "number", "minimum": 5, "maximum": 100 },
+            "height": { "type": "number", "minimum": 30, "maximum": 220 }
+          }
+        }
       }
     },
 
@@ -62,6 +80,23 @@
         "required": ["id", "role", "cutOnFold", "quantity", "grainline"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+          "label": {
+            "description": "A garment-specific display name for this piece (e.g. 'Front Placket', 'Drawstring Tunnel') — `role` alone is a generic placement category, not a name a person drafting from a real reference sheet would recognize. Optional; falls back to a role-derived name when absent.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["en", "ar"],
+            "properties": { "en": { "type": "string" }, "ar": { "type": "string" } }
+          },
+          "outlineCm": {
+            "description": "The piece's ACTUAL traced outline in centimeters — [x,y] corners in drafting order, read directly off a technical flat-sketch/tech-pack image's own piece diagram and printed dimensions (not a relative style factor). Only meaningful when the source image is that kind of technical drawing with real labeled measurements; omit for a photo or text-only generation, where the relative silhouette/construction factors above are what drive AIGen.build() instead. When present alongside garment.referenceMeasurementsCm, coordinates are scaled to the wearer's own measurements before use; without it, they're used exactly as given (fits only the reference size).",
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 60,
+            "items": {
+              "type": "array", "minItems": 2, "maxItems": 2,
+              "items": { "type": "number", "minimum": -50, "maximum": 300 }
+            }
+          },
           "role": {
             "description": "bodice-front/bodice-back/skirt-front/skirt-back are kept as validator-resolved aliases for the WP-6 vocabulary below (front-panel/back-panel/hip-panel-front/hip-panel-back in cloth-lab's own placement roles — see cloth-lab/src/pattern/roles.js) so existing Phase-1 AI-pipeline specs keep validating unchanged.",
             "enum": [

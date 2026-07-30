@@ -794,6 +794,10 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         else toast(T("importFail"));
       };
       card2.appendChild(traceBtn);
+      const techPackBtn=el("button","big-btn",IC.spark+T("billboardReadTechPack")); techPackBtn.style.marginTop="8px";
+      techPackBtn.onclick=()=>runTechPackPieces(techPackBtn);
+      card2.appendChild(techPackBtn);
+      card2.appendChild(el("div","help-note",T("billboardReadTechPackHint"))).style.marginTop="6px";
       box.appendChild(card2);
     }
   }
@@ -1035,6 +1039,18 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   async function runPatternPieces(btn){
     if(!bbBillboard) return;
     await generatePatternFrom("", bbBillboard, btn, "billboardPiecesReady");
+  }
+  // "Read Pattern Pieces From This Tech-Pack" — sourced from bbPattern (the
+  // AI-drawn technical flat-sketch with individual piece diagrams and printed
+  // dimensions), not bbBillboard (a worn-garment photo, which can only ever
+  // yield relative style factors — see runPatternPieces above). The prompt
+  // steers a vision-capable provider toward buildSystemPrompt()'s "mode 2"
+  // (read pieces[].outlineCm off the image literally) instead of guessing
+  // silhouette/construction factors as it would for a plain photo.
+  async function runTechPackPieces(btn){
+    if(!bbPattern) return;
+    const prompt = "The attached image is a technical flat-sketch / tech-pack drawing: individual pattern piece diagrams with printed dimensions, and possibly its own body-measurement table. Read the actual piece shapes and printed numbers directly off the image — do not guess relative style factors for pieces you can trace exactly.";
+    await generatePatternFrom(prompt, bbPattern, btn, "billboardTechPackReady");
   }
 
   // ================= QUICK DRAFT BUILDER =================

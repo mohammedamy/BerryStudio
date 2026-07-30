@@ -7,6 +7,7 @@ const schema = JSON.parse(readFileSync(new URL('../schema/pattern-spec.v1.json',
 const validSpec = JSON.parse(readFileSync(new URL('../schema/examples/valid.pattern-spec.json', import.meta.url)));
 const invalidSpec = JSON.parse(readFileSync(new URL('../schema/examples/invalid.pattern-spec.json', import.meta.url)));
 const romperSpec = JSON.parse(readFileSync(new URL('../schema/examples/romper.pattern-spec.json', import.meta.url)));
+const measuredSpec = JSON.parse(readFileSync(new URL('../schema/examples/measured-pieces.pattern-spec.json', import.meta.url)));
 const measurements = { chest: 92, waist: 74, hips: 100, backLen: 40, sleeve: 58, bicep: 28, height: 165, neck: 36, inseam: 76, thigh: 56, shoulder: 40 };
 
 function mockAdapter(responses) {
@@ -14,13 +15,17 @@ function mockAdapter(responses) {
   return { complete: async () => responses[Math.min(call++, responses.length - 1)] };
 }
 
-test('buildSystemPrompt embeds the schema vocabulary and all three few-shot examples', () => {
+test('buildSystemPrompt embeds the schema vocabulary and all four few-shot examples', () => {
   const p = buildSystemPrompt('women', 'en');
   assert.match(p, /garment\.type: dress \| top \| shirt \| skirt \| trousers \| robe \| romper/);
   assert.match(p, /construction\.neckline: v \| round \| boat \| off-shoulder \| halter \| collar \| mock/);
+  assert.match(p, /Four examples:/);
   assert.match(p, /Example 1 prompt/);
   assert.match(p, /Example 2 prompt/);
   assert.match(p, /Example 3 prompt/);
+  assert.match(p, /Example 4 prompt/);
+  assert.match(p, /outlineCm/);
+  assert.match(p, /referenceMeasurementsCm/);
 });
 
 test('specToStyle maps a zip closure', () => {
@@ -113,4 +118,73 @@ test('the proxy adapter\'s legacy {style} contract also short-circuits and build
   assert.equal(result.fellBack, undefined);
   assert.equal(result.source, 'remote');
   assert.ok(result.pieces.length > 0);
+});
+
+test('a valid measured-pieces spec (outlineCm) is traced literally via AIGen.buildFromMeasuredPieces, not a style-factor guess', async () => {
+  const adapter = mockAdapter([{ ok: true, providerId: 'test', json: measuredSpec, usage: {} }]);
+  const result = await generateFromSpec({
+    adapter, cfg: {},
+    prompt: 'read the pattern pieces directly from this tech-pack image',
+    measurements, category: 'women', lang: 'en', schema,
+  });
+  assert.equal(result.fellBack, undefined);
+  assert.equal(result.source, 'spec-measured');
+  assert.equal(result.pieces.length, 3);
+  const names = result.pieces.map((p) => p.name.en);
+  assert.ok(names.includes('Front Bodice'));
+  assert.ok(names.includes('Back Bodice'));
+  assert.ok(names.includes('Front Placket'));
+  // referenceMeasurementsCm.chest=85 vs the test suite's own measurements.chest=92 -> scaled, not verbatim
+  const front = result.pieces.find((p) => p.name.en === 'Front Bodice');
+  const sx = measurements.chest / 85;
+  assert.equal(front.outline[1][0], +(21 * sx).toFixed(2));
+  assert.equal(result.validation.summary.fail, 0);
+  // Canvas.setPattern(res.pieces, res.colors) indexes into res.colors per piece —
+  // an undefined/empty colors array here throws in js/canvas.js, not just in this test.
+  assert.ok(Array.isArray(result.colors) && result.colors.length > 0, 'measured-pieces path must return a real colors array for Canvas.setPattern');
+});
+
+test('measured-pieces geometry retry: a self-intersecting first trace is retried and a corrected second response succeeds', async () => {
+  const badSpec = {
+    ...measuredSpec,
+    pieces: [
+      { id: 'front-bodice', role: 'bodice-front', cutOnFold: true, quantity: 1, grainline: 'straight',
+        label: { en: 'Front Bodice', ar: 'صدرية أمامية' },
+        outlineCm: [[0, 0], [21, 21], [21, 0], [0, 21]] }, // bowtie self-intersection
+    ],
+  };
+  const goodSpec = {
+    ...measuredSpec,
+    pieces: [measuredSpec.pieces[0]],
+  };
+  const adapter = mockAdapter([
+    { ok: true, providerId: 'test', json: badSpec, usage: {} },
+    { ok: true, providerId: 'test', json: goodSpec, usage: {} },
+  ]);
+  const result = await generateFromSpec({
+    adapter, cfg: {}, prompt: 'read the pieces from this tech-pack', measurements, category: 'women', lang: 'en', schema,
+  });
+  assert.equal(result.fellBack, undefined);
+  assert.equal(result.source, 'spec-measured');
+  assert.equal(result.pieces.length, 1);
+  assert.equal(result.validation.summary.fail, 0);
+});
+
+test('measured-pieces geometry retry: invalid geometry twice falls back honestly instead of showing broken pieces', async () => {
+  const badSpec = {
+    ...measuredSpec,
+    pieces: [
+      { id: 'front-bodice', role: 'bodice-front', cutOnFold: true, quantity: 1, grainline: 'straight',
+        outlineCm: [[0, 0], [21, 21], [21, 0], [0, 21]] },
+    ],
+  };
+  const adapter = mockAdapter([
+    { ok: true, providerId: 'test', json: badSpec, usage: {} },
+    { ok: true, providerId: 'test', json: badSpec, usage: {} },
+  ]);
+  const result = await generateFromSpec({
+    adapter, cfg: {}, prompt: 'read the pieces from this tech-pack', measurements, category: 'women', lang: 'en', schema,
+  });
+  assert.equal(result.fellBack, true);
+  assert.match(result.fallbackReason, /geometry/);
 });
