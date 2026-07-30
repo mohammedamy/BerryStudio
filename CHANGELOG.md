@@ -6,6 +6,43 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Fashion Billboard: generate real pattern pieces from the AI photo, not just a background trace
+
+### Added
+- **"Generate Pattern Pieces From This"** (AI Fashion Billboard section) —
+  a new button on the generated billboard photo that runs the exact same
+  prompt/image → vector-pieces pipeline the AI Pattern Generator's own
+  prompt box uses (spec-first via a configured provider, with vision
+  fusion when an image is involved; falling back to the local silhouette
+  heuristic otherwise), sourced from the billboard photo instead of a
+  user-uploaded inspiration image. Reads the garment's neckline/hem/
+  flare/colour from the photo and drafts real, editable pieces straight
+  onto the canvas — the existing "Use as Background Trace" path (manual
+  tracing) is untouched and still available for the separately-generated
+  tech-pack-style pattern *drawing*, which is a flat illustration, not a
+  worn-garment photo, and isn't what this new pipeline is designed to read.
+- Extracted `runAI()`'s core logic into a shared `generatePatternFrom(prompt,
+  imageDataURL, btn, doneToastKey)` (`js/app.js`) so both entry points run
+  byte-identical generation logic — no duplicated pipeline to drift out of
+  sync.
+
+### Fixed (diagnosis, not a code bug)
+- Traced a report of "the AI pattern generator always produces the same
+  output regardless of prompt or image" to a **configuration** issue, not
+  a drafting-engine bug: the account's **Text Generation** provider
+  (Settings → AI Provider) was set to **Ollama (local)** — a local server
+  that wasn't running — so every generation attempt failed to reach it and
+  silently fell back to the offline heuristic; the account's real OpenAI
+  key was only ever configured under the separate **Image Generation** tab
+  (which is why the Billboard's photo generation worked). Verified the
+  underlying engine itself does vary correctly per prompt/image (5
+  distinct prompts → 5 distinct garment types and geometries, confirmed via
+  both the pushed unit tests and a live run against the actual deployed
+  button). No fix needed in `js/ai.js`/`js/ai-spec-pipeline.js` — the
+  Provider dropdown was switched to OpenAI for Text Generation as part of
+  this diagnosis; the account still needs its own API key pasted into that
+  tab (never done by an agent) and a text model selected via "Fetch Models".
+
 ## AI Pattern Generator: romper/jumpsuit garment type (real vector pieces, not an image)
 
 ### Added

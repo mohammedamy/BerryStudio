@@ -774,6 +774,10 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const drawBtn=el("button","big-btn ghost",IC.ruler+T("billboardDrawPattern"));
     drawBtn.onclick=()=>runPattern(drawBtn);
     card1.appendChild(drawBtn);
+    const piecesBtn=el("button","big-btn",IC.spark+T("billboardGeneratePieces")); piecesBtn.style.marginTop="8px";
+    piecesBtn.onclick=()=>runPatternPieces(piecesBtn);
+    card1.appendChild(piecesBtn);
+    card1.appendChild(el("div","help-note",T("billboardGeneratePiecesHint"))).style.marginTop="6px";
     box.appendChild(card1);
 
     if(bbPattern){
@@ -943,11 +947,16 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     return cachedSpecSchema;
   }
 
-  async function runAI(txt, btn){
-    const prompt=(txt||"").trim();
-    if(!prompt && !aiImage){ toast(T("aiNeedInput")); return; }
+  // Core prompt/image -> real vector pieces pipeline, shared by the AI
+  // Pattern Generator's own prompt box (runAI, image = the uploaded
+  // inspiration image) and the Fashion Billboard's "Generate Pattern Pieces
+  // From This" button (runPatternPieces, image = the generated billboard
+  // photo) — both are just different sources for the same `imageDataURL`,
+  // so this always produces real, editable pieces on the canvas, never an
+  // image to trace.
+  async function generatePatternFrom(prompt, imageDataURL, btn, doneToastKey){
     const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7"; btn.disabled=true;
-    const setStage = beginAIThinking(!!aiImage);
+    const setStage = beginAIThinking(!!imageDataURL);
     try {
       // BerryStudio-Upgrade-Plan WP-3: if a real AI provider is configured
       // (anything beyond the default empty `proxy`), try the spec-first
@@ -967,7 +976,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         const schema = await loadSpecSchema();
         const specResult = await generateFromSpec({
           adapter, cfg, prompt, measurements: currentMeas(), category: state.category, lang: state.lang,
-          schema, images: aiImage ? [aiImage] : undefined,
+          schema, images: imageDataURL ? [imageDataURL] : undefined,
         });
         if(!specResult.fellBack){
           // BerryStudio-Upgrade-Plan WP-4: when an image was supplied and the
@@ -977,9 +986,9 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
           // stays authoritative for length/flare/hem/colour exactly as it
           // is today. Text-only or legacy-proxy generations skip this and
           // use the spec result as-is.
-          if(aiImage && specResult.source==="spec"){
-            const pixelMetrics = await AIGen.analyzeImage(aiImage);
-            const promptStyle = AIGen.deriveStyle({ metrics: pixelMetrics, prompt, category: state.category, imageDataURL: aiImage });
+          if(imageDataURL && specResult.source==="spec"){
+            const pixelMetrics = await AIGen.analyzeImage(imageDataURL);
+            const promptStyle = AIGen.deriveStyle({ metrics: pixelMetrics, prompt, category: state.category, imageDataURL });
             const { style: fusedStyle, sourceMap } = fuseStyle({ specStyle: specResult.style, promptStyle });
             const built = AIGen.build(fusedStyle, currentMeas());
             const provenance = mergeProvenance(sourceMap, provenanceMapFromSpec(specResult.spec));
@@ -1001,7 +1010,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       // is configured, or the configured one failed/returned invalid output.
       if(!res){
         res = await AIGen.generate({
-          prompt, imageDataURL: aiImage, category: state.category,
+          prompt, imageDataURL, category: state.category,
           measurements: currentMeas(), endpoint: "", lang: state.lang,
           onStage: setStage,
         });
@@ -1011,9 +1020,21 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       hideEmpty(); renderLayersPane();
       if(state.view==="3d") build3D(res.colorInt);
       renderAIAttrs(res);                         // show what was actually detected, right where the "thinking" ran
-      toast(T("generated"));
+      toast(T(doneToastKey));
     } catch(e){ toast(T("importFail")); }
     finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
+  }
+  async function runAI(txt, btn){
+    const prompt=(txt||"").trim();
+    if(!prompt && !aiImage){ toast(T("aiNeedInput")); return; }
+    await generatePatternFrom(prompt, aiImage, btn, "generated");
+  }
+  // Fashion Billboard "Generate Pattern Pieces From This" — same pipeline
+  // as the AI Pattern Generator's own image-upload path, sourced from the
+  // generated billboard photo instead of a user-uploaded inspiration image.
+  async function runPatternPieces(btn){
+    if(!bbBillboard) return;
+    await generatePatternFrom("", bbBillboard, btn, "billboardPiecesReady");
   }
 
   // ================= QUICK DRAFT BUILDER =================
