@@ -32,26 +32,48 @@ export const View3D = (() => {
   // *dynamic* import() even though the identical map correctly resolves
   // static imports (confirmed directly: import("three") throws in that
   // engine while import("https://unpkg.com/.../three.module.js") succeeds
-  // immediately after, same page, same load). importWithFallback() tries
-  // the bare specifier first (the normal, version-pinned-in-one-place
-  // path, and the only one that runs in engines where it already works
-  // fine) and only falls back to a hardcoded, version-matched CDN URL if
-  // that throws — so this never changes behavior where things already work.
+  // immediately after, same page, same load).
+  //
+  // Real-world follow-up: even with the CDN fallback below, one user's 3D
+  // Preview still failed to load while Cloth Lab (a separately Vite-bundled
+  // app with no runtime CDN dependency) and /3d-test.html (a raw WebGL2
+  // probe that never imports three.js at all) both worked fine on the same
+  // device — pointing at something blocking unpkg.com specifically (an
+  // ad-blocker/privacy extension/network filter), not a bare-specifier
+  // resolution quirk or a WebGL capability gap. A second CDN on a genuinely
+  // different domain — esm.sh, already in this page's own CSP script-src
+  // for other features — is a real, meaningfully independent fallback for
+  // exactly that failure mode; a same-domain retry wouldn't be.
+  //
+  // Each tier is tried as a whole (main three.js + all addons from the SAME
+  // source) rather than mixed per-file, since three.js addon modules import
+  // "three" internally and mixing sources risks two different module
+  // instances of the library coexisting.
   const THREE_VERSION = "0.185.1";
-  const THREE_CDN = `https://unpkg.com/three@${THREE_VERSION}`;
-  async function importWithFallback(bareSpecifier, cdnPath) {
-    try { return await import(/* @vite-ignore */ bareSpecifier); }
-    catch (e) { return import(/* @vite-ignore */ `${THREE_CDN}/${cdnPath}`); }
+  const DEP_TIERS = [
+    { label: "importmap", base: null, addons: null },
+    { label: "unpkg", base: `https://unpkg.com/three@${THREE_VERSION}/build/three.module.js`, addons: `https://unpkg.com/three@${THREE_VERSION}/examples/jsm` },
+    { label: "esm.sh", base: `https://esm.sh/three@${THREE_VERSION}`, addons: `https://esm.sh/three@${THREE_VERSION}/examples/jsm` },
+  ];
+  async function loadDepsFromTier(tier) {
+    const THREE_ = tier.base ? await import(/* @vite-ignore */ tier.base) : await import(/* @vite-ignore */ "three");
+    const addonUrl = (path) => tier.addons ? `${tier.addons}/${path}` : `three/addons/${path}`;
+    const { OrbitControls: OC } = await import(/* @vite-ignore */ addonUrl("controls/OrbitControls.js"));
+    let GL = null, RGBE = null;
+    try { ({ GLTFLoader: GL } = await import(/* @vite-ignore */ addonUrl("loaders/GLTFLoader.js"))); } catch (e) { /* optional */ }
+    try { ({ RGBELoader: RGBE } = await import(/* @vite-ignore */ addonUrl("loaders/RGBELoader.js"))); } catch (e) { /* optional */ }
+    return { THREE_, OC, GL, RGBE };
   }
   async function loadDeps() {
     if (THREE) return true;
-    try {
-      THREE = await importWithFallback("three", "build/three.module.js");
-      ({ OrbitControls } = await importWithFallback("three/addons/controls/OrbitControls.js", "examples/jsm/controls/OrbitControls.js"));
-      try { ({ GLTFLoader } = await importWithFallback("three/addons/loaders/GLTFLoader.js", "examples/jsm/loaders/GLTFLoader.js")); } catch (e) { GLTFLoader = null; }
-      try { ({ RGBELoader } = await importWithFallback("three/addons/loaders/RGBELoader.js", "examples/jsm/loaders/RGBELoader.js")); } catch (e) { RGBELoader = null; }
-      return true;
-    } catch (e) { return false; }
+    for (const tier of DEP_TIERS) {
+      try {
+        const { THREE_, OC, GL, RGBE } = await loadDepsFromTier(tier);
+        THREE = THREE_; OrbitControls = OC; GLTFLoader = GL; RGBELoader = RGBE;
+        return true;
+      } catch (e) { /* try the next tier */ }
+    }
+    return false;
   }
 
   // WP-9.3: same CC0 studio-softbox HDRI cloth-lab already uses (see

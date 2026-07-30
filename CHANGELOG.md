@@ -6,21 +6,30 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
-## Post-Phase-4 fix — 3D Preview blank canvas (real bug, not a tooling artifact)
+## Post-Phase-4 fix — 3D Preview blank canvas (real bug, fixed in two rounds)
 
 ### Fixed
-- **3D Preview reported blank by a real user, twice, across two phases** —
+- **3D Preview reported blank by a real user, across two phases** —
   previously dismissed as "some browser-automation tools fail resolving
   import-map entries in a dynamic `import()`," a tooling note rather than
-  an app fix. Reproduced directly: `import("three")` throws "Failed to
-  resolve module specifier" in the affected engine, while
-  `import("https://unpkg.com/.../three.module.js")` on the exact same page
-  succeeds immediately after — there was no reason to assume only an
-  automation tool could hit this. Fixed in `js/three-view.js`: every
-  dynamic `import()` of a bare specifier now tries the normal path first
-  and falls back to a hardcoded, version-matched CDN URL only if that
-  throws.
-- A second bug found alongside it: even in a genuine WebGL-unavailable
+  an app fix.
+  - Round 1: reproduced directly — `import("three")` throws "Failed to
+    resolve module specifier" in the affected engine, while
+    `import("https://unpkg.com/.../three.module.js")` on the exact same
+    page succeeds immediately after. Fixed in `js/three-view.js`: every
+    dynamic `import()` of a bare specifier retries against an explicit
+    unpkg.com URL on failure.
+  - Round 2: the same user still saw it fail. Their device separately
+    confirmed full WebGL2/WebGPU support via `/3d-test.html` (no runtime
+    CDN dependency), and Cloth Lab (a separately Vite-bundled app, also no
+    runtime CDN dependency) worked fine for them — pointing at something
+    blocking `unpkg.com` specifically, which a same-domain retry can never
+    route around. `js/three-view.js` now falls through three tiers — the
+    import map, an explicit unpkg.com URL, then esm.sh (a genuinely
+    different domain, already in the page's CSP) — verified by blocking
+    all `unpkg.com` requests in a Playwright test and confirming 3D
+    Preview still initializes via the esm.sh tier alone.
+- A second bug found alongside round 1: even in a genuine WebGL-unavailable
   case, the "3D preview needs WebGL" fallback message was drawn onto a
   canvas still sized 0×0 from app boot (before the 3D tab was ever opened)
   and nothing ever redrew it at the correct size once the tab became
@@ -29,8 +38,9 @@ entry" rule.
 - Strengthened the existing "open 3D preview" smoke test, which had been
   asserting only CSS visibility (a wrapper can be visible while the
   canvas's own internal raster buffer is still 0×0) — it now asserts
-  `View3D.isReady()` and real non-zero canvas dimensions directly, closing
-  the gap that let this regression ship unnoticed in the first place.
+  `View3D.isReady()` and real non-zero canvas dimensions directly. Added a
+  new permanent test that blocks all `unpkg.com` requests and confirms the
+  esm.sh fallback tier alone is enough for 3D Preview to still work.
 
 ## Phase 4 — Product surface (WP-16 – WP-18)
 

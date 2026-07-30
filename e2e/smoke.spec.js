@@ -89,6 +89,38 @@ test('load, grade, export SVG, open 3D preview — no console errors', async ({ 
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
 
+// A real regression, reported by a user: 3D Preview needs three.js from
+// unpkg.com, and something in a real visitor's environment (most likely an
+// ad-blocker/privacy extension/network filter — their device separately
+// confirmed full WebGL2/WebGPU support via /3d-test.html, and Cloth Lab, a
+// self-contained Vite bundle with no runtime CDN dependency, worked fine
+// for them) was blocking that one domain specifically. js/three-view.js
+// now falls through three tiers — the page's own import map, an explicit
+// unpkg.com URL, then esm.sh (a genuinely different domain, already in
+// this page's CSP for other features) — this proves the third tier alone
+// is enough by blocking the first two entirely.
+test('3D Preview still initializes when unpkg.com is completely blocked (esm.sh fallback)', async ({ page }) => {
+  await page.route('**://unpkg.com/**', (route) => route.abort());
+
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+
+  await page.goto('/index.html');
+  await dismissOnboarding(page);
+  await page.locator('#viewToggle button[data-v="3d"]').click();
+  await page.waitForTimeout(3000);
+
+  const state3d = await page.evaluate(() => {
+    const c = document.getElementById('canvas3d');
+    return { w: c.width, h: c.height, ready: window.View3D.isReady() };
+  });
+  expect(state3d.ready).toBe(true);
+  expect(state3d.w).toBeGreaterThan(0);
+  expect(state3d.h).toBeGreaterThan(0);
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});
+
 // BerryStudio-Upgrade-Plan WP-9.1: the standalone capability-check page
 // loads with no console errors and reaches a real verdict (not stuck on
 // "Checking…", the case a CSP misconfiguration or a broken import would

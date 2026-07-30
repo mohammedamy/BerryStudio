@@ -193,25 +193,33 @@ in the app's own header.
   recording are all confirmed working. GIF export isn't offered — every
   JS GIF encoder is a new dependency this project avoids; use the
   MP4/WebM/PNG-sequence export and convert externally if you need a GIF.
-- **A real, previously-dismissed-too-quickly bug**: 3D Preview reported
-  blank by a real user (twice, across two phases) was originally chalked
-  up to "some browser-automation tools fail resolving import-map entries
-  in a dynamic `import()`" and left as a tooling note rather than fixed —
-  reproducing it directly (`import("three")` throws "Failed to resolve
-  module specifier" in the affected engine, while
-  `import("https://unpkg.com/.../three.module.js")` on the very same page
-  succeeds immediately after) showed this affects more than just one
-  automation tool's engine, and there was no reason a real visitor
-  couldn't hit the identical failure mode. Fixed properly in
-  `js/three-view.js`: every dynamic `import()` of a bare specifier now
-  tries the normal, version-pinned-in-one-place path first and falls back
-  to a hardcoded, version-matched CDN URL only if that throws — a genuine
-  fix, not a "some environments just can't do this" shrug. A related bug
-  found alongside it: even in a real WebGL-unavailable fallback case, the
-  "3D preview needs WebGL" message was being drawn onto a canvas still
-  sized 0×0 from app boot (before the 3D tab was ever opened) and nothing
-  ever redrew it at the correct size — `resize()` now re-attempts the
-  fallback message at the real size on every call, not just once at boot.
+- **A real, previously-dismissed-too-quickly bug, fixed in two rounds**: 3D
+  Preview reported blank by a real user (across two phases) was originally
+  chalked up to "some browser-automation tools fail resolving import-map
+  entries in a dynamic `import()`" and left as a tooling note rather than
+  fixed. Round 1: reproducing it directly (`import("three")` throws
+  "Failed to resolve module specifier" in the affected engine, while
+  `import("https://unpkg.com/.../three.module.js")` on the same page
+  succeeds immediately after) showed this affects more than one
+  automation tool's engine, so `js/three-view.js` was changed to retry a
+  failed bare-specifier import against an explicit unpkg.com URL. Round 2:
+  the SAME user still saw it fail after that fix, while the same device's
+  `/3d-test.html` capability check (no runtime CDN dependency at all)
+  confirmed full WebGL2/WebGPU support, and Cloth Lab (a separately
+  Vite-bundled app with no runtime CDN dependency) worked fine — pointing
+  at something blocking `unpkg.com` specifically (an ad-blocker/privacy
+  extension/network filter), which a same-domain retry can never route
+  around. `js/three-view.js` now falls through three tiers — the page's
+  import map, an explicit unpkg.com URL, then esm.sh (a genuinely
+  different domain, already in this page's CSP for other features) —
+  verified by literally blocking all `unpkg.com` requests in a Playwright
+  test and confirming 3D Preview still initializes via the esm.sh tier
+  alone. A related bug found alongside round 1: even in a real
+  WebGL-unavailable fallback case, the "3D preview needs WebGL" message
+  was being drawn onto a canvas still sized 0×0 from app boot (before the
+  3D tab was ever opened) and nothing ever redrew it at the correct size —
+  `resize()` now re-attempts the fallback message at the real size on
+  every call, not just once at boot.
 - **ES modules**: every root `js/*.js` file now has real `export`s and the files
   that need them have real `import`s, replacing the previous "9 classic scripts
   sharing one browser lexical scope" pattern. Every exported symbol also still
