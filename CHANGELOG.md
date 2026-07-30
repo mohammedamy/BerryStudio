@@ -6,6 +6,23 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Shift-drag bypasses the 1cm grid snap
+
+### Added
+- **Shift+Drag free positioning** (`js/canvas.js`) — holding Shift while
+  dragging now bypasses the 1cm grid snap everywhere the canvas snaps:
+  outline-point handles, construction points/lines/arcs/circles, and the
+  Line/Arc/Pen/Polygon/Knife/Grainline tools. The shared `snap()`,
+  `snapToPoint()`, and `snapConstruction()`/`nearestPointId()` helpers all
+  take a `free` flag now, threaded from each call site's `e.shiftKey` —
+  with Snap enabled, a normal drag still rounds to the nearest whole
+  centimetre, but a Shift-held drag lands on the exact fractional
+  coordinate under the cursor. Verified end-to-end via synthetic
+  `PointerEvent`s carrying `shiftKey`: identical drags produced `[63, 88]`
+  without Shift and `[59.72, 86.17]` with it.
+- Documented in the in-app Help modal's Keyboard shortcuts table and in
+  `docs/shortcuts.html` (EN + AR), under "Canvas & selection".
+
 ## Pattern library expansion, colourful thumbnails, currency selector, real Bill of Materials
 
 ### Added

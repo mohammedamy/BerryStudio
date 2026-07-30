@@ -1726,7 +1726,8 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     tools.forEach(k=>{ html += `<tr><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);font-weight:700;white-space:nowrap">${T("t_"+k)}</td><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--ink-2)">${T("tt_"+k)}</td></tr>`; });
     html += `</table><h3 style="margin:18px 0 8px">${T("helpShortcuts")}</h3><table style="width:100%;border-collapse:collapse;font-size:12.5px">`;
     [["V P L A M R S T", T("sc_tools")], ["Ctrl+Z / Ctrl+Shift+Z", T("sc_undo")], ["Ctrl+K", T("sc_cmd")], ["Esc", T("sc_esc")],
-     ["[ / ]", T("sc_cycle")], ["Arrow keys", T("sc_nudge")], ["Shift+Arrow", T("sc_nudgeFine")], ["Delete / Backspace", T("sc_delete")]]
+     ["[ / ]", T("sc_cycle")], ["Arrow keys", T("sc_nudge")], ["Shift+Arrow", T("sc_nudgeFine")], ["Delete / Backspace", T("sc_delete")],
+     ["Shift+Drag", T("sc_freeDrag")]]
       .forEach(([k,d])=>{ html += `<tr><td style="padding:6px 8px;border-bottom:1px solid var(--line-2)"><code style="background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-weight:700">${k}</code></td><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--ink-2)">${d}</td></tr>`; });
     html += "</table>";
     openModal(T("helpTitle"), html, true);

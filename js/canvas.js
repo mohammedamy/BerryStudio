@@ -75,7 +75,9 @@ export const Canvas = (() => {
   // ---- coordinate transforms (cm <-> screen px) ----
   const toScreen = (x, y) => [view.x + x * view.scale, view.y + y * view.scale];
   const toWorld = (sx, sy) => [(sx - view.x) / view.scale, (sy - view.y) / view.scale];
-  const snap = (v) => opts.snap ? Math.round(v) : v;
+  // `free` (held Shift during a drag/click) bypasses the 1cm grid round —
+  // lets a point land at any fractional coordinate even with Snap enabled.
+  const snap = (v, free) => (opts.snap && !free) ? Math.round(v) : v;
 
   // ---- layout pieces automatically, wrapping into tidy rows ----
   function layoutPieces(rawPieces) {
@@ -139,9 +141,11 @@ export const Canvas = (() => {
   const sclAbout = (c,f)   => ([x,y]) => [c[0]+(x-c[0])*f, c[1]+(y-c[1])*f];
 
   // Snap a world point to a nearby anchor of any piece, else to the grid.
-  function snapToPoint(wx, wy, excludePiece, excludeIdx){
+  // `free` (Shift held) bypasses both the point-magnet and the grid fallback
+  // entirely, returning the raw fractional coordinate under the cursor.
+  function snapToPoint(wx, wy, excludePiece, excludeIdx, free){
     snapMark = null;
-    if (!opts.snap) return [wx,wy];
+    if (!opts.snap || free) return [wx,wy];
     const thr = 9 / view.scale;              // ~9px in world units
     let best=null, bd=thr;
     pieces.forEach((p,pi)=>p.outline.forEach((pt,idx)=>{
@@ -765,21 +769,21 @@ export const Canvas = (() => {
       }
 
       // construction tools: point / line / arc / circle / promote-to-piece / calibrate
-      if (tool==="point"){ const s=snapConstruction(wx,wy); if(s.pid==null) addPoint(s.x,s.y); render(); return; }
+      if (tool==="point"){ const s=snapConstruction(wx,wy,e.shiftKey); if(s.pid==null) addPoint(s.x,s.y); render(); return; }
       if (tool==="conline"){
-        const s=snapConstruction(wx,wy);
+        const s=snapConstruction(wx,wy,e.shiftKey);
         drawing={tool:"conline", pts:[[s.x,s.y],[s.x,s.y]], refs:[refFromSnap(s), null]};
         return;
       }
       if (tool==="conarc"){
         if (!drawing || drawing.tool!=="conarc"){
-          const s=snapConstruction(wx,wy);
+          const s=snapConstruction(wx,wy,e.shiftKey);
           drawing={tool:"conarc", phase:1, pts:[[s.x,s.y],[s.x,s.y]], refs:[refFromSnap(s), null], ctrl:null, ctrlRef:null};
         } else if (drawing.phase===1){
-          const s=snapConstruction(wx,wy);
+          const s=snapConstruction(wx,wy,e.shiftKey);
           drawing.pts[1]=[s.x,s.y]; drawing.refs[1]=refFromSnap(s); drawing.phase=2;
         } else {
-          const pid=nearestPointId(wx,wy); drawing.ctrl=[wx,wy];
+          const pid=nearestPointId(wx,wy,10,e.shiftKey); drawing.ctrl=[wx,wy];
           drawing.ctrlRef = pid!=null ? {pid} : {x:wx,y:wy};
           pushUndo(); cons.push({id:consSeq++, kind:"arc", a:drawing.refs[0], b:drawing.refs[1], ctrl:drawing.ctrlRef});
           drawing=null;
@@ -788,10 +792,10 @@ export const Canvas = (() => {
       }
       if (tool==="circle"){
         if (!drawing || drawing.tool!=="circle"){
-          const s=snapConstruction(wx,wy);
+          const s=snapConstruction(wx,wy,e.shiftKey);
           drawing={tool:"circle", center:[s.x,s.y], centerRef:refFromSnap(s), rim:[s.x,s.y]};
         } else {
-          const s=snapConstruction(wx,wy);
+          const s=snapConstruction(wx,wy,e.shiftKey);
           pushUndo(); cons.push({id:consSeq++, kind:"circle", a:drawing.centerRef, b:refFromSnap(s)});
           drawing=null;
         }
@@ -822,7 +826,7 @@ export const Canvas = (() => {
 
       // (2) two-click tools: knife (split) & grainline
       if (tool==="knife" || tool==="grain"){
-        clickBuf.push([snap(wx),snap(wy)]);
+        clickBuf.push([snap(wx,e.shiftKey),snap(wy,e.shiftKey)]);
         if (clickBuf.length===2){
           if (tool==="knife") doKnife(clickBuf[0],clickBuf[1]);
           else doGrainLine(clickBuf[0],clickBuf[1]);
@@ -849,23 +853,23 @@ export const Canvas = (() => {
       }
 
       if (tool==="measure"){ if(measurePts.length>=2)measurePts=[]; measurePts.push([wx,wy]); render(); return; }
-      if (tool==="line"){ drawing={tool:"line",pts:[[snap(wx),snap(wy)]]}; return; }
+      if (tool==="line"){ drawing={tool:"line",pts:[[snap(wx,e.shiftKey),snap(wy,e.shiftKey)]]}; return; }
       if (tool==="arc"){
         // 3 clicks: start → end → bulge
-        if(!drawing || drawing.tool!=="arc"){ drawing={tool:"arc",phase:1,pts:[[snap(wx),snap(wy)],[snap(wx),snap(wy)]],ctrl:null}; }
-        else if(drawing.phase===1){ drawing.pts[1]=[snap(wx),snap(wy)]; drawing.phase=2; }
+        if(!drawing || drawing.tool!=="arc"){ drawing={tool:"arc",phase:1,pts:[[snap(wx,e.shiftKey),snap(wy,e.shiftKey)],[snap(wx,e.shiftKey),snap(wy,e.shiftKey)]],ctrl:null}; }
+        else if(drawing.phase===1){ drawing.pts[1]=[snap(wx,e.shiftKey),snap(wy,e.shiftKey)]; drawing.phase=2; }
         else { drawing.ctrl=[wx,wy]; pushUndo(); sketch.push(drawing); drawing=null; }
         render(); return;
       }
-      if (tool==="pen"){ if(!drawing)drawing={tool:"pen",pts:[]}; drawing.pts.push([snap(wx),snap(wy)]); render(); return; }
+      if (tool==="pen"){ if(!drawing)drawing={tool:"pen",pts:[]}; drawing.pts.push([snap(wx,e.shiftKey),snap(wy,e.shiftKey)]); render(); return; }
       if (tool==="polygon"){
         // click to add vertices; click near the start point (or double-click) closes the shape
-        if (!drawing || drawing.tool!=="polygon"){ drawing={tool:"polygon",pts:[[snap(wx),snap(wy)]]}; render(); return; }
+        if (!drawing || drawing.tool!=="polygon"){ drawing={tool:"polygon",pts:[[snap(wx,e.shiftKey),snap(wy,e.shiftKey)]]}; render(); return; }
         const first=toScreen(drawing.pts[0][0],drawing.pts[0][1]);
         if (drawing.pts.length>=3 && Math.hypot(first[0]-e.offsetX, first[1]-e.offsetY)<=10){
           pushUndo(); sketch.push(drawing); drawing=null; render(); return;
         }
-        drawing.pts.push([snap(wx),snap(wy)]); render(); return;
+        drawing.pts.push([snap(wx,e.shiftKey),snap(wy,e.shiftKey)]); render(); return;
       }
       if (tool==="free"||tool==="freehand"){ drawing={tool:"free",pts:[[wx,wy]]}; return; }
 
@@ -900,7 +904,7 @@ export const Canvas = (() => {
       // live handle editing
       if (edit){
         const p=pieces[selected];
-        if (edit.type==="point"){ p.outline[edit.idx]=snapToPoint(wx,wy,selected,edit.idx); }
+        if (edit.type==="point"){ p.outline[edit.idx]=snapToPoint(wx,wy,selected,edit.idx,e.shiftKey); }
         else if (edit.type==="rotate"){ const ang=Math.atan2(wy-edit.c[1],wx-edit.c[0])-edit.startAng; applyFromSnap(p,edit.snp,rotAbout(edit.c,ang)); }
         else if (edit.type==="scale"){ let f=Math.hypot(wx-edit.c[0],wy-edit.c[1])/edit.startDist; f=Math.max(0.2,Math.min(5,f)); applyFromSnap(p,edit.snp,sclAbout(edit.c,f)); }
         render(); return;
@@ -910,16 +914,16 @@ export const Canvas = (() => {
       if (dragText){ const t=texts[dragText.i]; t.x+=wx-dragText.ox; t.y+=wy-dragText.oy; dragText.ox=wx; dragText.oy=wy; render(); return; }
       if (dragPoint){ const p=getPointById(dragPoint.id); if(p){ p.x+=wx-dragPoint.ox; p.y+=wy-dragPoint.oy; p.xExpr=null; p.yExpr=null; } dragPoint.ox=wx; dragPoint.oy=wy; render(); return; }
       if (dragPiece){ const dx=wx-dragPiece.ox, dy=wy-dragPiece.oy; movePiece(dragPiece.i,dx,dy); dragPiece.ox=wx; dragPiece.oy=wy; render(); return; }
-      if (drawing && drawing.tool==="line"){ drawing.pts[1]=[snap(wx),snap(wy)]; render(); return; }
-      if (drawing && drawing.tool==="arc"){ if(drawing.phase===1) drawing.pts[1]=[snap(wx),snap(wy)]; else drawing.ctrl=[wx,wy]; render(); return; }
-      if (drawing && drawing.tool==="conline"){ const s=snapConstruction(wx,wy); drawing.pts[1]=[s.x,s.y]; drawing.refs[1]=refFromSnap(s); render(); return; }
+      if (drawing && drawing.tool==="line"){ drawing.pts[1]=[snap(wx,e.shiftKey),snap(wy,e.shiftKey)]; render(); return; }
+      if (drawing && drawing.tool==="arc"){ if(drawing.phase===1) drawing.pts[1]=[snap(wx,e.shiftKey),snap(wy,e.shiftKey)]; else drawing.ctrl=[wx,wy]; render(); return; }
+      if (drawing && drawing.tool==="conline"){ const s=snapConstruction(wx,wy,e.shiftKey); drawing.pts[1]=[s.x,s.y]; drawing.refs[1]=refFromSnap(s); render(); return; }
       if (drawing && drawing.tool==="conarc"){
-        if(drawing.phase===1){ const s=snapConstruction(wx,wy); drawing.pts[1]=[s.x,s.y]; drawing.refs[1]=refFromSnap(s); }
-        else { drawing.ctrl=[wx,wy]; const pid=nearestPointId(wx,wy); snapMark = pid!=null ? [getPointById(pid).x,getPointById(pid).y] : null; }
+        if(drawing.phase===1){ const s=snapConstruction(wx,wy,e.shiftKey); drawing.pts[1]=[s.x,s.y]; drawing.refs[1]=refFromSnap(s); }
+        else { drawing.ctrl=[wx,wy]; const pid=nearestPointId(wx,wy,10,e.shiftKey); snapMark = pid!=null ? [getPointById(pid).x,getPointById(pid).y] : null; }
         render(); return;
       }
-      if (drawing && drawing.tool==="circle"){ const s=snapConstruction(wx,wy); drawing.rim=[s.x,s.y]; render(); return; }
-      if (tool==="point"){ snapConstruction(wx,wy); render(); return; }
+      if (drawing && drawing.tool==="circle"){ const s=snapConstruction(wx,wy,e.shiftKey); drawing.rim=[s.x,s.y]; render(); return; }
+      if (tool==="point"){ snapConstruction(wx,wy,e.shiftKey); render(); return; }
       if (drawing && drawing.tool==="free"){ drawing.pts.push([wx,wy]); render(); return; }
       if (clickBuf.length && (tool==="knife"||tool==="grain"||tool==="calib")){ render(); return; }
       if (drawing && drawing.tool==="polygon"){ render(); return; }
@@ -1210,8 +1214,8 @@ export const Canvas = (() => {
       return {ok:true};
     } catch(e){ return {ok:false, error:e.message}; }
   }
-  function nearestPointId(wx,wy,thrPx=10){
-    if(!opts.snap) return null;
+  function nearestPointId(wx,wy,thrPx=10,free){
+    if(!opts.snap || free) return null;
     const thr=thrPx/view.scale; let best=null,bd=thr;
     points.forEach(p=>{ const d=Math.hypot(p.x-wx,p.y-wy); if(d<bd){bd=d;best=p.id;} });
     return best;
@@ -1222,11 +1226,11 @@ export const Canvas = (() => {
   }
   // Snap a raw world point to a nearby construction point (for the drafting
   // tools below); falls back to grid snap. Reuses the shared snap-ring mark.
-  function snapConstruction(wx,wy){
-    const pid=nearestPointId(wx,wy);
+  function snapConstruction(wx,wy,free){
+    const pid=nearestPointId(wx,wy,10,free);
     if(pid!=null){ const p=getPointById(pid); snapMark=[p.x,p.y]; return {x:p.x,y:p.y,pid}; }
     snapMark=null;
-    return {x:snap(wx), y:snap(wy), pid:null};
+    return {x:snap(wx,free), y:snap(wy,free), pid:null};
   }
   const refFromSnap = s => s.pid!=null ? {pid:s.pid} : {x:s.x, y:s.y};
 
