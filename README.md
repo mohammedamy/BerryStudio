@@ -402,6 +402,21 @@ in the app's own header.
 - **Google Drive/OneDrive sync** (WP-18) is a bring-your-own-OAuth-client-ID
   integration — see the note further below — not a BerryStudio-hosted
   service, the same honesty pattern as WP-1's bring-your-own-AI-key design.
+- **A third real, pre-existing bug found and fixed, this time in
+  deployment rather than app code**: found while verifying WP-16's new
+  `docs/` actually reached production — the CI deploy workflow's "Assemble
+  combined site" step copies an explicit file/directory list rather than
+  the whole repo, and that list was never updated after `body.html` (WP-10)
+  and `3d-test.html` (WP-9) were added in earlier phases. Both had been
+  returning a live 404 in production since the phase that introduced each
+  of them, despite being genuinely built, tested, and linked from the
+  running app the whole time — `npm test`/Playwright serve the repo
+  directly and never exercised the deploy step's copy list, so nothing
+  caught it until this direct production check. Fixed by adding `body.html`,
+  `3d-test.html`, and `docs/` to that list; a future top-level HTML file
+  will need the same one-line addition (a deliberate allow-list, not
+  something to wildcard, since the repo root isn't a build output
+  directory — a wildcard would also publish scratch/dev files).
 
 ---
 

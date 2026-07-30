@@ -1,15 +1,30 @@
 name: Deploy to GitHub Pages
 
 # Publishes the existing static production site (index.html, css/, js/,
-# icons/, env/, schema/, manifest.webmanifest, sw.js) UNCHANGED at the domain
-# root, plus the cloth-lab/ Vite app built and published at a /cloth-lab/
-# subpath alongside it — one combined artifact, not a replacement of the
-# production site. See cloth-lab/vite.config.js's `base` for the matching
-# subpath. Also builds and publishes cloth-lab's embedded-library bundle
-# (dist-embed/, WP-5) at /cloth-lab/dist-embed/ — js/app.js's
-# mountClothLabEmbedded() resolves it relative to its own module URL, so it
-# must land at exactly that path for the "embedded" engine flag to work in
-# production.
+# icons/, env/, schema/, manifest.webmanifest, sw.js, docs/, plus any other
+# top-level HTML entry point — body.html, 3d-test.html) UNCHANGED at the
+# domain root, plus the cloth-lab/ Vite app built and published at a
+# /cloth-lab/ subpath alongside it — one combined artifact, not a
+# replacement of the production site. See cloth-lab/vite.config.js's `base`
+# for the matching subpath. Also builds and publishes cloth-lab's
+# embedded-library bundle (dist-embed/, WP-5) at /cloth-lab/dist-embed/ —
+# js/app.js's mountClothLabEmbedded() resolves it relative to its own
+# module URL, so it must land at exactly that path for the "embedded"
+# engine flag to work in production.
+#
+# POST-MORTEM (found while verifying WP-16's new docs/ deployed correctly):
+# the "Assemble combined site" step below used an EXPLICIT file/directory
+# allow-list (`cp -r index.html css icons js env schema manifest.webmanifest
+# sw.js`) written once and never updated as new top-level entry points were
+# added in later phases — body.html (WP-10) and 3d-test.html (WP-9) had
+# been silently 404ing in production since the phase that introduced each
+# of them, despite both being genuinely built, tested, and linked from the
+# live app. Fixed by adding them (and docs/) to the copy list explicitly;
+# a genuinely new top-level HTML file added in a future phase will need
+# the same one-line addition here — this is a deliberate allow-list, not
+# an oversight to "fix properly" with a wildcard, since a wildcard here
+# would also start publishing scratch/dev files that don't belong in
+# production (this repo's root is not a build output directory).
 on:
   push:
     branches: [main]
@@ -130,7 +145,7 @@ jobs:
         run: |
           set -e
           mkdir -p _site
-          cp -r index.html css icons js env schema manifest.webmanifest sw.js _site/
+          cp -r index.html body.html 3d-test.html css icons js env schema manifest.webmanifest sw.js docs _site/
           mkdir -p _site/cloth-lab
           cp -r cloth-lab/dist/. _site/cloth-lab/
           mkdir -p _site/cloth-lab/dist-embed

@@ -59,6 +59,16 @@ verification pass before WP-18 (a genuinely new feature) built on top of it.
   fixed by those two WPs but the notes were never updated, directly
   contradicting the status table just above them. Corrected during this
   phase's own README pass.
+- **CI deploy workflow was silently 404ing `body.html` (WP-10) and
+  `3d-test.html` (WP-9) in production** since the phase each was
+  introduced — found while verifying this phase's own `docs/` deployed
+  correctly. `.github/workflows/deploy-pages.yml`'s "Assemble combined
+  site" step copies an explicit allow-list of files/directories rather
+  than the whole repo, and that list was never updated for either page.
+  Both were genuinely built, tested, and linked from the live app the
+  whole time — `npm test`/Playwright serve the repo directly and never
+  exercise the deploy step, so nothing had caught it. Fixed by adding
+  `body.html`, `3d-test.html`, and `docs/` to the copy list.
 
 ### Honest notes
 - Keyboard canvas operation covers whole pattern pieces only — construction
