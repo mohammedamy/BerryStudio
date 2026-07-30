@@ -155,13 +155,18 @@ in the app's own header.
   wrapped in a small `%AI` compatibility header. None of these fall back to
   the vector SVG payload under a different extension any more.
 - **Projects** round-trip losslessly via `Save Project (.json)` → `Import Project`.
-- **3D avatars** are high-quality *procedural stylised* characters (not photoreal
-  humans — that needs sculpted, rigged GLB models an in-browser script can't
-  synthesise). For photorealism, open **Settings → 3D avatar models (GLB)** and
-  paste a model URL per category (e.g. a Ready Player Me link ending in `.glb`) —
-  no code needed. The loader auto-scales the model to the live measurements and
-  falls back to the built-in body if the URL fails. Local files work too: drop
-  them in the repo (e.g. `avatars/women.glb`) and paste that relative path.
+- **3D avatars** are high-quality *procedural stylised* characters by default
+  (not photoreal humans — that needs sculpted GLB models an in-browser script
+  can't synthesise). **Settings → 3D avatar models (GLB)** now offers three
+  ways to replace the default body per category: pick one of 8 bundled GLB
+  models (`avatars/`, real Man/Boy/Girl/Woman variants — see the Honest note
+  below on what they are and aren't), paste a model URL (e.g. a Ready Player
+  Me link ending in `.glb`), or upload your own `.glb` file directly from
+  disk. The loader auto-scales whichever model is active to the live
+  measurements and falls back to the built-in body if it fails to load.
+  Uploaded files are session-only (a `blob:` URL, never persisted) — use a
+  hosted URL or one of the bundled models if you want the choice to survive
+  a reload.
 - Three.js + OrbitControls load from a CDN (via an import map) on first visit,
   then are cached for offline use.
 - **3D Cloth Lab**'s cloth solver uses a distance-based hinge/fold spring for
@@ -435,6 +440,21 @@ in the app's own header.
   will need the same one-line addition (a deliberate allow-list, not
   something to wildcard, since the repo root isn't a build output
   directory — a wildcard would also publish scratch/dev files).
+- **Bundled avatar gallery** (`avatars/`, Settings → 3D avatar models) — 8
+  real GLB models (2 men, 1 woman, 2 boys, 3 girls), selectable per category
+  alongside the existing custom-URL field and a new "upload your own file"
+  option. These are static, **unrigged** single-mesh exports (from an
+  AI image-to-3D pipeline, not a sculpted/rigged character) — that's a
+  perfect fit for 3D Preview (`js/three-view.js` just loads and scales to
+  height, no skeleton needed) but means pose variants in 3D Cloth Lab
+  (seated/walk/etc.) won't animate them; they'll display correctly, just
+  static, the same as any unposed model. A 9th candidate model was
+  deliberately left out: at 41MB it was 10x every other file's size,
+  bloating both the git repo and the download a visitor would pay just to
+  preview it — left for a future, properly-compressed re-export rather
+  than shipped as-is. Not precached by the service worker (same
+  network-first-then-cache behaviour as any other same-origin asset) —
+  only fetched when a user actually picks one.
 
 ---
 

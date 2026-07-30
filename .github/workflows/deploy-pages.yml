@@ -1,9 +1,9 @@
 name: Deploy to GitHub Pages
 
 # Publishes the existing static production site (index.html, css/, js/,
-# icons/, env/, schema/, manifest.webmanifest, sw.js, docs/, plus any other
-# top-level HTML entry point — body.html, 3d-test.html) UNCHANGED at the
-# domain root, plus the cloth-lab/ Vite app built and published at a
+# icons/, env/, schema/, manifest.webmanifest, sw.js, docs/, avatars/, plus
+# any other top-level HTML entry point — body.html, 3d-test.html) UNCHANGED
+# at the domain root, plus the cloth-lab/ Vite app built and published at a
 # /cloth-lab/ subpath alongside it — one combined artifact, not a
 # replacement of the production site. See cloth-lab/vite.config.js's `base`
 # for the matching subpath. Also builds and publishes cloth-lab's
@@ -145,7 +145,7 @@ jobs:
         run: |
           set -e
           mkdir -p _site
-          cp -r index.html body.html 3d-test.html css icons js env schema manifest.webmanifest sw.js docs _site/
+          cp -r index.html body.html 3d-test.html css icons js env schema manifest.webmanifest sw.js docs avatars _site/
           mkdir -p _site/cloth-lab
           cp -r cloth-lab/dist/. _site/cloth-lab/
           mkdir -p _site/cloth-lab/dist-embed

@@ -160,7 +160,11 @@ test('AI Provider settings panel renders and a mocked Test Connection round-trip
   await page.locator('#settingsBtn').click();
   await expect(page.locator('#settingsModal')).toHaveClass(/show/);
   await page.getByText('Text generation', { exact: true }).click();
-  await page.locator('#settingsModal select').selectOption('anthropic');
+  // Settings now has several <select>s (AI provider, cloud-sync target,
+  // per-category avatar pickers) — scope to the one that actually offers
+  // an "anthropic" option rather than assuming it's the only select.
+  const providerSelect = page.locator('#settingsModal select').filter({ has: page.locator('option[value="anthropic"]') });
+  await providerSelect.selectOption('anthropic');
   await expect(page.getByText('API key', { exact: false })).toBeVisible();
 
   await page.getByRole('button', { name: 'Test connection' }).click();
@@ -605,4 +609,43 @@ test('WP-18: self-hosted cloud sync saves and loads a real project round-trip', 
   } finally {
     server.close();
   }
+});
+
+// Bundled avatar gallery: picking one of the repo-shipped GLB models in
+// Settings sets state.avatarGLB for that category and the 3D Preview
+// actually loads and displays it (not just that the dropdown renders).
+test('bundled avatar picker loads a real GLB model into 3D Preview', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+
+  await page.goto('/index.html');
+  await dismissOnboarding(page);
+
+  await page.locator('#settingsBtn').click();
+  const selects = page.locator('#settingsModal select');
+  const count = await selects.count();
+  let menSelect = null;
+  for (let i = 0; i < count; i++) {
+    const values = await selects.nth(i).evaluate((s) => [...s.options].map((o) => o.value));
+    if (values.includes('bundled:man')) { menSelect = selects.nth(i); break; }
+  }
+  expect(menSelect).not.toBeNull();
+  await menSelect.selectOption('bundled:man');
+  await page.locator('#settingsModal [data-close]').click();
+
+  const savedUrl = await page.evaluate(() => JSON.parse(localStorage.getItem('pps')).avatarGLB.men);
+  expect(savedUrl).toBe('avatars/man.glb');
+
+  await page.locator('#catSeg button[data-cat="men"]').click();
+  await page.locator('#viewToggle button[data-v="3d"]').click();
+  await page.waitForTimeout(3000);
+
+  const state3d = await page.evaluate(() => {
+    const c = document.getElementById('canvas3d');
+    return { w: c.width, h: c.height, ready: window.View3D.isReady() };
+  });
+  expect(state3d.ready).toBe(true);
+  expect(state3d.w).toBeGreaterThan(0);
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });

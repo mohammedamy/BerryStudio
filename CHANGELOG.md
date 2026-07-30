@@ -6,6 +6,31 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Bundled avatar gallery
+
+### Added
+- **8 real GLB avatar models** (`avatars/`) selectable per category in
+  Settings → 3D avatar models: 2 men (man, heavier-build variant), 1 woman,
+  2 boys, 3 girls — alongside the existing custom-URL field and a new
+  "upload your own file" option (`<input type=file>` → a session-only
+  `blob:` URL, honestly labelled as not persisting across reloads).
+  Deployed via `.github/workflows/deploy-pages.yml`'s copy list (added
+  `avatars` alongside the `docs`/`body.html`/`3d-test.html` fix from the
+  entry above — same class of gap, caught before it shipped broken this
+  time).
+
+### Honest notes
+- These are static, **unrigged** single-mesh exports from an AI
+  image-to-3D pipeline, not sculpted/rigged characters — a perfect fit for
+  3D Preview (loads and scales to height, no skeleton needed) but pose
+  variants in 3D Cloth Lab won't animate them (no skeleton to rotate);
+  they still display correctly, just static.
+- A 9th candidate model (a "woman" variant) was deliberately left out at
+  the user's direction: 41MB vs. 2-3.6MB for every other file, which would
+  have meaningfully bloated both the git repo and the download a visitor
+  pays just to preview it. Left for a future, properly-compressed
+  re-export.
+
 ## Post-Phase-4 fix — 3D Preview blank canvas (real bug, fixed in two rounds)
 
 ### Fixed

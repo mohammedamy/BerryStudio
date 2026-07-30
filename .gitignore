@@ -13,3 +13,8 @@ node_modules/
 test-results/
 playwright-report/
 blob-report/
+
+# Raw avatar source exports (multi-format working files: .glb/.obj/.fbx/.stl).
+# The curated, production-ready subset lives in avatars/ (tracked); this
+# folder is local source material only, never served by the app.
+Manniquin/

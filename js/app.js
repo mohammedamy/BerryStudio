@@ -77,6 +77,31 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   const L = o => (o ? (o[state.lang] ?? o.en) : "");
 
   const PALETTE = ["#6d5efc", "#00c2a8", "#ff5d8f", "#e2a52b", "#4c8dff", "#c1492e"];
+  // Bundled avatar GLBs (repo-relative, per README's own "drop them in the
+  // repo e.g. avatars/women.glb" convention) — static, unrigged single-mesh
+  // exports. Fine for 3D Preview (js/three-view.js just loads+scales, no
+  // skeleton needed); in 3D Cloth Lab, pose variants won't animate them
+  // since there's no skeleton to rotate — they'll still display, just
+  // static, exactly as an unposed/A-pose model would. Labels are EN/AR
+  // i18n keys (avatarModel_<id>), not raw strings, to stay bilingual.
+  const BUNDLED_AVATARS = {
+    men: [
+      { id: "man", file: "avatars/man.glb" },
+      { id: "fatman", file: "avatars/fatman.glb" },
+    ],
+    women: [
+      { id: "woman2", file: "avatars/woman2.glb" },
+    ],
+    boys: [
+      { id: "boy", file: "avatars/boy.glb" },
+      { id: "boy2", file: "avatars/boy2.glb" },
+    ],
+    girls: [
+      { id: "girl", file: "avatars/girl.glb" },
+      { id: "girl2", file: "avatars/girl2.glb" },
+      { id: "girl3", file: "avatars/girl3.glb" },
+    ],
+  };
   let aiImage = null;   // data-URL of the uploaded AI inspiration image
   // AI Fashion Billboard — up to 2 source clothing photos, the generated
   // editorial "billboard" photo, and the pattern-drawing image derived from it
@@ -2434,6 +2459,67 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     }
   }
 
+  // Per-category avatar picker: bundled model / custom URL / upload your
+  // own file. `state.avatarGLB[cat]` stores whichever URL is active —
+  // bundled options resolve to a repo-relative path, uploads to a session-
+  // only blob: URL (see the honest note in the upload handler below).
+  function renderAvatarPickerRow(container, cat){
+    const current = (state.avatarGLB && state.avatarGLB[cat]) || "";
+    const bundled = BUNDLED_AVATARS[cat] || [];
+    const bundledMatch = bundled.find(b => b.file === current);
+    const mode = bundledMatch ? "bundled" : current.startsWith("blob:") ? "upload" : current ? "url" : "none";
+
+    const row = el("div"); row.style.cssText = "margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line-2)";
+    row.appendChild(el("div", null, T(cat))).style.cssText = "font-size:12px;font-weight:700;margin-bottom:6px";
+
+    const applyURL = (url) => {
+      state.avatarGLB = state.avatarGLB || {};
+      state.avatarGLB[cat] = url || ""; save();
+      View3D.setAvatarURL(cat, url || null);
+      if (state.view === "3d" && state.category === cat) build3D();
+      toast("✓ " + T(cat));
+    };
+
+    const sel = el("select", "select");
+    const opt = (value, label, selected) => { const o = document.createElement("option"); o.value = value; o.textContent = label; if (selected) o.selected = true; sel.appendChild(o); };
+    opt("none", T("avatarNone"), mode === "none");
+    bundled.forEach(b => opt("bundled:" + b.id, T("avatarModel_" + b.id), mode === "bundled" && bundledMatch.id === b.id));
+    opt("url", T("avatarCustomUrl"), mode === "url");
+    opt("upload", T("avatarUpload"), mode === "upload");
+    row.appendChild(sel);
+
+    const detail = el("div"); detail.style.marginTop = "6px";
+    row.appendChild(detail);
+
+    function renderDetail(selected){
+      detail.innerHTML = "";
+      if (selected === "url") {
+        const inp = el("input", "input"); inp.type = "url"; inp.dir = "ltr";
+        inp.placeholder = "https://models.readyplayer.me/….glb";
+        inp.value = mode === "url" ? current : "";
+        inp.onchange = () => applyURL(inp.value.trim());
+        detail.appendChild(inp);
+      } else if (selected === "upload") {
+        const inp = el("input"); inp.type = "file"; inp.accept = ".glb,model/gltf-binary";
+        inp.onchange = () => {
+          const f = inp.files && inp.files[0]; if (!f) return;
+          applyURL(URL.createObjectURL(f));
+        };
+        detail.appendChild(inp);
+        detail.appendChild(el("div", "help-note", T("avatarUploadHint")));
+      } else if (selected === "none") {
+        if (current) applyURL("");
+      }
+    }
+    sel.onchange = () => {
+      const v = sel.value;
+      if (v.startsWith("bundled:")) { applyURL(bundled.find(b => b.id === v.slice(8)).file); renderDetail("bundled"); }
+      else { renderDetail(v); }
+    };
+    renderDetail(mode);
+    container.appendChild(row);
+  }
+
   function renderAISettings(body){
     ensureAIState();
     const wrap=el("div","field"); wrap.style.marginTop="14px";
@@ -2606,24 +2692,11 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     // flat "AI endpoint"/"AI Image endpoint" fields; today's saved values
     // become the `proxy` adapter's baseUrl under the hood (see ensureAIState()).
     renderAISettings(body);
-    // 3D avatar models — paste a GLB URL per category (e.g. Ready Player Me)
+    // 3D avatar models — pick a bundled model, paste a URL (e.g. Ready
+    // Player Me), or upload your own GLB file, per category.
     const av = el("div","field"); av.style.marginTop="14px";
     av.innerHTML = `<label>${T("avatarModels")}</label>`;
-    ["women","men","girls","boys"].forEach(cat=>{
-      const wrap = el("div"); wrap.style.cssText="display:flex;align-items:center;gap:8px;margin-bottom:6px";
-      wrap.appendChild(el("span",null,T(cat))).style.cssText="font-size:12px;font-weight:700;min-width:52px";
-      const inp = el("input","input"); inp.type="url"; inp.dir="ltr";
-      inp.placeholder="https://models.readyplayer.me/….glb";
-      inp.value = (state.avatarGLB && state.avatarGLB[cat]) || "";
-      inp.onchange = () => {
-        state.avatarGLB = state.avatarGLB || {};
-        state.avatarGLB[cat] = inp.value.trim(); save();
-        View3D.setAvatarURL(cat, inp.value.trim() || null);
-        if (state.view === "3d" && state.category === cat) build3D();
-        toast("✓ " + T(cat));
-      };
-      wrap.appendChild(inp); av.appendChild(wrap);
-    });
+    ["women","men","girls","boys"].forEach(cat=>renderAvatarPickerRow(av, cat));
     av.appendChild(el("div","help-note",T("avatarModelsD")));
     body.appendChild(av);
     // BerryStudio-Upgrade-Plan WP-5: 3D Cloth Lab engine — feature-flagged
