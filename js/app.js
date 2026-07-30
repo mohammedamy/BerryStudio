@@ -63,6 +63,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     // state; the self-hosted endpoint's bearer token and Drive/OneDrive
     // access tokens never do — see js/cloud-sync.js.
     syncTarget: "endpoint", syncEndpointUrl: "", syncGoogleClientId: "", syncMicrosoftClientId: "",
+    costCurrency: "USD",
   };
   const savedRaw = JSON.parse(localStorage.getItem("pps") || "{}");
   const state = Object.assign({}, DEF, savedRaw);
@@ -77,6 +78,14 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   const L = o => (o ? (o[state.lang] ?? o.en) : "");
 
   const PALETTE = ["#6d5efc", "#00c2a8", "#ff5d8f", "#e2a52b", "#4c8dff", "#c1492e"];
+  // Cost estimator currency: fixed approximate rates, not a live FX feed —
+  // SAR is an accurate long-standing peg (3.75), EGP floats and is a rough
+  // approximation flagged to the user in the UI rather than presented as exact.
+  const CURRENCIES = {
+    USD: { symbol: "$", rate: 1, label: "USD" },
+    SAR: { symbol: "ر.س", rate: 3.75, label: "SAR" },
+    EGP: { symbol: "ج.م", rate: 49, label: "EGP" },
+  };
   // Bundled avatar GLBs (repo-relative, per README's own "drop them in the
   // repo e.g. avatars/women.glb" convention) — static, unrigged single-mesh
   // exports. Fine for 3D Preview (js/three-view.js just loads+scales, no
@@ -178,6 +187,23 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     circleTool:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
     promote:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 9l4-4 8 1 4 6-2 9H7z" stroke-dasharray="2.5 2"/><path d="M8.5 12.5l2.2 2.2 4.8-4.8"/></svg>',
     calib:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h16M4 12v-3M20 12v-3M9 12v-3M15 12v-3"/></svg>',
+  };
+
+  // Library thumbnails: real, full-colour illustrations (not currentColor-themed
+  // like IC above) so every garment TYPE reads distinctly at a glance in the grid.
+  // No <defs>/gradients — many copies of the same SVG string land in the DOM at
+  // once and duplicate ids would collide, so depth comes from flat layered fills.
+  const LIB_ICONS = {
+    shirt:'<svg viewBox="0 0 24 24"><path d="M8 2l4 3 4-3 5 4-3 4v11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V10L3 6z" fill="#4d7fc4"/><path d="M8 2l1.6 3.6L12 8l2.4-2.4L16 2l-1 2.2-3 2.4-3-2.4z" fill="#eef3fb"/><circle cx="12" cy="10" r=".7" fill="#254170"/><circle cx="12" cy="13.4" r=".7" fill="#254170"/><circle cx="12" cy="16.8" r=".7" fill="#254170"/></svg>',
+    top:'<svg viewBox="0 0 24 24"><path d="M8.4 3l3.6 2.4L15.6 3l4.4 3.6-2.6 3-1 12.4H7.6l-1-12.4-2.6-3z" fill="#3f9b8c"/><path d="M8.4 3l3.6 2.4L15.6 3l1 1.6-4.6 3.4-4.6-3.4z" fill="#d9f0ec"/></svg>',
+    dress:'<svg viewBox="0 0 24 24"><path d="M9 2l3 3 3-3 2 5-3 3 4 12H7l4-12-3-3z" fill="#ea6f93"/><path d="M9 2l3 3 3-3 1 2.4-4 3.6-4-3.6z" fill="#fbdce6"/><path d="M8.6 13h6.8" stroke="#c1436a" stroke-width="1.1" stroke-linecap="round"/></svg>',
+    gown:'<svg viewBox="0 0 24 24"><path d="M9 2l3 2.6 3-2.6 2 4.6-2.6 2.6 5 13.8H6.6l5-13.8L9 6.6z" fill="#7a4aa8"/><path d="M9 2l3 2.6 3-2.6 1 2.4-4 3.4-4-3.4z" fill="#e7d6f5"/><path d="M8 15.4h8" stroke="#d8b23e" stroke-width="1.1"/><path d="M12 15.4v9" stroke="#5e3583" stroke-width=".8" stroke-dasharray="1.4 1.4"/></svg>',
+    robe:'<svg viewBox="0 0 24 24"><path d="M9 2h6l1.6 3-2.6 2 1 15H8l1-15-2.6-2z" fill="#cf9a3e"/><path d="M9 2h6l.8 1.6H8.2z" fill="#f2ddb0"/><path d="M6 8l2-3M18 8l-2-3" stroke="#b07f2e" stroke-width="1.2" stroke-linecap="round" fill="none"/><path d="M12 6v16" stroke="#a9781f" stroke-width=".8"/></svg>',
+    jacket:'<svg viewBox="0 0 24 24"><path d="M9 2L6 4 4 8l2 2v11a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10l2-2-2-4-3-2-3 2.6z" fill="#2e3d5c"/><path d="M9 2l3 2.6L15 2l1.4 1-4.4 6-4.4-6z" fill="#4a5d82"/><circle cx="10.6" cy="14" r=".6" fill="#d9b54c"/><circle cx="10.6" cy="17" r=".6" fill="#d9b54c"/></svg>',
+    coat:'<svg viewBox="0 0 24 24"><path d="M9 2L6 4 4 8l2 2v13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10l2-2-2-4-3-2-3 2.6z" fill="#a9662f"/><path d="M9 2l3 2.6L15 2l1.4 1-4.4 6-4.4-6z" fill="#c98a4c"/><path d="M6 15h12" stroke="#7a4c22" stroke-width="1.2"/><circle cx="10" cy="12" r=".55" fill="#5c3a1e"/><circle cx="14" cy="12" r=".55" fill="#5c3a1e"/><circle cx="10" cy="19" r=".55" fill="#5c3a1e"/><circle cx="14" cy="19" r=".55" fill="#5c3a1e"/></svg>',
+    suit:'<svg viewBox="0 0 24 24"><path d="M9 2L6 4 4 8l2 2v11a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10l2-2-2-4-3-2-3 2.6z" fill="#3c3f46"/><path d="M9 2l1.6 2.4L9.4 20H8V10L6 8l1-3z" fill="#f2f2f2"/><path d="M15 2l-1.6 2.4L14.6 20H16V10l2-2-1-3z" fill="#f2f2f2"/><path d="M11 4.6l1 2 1-2-1-1.6z" fill="#7c2432"/><path d="M11.4 6.2h1.2l-.4 6-.4 0z" fill="#7c2432"/></svg>',
+    trousers:'<svg viewBox="0 0 24 24"><path d="M6 2h12l.6 8-1 2 .8 12h-4l-1-11-1 11H8l.8-12-1-2z" fill="#3c5f95"/><path d="M6 2h12l.3 3.6H5.7z" fill="#294570"/><path d="M12 4v6" stroke="#294570" stroke-width="1"/></svg>',
+    skirt:'<svg viewBox="0 0 24 24"><path d="M9 3h6l1 4h-8z" fill="#3c5f95"/><path d="M8 7h8l3 13H5z" fill="#e8a33e"/><path d="M12 7v13" stroke="#c1811f" stroke-width=".8" stroke-dasharray="1.4 1.4"/></svg>',
   };
 
   // ---------------- TOOLS ----------------
@@ -598,7 +624,6 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   }
 
   // LIBRARY PANE
-  const LIB_THUMB = { dress:"dress", robe:"dress", top:"shirt", shirt:"shirt", skirt:"skirtIcon", trousers:"trousersIcon" };
   function renderLibraryPane() {
     const c = $(".rail-pane[data-pane=library]"); c.innerHTML="";
     c.appendChild(el("div","section-title",IC.shirt+T("libraryTitle")+` <small style="font-weight:600;color:var(--ink-2);margin-inline-start:4px">(${LIBRARY.length})</small>`));
@@ -619,13 +644,13 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       }).forEach(x=>{
           const p=PATTERNS[x.id];
           const card=el("div","lib-card");
-          card.appendChild(el("div","lib-thumb", IC[LIB_THUMB[x.type]] || (x.cat==="men"?IC.shirt:IC.dress)));
+          card.appendChild(el("div","lib-thumb", LIB_ICONS[x.type] || (x.cat==="men"?LIB_ICONS.shirt:LIB_ICONS.dress)));
           card.appendChild(el("div","lib-meta",`<div class="t">${L(p.name)}</div><div class="s">${L(x.tag)} · ${T(x.cat)}</div>`));
           card.onclick=()=>loadPattern(x.id);
           grid.appendChild(card);
         });
       // my patterns
-      state.mine.forEach((mp,idx)=>{ const card=el("div","lib-card"); card.appendChild(el("div","lib-thumb",IC.dress)); card.appendChild(el("div","lib-meta",`<div class="t">${mp.name}</div><div class="s">★ ${T("saveMine").split(" ")[0]}</div>`)); card.onclick=()=>{Canvas.setPattern(mp.pieces,PALETTE);afterLoad(mp.name);}; grid.appendChild(card); });
+      state.mine.forEach((mp,idx)=>{ const card=el("div","lib-card"); card.appendChild(el("div","lib-thumb",LIB_ICONS.dress)); card.appendChild(el("div","lib-meta",`<div class="t">${mp.name}</div><div class="s">★ ${T("saveMine").split(" ")[0]}</div>`)); card.onclick=()=>{Canvas.setPattern(mp.pieces,PALETTE);afterLoad(mp.name);}; grid.appendChild(card); });
       if(!grid.children.length) grid.appendChild(el("div","help-note",T("noResults")));
     };
     inp.oninput=()=>draw(inp.value); draw();
@@ -1142,18 +1167,29 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         : `${T("fabric")}: <b>${yards} m</b> @ 150cm`));
     const mkBtn=el("button","big-btn ghost",IC.cube+T("createMarker")); mkBtn.style.marginTop="8px"; mkBtn.onclick=openMarkerModal; c.appendChild(mkBtn);
     c.appendChild(el("div","section-title",null)).textContent=T("costEst");
-    const fabricCost=+(yards*8).toFixed(2), trims=6.5, labor=15;
+    c.appendChild(el("div",null,`<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("costCurrency")}</label>`)).style.marginTop="4px";
+    const curRow=el("div","opt-grid"); curRow.style.margin="8px 0";
+    Object.keys(CURRENCIES).forEach(code=>{
+      const o=el("div","opt"+((state.costCurrency||"USD")===code?" active":""), CURRENCIES[code].label);
+      o.onclick=()=>{ state.costCurrency=code; save(); renderExportPane(); };
+      curRow.appendChild(o);
+    });
+    c.appendChild(curRow);
+    const cur = CURRENCIES[state.costCurrency||"USD"];
+    const fmt = usd => `${cur.symbol}${(usd*cur.rate).toFixed(2)}`;
+    const fabricCostUsd=+(yards*8).toFixed(2), trimsUsd=6.5, laborUsd=15;
     const cost=el("div");
-    cost.appendChild(el("div","cost-row",`<span>${T("fabric")}</span><b>$${fabricCost}</b>`));
-    cost.appendChild(el("div","cost-row",`<span>${T("trims")}</span><b>$${trims}</b>`));
-    cost.appendChild(el("div","cost-row",`<span>${T("labor")}</span><b>$${labor}</b>`));
-    cost.appendChild(el("div","cost-row total",`<span>${T("total")}</span><b>$${(fabricCost+trims+labor).toFixed(2)}</b>`));
+    cost.appendChild(el("div","cost-row",`<span>${T("fabric")}</span><b>${fmt(fabricCostUsd)}</b>`));
+    cost.appendChild(el("div","cost-row",`<span>${T("trims")}</span><b>${fmt(trimsUsd)}</b>`));
+    cost.appendChild(el("div","cost-row",`<span>${T("labor")}</span><b>${fmt(laborUsd)}</b>`));
+    cost.appendChild(el("div","cost-row total",`<span>${T("total")}</span><b>${fmt(fabricCostUsd+trimsUsd+laborUsd)}</b>`));
     c.appendChild(cost);
+    if((state.costCurrency||"USD")!=="USD") c.appendChild(el("div","help-note",T("costRateNote")));
     const ex=el("button","big-btn",IC.download+T("exportNow")); ex.style.marginTop="14px"; ex.onclick=doExport; c.appendChild(ex);
     const tp=el("button","big-btn ghost",T("techPack")); tp.style.marginTop="8px"; tp.onclick=()=>techPack(); c.appendChild(tp);
     const ps=el("button","big-btn ghost",IC.printer+T("patternSummary")); ps.style.marginTop="8px"; ps.onclick=()=>exportSummary(); c.appendChild(ps);
     c.appendChild(el("div","help-note",T("patternSummaryD"))).style.marginTop="6px";
-    const bo=el("button","big-btn ghost",T("bom")); bo.style.marginTop="10px"; bo.onclick=()=>toast(T("bom")+" ✓"); c.appendChild(bo);
+    const bo=el("button","big-btn ghost",T("bom")); bo.style.marginTop="10px"; bo.onclick=()=>exportBom(); c.appendChild(bo);
     const cp=el("button","big-btn ghost",T("checkPattern")); cp.style.marginTop="8px"; cp.onclick=()=>runCheckPattern(); c.appendChild(cp);
     const ws=el("button","big-btn ghost",T("walkSeam")); ws.style.marginTop="8px"; ws.onclick=()=>openWalkSeamModal(); c.appendChild(ws);
   }
@@ -2057,6 +2093,87 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     if(!w){ toast(T("patternSummary")+": allow pop-ups"); return; }
     w.document.write(buildSummaryHTML()); w.document.close();
     toast(T("exported")+" · "+T("patternSummary"));
+  }
+
+  // ================= BILL OF MATERIALS =================
+  // Notions are derived from what's actually in the loaded pattern — piece
+  // roles/names that already carry real signal (e.g. fancy-patterns.js's
+  // "Zip Placket Facing" pieces, cuff/waistband roles) — rather than a
+  // fixed guessed list, so an empty/simple pattern gets a short, honest BOM
+  // and a coat/suit gets a real one. Front-button count is the one estimate
+  // (industry ~10-12cm spacing over the back length) and is labelled as such.
+  function buildBomFabricConsumption(){
+    const m=currentMeas();
+    const yards = state.lastMarkerYards!=null ? +state.lastMarkerYards.toFixed(2) : +((m.height/100)*(state.category==="women"?1.8:1.5)).toFixed(2);
+    const width = state.lastMarkerWidth || 160;
+    return { yards, width };
+  }
+  function buildBomItems(pieces){
+    const m=currentMeas();
+    const { yards, width } = buildBomFabricConsumption();
+    const isZipPlacket = p => p.role==="placket-facing" && /zip/i.test((p.name&&p.name.en)||"");
+    const buttonFrontPiece = p => p.role==="lapel-facing" && !isZipPlacket(p);
+    const zipPresent = pieces.some(isZipPlacket);
+    const cuffCount = pieces.filter(p=>p.role==="cuff").length;
+    const waistbandCount = pieces.filter(p=>p.role==="waistband").length;
+    const buttonFrontPresent = pieces.some(buttonFrontPiece);
+    const liningNeeded = pieces.some(p=>p.role==="lapel-facing"||p.role==="placket-facing");
+    const interfacingNeeded = pieces.some(p=>["collar","cuff","waistband","lapel-facing","placket-facing"].includes(p.role));
+
+    const items = [];
+    items.push({ item:T("bomMainFabric"), qty:`${yards} m`, note:`@ ${width}cm — ${T("bomFabricDefault")}` });
+    if(liningNeeded) items.push({ item:T("bomLining"), qty:`${+(yards*0.4).toFixed(2)} m`, note:T("bomLiningNote") });
+    if(interfacingNeeded) items.push({ item:T("bomInterfacing"), qty:"0.3 m", note:T("bomInterfacingNote") });
+    if(zipPresent) items.push({ item:T("bomZipper"), qty:"1", note:`≈${Math.round(m.backLen*0.6)} cm` });
+    if(cuffCount) items.push({ item:T("bomButtonsCuff"), qty:String(cuffCount), note:T("bomButtonsCuffNote") });
+    if(waistbandCount) items.push({ item:T("bomClosureWaistband"), qty:String(waistbandCount), note:T("bomClosureWaistbandNote") });
+    if(buttonFrontPresent) items.push({ item:T("bomButtonsFront"), qty:String(Math.max(2,Math.round(m.backLen/12))), note:T("bomButtonsFrontNote") });
+    items.push({ item:T("bomThread"), qty:"1", note:T("bomThreadNote") });
+    items.push({ item:T("bomLabels"), qty:"1", note:T("bomLabelsNote") });
+    return items;
+  }
+  function buildBomHTML(){
+    const pieces=Canvas.getPieces();
+    const nameObj = state.loaded ? PATTERNS[state.loaded].name : { en:T("customPattern"), ar:T("customPattern") };
+    const sizeLbl = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids).label) : state.size;
+    const rtl = state.lang==="ar";
+    const items = buildBomItems(pieces);
+    const itemsHTML = items.map(row=>`<tr><td style="text-align:${rtl?"end":"start"}">${row.item}</td><td>${row.qty}</td><td style="color:#666;font-size:12px">${row.note}</td></tr>`).join("");
+    const cuttingHTML = pieces.map((p,i)=>`<tr><td style="text-align:${rtl?"end":"start"}">${i+1}. ${p.name.en} / ${p.name.ar}</td><td>${p.cutOnFold?T("cutOnFold"):"—"}</td><td>${p.color||""}</td></tr>`).join("");
+    return `<!doctype html><html lang="${state.lang}" dir="${rtl?"rtl":"ltr"}"><head><meta charset="utf-8">
+<title>BerryStudio — ${nameObj.en} · ${T("bom")}</title>
+<style>
+  @page{margin:14mm}
+  *{box-sizing:border-box}
+  body{font-family:${rtl?"'Cairo','Segoe UI'":"'Segoe UI'"},Tahoma,Arial,sans-serif;color:#1a1a1a;margin:0;padding:22px;background:#fff}
+  h1{font-size:21px;margin:0 0 3px}
+  h1 span{color:#8a8a8a;font-weight:600;font-size:16px}
+  .sub{font-size:13px;color:#666;margin:0 0 16px}
+  h2{font-size:15px;margin:22px 0 8px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{border:1px solid #ddd;padding:7px 10px;text-align:center}
+  th{background:#f1eeff;font-weight:700}
+  .pbar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px}
+  .pbar button{font-family:inherit;font-size:13px;font-weight:700;padding:9px 16px;border-radius:8px;border:1px solid #ccc;background:#f5f5f5;cursor:pointer}
+  .pbar button.primary{background:#6d5efc;color:#fff;border-color:#6d5efc}
+  @media print{.pbar{display:none}}
+</style></head>
+<body>
+  <div class="pbar"><button onclick="window.close()">${T("close")}</button><button class="primary" onclick="window.print()">${T("printNow")}</button></div>
+  <h1>${nameObj.en} <span>/ ${nameObj.ar}</span></h1>
+  <p class="sub">BerryStudio · ${T("bom")} · ${T("gradedTo")}: ${sizeLbl} · ${T("std_"+state.standard)}</p>
+  <h2>${T("bom")}</h2>
+  <table><tr><th>${T("bomItem")}</th><th>${T("bomQty")}</th><th>${T("bomNotes")}</th></tr>${itemsHTML}</table>
+  <h2>${T("bomCuttingList")}</h2>
+  <table><tr><th>${T("pieces")}</th><th>${T("cutOnFold")}</th><th>${T("pieceColor")}</th></tr>${cuttingHTML}</table>
+</body></html>`;
+  }
+  function exportBom(){
+    const pieces=Canvas.getPieces(); if(!pieces.length){ toast(T("empty2d")); return; }
+    const w=window.open("","_blank");
+    if(!w){ toast(T("bom")+": allow pop-ups"); return; }
+    w.document.write(buildBomHTML()); w.document.close();
+    toast(T("exported")+" · "+T("bom"));
   }
 
   // ================= PATTERNS =================

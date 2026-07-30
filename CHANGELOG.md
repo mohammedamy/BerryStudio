@@ -6,6 +6,62 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Pattern library expansion, colourful thumbnails, currency selector, real Bill of Materials
+
+### Added
+- **40 new Fancy Collection designs** (`js/fancy-patterns.js`) — 10 per
+  category (Women: `wf07`-`wf16`, Men: `mf07`-`mf16`, Girls: `gf07`-`gf16`,
+  Boys: `bf07`-`bf16`), each with 10+ real pattern pieces built from the
+  file's existing bezier component toolkit (`princessBodice`, `sleeve2pc`,
+  `collarStand`, `peplumPc`, `godetPc`, `capePc`, etc.) — no new geometry
+  helpers invented. The Fancy Collection goes from 24 designs (6/category)
+  to 64 (16/category); the full pattern library (base `PATTERNS` + Quick
+  Draft's `js/library.js` variants + Fancy Collection) goes from 124 to
+  164 entries.
+- **Distinct, colourful library thumbnails** (`js/app.js`'s new `LIB_ICONS`)
+  — every garment `type` now in use across the library (dress, gown, robe,
+  top, shirt, skirt, trousers, jacket, coat, suit) gets its own flat-fill
+  illustrated icon (e.g. a navy blazer with lapel + gold buttons for
+  jacket, a rust double-breasted coat for coat, a charcoal suit jacket
+  with a burgundy tie for suit) instead of the old two-icon fallback that
+  left the majority of the library — every gown, jacket, coat and suit —
+  rendering as a generic shirt or dress silhouette.
+- **Currency selector for the cost estimator** (Export pane) — USD/SAR/EGP
+  with a fixed exchange-rate table (`CURRENCIES` in `js/app.js`); SAR uses
+  the real long-standing 3.75 peg, EGP is an approximate rate flagged with
+  an on-screen note since it floats and this isn't a live FX feed.
+- **Real itemized Bill of Materials** (Export pane's "Bill of Materials"
+  button, previously a stub that only toasted "✓") — `buildBomItems()`
+  derives notions from the *loaded pattern's actual piece roles* rather
+  than a fixed guessed list: main fabric + width (reusing the existing
+  yardage estimate), lining fabric and fusible interfacing when
+  facing/lapel pieces are present, a zipper when a `"Zip Placket Facing"`
+  piece is detected, buttons per cuff/waistband piece, an estimated
+  front-button count from back-length (~1 per 12cm, labelled as an
+  estimate) when a button-front facing is present, plus thread and
+  care/size labels on every garment — printed alongside a real cutting
+  list (piece names, cut-on-fold, colour) in the same bilingual
+  print-ready window style as Pattern Summary/Tech Pack.
+
+### Fixed
+- **2 self-intersecting pattern pieces** (`gf10`'s bodice panels, `gf11`
+  and `gf13`'s neckline facings) found by the pattern validator sweep —
+  `gf10` widened `princessBodice()`'s `hipY`/`hemY` gap to match every
+  other design in the file; `gf11`/`gf13` replaced a misused
+  `lapelFacing()` call (whose curve proportions assume a longer `len` than
+  these short kid-scaled facings produce) with the same short inline
+  curved-band shape already used elsewhere in the file.
+
+### Honest notes
+- Front-button count in the Bill of Materials is a labelled *estimate*
+  (back-length / 12cm), not read from real notch/placket data — no such
+  data exists in the pattern format today, so this follows the project's
+  existing "defer or estimate honestly, don't fabricate a precise-looking
+  number" convention (see `js/validate.js`'s `ease` check for the same
+  principle applied elsewhere).
+- EGP's exchange rate is a fixed approximation, not a live feed — flagged
+  in the UI whenever a non-USD currency is selected.
+
 ## 2D canvas: select-anything delete, Add Point tool, oriented selection box
 
 ### Added
