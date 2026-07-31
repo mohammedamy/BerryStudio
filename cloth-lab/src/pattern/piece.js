@@ -5,7 +5,7 @@
 // all the way around) — the triangulator resamples the boundary one declared
 // edge at a time, in walk order, so a gap or overlap here would silently
 // corrupt the outline. Also derives `edgeOrder` (edges in polygon-walk order).
-export function finalizePiece(id, role, outline, seamEdges) {
+export function finalizePiece(id, role, outline, seamEdges, color) {
   const n = outline.length
   const edgeOrder = Object.keys(seamEdges).sort((a, b) => seamEdges[a].from - seamEdges[b].from)
   let totalSteps = 0
@@ -20,5 +20,5 @@ export function finalizePiece(id, role, outline, seamEdges) {
   if (totalSteps !== n) {
     throw new Error(`${id}: declared edges cover ${totalSteps} steps but the outline has ${n} points — perimeter isn't fully (and only once) tiled`)
   }
-  return { id, role, outline, seamEdges, edgeOrder }
+  return { id, role, outline, seamEdges, edgeOrder, color }
 }

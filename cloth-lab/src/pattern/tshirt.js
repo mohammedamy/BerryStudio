@@ -11,7 +11,7 @@
 // in automatically without manually tracking array indices.
 import { finalizePiece } from './piece.js'
 
-function buildPiece(id, role, points, order, edgeDefs) {
+function buildPiece(id, role, points, order, edgeDefs, color) {
   const outline = order.map((name) => points[name])
   const seamEdges = {}
   for (const [edgeName, [fromName, toName]] of Object.entries(edgeDefs)) {
@@ -20,7 +20,7 @@ function buildPiece(id, role, points, order, edgeDefs) {
     if (from < 0 || to < 0) throw new Error(`buildPiece(${id}): edge "${edgeName}" references an unknown point`)
     seamEdges[edgeName] = { from, to }
   }
-  return finalizePiece(id, role, outline, seamEdges)
+  return finalizePiece(id, role, outline, seamEdges, color)
 }
 
 // Mirror a piece across x=0 (for the left sleeve from the right sleeve) —
@@ -36,7 +36,7 @@ function mirrorPieceX(piece, newId) {
   for (const [name, { from, to }] of Object.entries(piece.seamEdges)) {
     seamEdges[name] = { from: remap(to), to: remap(from) }
   }
-  return finalizePiece(newId, piece.role, outline, seamEdges)
+  return finalizePiece(newId, piece.role, outline, seamEdges, piece.color)
 }
 
 // ---- Front panel (full symmetric piece; y grows downward from shoulder=0) ----
@@ -56,7 +56,7 @@ const front = buildPiece('front', 'frontPanel', frontPts, frontOrder, {
   leftArmhole: ['lUnderarm', 'lShoulder'],
   leftShoulder: ['lShoulder', 'lNeckShoulder'],
   neckline: ['lNeckShoulder', 'rNeckShoulder'],
-})
+}, '#6d5efc')
 
 // ---- Back panel (shallower neckline, otherwise the same block) ----
 const backPts = {
@@ -75,7 +75,7 @@ const back = buildPiece('back', 'backPanel', backPts, backOrder, {
   leftArmhole: ['lUnderarm', 'lShoulder'],
   leftShoulder: ['lShoulder', 'lNeckShoulder'],
   neckline: ['lNeckShoulder', 'rNeckShoulder'],
-})
+}, '#00c2a8')
 
 // ---- Right sleeve (cap curve split into front/back halves at capTop) ----
 const sleeveRPts = {
@@ -89,8 +89,12 @@ const sleeveR = buildPiece('sleeveR', 'sleeve', sleeveRPts, sleeveROrder, {
   cuff: ['backCuff', 'frontCuff'],
   frontSeam: ['frontCuff', 'frontUnderarm'],
   capFront: ['frontUnderarm', 'capTop'],
-})
-const sleeveL = mirrorPieceX(sleeveR, 'sleeveL')
+}, '#ff5d8f')
+// A distinct color from sleeveR (not just mirrorPieceX's inherited one) —
+// matches the debug views' existing left/right distinction, so the two
+// sleeves stay visually told apart in the Cloth/Pieces views the same way
+// they always have been.
+const sleeveL = { ...mirrorPieceX(sleeveR, 'sleeveL'), color: '#e2a52b' }
 
 export const TSHIRT_PIECES = [front, back, sleeveR, sleeveL]
 

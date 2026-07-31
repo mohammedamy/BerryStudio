@@ -32,6 +32,7 @@ function toPayloadPiece(p, i) {
     darts: p.darts, notches: p.notches, grain: p.grain,
     role: p.role, cutOnFold: p.cutOnFold, foldEdgeIndex: p.foldEdgeIndex,
     bilateral: p.bilateral, edges: p.edges, grainline: p.grainline,
+    color: p.color,
   }
 }
 

@@ -10,7 +10,7 @@ import { finalizePiece } from './piece.js'
 // so the rest of the pipeline (triangulate/assemble/simulate) never needs to
 // know whether a piece was hand-authored or interactively authored.
 export function createDraftPiece(rawPiece, role) {
-  return { id: rawPiece.id, label: rawPiece.label, role, outline: rawPiece.outline, edges: {} }
+  return { id: rawPiece.id, label: rawPiece.label, role, outline: rawPiece.outline, color: rawPiece.color, edges: {} }
 }
 
 function edgeIndices(from, to, n) {
@@ -73,5 +73,5 @@ export function finalizeDraftPiece(draft) {
       }
     }
   }
-  return finalizePiece(draft.id, draft.role, draft.outline, edges)
+  return finalizePiece(draft.id, draft.role, draft.outline, edges, draft.color)
 }

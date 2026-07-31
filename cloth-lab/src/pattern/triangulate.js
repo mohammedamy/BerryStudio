@@ -176,6 +176,7 @@ export function triangulatePiece(piece, subdivForPiece, targetSpacingCm) {
   return {
     pieceId: piece.id,
     role: piece.role,
+    color: piece.color,
     positions2D: allPts,
     triangles: new Uint32Array(triangles),
     boundaryChains,

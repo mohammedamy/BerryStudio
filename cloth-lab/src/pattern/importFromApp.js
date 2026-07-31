@@ -185,7 +185,7 @@ export function convertAppPattern(payload) {
       if (cls && typeof cls === 'object') { skipped.push({ label, reason: cls.reason }); continue }
       const local = relocalize(p.outline)
 
-      if (cls === 'sleeve') { sleeves.push({ id: p.id, label, outline: local }); continue }
+      if (cls === 'sleeve') { sleeves.push({ id: p.id, label, outline: local, color: p.color }); continue }
 
       const slotKey = { 'bodice-front': 'frontPanel', 'bodice-back': 'backPanel', 'skirt-front': 'hipPanelFront', 'skirt-back': 'hipPanelBack' }[cls]
       if (bySlot[slotKey].length) {
@@ -194,7 +194,7 @@ export function convertAppPattern(payload) {
       }
       const isSkirt = cls.startsWith('skirt')
       const outline = isFoldPiece(local) ? unfoldPiece(local) : local
-      rawPieces.push({ id: p.id, label: p.label, outline })
+      rawPieces.push({ id: p.id, label: p.label, outline, color: p.color })
       roles[p.id] = slotKey
       bySlot[slotKey].push({ id: p.id, label })
       for (const e of deriveTorsoEdgeInstructions(outline, { includeTop: !isSkirt })) pushEdge(p.id, e.name, e.from, e.to)
@@ -207,13 +207,13 @@ export function convertAppPattern(payload) {
     const local = relocalize(p.outline)
 
     if (SLEEVE_ROLES.has(schemaRole)) {
-      sleeves.push({ id: p.id, label, outline: local })
+      sleeves.push({ id: p.id, label, outline: local, color: p.color })
       continue
     }
 
     if (schemaRole === 'skirt-front-gore' || schemaRole === 'skirt-back-gore' || schemaRole === 'skirt-side-gore-left' || schemaRole === 'skirt-side-gore-right') {
       const internalRole = { 'skirt-front-gore': 'goreFront', 'skirt-back-gore': 'goreBack', 'skirt-side-gore-left': 'goreSideLeft', 'skirt-side-gore-right': 'goreSideRight' }[schemaRole]
-      rawPieces.push({ id: p.id, label: p.label, outline: local })
+      rawPieces.push({ id: p.id, label: p.label, outline: local, color: p.color })
       roles[p.id] = internalRole
       recognized.push({ id: p.id, label })
       continue
@@ -224,7 +224,7 @@ export function convertAppPattern(payload) {
       // trusting the DECLARATION (no isFoldPiece re-derivation) since the
       // generator that authored this outline already knows it's a half.
       const outline = unfoldPiece(local)
-      rawPieces.push({ id: p.id, label: p.label, outline })
+      rawPieces.push({ id: p.id, label: p.label, outline, color: p.color })
       roles[p.id] = placement
       if (princessSeamId) {
         // Post-unfold, the shape's own rightSide/leftSide split (found the
@@ -246,8 +246,8 @@ export function convertAppPattern(payload) {
     if (bilateral) {
       const rId = p.id + '_r', lId = p.id + '_l'
       const n = local.length
-      rawPieces.push({ id: rId, label: p.label, outline: local })
-      rawPieces.push({ id: lId, label: p.label, outline: mirrorOutline(local) })
+      rawPieces.push({ id: rId, label: p.label, outline: local, color: p.color })
+      rawPieces.push({ id: lId, label: p.label, outline: mirrorOutline(local), color: p.color })
       roles[rId] = placement
       roles[lId] = placement
       if (edges && edges.length && !UNSEAMED_BILATERAL_ROLES.has(schemaRole)) {
@@ -272,7 +272,7 @@ export function convertAppPattern(payload) {
     // (e.g. an asymmetric jacket front), or a decorative attach-only role
     // (collar/cuff/pocket/facing/waistband/sash/yoke/peplum/tier/cape/lining/
     // other) — placed via its role's placement family, not auto-seamed.
-    rawPieces.push({ id: p.id, label: p.label, outline: local })
+    rawPieces.push({ id: p.id, label: p.label, outline: local, color: p.color })
     roles[p.id] = placement
     if (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack') {
       bySlot[placement].push({ id: p.id, label })
@@ -288,8 +288,8 @@ export function convertAppPattern(payload) {
   // gravity+placement alone, safer than guessing a seam location).
   for (const s of sleeves) {
     const rId = s.id + '_r', lId = s.id + '_l'
-    rawPieces.push({ id: rId, label: s.label, outline: s.outline })
-    rawPieces.push({ id: lId, label: s.label, outline: mirrorOutline(s.outline) })
+    rawPieces.push({ id: rId, label: s.label, outline: s.outline, color: s.color })
+    rawPieces.push({ id: lId, label: s.label, outline: mirrorOutline(s.outline), color: s.color })
     roles[rId] = 'sleeve'
     roles[lId] = 'sleeve'
     const tube = sleeveTubeEdges(s.outline)

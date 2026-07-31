@@ -102,7 +102,7 @@ export function useSeamEditor(rawPieces, roles, seedEdges, seedSeams) {
 
   function finalize() {
     try {
-      const finalPieces = drafts.map((d) => finalizeDraftPiece({ id: d.id, role: d.role, outline: d.outline, edges: { ...d.edges } }))
+      const finalPieces = drafts.map((d) => finalizeDraftPiece({ id: d.id, role: d.role, outline: d.outline, color: d.color, edges: { ...d.edges } }))
       return { pieces: finalPieces, seams }
     } catch (e) {
       setError(e.message)

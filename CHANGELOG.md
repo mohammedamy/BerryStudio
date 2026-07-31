@@ -6,6 +6,47 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Cloth Lab: simulated pieces render in their real 2D-canvas color
+
+### Fixed
+- Cloth Lab's **Cloth** view (the live GPU simulation) rendered the entire
+  garment in one hardcoded flat material color (`#c9cedb`) regardless of
+  what colors were actually assigned to each piece in the 2D canvas's
+  Layers panel; the **Pieces** debug view used its own fixed id/role→color
+  lookup table, unrelated to the real piece colors either.
+
+### Added
+- The 2D canvas's own per-piece `color` (Layers panel swatch/picker) now
+  threads all the way through the postMessage bridge
+  (`js/app.js`'s `buildClothLabPayload()`) into cloth-lab's import/seam-
+  authoring/triangulation/assembly pipeline
+  (`importFromApp.js` → `seamAuthoring.js`/`piece.js` → `triangulate.js` →
+  `assemble.js`) as a real per-render-vertex color attribute, correctly
+  converted from sRGB to the renderer's linear working space. **`ClothMesh.jsx`**
+  now uses `vertexColors: true` with a white material base instead of a
+  fixed color, so each simulated piece's fabric tints to its own real
+  color while keeping the shared PBR/fabric-texture properties. **`StaticPiecesDebug.jsx`**
+  (Pieces view) now prefers the same real color, falling back to its old
+  fixed lookup table only for a piece with no color at all. The default
+  T-shirt fixture (`tshirt.js`, no bridge import) was given the same
+  colors the old debug-only lookup table used, so its own look is
+  unchanged.
+- Render vertices are never deduplicated across pieces in this pipeline
+  (only their positions are synced via a shared sim particle at a welded
+  seam — see `assemble.js`), so there's no seam-boundary color-blending
+  ambiguity to resolve: every render vertex belongs to exactly one piece,
+  unambiguously.
+
+### Scope decision (not a silent gap)
+The **Weld** (weld-topology: interior/seam/multi-piece-corner) and **Seams**
+(seam-authoring: pending/assigned/unassigned) debug views keep their own
+existing diagnostic coloring rather than switching to real piece colors —
+recoloring either would destroy the specific structural/state signal that
+is that view's entire purpose, with no other view providing it. Real
+per-piece color was added everywhere else: Cloth, Pieces, and (already
+working via the existing part-level `partsFabric()`/`fabricState`
+mechanism, verified unchanged) the root app's separate 3D Preview tab.
+
 ## Tech-pack tracing: read a technical flat-sketch image's actual measured pieces, not a style-factor guess
 
 ### Fixed

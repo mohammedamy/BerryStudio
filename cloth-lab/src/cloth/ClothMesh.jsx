@@ -79,6 +79,12 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
     }
     geom.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     geom.setAttribute('uv', new THREE.BufferAttribute(cloth.renderUV, 2))
+    // Per-piece color (already linear — see assemble.js's hexToLinearRGB),
+    // sourced from the 2D canvas's own piece.color via the postMessage
+    // bridge. Combined with the material's vertexColors flag below so each
+    // simulated piece renders in the color it has in 2D instead of one flat
+    // garment-wide tint.
+    geom.setAttribute('color', new THREE.BufferAttribute(cloth.renderColor, 3))
     geom.setIndex(new THREE.BufferAttribute(cloth.renderTriangles, 1))
     // Vestigial: MeshPhysicalMaterial's standard vertex chunks reference a
     // `normal` attribute unconditionally even though the onBeforeCompile
@@ -144,7 +150,13 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
   const material = useMemo(() => {
     const fabric = FABRIC_PRESETS[fabricId] || FABRIC_PRESETS[DEFAULT_FABRIC]
     const mat = new THREE.MeshPhysicalMaterial({
-      color: '#c9cedb', roughness: fabric.rough, metalness: fabric.metal,
+      // White base + vertexColors: true — the geometry's own per-piece
+      // `color` attribute (assemble.js's renderColor, sourced from the 2D
+      // canvas) is what actually tints the fabric now, not a fixed material
+      // color. See assemble.js's DEFAULT_PIECE_COLOR for the fallback when a
+      // piece arrives with no color at all.
+      color: '#ffffff', vertexColors: true,
+      roughness: fabric.rough, metalness: fabric.metal,
       sheen: fabric.sheen, sheenRoughness: 0.5, clearcoat: fabric.clear, clearcoatRoughness: 0.4,
       transparent: fabric.om < 1, opacity: fabric.om,
       side: THREE.DoubleSide,

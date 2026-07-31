@@ -12,6 +12,35 @@ import { placePiece } from '../pattern/placement.js'
 // believable fine weave on all three, so this is the settled value.
 export const UV_REPEAT_CM = 3
 
+// Same neutral blue-gray ClothMesh.jsx's material used to hardcode as its
+// whole-garment base color — now only the FALLBACK for a piece that arrives
+// with no `color` (e.g. an old cached bridge payload, or the rare piece the
+// 2D canvas never assigned one to), so a garment missing color data still
+// renders sensibly instead of black/white.
+const DEFAULT_PIECE_COLOR = '#c9cedb'
+
+// Three.js vertex colors (and Material.color) are consumed in the renderer's
+// LINEAR working color space, but a piece's `color` is an sRGB hex string
+// (same as any CSS/canvas color, and what js/canvas.js's <input type=color>
+// swatch produces) — feeding sRGB values into the `color` attribute directly
+// reads visibly washed-out/too-bright next to `material.color` (which THREE.
+// Color() DOES convert automatically). This hand-rolls the standard sRGB->
+// linear transfer function rather than pulling in three.js here — assemble.js
+// is deliberately plain geometry/math with no rendering-library dependency
+// (see placement.js's own precedent).
+function srgbToLinear(c) {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+}
+function hexToLinearRGB(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec((hex || '').trim())
+  const int = m ? parseInt(m[1], 16) : parseInt(DEFAULT_PIECE_COLOR.slice(1), 16)
+  return [
+    srgbToLinear(((int >> 16) & 255) / 255),
+    srgbToLinear(((int >> 8) & 255) / 255),
+    srgbToLinear((int & 255) / 255),
+  ]
+}
+
 // Union-find (disjoint set) — plain array-based, path-compressed.
 function makeUnionFind(n) {
   const parent = new Int32Array(n)
@@ -75,6 +104,13 @@ export function assembleCloth(triangulatedPieces, dims, seams) {
   const simRestPositions = new Float32Array(simParticleCount * 3)
   const contributionCount = new Float32Array(simParticleCount)
   const renderUV = new Float32Array(renderVertexCount * 2)
+  // Per-render-vertex color (linear RGB), sourced from each ORIGINAL piece's
+  // own `color` — unlike renderVertexToSimParticle (which shares one sim
+  // particle across a welded seam), render vertices themselves are never
+  // deduplicated across pieces (each triangulated piece keeps its own local
+  // copy — see pieceOffset above), so there's no seam-boundary ambiguity to
+  // resolve: a render vertex always belongs to exactly one piece.
+  const renderColor = new Float32Array(renderVertexCount * 3)
   const renderTriangles = new Uint32Array(triangulatedPieces.reduce((n, tp) => n + tp.triangles.length, 0))
   // Rest-state area share (m²) per sim particle — 1/3 of every incident
   // triangle's flat 2D pattern-space area (not the placed 3D area: mass is a
@@ -92,6 +128,7 @@ export function assembleCloth(triangulatedPieces, dims, seams) {
   for (const tp of triangulatedPieces) {
     const offset = pieceOffset[tp.pieceId]
     const positions3D = placePiece(tp, dims)
+    const [cr, cg, cb] = hexToLinearRGB(tp.color)
 
     positions3D.forEach(([x, y, z], localIdx) => {
       const g = offset + localIdx
@@ -100,6 +137,9 @@ export function assembleCloth(triangulatedPieces, dims, seams) {
       simRestPositions[sp * 3 + 1] += y
       simRestPositions[sp * 3 + 2] += z
       contributionCount[sp]++
+      renderColor[g * 3] = cr
+      renderColor[g * 3 + 1] = cg
+      renderColor[g * 3 + 2] = cb
       // Fixed real-world divisor (not this piece's own bounding box) so a
       // fabric weave repeats at the same physical size on every piece
       // regardless of its area — see UV_REPEAT_CM above. UVs now legitimately
@@ -152,7 +192,7 @@ export function assembleCloth(triangulatedPieces, dims, seams) {
 
   return {
     simParticleCount, simRestPositions, simRestNormal, simAreaShare,
-    renderVertexCount, renderVertexToSimParticle, renderUV, renderTriangles,
+    renderVertexCount, renderVertexToSimParticle, renderUV, renderColor, renderTriangles,
     weldDegree, pieceOffset,
   }
 }

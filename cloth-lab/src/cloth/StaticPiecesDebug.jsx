@@ -24,7 +24,7 @@ export default function StaticPiecesDebug({ dims, pieces: pieceDefs = TSHIRT_PIE
       geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3))
       geometry.setIndex(new THREE.BufferAttribute(tp.triangles, 1))
       geometry.computeVertexNormals()
-      return { id: tp.pieceId, role: tp.role, geometry }
+      return { id: tp.pieceId, role: tp.role, color: tp.color, geometry }
     })
   }, [dims, pieceDefs, seams])
 
@@ -32,7 +32,10 @@ export default function StaticPiecesDebug({ dims, pieces: pieceDefs = TSHIRT_PIE
     <group name="static-pieces-debug">
       {pieces.map((p) => (
         <mesh key={p.id} geometry={p.geometry}>
-          <meshStandardMaterial color={PIECE_COLORS[p.id] || ROLE_COLORS[p.role] || '#888'} side={THREE.DoubleSide} roughness={0.8} />
+          {/* Real 2D-canvas piece color first (bridged imports), falling back
+              to the old fixed lookup tables only for a piece with no color
+              at all (e.g. the default T-shirt path bypassing the bridge). */}
+          <meshStandardMaterial color={p.color || PIECE_COLORS[p.id] || ROLE_COLORS[p.role] || '#888'} side={THREE.DoubleSide} roughness={0.8} />
         </mesh>
       ))}
     </group>

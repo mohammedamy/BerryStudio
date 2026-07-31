@@ -2379,6 +2379,11 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         // — see cloth-lab/src/pattern/importFromApp.js and roles.js.
         role: p.role, cutOnFold: p.cutOnFold, foldEdgeIndex: p.foldEdgeIndex,
         bilateral: p.bilateral, edges: p.edges, grainline: p.grainline,
+        // The 2D canvas's own per-piece color (Layers panel swatch/picker —
+        // js/canvas.js's setColor()), so cloth-lab's Cloth/Pieces views can
+        // render each simulated piece in the same color it has in 2D
+        // instead of a generic material tint.
+        color: p.color,
       })),
     };
   }
