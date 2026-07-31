@@ -91,7 +91,15 @@ export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */,
     const localX = radius * Math.sin(phi)
     const localZ = radius * Math.cos(phi)
     const worldY = shoulderWorldY - alongArm * Math.cos(leanOut)
-    const worldX = shoulderWorldX + side * alongArm * Math.sin(leanOut) + localX * Math.cos(leanOut)
+    // `leanOut` already carries the per-side sign (side * 0.12), and Math.sin
+    // is odd, so Math.sin(leanOut) is itself already signed correctly per
+    // side — multiplying by `side` again here squares it back to +1 and
+    // cancels the sign, pushing BOTH arms toward the same absolute X
+    // direction as you go down the arm instead of mirroring outward. That
+    // left one side's sleeve curving in toward the torso/centerline instead
+    // of hanging away from the body (reported: a sleeve visibly bending
+    // toward the lower body while the actual arm underneath stays straight).
+    const worldX = shoulderWorldX + alongArm * Math.sin(leanOut) + localX * Math.cos(leanOut)
     return [worldX, worldY, localZ]
   })
 }
