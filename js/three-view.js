@@ -396,8 +396,16 @@ export const View3D = (() => {
     // crown cap — hairline lifted above the eyes so the face stays visible
     const cap = new THREE.Mesh(new THREE.SphereGeometry(headH * 0.55, 24, 18, 0, Math.PI * 2, 0, Math.PI * 0.46), mat);
     cap.position.y = headH * 0.08; cap.castShadow = true; headG.add(cap);
-    // back-of-head coverage (does not reach the face)
-    const backCap = new THREE.Mesh(new THREE.SphereGeometry(headH * 0.54, 24, 18, 0, Math.PI, Math.PI * 0.32, Math.PI * 0.55), mat);
+    // Back-of-head coverage. phiStart=0/phiLength=Math.PI used to mean "sweep
+    // a full 180deg arc" — combined with the -Math.PI/2 Y-rotation below,
+    // phi=0 lands at the true back but phi=Math.PI lands directly at the
+    // FRONT, so that arc wrapped continuously across one entire side of the
+    // head (at a theta band reaching up to eye height) and covered half the
+    // face in the near-black hair material instead of stopping at the back.
+    // A symmetric +-0.35*PI arc centered on phi=0 (the back) stays a safe
+    // ~20deg short of the true side (+-0.5*PI) on each side, so it never
+    // reaches the ear line, let alone the face.
+    const backCap = new THREE.Mesh(new THREE.SphereGeometry(headH * 0.54, 24, 18, -Math.PI * 0.35, Math.PI * 0.7, Math.PI * 0.32, Math.PI * 0.55), mat);
     backCap.rotation.y = -Math.PI / 2; backCap.position.z = -headH * 0.02; backCap.castShadow = true; headG.add(backCap);
     if (category === "women") {
       // long hair falling down the back
