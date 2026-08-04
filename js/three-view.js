@@ -22,8 +22,75 @@ export const View3D = (() => {
   let reduceMotion = false;
   let host, curCategory = "women", curH = 1.7;
   let onLoading = () => {};
+  let onAvatarIssue = () => {};
+  let onFatalError = () => {};
   let noiseTex = null;
   const avatarURLs = {};                       // category -> optional GLB url
+
+  // ---------- GLB robustness: timeout, retry, in-memory cache ----------
+  // Bundled/uploaded avatars are optional overrides on top of the always-
+  // available procedural body, but a hung fetch (flaky network, a stalled
+  // service-worker intercept, a very slow disk on first install) used to
+  // leave the loading spinner showing forever, since GLTFLoader.load() has
+  // no built-in timeout and its promise then never settles either way.
+  const GLB_TIMEOUT_MS = 10000;
+  const GLB_MAX_RETRIES = 2;
+  const GLB_CACHE_LIMIT = 6;                   // cap memory for many custom URLs in one session
+  const glbCache = new Map();                  // url -> raw loaded gltf (untouched, reused via .scene.clone())
+  function withTimeout(promise, ms) {
+    let timer;
+    const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), ms); });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+  function fetchGLTF(url, onProgress) {
+    return new Promise((resolve, reject) => {
+      new GLTFLoader().load(url, resolve, (evt) => {
+        if (onProgress && evt.total) onProgress(Math.max(0, Math.min(99, Math.round(evt.loaded / evt.total * 100))));
+      }, reject);
+    });
+  }
+  async function loadGLTFWithRetry(url, onProgress) {
+    if (glbCache.has(url)) { onProgress && onProgress(100); return glbCache.get(url); }
+    let lastErr;
+    for (let attempt = 0; attempt <= GLB_MAX_RETRIES; attempt++) {
+      try {
+        const gltf = await withTimeout(fetchGLTF(url, onProgress), GLB_TIMEOUT_MS);
+        if (glbCache.size >= GLB_CACHE_LIMIT) glbCache.delete(glbCache.keys().next().value);
+        glbCache.set(url, gltf);
+        return gltf;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < GLB_MAX_RETRIES) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+      }
+    }
+    throw lastErr;
+  }
+
+  // ---------- disposal (avoid leaking geometries/materials/textures on
+  // every avatar/category swap). Geometries and materials on a GLB body
+  // may be shared-by-reference with a cached gltf (see loadGLB — clone(true)
+  // shares leaf geometry/material, it doesn't deep-copy them), but dispose()
+  // is safe to call repeatedly in three.js: it just drops the GPU-side
+  // buffer/texture handles, which the renderer transparently re-creates the
+  // next time that same geometry/material is used, so re-visiting a cached
+  // category after leaving it still renders correctly. `noiseTex` is a
+  // single texture shared by every procedural skin material for the whole
+  // app lifetime and must never be disposed here.
+  function disposeMaterial(mat) {
+    if (!mat) return;
+    ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap",
+     "alphaMap", "bumpMap", "sheenColorMap", "clearcoatMap", "transmissionMap", "thicknessMap"]
+      .forEach(key => { const tex = mat[key]; if (tex && tex.isTexture && tex !== noiseTex) tex.dispose(); });
+    mat.dispose();
+  }
+  function disposeObject3D(obj) {
+    if (!obj) return;
+    obj.traverse(o => {
+      if (!o.isMesh) return;
+      if (o.geometry) o.geometry.dispose();
+      if (Array.isArray(o.material)) o.material.forEach(disposeMaterial); else disposeMaterial(o.material);
+    });
+  }
 
   // ---------- dependency loading (uses the page import map) ----------
   // A bare specifier ("three") only resolves via the <script type="importmap">
@@ -290,6 +357,7 @@ export const View3D = (() => {
   // ---------- procedural body ----------
   function buildProcedural(category, m) {
     curCategory = category;
+    disposeObject3D(bodyGroup); disposeObject3D(garmentGroup);
     root.clear(); limbs = {};
     bodyGroup = new THREE.Group(); root.add(bodyGroup);
 
@@ -624,10 +692,18 @@ export const View3D = (() => {
   }
 
   // ---------- optional GLB avatar ----------
-  async function loadGLB(category, m) {
+  async function loadGLB(category, m, onProgress) {
     if (!GLTFLoader) throw new Error("no loader");
-    const gltf = await new Promise((res, rej) => new GLTFLoader().load(avatarURLs[category], res, undefined, rej));
-    root.clear(); limbs = {}; bodyGroup = gltf.scene; root.add(bodyGroup);
+    const url = avatarURLs[category];
+    const gltf = await loadGLTFWithRetry(url, onProgress);
+    disposeObject3D(bodyGroup); disposeObject3D(garmentGroup);
+    // clone(true) copies the scenegraph/transform hierarchy but shares leaf
+    // geometry/material with the cached original (three.js clone() is
+    // shallow on those) — so this category's height/pose changes never
+    // corrupt the cached copy other avatars/rebuilds reuse, while the one-
+    // time pedestal/spike cleanup below (which mutates geometry in place)
+    // still only has to run once per URL, not on every rebuild.
+    root.clear(); limbs = {}; bodyGroup = gltf.scene.clone(true); root.add(bodyGroup);
     bodyGroup.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     stripPedestal(bodyGroup);
     keepLargestComponent(bodyGroup);
@@ -679,16 +755,32 @@ export const View3D = (() => {
     lastPieceVis = opts.pieces || lastPieceVis;
 
     const token = ++buildToken;
-    onLoading(true);
+    onLoading(true, { progress: 0 });
     await nextFrame();                       // let the spinner paint
     if (token !== buildToken) return;
     scene.background = gradientBackdrop();    // follow light/dark theme
+    // The spinner must NEVER stay stuck: onLoading(false) always fires in
+    // `finally`, whether the GLB loads, times out, errors, or even if the
+    // procedural fallback itself throws (a real render bug, not a network
+    // one — surfaced via onAvatarIssue instead of leaving a dead screen).
     try {
-      if (avatarURLs[category]) { await loadGLB(category, m); applyFabric(); }
-      else buildProcedural(category, m);
-    } catch (e) { buildProcedural(category, m); }
-    if (token !== buildToken) return;
-    onLoading(false);
+      if (avatarURLs[category]) {
+        try {
+          await loadGLB(category, m, pct => { if (token === buildToken) onLoading(true, { progress: pct }); });
+          applyFabric();
+        } catch (e) {
+          if (token === buildToken) onAvatarIssue(category, e);
+          buildProcedural(category, m);
+        }
+      } else {
+        buildProcedural(category, m);
+      }
+    } catch (e) {
+      console.error("[View3D] avatar build failed:", e);
+      if (token === buildToken) onAvatarIssue(category, e);
+    } finally {
+      if (token === buildToken) onLoading(false);
+    }
   }
 
   function frameCamera(H) {
@@ -781,12 +873,20 @@ export const View3D = (() => {
     camera.aspect = (r.width || 1) / (r.height || 1); camera.updateProjectionMatrix();
   }
   function fallback() {
+    // Primary UX is the DOM overlay app.js shows via onFatalError (Retry /
+    // Continue in 2D) — this canvas text is just a last-resort safety net
+    // in case that callback was never wired up.
+    onFatalError();
     const c = host.getContext && host.getContext("2d"); if (!c) return;
     host.width = host.clientWidth; host.height = host.clientHeight;
     c.fillStyle = "#8b93a7"; c.font = "600 14px Inter, sans-serif"; c.textAlign = "center";
     c.fillText("3D preview needs WebGL and a first-load connection.", host.width / 2, host.height / 2);
   }
   function setAvatarURL(category, url) { if (url) avatarURLs[category] = url; else delete avatarURLs[category]; }
+  // Re-attempt loading three.js/WebGL from scratch (the "Retry" action on the
+  // fatal-error overlay). loadDeps() itself already tries every CDN tier
+  // again since THREE is still null at this point.
+  async function retryInit() { if (ready) return true; await init(host); return ready; }
 
   return {
     init, build, resize, setFabric, setPieceVisibility,
@@ -794,7 +894,9 @@ export const View3D = (() => {
     setWalk: v => walking = v,
     setReduceMotion: v => { reduceMotion = !!v; if (controls) controls.autoRotate = spinning && !reduceMotion; },
     setLoadingCallback: cb => onLoading = cb || (() => {}),
-    setAvatarURL, isReady: () => ready,
+    setAvatarIssueCallback: cb => onAvatarIssue = cb || (() => {}),
+    setFatalErrorCallback: cb => onFatalError = cb || (() => {}),
+    setAvatarURL, isReady: () => ready, retryInit,
   };
 })();
 // TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.

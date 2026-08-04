@@ -140,6 +140,15 @@
         <div class="view3d-wrap" id="view3d">
           <canvas id="canvas3d" tabindex="0" role="img" data-i18n-aria="canvas3dAriaLabel" aria-label="3D preview"></canvas>
           <div class="v3d-loading" id="v3dLoading"><span class="v3d-spinner"></span><span id="v3dLoadingTxt">Loading avatar…</span></div>
+          <div class="v3d-error" id="v3dError">
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+            <p data-i18n="v3dErrorTitle">3D preview unavailable</p>
+            <span class="v3d-error-body" data-i18n="v3dErrorBody">We couldn't start the 3D preview — check your connection and try again.</span>
+            <div class="v3d-error-actions">
+              <button class="big-btn" id="v3dRetryBtn" data-i18n="v3dRetry">Retry</button>
+              <button class="big-btn ghost" id="v3dContinue2DBtn" data-i18n="v3dContinue2D">Continue in 2D</button>
+            </div>
+          </div>
           <div style="position:absolute;inset-inline-start:16px;top:16px;display:flex;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 14px;box-shadow:var(--shadow-2)">
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700"><input type="checkbox" id="spinToggle" checked> 360°</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700"><input type="checkbox" id="walkToggle" checked> Walk</label>

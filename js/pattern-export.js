@@ -26,6 +26,37 @@ export function isTurnPoint(outline, i) {
 
 function avg(arr) { return arr.reduce((a, b) => a + b, 0) / arr.length; }
 
+// Emits the PDF content-stream path operators ('m'/'l'/'c') for one
+// piece's outline — a real cubic bezier ('c') for any span p.curves (WP-14;
+// see princessCurve() in js/fancy-patterns.js) declares, straight lines
+// ('l') for everything else. Without this, every curved seam — including
+// ones PDF natively supports as a real bezier — exported as the same
+// flattened straight-segment polyline PDF drew for hard corners, needlessly
+// faceted since the real control points were sitting right there in
+// p.curves and simply never read. `X`/`Y` are raw-number coordinate
+// transforms (this formats to 2dp itself); caller still appends its own
+// "h S"-style close+stroke after this. A curve whose toIdx wraps past the
+// end of the outline (not produced by princessCurve() today, but not
+// guaranteed by the data shape either) falls back to straight segments
+// for that span rather than assuming a direction that isn't there.
+function outlinePathOps(p, X, Y) {
+  const o = p.outline, n = o.length;
+  const curveByFrom = new Map((p.curves || []).map((c) => [c.fromIdx, c]));
+  let cs = `${X(o[0][0]).toFixed(2)} ${Y(o[0][1]).toFixed(2)} m\n`;
+  let i = 0;
+  while (i < n - 1) {
+    const c = curveByFrom.get(i);
+    if (c && c.toIdx > i && c.toIdx < n && c.c1 && c.c2) {
+      cs += `${X(c.c1[0]).toFixed(2)} ${Y(c.c1[1]).toFixed(2)} ${X(c.c2[0]).toFixed(2)} ${Y(c.c2[1]).toFixed(2)} ${X(o[c.toIdx][0]).toFixed(2)} ${Y(o[c.toIdx][1]).toFixed(2)} c\n`;
+      i = c.toIdx;
+    } else {
+      i++;
+      cs += `${X(o[i][0]).toFixed(2)} ${Y(o[i][1]).toFixed(2)} l\n`;
+    }
+  }
+  return cs;
+}
+
 // ---- DXF (AutoCAD R12 ENTITIES; cm units, y-up) ----
 // Real AAMA/ASTM D6673 layer numbering:
 //   1  piece boundary (cut line)        8  internal lines (dart legs)
@@ -124,7 +155,7 @@ function buildSinglePagePDF(pieces) {
   const X = (x) => Xn(x).toFixed(2), Y = (y) => Yn(y).toFixed(2);
   let cs = "0.75 w 0 0 0 RG 0 0 0 rg\n";
   pieces.forEach((p) => {
-    p.outline.forEach((pt, i) => { cs += `${X(pt[0])} ${Y(pt[1])} ${i ? 'l' : 'm'}\n`; });
+    cs += outlinePathOps(p, Xn, Yn);
     cs += "h S\n";
     if (p.grain && p.grain.length === 2) cs += `${X(p.grain[0][0])} ${Y(p.grain[0][1])} m ${X(p.grain[1][0])} ${Y(p.grain[1][1])} l S\n`;
     (p.darts || []).forEach((d) => { d.forEach((pt, i) => cs += `${X(pt[0])} ${Y(pt[1])} ${i ? 'l' : 'm'}\n`); cs += "S\n"; });
@@ -215,7 +246,7 @@ function tileContentStream(pieces, originXcm, originYcm, pageWpt, pageHpt, margi
   // marks/labels, which are deliberately drawn AFTER the clip is lifted.
   cs += `q\n${marginPt.toFixed(2)} ${marginPt.toFixed(2)} ${contentW.toFixed(2)} ${contentH.toFixed(2)} re W n\n`;
   pieces.forEach((p) => {
-    p.outline.forEach((pt, i) => { cs += `${X(pt[0]).toFixed(2)} ${Y(pt[1]).toFixed(2)} ${i ? 'l' : 'm'}\n`; });
+    cs += outlinePathOps(p, X, Y);
     cs += "h S\n";
   });
   cs += "Q\n";

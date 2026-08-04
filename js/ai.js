@@ -756,8 +756,15 @@ export const AIGen = (() => {
     const built = build(style, measurements);
 
     stage("done");
+    // `imageSupplied` vs `usedImage`: both are false when no photo was
+    // given at all (nothing to say), but ONLY imageSupplied is true when a
+    // photo WAS given yet analyzeImage() couldn't read a clear silhouette
+    // from it (too little contrast, no clear edge run — see analyzeImage's
+    // own rowsFound threshold) — the caller uses that distinction to tell
+    // "you didn't attach a photo" apart from "your photo couldn't be read",
+    // which used to look identical (silently used prompt/defaults either way).
     return { ...built, summary: summary(style, lang), style, attributes: attributes(style, lang),
-             source:"local", usedImage: !!(metrics && metrics.ok) };
+             source:"local", usedImage: !!(metrics && metrics.ok), imageSupplied: !!imageDataURL };
   }
 
   return { analyzeImage, deriveStyle, build, buildFromMeasuredPieces, summary, attributes, generate };

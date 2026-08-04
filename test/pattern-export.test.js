@@ -13,6 +13,16 @@ const RECT_PIECE = {
   notches: [[0, 10]],
   grain: [[5, 2], [5, 18]],
 };
+// A piece carrying real p.curves metadata (WP-14 princess-seam shape) —
+// the outline's own points 1..3 are just the flattened/sampled version of
+// that same curve, which outlinePathOps() should skip over in favor of the
+// real 'c' (cubic bezier) operator built from c1/c2.
+const CURVED_PIECE = {
+  name: { en: 'Test Curve' },
+  outline: [[0, 0], [3, 6], [5, 10], [7, 14], [10, 20]],
+  curves: [{ fromIdx: 1, toIdx: 3, c1: [11, 7], c2: [11, 14] }],
+};
+
 function curvedEdgePoints() {
   // A gentle arc sampled into 6 points — each consecutive triple should
   // have a near-180° interior angle (well under the 20° turn threshold),
@@ -149,4 +159,20 @@ test('buildPDF({tiled:true, includeGuides:false}) skips the assembly-map page an
 test('buildPDF returns null for no pieces regardless of tiled option', () => {
   assert.equal(buildPDF([], { tiled: true }), null);
   assert.equal(buildPDF([], { tiled: false }), null);
+});
+
+test('buildPDF (single-page) draws a real cubic bezier ("c") for a piece with p.curves metadata', () => {
+  const pdf = buildPDF([CURVED_PIECE], { tiled: false });
+  assert.match(pdf, /\bc\n/);
+});
+
+test('buildPDF (single-page) never emits a "c" operator for a piece with no curves metadata', () => {
+  const pdf = buildPDF([RECT_PIECE], { tiled: false });
+  assert.doesNotMatch(pdf, /\bc\n/);
+});
+
+test('buildPDF ({tiled:true}) also draws a real cubic bezier for a piece with p.curves metadata', () => {
+  const bigCurved = { ...CURVED_PIECE, outline: CURVED_PIECE.outline.map(([x, y]) => [x * 5, y]) , curves: [{ ...CURVED_PIECE.curves[0], c1: [55, 7], c2: [55, 14] }] };
+  const pdf = buildPDF([bigCurved], { tiled: true, pageSize: 'a4', overlapMm: 10 });
+  assert.match(pdf, /\bc\n/);
 });

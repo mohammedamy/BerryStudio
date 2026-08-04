@@ -50,6 +50,7 @@ export const Canvas = (() => {
   let onCalibReq = () => {};           // app callback: (measuredDistCm) => prompts for the true distance
   let hlPoint = null, hlCons = null;   // id of a point/construction-line highlighted from the Object Browser
   let ghostSnap = null;                 // frozen ghost overlay {pieces, opacity, visible}
+  let clipboard = null;                 // {type:'point'|'cons'|'text'|'notch'|'piece', data} — last copied/cut object
 
   const CSS = k => getComputedStyle(document.body).getPropertyValue(k).trim();
 
@@ -391,6 +392,79 @@ export const Canvas = (() => {
     if (selNotch){ const {pieceIdx,idx}=selNotch; selNotch=null; return removeNotch(pieceIdx,idx); }
     if (selected>=0) return removePiece(selected);
     return false;
+  }
+
+  // Copy/cut/paste for whatever is currently selected — same precedence as
+  // deleteSelection() (point > construction line/arc/circle > text > notch >
+  // piece), since at most one of those can be selected at a time. Storing a
+  // JSON-cloned snapshot (not a live reference) means later edits to the
+  // source, or deleting it outright (cut), can never retroactively mutate
+  // what paste will produce; pasteClipboard() clones it again on every call
+  // so repeated pastes don't end up sharing nested arrays/objects.
+  function copySelection(){
+    if (hlPoint!=null){ const p=getPointById(hlPoint); if(!p) return false;
+      clipboard = { type:"point", data: JSON.parse(JSON.stringify(p)) }; return true; }
+    if (hlCons!=null){ const c=cons.find(x=>x.id===hlCons); if(!c) return false;
+      clipboard = { type:"cons", data: JSON.parse(JSON.stringify(c)) }; return true; }
+    if (selText!=null){ const t=texts.find(x=>x.id===selText); if(!t) return false;
+      clipboard = { type:"text", data: JSON.parse(JSON.stringify(t)) }; return true; }
+    if (selNotch){ const {pieceIdx,idx}=selNotch; const p=pieces[pieceIdx]; if(!p||!p.notches||!p.notches[idx]) return false;
+      clipboard = { type:"notch", data:{ pieceIdx, notch: p.notches[idx].slice() } }; return true; }
+    if (selected>=0 && pieces[selected]){
+      clipboard = { type:"piece", data: JSON.parse(JSON.stringify(pieces[selected])) }; return true; }
+    return false;
+  }
+  function cutSelection(){
+    if (!copySelection()) return false;
+    deleteSelection();
+    return true;
+  }
+  function hasClipboard(){ return !!clipboard; }
+  // Pasted copies land offset from the source (rather than exactly on top of
+  // it) so the duplicate is immediately visible and draggable on its own.
+  function pasteClipboard(){
+    if (!clipboard) return false;
+    const OFFSET = 2; // cm
+    const kind = clipboard.type;
+    const data = JSON.parse(JSON.stringify(clipboard.data));
+    if (kind==="notch" && !pieces[data.pieceIdx]) return false;   // source piece is gone
+    pushUndo();
+    if (kind==="point"){
+      const id = pointSeq++;
+      // Drop any formula link on paste — a formula-driven point recomputes
+      // to the SAME spot as its source on the next recompute, silently
+      // erasing the offset (and the whole point of pasting a duplicate).
+      points.push({ ...data, id, x: data.x+OFFSET, y: data.y+OFFSET, xExpr:null, yExpr:null });
+      hlPoint=id; hlCons=null; selText=null; selNotch=null; selected=-1;
+    } else if (kind==="cons"){
+      // Only literal {x,y} endpoints shift — a {pid} reference stays pinned
+      // to the same construction point (that's what "referential" means).
+      const shiftRef = r => (!r || r.pid!=null) ? r : { x:r.x+OFFSET, y:r.y+OFFSET };
+      data.id = consSeq++; data.a = shiftRef(data.a); data.b = shiftRef(data.b); data.ctrl = shiftRef(data.ctrl);
+      cons.push(data);
+      hlCons=data.id; hlPoint=null; selText=null; selNotch=null; selected=-1;
+    } else if (kind==="text"){
+      const id = textSeq++;
+      texts.push({ ...data, id, x: data.x+OFFSET, y: data.y+OFFSET });
+      selText=id; hlPoint=null; hlCons=null; selNotch=null; selected=-1;
+    } else if (kind==="notch"){
+      const p = pieces[data.pieceIdx];
+      p.notches = p.notches || [];
+      p.notches.push([data.notch[0]+OFFSET, data.notch[1]+OFFSET]);
+      selNotch = { pieceIdx: data.pieceIdx, idx: p.notches.length-1 }; hlPoint=null; hlCons=null; selText=null; selected=-1;
+    } else if (kind==="piece"){
+      const shift = ([x,y]) => [x+OFFSET, y+OFFSET];
+      data.name = { en:(data.name&&data.name.en||"Piece")+" copy", ar:(data.name&&data.name.ar||"قطعة")+" (نسخة)" };
+      data.outline = data.outline.map(shift);
+      data.darts = (data.darts||[]).map(d=>d.map(shift));
+      data.notches = (data.notches||[]).map(shift);
+      data.grain = (data.grain||[]).map(shift);
+      if (Array.isArray(data.curves)) data.curves = data.curves.map(c => ({ ...c, c1: shift(c.c1), c2: shift(c.c2) }));
+      pieces.push(data);
+      selected = pieces.length-1; hlPoint=null; hlCons=null; selText=null; selNotch=null;
+    } else return false;
+    render();
+    return true;
   }
 
   // ================= RENDER =================
@@ -1044,12 +1118,32 @@ export const Canvas = (() => {
   function selectPiece(i){ if(pieces[i] && !pieces[i].locked){ selected=i; render(); } }
   function clearSketch(){ pushUndo(); sketch=[]; render(); }
   function onZoomChange(cb){ onZoom=cb; }
+  // A real cubic bezier ('C') for any span p.curves (WP-14) declares,
+  // straight lines ('L') for everything else — otherwise a piece's curved
+  // seams export as the exact same flattened straight-segment shape as its
+  // hard corners, even though SVG paths natively support the cubic beziers
+  // the control points in p.curves already are. Mirrors pattern-export.js's
+  // outlinePathOps() (used by the PDF builders) for the same reason.
+  function outlinePathD(p){
+    const o=p.outline, n=o.length;
+    const curveByFrom = new Map((p.curves||[]).map(c=>[c.fromIdx,c]));
+    let d = `M ${o[0][0]} ${o[0][1]}`;
+    let i=0;
+    while(i<n-1){
+      const c = curveByFrom.get(i);
+      if (c && c.toIdx>i && c.toIdx<n && c.c1 && c.c2){
+        d += ` C ${c.c1[0]} ${c.c1[1]} ${c.c2[0]} ${c.c2[1]} ${o[c.toIdx][0]} ${o[c.toIdx][1]}`;
+        i = c.toIdx;
+      } else { i++; d += ` L ${o[i][0]} ${o[i][1]}`; }
+    }
+    return d + " Z";
+  }
   function exportSVG(){
     if(!pieces.length) return "";
     const all=pieces.flatMap(p=>p.outline); const xs=all.map(p=>p[0]),ys=all.map(p=>p[1]);
     const minX=Math.min(...xs)-3,minY=Math.min(...ys)-3,w=Math.max(...xs)-minX+3,h=Math.max(...ys)-minY+3;
     let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${w} ${h}" width="${w}cm" height="${h}cm">`;
-    pieces.forEach(p=>{ s+=`<polygon points="${p.outline.map(pt=>pt.join(',')).join(' ')}" fill="none" stroke="#222" stroke-width="0.2"/>`;
+    pieces.forEach(p=>{ s+=`<path d="${outlinePathD(p)}" fill="none" stroke="#222" stroke-width="0.2"/>`;
       if(p.grain?.length===2) s+=`<line x1="${p.grain[0][0]}" y1="${p.grain[0][1]}" x2="${p.grain[1][0]}" y2="${p.grain[1][1]}" stroke="#222" stroke-width="0.15"/>`; });
     const escXML = t => String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     texts.forEach(tx=>{ s+=`<text x="${tx.x}" y="${tx.y}" font-size="${tx.size||4}" fill="${tx.color||"#222"}"${tx.bold?' font-weight="700"':""}${tx.italic?' font-style="italic"':""} font-family="Inter, sans-serif">${escXML(tx.text)}</text>`; });
@@ -1391,6 +1485,7 @@ export const Canvas = (() => {
   return { init, setTranslator, setPattern, getPieces, setTool, setOpt, getOpt, zoom, fit,
            doUndo, doRedo, getZoom, toggleVisible, toggleLock, setColor, setMaterial, getSelected,
            selectPiece, clearSketch, render, deleteSelection,
+           copySelection, cutSelection, pasteClipboard, hasClipboard,
            addText, updateText, removeText, getTexts, onTextRequest,
            addPiece, removePiece, renamePiece, setPieceProps, nudgePiece,
            onZoomChange, exportSVG, exportDXF, exportHPGL, exportRaster, exportPDF, loadPieces, clearAll, screenOf,

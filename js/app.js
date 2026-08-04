@@ -21,7 +21,7 @@ import { MEAS_KEYS, renderMeasureFields } from './measure-form.js';
 import { consumeBodyFormHandoff } from './body-handoff.js';
 import { nest as nestTruePolygon, cancelNest } from './nesting.js';
 import { stepForSize, resolveGradedPieces } from './grading.js';
-import { pivotDart, slashAndSpread } from './darts.js';
+import { pivotDart, slashAndSpread, transferDart } from './darts.js';
 import { seamPointAtFraction } from './geometry.js';
 import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 
@@ -169,6 +169,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     text:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg>',
     polyfill:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M12 2l8 6-3 10H7L4 8z" fill-opacity="0.28"/></svg>',
     trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+    edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
     dots:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
     question:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.8 2.8 0 1 1 4.3 2.4c-.9.6-1.5 1.1-1.5 2.1"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg>',
     ruler:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18"/></svg>',
@@ -567,6 +568,32 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         Canvas.setPieceProps(pieceIdx, {darts:newDarts});
         toast(T("dartUpdated")); openDartEditorModal(pieceIdx);
       };
+
+      // Real "dart transfer": swing the WHOLE dart (apex included) around an
+      // external pivot — typically an anatomical reference like the bust
+      // point — rather than the dart's own apex (that's pivotDart above).
+      // Pivot X/Y default to the dart's own apex so applying with 0° is a
+      // visible no-op; moving the pivot away from the apex is what actually
+      // makes this "transfer" rather than "pivot".
+      const [apex] = dart;
+      const row3 = el("div","row"); row3.style.cssText="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap";
+      const pivotX = el("input","input"); pivotX.type="number"; pivotX.step="0.1"; pivotX.value=apex[0].toFixed(1); pivotX.style.cssText="flex:1;min-width:60px";
+      const pivotY = el("input","input"); pivotY.type="number"; pivotY.step="0.1"; pivotY.value=apex[1].toFixed(1); pivotY.style.cssText="flex:1;min-width:60px";
+      const transferDeg = el("input","input"); transferDeg.type="number"; transferDeg.step="1"; transferDeg.value="0"; transferDeg.style.cssText="flex:1;min-width:60px";
+      const transferBtn = el("button","big-btn ghost",T("dartTransferApply")); transferBtn.style.flex="0 0 auto";
+      row3.appendChild(el("span",null,T("dartTransferPivot")+":"));
+      row3.appendChild(pivotX); row3.appendChild(pivotY);
+      row3.appendChild(el("span",null,T("dartPivotDeg")+":"));
+      row3.appendChild(transferDeg); row3.appendChild(transferBtn);
+      body.appendChild(row3);
+      transferBtn.onclick = () => {
+        const px = +pivotX.value, py = +pivotY.value;
+        const deg = +transferDeg.value || 0;
+        if (!isFinite(px) || !isFinite(py)) return;
+        const newDarts = p.darts.map((d,i)=> i===di ? transferDart(d, [px,py], deg*Math.PI/180) : d);
+        Canvas.setPieceProps(pieceIdx, {darts:newDarts});
+        toast(T("dartUpdated")); openDartEditorModal(pieceIdx);
+      };
     });
   }
 
@@ -929,8 +956,11 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     lastAIResult = res;
     const box=$("#aiAttrs"); if(!box) return;
     box.style.display=""; box.innerHTML="";
-    const src = res.source==="remote" ? "Claude" : res.source==="spec" ? T("provenanceSpec") : res.source==="fused" ? T("provenanceVision") : (res.usedImage ? T("usedImageNote") : "");
-    box.appendChild(el("div","aa-head",`<span>${T("detected")}</span>${src?`<span>${src}</span>`:""}`));
+    const imageUnreadable = !res.usedImage && res.imageSupplied;  // a photo WAS attached, but analyzeImage() found no clear silhouette in it
+    const src = res.source==="remote" ? "Claude" : res.source==="spec" ? T("provenanceSpec") : res.source==="fused" ? T("provenanceVision")
+      : res.usedImage ? T("usedImageNote") : imageUnreadable ? T("imageUnreadableNote") : "";
+    const srcStyle = imageUnreadable ? ` style="color:var(--warn)"` : "";
+    box.appendChild(el("div","aa-head",`<span>${T("detected")}</span>${src?`<span${srcStyle}>${src}</span>`:""}`));
     (res.attributes||[]).forEach(a=>{
       const row=el("div","aa-row");
       const val = a.swatch ? `<span class="aa-swatch" style="background:${a.value}"></span>${a.value}` : a.value;
@@ -958,6 +988,21 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   // photo) — both are just different sources for the same `imageDataURL`,
   // so this always produces real, editable pieces on the canvas, never an
   // image to trace.
+  // generateFromSpec() already computes a real, specific reason for every
+  // fallback (missing/invalid key, network failure, rate limit, schema
+  // validation failure...) — this used to be discarded in favor of one
+  // fixed "didn't validate against the schema" toast even when the real
+  // cause was a bad API key or a dropped connection, which is actively
+  // misleading. Classifies the raw reason text into the closest of a
+  // handful of honest, actionable messages; anything unrecognized still
+  // falls back to the original generic (but truthful-enough) message.
+  function classifyAIFallbackReason(reason){
+    const r = String(reason||"");
+    if(/\b401\b|\b403\b|unauthor|invalid.{0,12}key|api.?key/i.test(r)) return "specFallbackAuth";
+    if(/\b429\b|rate.?limit/i.test(r)) return "specFallbackRateLimit";
+    if(/fetch|network|timeout|abort|dns|offline/i.test(r)) return "specFallbackNetwork";
+    return "specValidationFallback";
+  }
   async function generatePatternFrom(prompt, imageDataURL, btn, doneToastKey){
     const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7"; btn.disabled=true;
     const setStage = beginAIThinking(!!imageDataURL);
@@ -973,9 +1018,16 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       const providerId = state.aiProvider || "proxy";
       const adapter = AIProviders[providerId];
       const cfg = await resolveAICfg(providerId, aiCfgFor(providerId, false));
-      const hasRealProvider = providerId!=="proxy" ? true : !!cfg.baseUrl;
+      // A selected-but-unconfigured real provider (no key entered yet) used
+      // to still attempt a live call, fail with a 401, and surface as the
+      // same generic "schema didn't validate" toast below — actively
+      // confusing when the real issue is just a missing key. Caught here,
+      // before ever touching the network, with a message that says so.
+      const missingKey = providerId!=="proxy" && adapter.needsKey && !cfg.apiKey;
+      const hasRealProvider = providerId!=="proxy" ? !missingKey : !!cfg.baseUrl;
       let res = null;
-      if(hasRealProvider){
+      if(missingKey) toast(T("specFallbackNoKey"));
+      else if(hasRealProvider){
         setStage("analyzing");
         const schema = await loadSpecSchema();
         const specResult = await generateFromSpec({
@@ -1000,13 +1052,13 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
               ...built, summary: AIGen.summary(fusedStyle, state.lang), style: fusedStyle,
               attributes: AIGen.attributes(fusedStyle, state.lang, provenance),
               source: "fused", validation: PatternValidator.run(built.pieces, {}),
-              usedImage: !!(pixelMetrics && pixelMetrics.ok),
+              usedImage: !!(pixelMetrics && pixelMetrics.ok), imageSupplied: true,
             };
           } else {
             res = specResult;
           }
           setStage("done");
-        } else toast(T("specValidationFallback"));
+        } else toast(T(classifyAIFallbackReason(specResult.fallbackReason)));
       }
       // Image-driven parametric generation: robust local silhouette analysis
       // (neckline/hem/flare/colour), walked through visibly via setStage so
@@ -1737,13 +1789,43 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       det.innerHTML = `<summary>${g.label} · ${filtered.length}</summary>`;
       const ul = el("div","ob-rows");
       filtered.forEach(it=>{
-        const row = el("div","ob-row", escAttr(it.label));
+        const row = el("div","ob-row");
+        const label = el("span","ob-row-label", escAttr(it.label));
+        row.appendChild(label);
         row.onclick = () => {
           if (it.kind==="point") Canvas.selectPoint(it.id);
           else if (it.kind==="cons") Canvas.selectCons(it.id);
           else if (it.kind==="piece") { Canvas.selectPiece(it.id); Canvas.render(); }
           else if (it.kind==="text") Canvas.centerOn(it.x, it.y);
         };
+        const actions = el("div","ob-row-actions");
+        // Construction lines/arcs/circles have no name field to rename —
+        // delete-only for those; every other kind gets both.
+        if (it.kind!=="cons"){
+          const renameBtn = el("button",null,IC.edit); renameBtn.title = T("objRename");
+          renameBtn.onclick = (e) => {
+            e.stopPropagation();
+            const next = window.prompt(T("objRenamePrompt"), it.label);
+            if (next==null || !next.trim()) return;
+            const v = next.trim();
+            if (it.kind==="point") Canvas.setPointName(it.id, v);
+            else if (it.kind==="piece") Canvas.renamePiece(it.id, {[state.lang]: v});
+            else if (it.kind==="text") Canvas.updateText(it.id, {text: v});
+            renderLayersPane(); renderObjectBrowser();
+          };
+          actions.appendChild(renameBtn);
+        }
+        const delBtn = el("button",null,IC.trash); delBtn.title = T("objDelete");
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (it.kind==="point") Canvas.removePoint(it.id);
+          else if (it.kind==="cons") Canvas.removeCons(it.id);
+          else if (it.kind==="piece") Canvas.removePiece(it.id);
+          else if (it.kind==="text") Canvas.removeText(it.id);
+          renderLayersPane(); sync3DVisibility(); renderObjectBrowser();
+        };
+        actions.appendChild(delBtn);
+        row.appendChild(actions);
         ul.appendChild(row);
       });
       det.appendChild(ul); list.appendChild(det);
@@ -2369,6 +2451,11 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       category: state.category,
       fabricId: dominantFabricId(),
       avatarGLB: state.avatarGLB || {},
+      // cloth-lab was English-only regardless of this app's own language
+      // setting — the bridge already carried bilingual {en,ar} piece labels
+      // (below) but nothing telling cloth-lab which one, or its own UI
+      // chrome, should actually be shown. See cloth-lab/src/i18n.js.
+      lang: state.lang,
       pieces: Canvas.getPieces().filter(p=>p.visible!==false).map((p,i)=>({
         id: ((p.name&&p.name.en)||"piece").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")+"_"+i,
         label: p.name || {en:"Piece "+(i+1), ar:"قطعة "+(i+1)},
@@ -2459,6 +2546,11 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     $("#brandName").textContent=T("appName"); $("#brandSub").textContent=T("tagline");
     $$("#viewToggle button")[0].textContent=T("view2d"); $$("#viewToggle button")[1].textContent=T("view3d"); $$("#viewToggle button")[2].textContent=T("viewClothLab");
     Canvas.render();
+    // Cloth Lab only re-reads `lang` from a resent payload (it has no
+    // language toggle of its own — it mirrors this app's) — without this,
+    // switching language while already on the Cloth Lab tab left it
+    // showing the old language until the next unrelated pattern edit.
+    if(clothLabReady) syncClothLab(true);
   }
 
   // ================= TOOLTIPS =================
@@ -3006,6 +3098,24 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
           if (objBrowserOpen) renderObjectBrowser();
         }
       }
+    } else if(meta && !typing && state.view==="2d" && !$$(".overlay.show").length){
+      // Copy/cut/paste for whatever's selected on the canvas — a construction
+      // point, line/arc/circle, text, notch, or whole piece (same target
+      // Canvas.deleteSelection() acts on). Only preventDefault when the
+      // canvas actually had something to act on, so Ctrl/Cmd+C|X|V still do
+      // their normal browser thing (e.g. copying selected page text) when
+      // nothing on the canvas is selected.
+      const k=e.key.toLowerCase();
+      if(k==="c" && Canvas.copySelection()){ e.preventDefault(); toast(T("copiedObj")); }
+      else if(k==="x" && Canvas.cutSelection()){
+        e.preventDefault();
+        renderLayersPane(); sync3DVisibility(); if (objBrowserOpen) renderObjectBrowser();
+        toast(T("cutObj"));
+      } else if(k==="v" && Canvas.pasteClipboard()){
+        e.preventDefault();
+        renderLayersPane(); sync3DVisibility(); if (objBrowserOpen) renderObjectBrowser();
+        toast(T("pastedObj"));
+      }
     }
   }
   function hiCmd(){ $$("#cmdList .cmd-item").forEach((x,i)=>x.classList.toggle("sel",i===cmdSel)); const s=$$("#cmdList .cmd-item")[cmdSel]; if(s)s.scrollIntoView({block:"nearest"}); }
@@ -3080,7 +3190,20 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     Canvas.setOpt("unitsCm",state.unitsCm);
     Canvas.onZoomChange(()=>{ $("#zval").textContent=Canvas.getZoom()+"%"; });
     View3D.init($("#canvas3d"));
-    View3D.setLoadingCallback(v => { const o=$("#v3dLoading"); if(o) o.classList.toggle("show", v); });
+    View3D.setLoadingCallback((v,detail)=>{
+      const o=$("#v3dLoading"); if(!o) return;
+      o.classList.toggle("show", v);
+      if(v){ const pct=detail&&detail.progress; const txt=$("#v3dLoadingTxt");
+        if(txt) txt.textContent = pct>0 ? `${T("v3dLoadingLabel")} ${pct}%` : T("v3dLoadingLabel"); }
+    });
+    View3D.setAvatarIssueCallback((cat,err)=>{ console.warn("[3D avatar]",cat,err); toast(T("v3dAvatarFailed")); });
+    View3D.setFatalErrorCallback(()=>{ const o=$("#v3dError"); if(o) o.classList.add("show"); });
+    $("#v3dRetryBtn").onclick=async()=>{
+      const o=$("#v3dError"); if(o) o.classList.remove("show");
+      const ok=await View3D.retryInit();
+      if(ok){ View3D.resize(); build3D(); } else if(o) o.classList.add("show");
+    };
+    $("#v3dContinue2DBtn").onclick=()=>{ $("#v3dError").classList.remove("show"); setView("2d"); };
     applyReduceMotion(state.reduceMotion);
     initModalA11y();
     // photoreal GLB avatars saved in Settings (per category)
