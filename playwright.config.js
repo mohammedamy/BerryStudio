@@ -7,6 +7,12 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
+  // The suite has a handful of tests that flake under CI resource
+  // contention (settings-modal timing, Cloth Lab embed load, notch
+  // selection) — confirmed unrelated to actual app bugs by rerunning the
+  // exact same commit's files repeatedly and seeing a different random
+  // test fail each time. A single flaky run shouldn't block every deploy.
+  retries: process.env.CI ? 2 : 0,
   // In CI, also emit GitHub Actions annotations (one per failing test, with
   // the actual assertion error) — the job's own raw log requires repo admin
   // rights to fetch via the API, but check-run annotations are public, so
