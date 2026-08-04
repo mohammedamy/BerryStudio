@@ -264,12 +264,20 @@ in the app's own header.
   are labelled "Heuristic" in the report: a piece with no plausible front/back
   counterpart is flagged as unpairable, never guessed at. Running it over the
   full pattern library on its first pass genuinely found real issues, not
-  hypothetical ones — 30 Fancy Collection pieces have a duplicate consecutive
-  point in their outline (a likely bezier-sampling boundary bug in
-  `js/fancy-patterns.js`, not yet fixed here) and a consistent ~5mm
-  front/back "side length" delta across many catalogue garments that most
-  likely reflects an intentionally deeper front neckline rather than a real
-  defect — exactly the kind of result a *heuristic* check is supposed to
+  hypothetical ones — 67 Fancy Collection piece instances (across 30+ unique
+  designs) had a duplicate consecutive point in their outline, and a
+  consistent ~5mm front/back "side length" delta shows up across many
+  catalogue garments (still undecided — tracked as WP-40, not yet adjudicated
+  as of this note). **WP-26 fixed the duplicate-point bug**: it traced to
+  exactly four shape helpers in `js/fancy-patterns.js` (`godetPc`, `capePc`,
+  `peplumPc`, and `princessBodice`'s neckline/princess-curve join) where a
+  bezier segment's sampled endpoint re-landed exactly on a point already in
+  the outline — either the next segment's own start, or the shape's own
+  `[0,0]` origin when a closing curve swept back to it. Fixed at the source
+  with two small dedupe helpers rather than papering over it downstream;
+  `npm test` now asserts zero `closedOutline` failures across the library so
+  this exact class of bug can't silently regress. The ~5mm side-length
+  finding is exactly the kind of result a *heuristic* check is supposed to
   produce: a lead for a human to judge, not a verified fact. **Ease**
   (finished chest vs. body chest + minimum ease) is not implemented at all —
   it would need a second, unverifiable heuristic on top of the first (which
