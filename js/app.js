@@ -2337,11 +2337,32 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       : /skirt|تنور/.test(k) ? "skirt"
       : /trouser|بنطل|pant|\bleg\b/.test(k) ? "trousers" : "bodice";
   }
+  function isBackPiece(name){ return /\bback\b|خلفي|خلفية/.test((name||"").toLowerCase()); }
+  // A part's mesh used to just take the FIRST matching piece's color and
+  // silently drop every other one — a front+back bodice/skirt in two
+  // different colors (common: contrast lining, color-blocked panels) lost
+  // the back piece's color entirely, since the procedural body has one
+  // continuous front+back shell per part, not one mesh per real 2D piece.
+  // When a part genuinely has both a front piece and a differently-colored
+  // back piece, `colorBack` is set too — three-view.js paints the mesh's
+  // own front/back-facing vertices accordingly instead of one flat color.
+  // A part with only one piece (the overwhelmingly common case) gets
+  // exactly the same single `color` as before, unchanged.
   function partsFabric(){
-    const parts={};
+    const buckets={};
     Canvas.getPieces().filter(p=>p.visible!==false).forEach(p=>{
       const part=classifyPart(p.name&&p.name.en);
-      if(!parts[part]) parts[part]={ color:colorToInt(p.color), material:p.material||state.fabric3d||"cotton" };
+      const back = isBackPiece(p.name&&p.name.en) || isBackPiece(p.name&&p.name.ar);
+      (buckets[part] ||= {front:[], back:[]})[back?"back":"front"].push(p);
+    });
+    const parts={};
+    Object.entries(buckets).forEach(([part,{front,back}])=>{
+      const primary = front[0] || back[0];
+      parts[part] = { color:colorToInt(primary.color), material:primary.material||state.fabric3d||"cotton" };
+      if (front.length && back.length){
+        const backInt = colorToInt(back[0].color);
+        if (backInt !== parts[part].color) parts[part].colorBack = backInt;
+      }
     });
     return parts;
   }

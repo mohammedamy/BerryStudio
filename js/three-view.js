@@ -312,6 +312,34 @@ export const View3D = (() => {
       ...(f.anisotropy != null && { anisotropy: f.anisotropy, anisotropyRotation: f.anisoRot ?? 0 }),
     });
   }
+  // A part's mesh is one continuous front+back lathe shell — no separate
+  // front/back mesh to give a different material to. When the 2D pattern
+  // genuinely has both (app.js's partsFabric() only ever sets `colorBack`
+  // in that case, never for a single-piece part), paint the mesh's own
+  // vertices by which side of the body they're on instead of losing the
+  // back piece's color entirely. LatheGeometry revolves around Y with the
+  // profile's local Z = radius*sin(theta); the camera/character convention
+  // elsewhere in this file (frameCamera, camera.position.z>0) already
+  // treats +Z as the side facing the viewer, so that same sign split here
+  // lines up with "front" without needing any extra rotation bookkeeping.
+  // A no-op (leaves the plain flat material from fabricMat() alone) for
+  // every part that doesn't have a colorBack — i.e. everything, normally.
+  function applyFrontBackColor(mesh, part) {
+    const st = fabricState[part];
+    if (!st || st.colorBack == null) return;
+    const geo = mesh.geometry, pos = geo && geo.attributes && geo.attributes.position;
+    if (!pos) return;
+    const front = new THREE.Color(st.color), back = new THREE.Color(st.colorBack);
+    const colors = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const c = pos.getZ(i) >= 0 ? front : back;
+      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+    }
+    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    mesh.material.vertexColors = true;
+    mesh.material.color.set(0xffffff);
+    mesh.material.needsUpdate = true;
+  }
 
   // ---------- geometry helpers ----------
   const cm = v => v * 0.01;
@@ -510,6 +538,7 @@ export const View3D = (() => {
       [d.chestR * (female ? 0.98 : 1.08) + t, topY],
     ], fabricMat("bodice"), 32);
     bodice.scale.z = female ? 0.82 : 0.82; bodice.name = "bodice"; garmentGroup.add(bodice);
+    applyFrontBackColor(bodice, "bodice");
 
     // skirt / lower — dress for women & girls, trousers for men & boys
     if (female) {
@@ -522,6 +551,7 @@ export const View3D = (() => {
         [d.hipR * flare, hemY],
       ], fabricMat("skirt"), 40);
       skirt.name = "skirt"; garmentGroup.add(skirt);
+      applyFrontBackColor(skirt, "skirt");
     } else {
       const hemY = category === "boys" ? d.H * 0.30 : d.H * 0.02;
       // hip / seat cover bridging the two legs (closes the crotch gap)
@@ -743,6 +773,7 @@ export const View3D = (() => {
       Object.entries(opts.parts).forEach(([part, v]) => {
         if (!fabricState[part] || !v) return;
         if (v.color != null) fabricState[part].color = v.color;
+        fabricState[part].colorBack = v.colorBack != null ? v.colorBack : null;
         if (v.material) fabricState[part].material = v.material;
       });
     } else {
@@ -800,6 +831,7 @@ export const View3D = (() => {
       Object.entries(parts).forEach(([part, v]) => {
         if (!fabricState[part] || !v) return;
         if (v.color != null) fabricState[part].color = v.color;
+        fabricState[part].colorBack = v.colorBack != null ? v.colorBack : null;
         if (v.material) fabricState[part].material = v.material;
       });
     } else if (color != null || material) {
@@ -812,9 +844,9 @@ export const View3D = (() => {
   }
   function applyFabric() {
     if (!garmentGroup) return;
-    garmentGroup.traverse(o => { if (o.isMesh && fabricState[o.name]) o.material = fabricMat(o.name); });
+    garmentGroup.traverse(o => { if (o.isMesh && fabricState[o.name]) { o.material = fabricMat(o.name); applyFrontBackColor(o, o.name); } });
     // sleeves live under the arm groups
-    Object.values(limbs).forEach(g => g.traverse(o => { if (o.isMesh && o.name === "sleeve") o.material = fabricMat("sleeve"); }));
+    Object.values(limbs).forEach(g => g.traverse(o => { if (o.isMesh && o.name === "sleeve") { o.material = fabricMat("sleeve"); applyFrontBackColor(o, "sleeve"); } }));
   }
   let lastPieceVis = null;
   function setPieceVisibility(pieces) { lastPieceVis = pieces; applyPieceVisibility(); }
