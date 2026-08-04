@@ -1,6 +1,7 @@
-import { Component, Suspense } from 'react'
+import { Component, Suspense, useEffect } from 'react'
 import Avatar from './Avatar'
 import GLBAvatar from './GLBAvatar'
+import { t } from '../i18n'
 
 // Tier-1 fallback: a GLB load failure (bad URL, network, CORS, invalid
 // file) surfaces as a thrown error on the render AFTER GLTFLoader's promise
@@ -10,7 +11,10 @@ import GLBAvatar from './GLBAvatar'
 class AvatarErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { failed: false } }
   static getDerivedStateFromError() { return { failed: true } }
-  componentDidCatch(error) { console.warn('GLBAvatar failed to load, falling back to the procedural avatar:', error) }
+  componentDidCatch(error) {
+    console.warn('GLBAvatar failed to load, falling back to the procedural avatar:', error)
+    if (this.props.onLoadError) this.props.onLoadError()
+  }
   render() { return this.state.failed ? this.props.fallback : this.props.children }
 }
 
@@ -37,12 +41,24 @@ class AvatarErrorBoundary extends Component {
 // `walk` scoped to GLBs that ship embedded animation clips; the procedural
 // avatar has no skeleton to animate, so `walk` there is a no-op standing
 // pose, same honest degradation as everywhere else in this fallback chain).
-export default function BodyAvatar({ dims, url, collisionRigRef, skinColor, pose }) {
+// `onPoseWarning(message|null)` surfaces GLBAvatar's degraded-support cases
+// (unrecognized rig, VRM, no walk animation, "seated" leg fallback) as
+// user-visible UI instead of a console.warn nobody but a developer would
+// ever see — see GLBAvatar.jsx's own header comment for why it's two
+// separate state slots combined there rather than one. Cleared here
+// whenever there's no url at all (plain procedural avatar, no GLB-specific
+// limitation possible) — GLBAvatar unmounting doesn't otherwise get a
+// chance to clear whatever it last reported.
+export default function BodyAvatar({ dims, lang = 'en', url, collisionRigRef, skinColor, pose, onPoseWarning }) {
+  useEffect(() => { if (!url && onPoseWarning) onPoseWarning(null) }, [url, onPoseWarning])
   if (!url) return <Avatar dims={dims} skinColor={skinColor} pose={pose} />
   return (
-    <AvatarErrorBoundary fallback={<Avatar dims={dims} skinColor={skinColor} pose={pose} />}>
+    <AvatarErrorBoundary
+      fallback={<Avatar dims={dims} skinColor={skinColor} pose={pose} />}
+      onLoadError={() => onPoseWarning && onPoseWarning(t(lang, 'avatarLoadError'))}
+    >
       <Suspense fallback={<Avatar dims={dims} skinColor={skinColor} pose={pose} />}>
-        <GLBAvatar dims={dims} url={url} collisionRigRef={collisionRigRef} pose={pose} />
+        <GLBAvatar dims={dims} lang={lang} url={url} collisionRigRef={collisionRigRef} pose={pose} onPoseWarning={onPoseWarning} />
       </Suspense>
     </AvatarErrorBoundary>
   )

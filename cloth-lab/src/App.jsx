@@ -14,6 +14,7 @@ import { buildSkirtRaw, DEFAULT_SKIRT_STYLE } from './pattern/library/skirt'
 import { useSeamEditor } from './seam/useSeamEditor'
 import SeamEditorPanel from './seam/SeamEditorPanel'
 import { convertAppPattern } from './pattern/importFromApp'
+import { t, dirFor } from './i18n'
 
 // Front/back skirt panels only — no waistband. A waistband needs its single
 // bottom edge SPLIT into two sub-seams (one to the front top, one to the
@@ -48,12 +49,23 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   const [fabricId, setFabricId] = useState((pattern && pattern.fabricId) || DEFAULT_FABRIC)
   const [skinToneId, setSkinToneId] = useState(DEFAULT_SKIN_TONE)
   const [poseId, setPoseId] = useState(DEFAULT_POSE)
+  // Surfaced from deep inside GLBAvatar (see its own header comment) —
+  // unrecognized rig, VRM, no walk clip, no leg rig for "seated". null when
+  // the current avatar/pose combination has full support.
+  const [poseWarning, setPoseWarning] = useState(null)
   const [garment, setGarment] = useState(null) // null = default T-shirt; else {pieces, seams} from the seam editor
   // Per-category GLB avatar URLs from the bridge (root app's state.avatarGLB
   // dict) — keyed by category, not a single URL, because cloth-lab's own
   // Header category switcher is independent of the bridge: switching
   // category in here must not lose the association or need a resend.
   const [avatarGLBByCategory, setAvatarGLBByCategory] = useState((pattern && pattern.avatarGLB) || {})
+  // cloth-lab has no language switcher of its own — it always mirrors
+  // whichever language the root BerryStudio app last sent (see
+  // buildClothLabPayload()'s `lang` field, js/app.js). Defaults to 'en' for
+  // the standalone dev preview (no `pattern`/bridge at all) and stays 'en'
+  // until the first real bridge payload arrives for the iframe path (mirrors
+  // every other bridged field's own "nothing yet" default).
+  const [lang, setLang] = useState((pattern && pattern.lang) || 'en')
 
   // Whatever the bridge (root BerryStudio app — iframe postMessage in
   // standalone/legacy mode, the `pattern` prop when embedded) last sent,
@@ -79,7 +91,24 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   // category/measurements/fabric/avatar to match, and always land on the
   // Seams view for review — never auto-simulate, see importFromApp.js's
   // header comment for why.
+  //
+  // `lang` (WP-9 issue #7) resends the FULL bridge payload every time the
+  // root app's language changes (see js/app.js's applyLang()), reusing this
+  // exact same message/prop path rather than a separate one — simplest to
+  // wire, but it means a payload whose ONLY actual change is `lang` must be
+  // told apart from a genuinely new pattern. Without the signature check
+  // below, every language switch bumped garmentVersion (full Workspace
+  // remount — seam-editor progress lost) and forced debugView back to
+  // 'seams' (silently yanking the user off whatever view — Cloth, Weld,
+  // Pieces — they were actually looking at) purely from switching languages.
+  const lastPatternSignatureRef = useRef(null)
   function applyIncomingPattern(payload) {
+    if (payload.lang) setLang(payload.lang)
+    const { lang: _lang, ...patternOnly } = payload
+    const signature = JSON.stringify(patternOnly)
+    if (signature === lastPatternSignatureRef.current) return // only `lang` differed — already applied above
+    lastPatternSignatureRef.current = signature
+
     const result = convertAppPattern(payload)
     setCategory(payload.category)
     setMeasurementsByCategory((prev) => ({ ...prev, [payload.category]: payload.measurements }))
@@ -129,20 +158,21 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   }, [embedded, pattern])
 
   return (
-    <div className="cloth-lab-root">
+    <div className="cloth-lab-root" dir={dirFor(lang)} lang={lang}>
       <Header
-        embedded={embedded} bodyOnly={bodyOnly}
+        embedded={embedded} bodyOnly={bodyOnly} lang={lang}
         category={category} onCategoryChange={setCategory}
         debugView={debugView} onDebugViewChange={setDebugView}
       />
       <Workspace
         key={garmentVersion}
-        bodyOnly={bodyOnly}
+        bodyOnly={bodyOnly} lang={lang}
         dims={dims} measurements={measurements}
         onMeasurementsChange={(next) => setMeasurementsByCategory((prev) => ({ ...prev, [category]: next }))}
         fabricId={fabricId} onFabricChange={setFabricId}
         skinToneId={skinToneId} onSkinToneChange={setSkinToneId}
         poseId={poseId} onPoseChange={setPoseId}
+        poseWarning={poseWarning} onPoseWarning={setPoseWarning}
         debugView={debugView} garment={garment}
         imported={imported} skirtRawPieces={skirtRawPieces}
         avatarGLBUrl={avatarGLBByCategory[category]}
@@ -157,7 +187,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
 // Seams view — split out from App so the whole thing can be remounted
 // (via App's key={garmentVersion}) as a unit whenever a new garment import
 // needs a fresh seam-editor rather than picking up on top of a stale one.
-function Workspace({ bodyOnly, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, skinToneId, onSkinToneChange, poseId, onPoseChange, debugView, garment, imported, skirtRawPieces, avatarGLBUrl, onReset, onSimulate }) {
+function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, debugView, garment, imported, skirtRawPieces, avatarGLBUrl, onReset, onSimulate }) {
   const rawPieces = imported ? imported.rawPieces : skirtRawPieces
   const roles = imported ? imported.roles : SKIRT_ROLES
   const seedEdges = imported ? imported.edgeInstructions : undefined
@@ -171,32 +201,59 @@ function Workspace({ bodyOnly, dims, measurements, onMeasurementsChange, fabricI
       <aside style={{ width: 260, flex: '0 0 auto', borderInlineEnd: '1px solid var(--border)', background: 'var(--panel)', overflowY: 'auto' }}>
         {!bodyOnly && (
           <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: 'var(--text-2)' }}>Garment:</span>
-            <strong>{imported ? 'From your BerryStudio design' : garment ? 'Custom (seam-authored)' : 'T-shirt (default)'}</strong>
+            <span style={{ color: 'var(--text-2)' }}>{t(lang, 'garment')}</span>
+            <strong>{imported ? t(lang, 'garmentFromDesign') : garment ? t(lang, 'garmentCustom') : t(lang, 'garmentDefault')}</strong>
             {(garment || imported) && (
               <button
                 onClick={onReset}
                 style={{ marginInlineStart: 'auto', border: 'none', background: 'transparent', color: 'var(--accent-2)', fontSize: 12, cursor: 'pointer' }}
               >
-                Reset
+                {t(lang, 'reset')}
               </button>
             )}
           </div>
         )}
         {!bodyOnly && imported && imported.skipped.length > 0 && (
           <div style={{ padding: '8px 14px', fontSize: 11.5, color: 'var(--text-2)', borderBottom: '1px solid var(--border)', lineHeight: 1.5 }}>
-            {imported.recognized.length} of {imported.recognized.length + imported.skipped.length} pieces used — skipped: {imported.skipped.map((s) => s.label).join(', ')}
+            {t(lang, 'piecesUsedSkipped', {
+              used: imported.recognized.length,
+              total: imported.recognized.length + imported.skipped.length,
+              list: imported.skipped.map((s) => s.label).join(', '),
+            })}
           </div>
         )}
-        <MeasurementPanel measurements={measurements} onChange={onMeasurementsChange} />
-        {!bodyOnly && <FabricPanel fabricId={fabricId} onChange={onFabricChange} />}
-        <AvatarPanel skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />
-        <ExportPanel exportRef={exportRef} />
-        {!bodyOnly && debugView === 'seams' && <SeamEditorPanel editor={seamEditor} onSimulate={onSimulate} />}
+        <MeasurementPanel lang={lang} measurements={measurements} onChange={onMeasurementsChange} />
+        {!bodyOnly && <FabricPanel lang={lang} fabricId={fabricId} onChange={onFabricChange} />}
+        <AvatarPanel lang={lang} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />
+        <ExportPanel lang={lang} exportRef={exportRef} />
+        {!bodyOnly && debugView === 'seams' && <SeamEditorPanel lang={lang} editor={seamEditor} onSimulate={onSimulate} />}
       </aside>
       <main style={{ flex: '1 1 auto', position: 'relative' }}>
+        {poseWarning && debugView !== 'seams' && (
+          <div
+            role="alert"
+            style={{
+              position: 'absolute', insetInlineStart: 12, insetInlineEnd: 12, top: 12, zIndex: 5,
+              display: 'flex', alignItems: 'flex-start', gap: 8,
+              background: 'color-mix(in srgb, #e0a83a 16%, var(--panel))',
+              border: '1px solid color-mix(in srgb, #e0a83a 55%, var(--border))',
+              borderRadius: 'var(--radius)', padding: '9px 12px', fontSize: 12.5, lineHeight: 1.45,
+              color: 'var(--text)',
+            }}
+          >
+            <span style={{ flex: '0 0 auto', fontSize: 14 }}>⚠</span>
+            <span style={{ flex: '1 1 auto' }}>{poseWarning}</span>
+            <button
+              onClick={() => onPoseWarning(null)}
+              aria-label={lang === 'ar' ? 'إغلاق' : 'Dismiss'}
+              style={{ flex: '0 0 auto', border: 'none', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 2 }}
+            >
+              ×
+            </button>
+          </div>
+        )}
         <Canvas shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
-          <Scene dims={dims} debugView={debugView} fabricId={fabricId} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} />
+          <Scene dims={dims} lang={lang} debugView={debugView} fabricId={fabricId} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} />
         </Canvas>
         {debugView === 'cloth' && isSolverHUDEnabled() && <SolverHUD statsRef={statsRef} />}
       </main>

@@ -1,13 +1,14 @@
 import { FABRIC_IDS, FABRIC_PRESETS } from '../cloth/fabricPresets'
+import { t } from '../i18n'
 
 // Live fabric switching — ClothSimulation.setFabric() only ever touches
 // plain float uniforms (massDensity/stiffness/damping/friction), so this is
 // an instant swap: no shader recompile, no texture rebuild, no sim restart.
-export default function FabricPanel({ fabricId, onChange }) {
+export default function FabricPanel({ lang = 'en', fabricId, onChange }) {
   return (
     <div style={{ padding: 14, borderTop: '1px solid var(--border)' }}>
       <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
-        Fabric
+        {t(lang, 'fabric')}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
         {FABRIC_IDS.map((id) => (

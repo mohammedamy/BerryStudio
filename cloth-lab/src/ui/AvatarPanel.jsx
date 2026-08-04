@@ -1,4 +1,5 @@
 import { SKIN_TONES } from '../body/skinTones'
+import { t } from '../i18n'
 
 export { DEFAULT_SKIN_TONE } from '../body/skinTones'
 
@@ -23,11 +24,16 @@ export const POSES = [
 // WP-8.6: a preset skin-tone picker (was a single hardcoded '#e3b08c' in
 // Avatar.jsx) — see body/skinTones.js for the actual table and why it's
 // there rather than here.
-export default function AvatarPanel({ skinTone, onChange, pose, onPoseChange }) {
+const POSE_I18N_KEYS = {
+  standing: 'pose_standing', apose: 'pose_apose', tpose: 'pose_tpose',
+  contrapposto: 'pose_contrapposto', seated: 'pose_seated', walk: 'pose_walk',
+}
+
+export default function AvatarPanel({ lang = 'en', skinTone, onChange, pose, onPoseChange }) {
   return (
     <div style={{ padding: 14, borderTop: '1px solid var(--border)' }}>
       <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
-        Skin Tone
+        {t(lang, 'skinTone')}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6 }}>
         {SKIN_TONES.map((tone) => (
@@ -48,7 +54,7 @@ export default function AvatarPanel({ skinTone, onChange, pose, onPoseChange }) 
       {onPoseChange && (
         <>
           <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5, margin: '14px 0 10px' }}>
-            Pose
+            {t(lang, 'pose')}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             {POSES.map((p) => (
@@ -62,7 +68,7 @@ export default function AvatarPanel({ skinTone, onChange, pose, onPoseChange }) 
                   border: '1px solid var(--border)',
                 }}
               >
-                {p.label}
+                {t(lang, POSE_I18N_KEYS[p.id])}
               </button>
             ))}
           </div>

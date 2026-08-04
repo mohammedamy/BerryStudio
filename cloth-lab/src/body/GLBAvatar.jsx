@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGLTF, useAnimations } from '@react-three/drei'
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js'
 import { normalizeGLBHeight, applyPoseToGLB, detectVRM } from './reposeGLB'
 import { deriveMeshFitCollisionRig } from './meshFitCollisionRig'
 import { applyFFDLattice } from './ffdLattice'
+import { t } from '../i18n'
 
 // useGLTF (drei's Suspense-based GLTFLoader hook) caches by URL and returns
 // the SAME scene graph across every call/remount for that URL — this app
@@ -31,12 +32,31 @@ import { applyFFDLattice } from './ffdLattice'
 // pose is a static repose (reposeGLB.js); `walk` is the one case where the
 // pose itself is time-varying, so it's handled here rather than folded
 // into applyPoseToGLB.
-export default function GLBAvatar({ dims, url, collisionRigRef, pose = 'standing' }) {
+// `onPoseWarning(message|null)` — the ONLY user-facing surface for the four
+// degraded-support cases this component already detected internally (VRM,
+// no recognized arm rig, no recognized leg rig for "seated", no animation
+// clip for "walk") — previously console.warn only, invisible to anyone not
+// watching devtools. Two independent state slots (mesh-level vs walk-level)
+// rather than one, because they're set from two different effects that run
+// on different dependency changes; combining them declaratively in a third
+// effect avoids the staleness bugs a single shared ref written from two
+// places would risk (a warning surviving after its own condition cleared).
+// The slots hold an i18n KEY (js/i18n.js — cloth-lab/src/i18n.js), not the
+// resolved string — resolving happens in the final combining effect below,
+// which is the only place with the current `lang`. Storing the resolved
+// string instead would mean a language switch never updates an
+// already-showing banner unless SOME OTHER dependency (dims/pose/scene)
+// happened to also force the expensive scene-prep useMemo to rerun.
+export default function GLBAvatar({ dims, lang = 'en', url, collisionRigRef, pose = 'standing', onPoseWarning }) {
   const gltf = useGLTF(url)
   const { scene, animations } = gltf
   const rootRef = useRef(null)
+  const meshWarningRef = useRef(null)
+  const [meshWarning, setMeshWarning] = useState(null)
+  const [walkWarning, setWalkWarning] = useState(null)
 
   const preparedScene = useMemo(() => {
+    meshWarningRef.current = null
     const cloned = cloneSkeleton(scene)
     cloned.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true } })
     normalizeGLBHeight(cloned, dims.H)
@@ -55,11 +75,8 @@ export default function GLBAvatar({ dims, url, collisionRigRef, pose = 'standing
       // any of the four expected bone names anyway, but that failure
       // path's message doesn't explain WHY, which this one does). Pose
       // selection (WP-8.5) has no effect on a VRM file for the same reason.
-      console.warn(
-        'GLBAvatar: this file uses the VRM extension. Full VRM humanoid-bone support is not implemented yet — ' +
-        'rendering it in its original (bind) pose. Simulated cloth is placed assuming an arms-down pose, ' +
-        'so sleeves and fitted areas may visibly float or clip.'
-      )
+      console.warn('GLBAvatar: ' + t('en', 'poseWarnVRM') + ' Full VRM humanoid-bone support is not implemented yet.')
+      meshWarningRef.current = 'poseWarnVRM'
       if (collisionRigRef) collisionRigRef.current = null
       return cloned
     }
@@ -76,12 +93,8 @@ export default function GLBAvatar({ dims, url, collisionRigRef, pose = 'standing
     // still lands exactly on the final target, not some blended result.
     const { poseFixed: standingFixed } = applyPoseToGLB(cloned, 'standing')
     if (!standingFixed) {
-      console.warn(
-        'GLBAvatar: no standard Mixamo/RPM arm rig found (LeftArm/RightArm/LeftForeArm/RightForeArm) — ' +
-        'rendering this avatar in its original pose. Simulated cloth is placed assuming an arms-down pose, ' +
-        'so sleeves and fitted areas may visibly float or clip. Pose selection has no effect without a ' +
-        'recognized rig.'
-      )
+      console.warn('GLBAvatar: ' + t('en', 'poseWarnNoRig') + ' (looked for LeftArm/RightArm/LeftForeArm/RightForeArm)')
+      meshWarningRef.current = 'poseWarnNoRig'
     }
     // WP-8.3: real torso/hip measurements from THIS loaded mesh, not the
     // generic formula — see meshFitCollisionRig.js's own header comment
@@ -91,10 +104,8 @@ export default function GLBAvatar({ dims, url, collisionRigRef, pose = 'standing
     if (standingFixed && pose !== 'standing' && pose !== 'walk') {
       const { legPoseFixed } = applyPoseToGLB(cloned, pose)
       if (pose === 'seated' && !legPoseFixed) {
-        console.warn(
-          'GLBAvatar: "seated" pose could not bend the knee (no standard Mixamo/RPM leg rig found — ' +
-          'LeftUpLeg/RightUpLeg/LeftLeg/RightLeg/LeftFoot/RightFoot) — legs stay standing; arms still relax.'
-        )
+        console.warn('GLBAvatar: ' + t('en', 'poseWarnSeatedLeg') + ' (looked for LeftUpLeg/RightUpLeg/LeftLeg/RightLeg/LeftFoot/RightFoot)')
+        meshWarningRef.current = 'poseWarnSeatedLeg'
       }
     }
     return cloned
@@ -109,6 +120,11 @@ export default function GLBAvatar({ dims, url, collisionRigRef, pose = 'standing
     // clones from different mounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene, dims, pose])
+  // Flush the ref computed above into real state — deferred to an effect
+  // (never called directly inside the useMemo above) since that's the
+  // earliest point in React's render cycle where updating a component's
+  // own state is safe.
+  useEffect(() => { setMeshWarning(meshWarningRef.current) }, [preparedScene])
 
   // WP-8.5 `walk`: only ever tried when the GLB shipped its own animation
   // clips — useAnimations ticks the mixer internally (an R3F useFrame under
@@ -116,15 +132,28 @@ export default function GLBAvatar({ dims, url, collisionRigRef, pose = 'standing
   const { actions, names } = useAnimations(animations, rootRef)
   useEffect(() => {
     Object.values(actions || {}).forEach((a) => a && a.stop())
-    if (pose !== 'walk') return
+    if (pose !== 'walk') { setWalkWarning(null); return }
     if (!names || !names.length) {
       console.warn('GLBAvatar: "walk" pose requested but this GLB has no embedded animation clips — rendering the standing pose instead.')
+      setWalkWarning('poseWarnWalkNoClip')
       return
     }
+    setWalkWarning(null)
     const walkName = names.find((n) => /walk/i.test(n)) || names[0]
     const action = actions[walkName]
     if (action) action.reset().fadeIn(0.2).play()
   }, [pose, actions, names])
+
+  // Mesh-level limitations (no recognized rig, VRM) take priority over the
+  // walk-specific one when both happen to apply — they're the more
+  // consequential of the two (they affect every pose, not just one). `lang`
+  // is a dep here (not on the scene-prep useMemo above) so switching
+  // language updates an already-showing banner instantly, without forcing
+  // a full skeleton-clone/FFD/repose rebuild just to change a string.
+  useEffect(() => {
+    const key = meshWarning || walkWarning
+    if (onPoseWarning) onPoseWarning(key ? t(lang, key) : null)
+  }, [meshWarning, walkWarning, lang, onPoseWarning])
 
   return <primitive ref={rootRef} object={preparedScene} />
 }

@@ -1,13 +1,7 @@
 import { CATEGORIES } from '../state/measurements'
+import { t } from '../i18n'
 
-const LABELS = { women: 'Women', men: 'Men', girls: 'Girls', boys: 'Boys' }
-const DEBUG_VIEWS = [
-  { id: 'off', label: 'Off', title: 'No pattern-piece debug overlay' },
-  { id: 'pieces', label: 'Pieces', title: 'Per-piece flat-color static placement (no physics)' },
-  { id: 'weld', label: 'Weld', title: 'Weld-degree overlay: grey=unwelded, green=seam, red=multi-piece corner' },
-  { id: 'cloth', label: 'Cloth', title: 'Live GPU cloth simulation: structural+bend+self-collision, body collision, grab-and-drag' },
-  { id: 'seams', label: 'Seams', title: 'Interactively author seam pairings for an imported pattern, in 3D' },
-]
+const DEBUG_VIEW_KEYS = ['off', 'pieces', 'weld', 'cloth', 'seams']
 
 // WP-5.3: `embedded` hides the title and category switcher — both are
 // redundant chrome once mounted inside the root BerryStudio app's own tab
@@ -19,7 +13,7 @@ const DEBUG_VIEWS = [
 // WP-10: `bodyOnly` (the standalone BodyForm page) additionally hides the
 // debug-view switcher — there's no garment/cloth/seams to switch between,
 // only the avatar, so every one of those buttons would be a dead end.
-export default function Header({ embedded = false, bodyOnly = false, category, onCategoryChange, debugView, onDebugViewChange }) {
+export default function Header({ embedded = false, bodyOnly = false, lang = 'en', category, onCategoryChange, debugView, onDebugViewChange }) {
   return (
     <header
       style={{
@@ -27,21 +21,21 @@ export default function Header({ embedded = false, bodyOnly = false, category, o
         borderBottom: '1px solid var(--border)', background: 'var(--panel)', flex: '0 0 auto',
       }}
     >
-      {!embedded && <strong style={{ fontSize: 15 }}>BerryStudio 3D — Cloth Lab</strong>}
+      {!embedded && <strong style={{ fontSize: 15 }}>{t(lang, 'title')}</strong>}
       {!bodyOnly && (
         <div style={{ display: 'flex', gap: 4 }}>
-          {DEBUG_VIEWS.map((v) => (
+          {DEBUG_VIEW_KEYS.map((id) => (
             <button
-              key={v.id}
-              onClick={() => onDebugViewChange(v.id)}
-              title={v.title}
+              key={id}
+              onClick={() => onDebugViewChange(id)}
+              title={t(lang, `dv_${id}_title`)}
               style={{
                 padding: '6px 12px', borderRadius: 999, border: '1px solid var(--border)', fontSize: 13,
-                background: v.id === debugView ? 'var(--accent-2)' : 'var(--panel-2)',
-                color: v.id === debugView ? '#fff' : 'var(--text-2)',
+                background: id === debugView ? 'var(--accent-2)' : 'var(--panel-2)',
+                color: id === debugView ? '#fff' : 'var(--text-2)',
               }}
             >
-              {v.label}
+              {t(lang, `dv_${id}`)}
             </button>
           ))}
         </div>
@@ -58,7 +52,7 @@ export default function Header({ embedded = false, bodyOnly = false, category, o
                 color: c === category ? '#fff' : 'var(--text)',
               }}
             >
-              {LABELS[c]}
+              {t(lang, `cat_${c}`)}
             </button>
           ))}
         </div>
