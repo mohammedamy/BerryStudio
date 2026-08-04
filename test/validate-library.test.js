@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import { PATTERNS, computeMeasurements } from '../js/data.js';
 import '../js/library.js'; // side effect: adds the 94 catalogue entries to PATTERNS
+import '../js/girls-leotards.js'; // side effect: adds the 100-pattern Girls' Gymnastics Leotards collection
 import { FancyGen } from '../js/fancy-patterns.js'; // side effect: adds the 24 Fancy Collection entries
 import { run } from '../js/validate.js';
 
@@ -14,10 +15,11 @@ void FancyGen; // imported for its module side effect, not used directly here
 // before that. Deliberately does NOT assert every pattern passes every
 // check — several checks are explicitly heuristic or deferred (see
 // js/validate.js's own module comment) — it asserts the run completes
-// without throwing across all 124 patterns (100 from data.js+library.js
-// + 24 Fancy Collection) and prints an honest summary of what it found.
-// It DID find real things on the first run — see README.md's Honest
-// notes for WP-0.4 rather than treating a clean run as the bar to hit.
+// without throwing across all 224 patterns (100 from data.js+library.js
+// + 100 Girls' Gymnastics Leotards + 24 Fancy Collection) and prints an
+// honest summary of what it found. It DID find real things on the first
+// run — see README.md's Honest notes for WP-0.4 rather than treating a
+// clean run as the bar to hit.
 test('validator runs cleanly over every pattern in the library, reports what it finds', () => {
   const ids = Object.keys(PATTERNS);
   console.log(`\n  Sweeping ${ids.length} patterns...`);
