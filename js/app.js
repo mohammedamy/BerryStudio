@@ -52,6 +52,15 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     // apply to whichever technique is selected. "none" on either keeps
     // AIGen.build()'s output byte-identical to before this option existed.
     builderOpts: { length:"medium", flare:"regular", fit:"regular", sleeve:"short", waistTech:"none", waistIntensity:"light", sleeveTech:"none", sleeveIntensity:"light" }, builderCustom: {},
+    // Guided Prompt Builder (AI pane): structured fields that assemble into
+    // a precise, unambiguous free-text prompt instead of asking the user to
+    // write one from scratch — the concrete fix for "the AI prompt is too
+    // vague to draft anything specific from". "any" means "let the AI/local
+    // heuristic decide" (the field is simply omitted from the built
+    // sentence) — everything defaults to "any" except garment type, which
+    // needs some starting value; a user who touches nothing gets exactly
+    // today's plain-text-prompt behaviour.
+    aiGuided: { type:"dress", fit:"any", flare:"any", length:"any", neckline:"any", sleeve:"any", hem:"any", closure:"none", notes:"" },
     avatarGLB: { women: "", men: "", girls: "", boys: "" },
     // BerryStudio-Upgrade-Plan WP-5: "iframe" (default, unchanged behavior)
     // or "embedded" (cloth-lab's lib build mounted directly into this page,
@@ -713,6 +722,102 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     c.appendChild(b);
   }
 
+  // ---- Guided Prompt Builder (AI pane) ----
+  // The free-text prompt box above is exactly as reliable as what the user
+  // happens to type into it — a one-word prompt ("dress") gives both the
+  // local regex heuristic (js/ai.js's deriveStyle()) and an LLM provider
+  // (js/ai-spec-pipeline.js) almost nothing to work with, which is the root
+  // of "the generated pattern is generic". This builder assembles a precise
+  // sentence from structured choices instead, using the EXACT canonical
+  // English phrases deriveStyle()'s own regexes already match (and the
+  // schema/pattern-spec.v1.json enum values the LLM path expects) — so a
+  // guided build is reliably specific for BOTH generation paths, not just
+  // whichever one happens to be configured. The assembled sentence is
+  // always built in this canonical English vocabulary regardless of the
+  // active UI language (state.lang): it's what feeds the local regex
+  // fallback (English tokens are its most complete coverage — see
+  // deriveStyle()'s own regexes) as well as the LLM, which reads English or
+  // Arabic prompts equally well either way. Only the FORM LABELS the user
+  // sees are localized (T()/i18n), not the text this produces.
+  const AI_GUIDED_WORDS = {
+    fit:      { fitted:"fitted", regular:"regular fit", relaxed:"relaxed" },
+    flare:    { slim:"pencil silhouette", regular:"regular silhouette", full:"a-line silhouette" },
+    length:   { short:"mini length", medium:"regular length", long:"maxi length" },
+    neckline: { v:"v-neck", round:"round neck", boat:"boat neck", offshoulder:"off-shoulder neckline", halter:"halter neckline", collar:"collar", mock:"mock neck" },
+    sleeve:   { sleeveless:"sleeveless", short:"short sleeves", threeQuarter:"three-quarter sleeves", long:"long sleeves" },
+    hem:      { straight:"straight hem", curved:"curved hem", highlow:"high-low hem", asymmetric:"asymmetric hem" },
+    closure:  { wrap:"wrap closure", zip:"zip closure", button:"button closure", tie:"tie closure" },
+  };
+  function buildGuidedPrompt(o){
+    const type = o.type || "dress";
+    const fitW = AI_GUIDED_WORDS.fit[o.fit], flareW = AI_GUIDED_WORDS.flare[o.flare];
+    const lead = ["a", fitW, flareW, type].filter(Boolean).join(" ");
+    const bits = [lead, AI_GUIDED_WORDS.length[o.length], AI_GUIDED_WORDS.neckline[o.neckline],
+      AI_GUIDED_WORDS.sleeve[o.sleeve], AI_GUIDED_WORDS.hem[o.hem], AI_GUIDED_WORDS.closure[o.closure]].filter(Boolean);
+    let sentence = bits.join(", ") + ".";
+    if(o.notes && o.notes.trim()) sentence += " " + o.notes.trim();
+    return sentence;
+  }
+  // Segmented-button row, same visual language as renderBuilderPane()'s own
+  // segRow — `opts` includes "any"/"none" as an explicit "let the AI/local
+  // heuristic decide" choice (skips the clause entirely in buildGuidedPrompt).
+  function guidedSegRow(container, label, key, opts, labelFn){
+    const wrap=el("div","set-row"); wrap.style.marginTop="10px"; wrap.style.flexWrap="wrap"; wrap.style.alignItems="flex-start";
+    wrap.innerHTML=`<span class="sl">${label}</span>`;
+    // Quick Draft Builder's own .seg rows never carry more than 3 short
+    // options — fine as a single nowrap line. Several of these guided rows
+    // (neckline in particular, 8 options) don't fit that assumption, so
+    // this wraps onto multiple lines instead of silently overflowing/
+    // clipping past the sidebar's edge (the global .seg CSS is untouched,
+    // this is scoped to just these rows).
+    const seg=el("div","seg"); seg.style.flexWrap="wrap"; seg.style.rowGap="4px";
+    opts.forEach(o=>{
+      const b=el("button", state.aiGuided[key]===o?"active":"", labelFn(o));
+      b.onclick=()=>{ state.aiGuided[key]=o; save(); renderAIPane(); };
+      seg.appendChild(b);
+    });
+    wrap.appendChild(seg); container.appendChild(wrap);
+  }
+  function renderGuidedPromptBuilder(ta){
+    const box=el("div","field"); box.style.marginTop="4px";
+    box.appendChild(el("div","section-title",IC.ruler+T("aiGuidedTitle")));
+    box.appendChild(el("div","help-note",T("aiGuidedDesc")));
+
+    const g = state.aiGuided;
+
+    const typeGrid=el("div","opt-grid"); typeGrid.style.margin="8px 0 4px";
+    AIGEN_KINDS.forEach(k=>{
+      const o=el("div","opt"+(g.type===k?" active":""), T("kind_"+k));
+      o.onclick=()=>{ g.type=k; save(); renderAIPane(); };
+      typeGrid.appendChild(o);
+    });
+    box.appendChild(typeGrid);
+
+    guidedSegRow(box, T("builderFit"), "fit", ["any","fitted","regular","relaxed"], o=>o==="any"?T("opt_any"):T("opt_"+o));
+    guidedSegRow(box, T("builderFlare"), "flare", ["any","slim","regular","full"], o=>o==="any"?T("opt_any"):T("opt_"+o));
+    guidedSegRow(box, T("builderLength"), "length", ["any","short","medium","long"], o=>o==="any"?T("opt_any"):T("opt_"+o));
+    guidedSegRow(box, T("aiGuidedNeckline"), "neckline",
+      ["any","v","round","boat","offshoulder","halter","collar","mock"],
+      o=>o==="any"?T("opt_any"):T("opt_neck"+o[0].toUpperCase()+o.slice(1)));
+    guidedSegRow(box, T("builderSleeve"), "sleeve", ["any","sleeveless","short","threeQuarter","long"],
+      o=>o==="any"?T("opt_any"):o==="threeQuarter"?T("opt_threeQuarter"):T("opt_"+o));
+    guidedSegRow(box, T("aiGuidedHem"), "hem", ["any","straight","curved","highlow","asymmetric"],
+      o=>o==="any"?T("opt_any"):T("opt_hem"+o[0].toUpperCase()+o.slice(1)));
+    guidedSegRow(box, T("aiGuidedClosure"), "closure", ["none","wrap","zip","button","tie"],
+      o=>o==="none"?T("opt_none"):T("opt_closure"+o[0].toUpperCase()+o.slice(1)));
+
+    const notesF=el("div","field"); notesF.style.marginTop="10px";
+    notesF.innerHTML=`<label>${T("aiGuidedNotes")}</label>`;
+    const notesIn=el("input","input"); notesIn.value=g.notes||""; notesIn.placeholder=T("aiGuidedNotesPh");
+    notesIn.oninput=()=>{ g.notes=notesIn.value; save(); };
+    notesF.appendChild(notesIn); box.appendChild(notesF);
+
+    const buildBtn=el("button","big-btn ghost",IC.check+T("aiGuidedBuild")); buildBtn.style.marginTop="12px";
+    buildBtn.onclick=()=>{ ta.value=buildGuidedPrompt(g); toast(T("aiGuidedBuilt")); };
+    box.appendChild(buildBtn);
+    return box;
+  }
+
   // AI PANE
   const AI_STAGES = ["analyzing","silhouette","drafting"];
   function renderAIPane() {
@@ -748,7 +853,9 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const statusBox=el("div","ai-status"); statusBox.id="aiStatus";
     const attrsBox=el("div","ai-attrs"); attrsBox.id="aiAttrs"; attrsBox.style.display="none";
 
-    c.appendChild(preview); c.appendChild(f); c.appendChild(file); c.appendChild(up); c.appendChild(gen);
+    const guided = renderGuidedPromptBuilder(ta);
+
+    c.appendChild(preview); c.appendChild(guided); c.appendChild(f); c.appendChild(file); c.appendChild(up); c.appendChild(gen);
     c.appendChild(statusBox); c.appendChild(attrsBox);
 
     // ---- AI Fashion Billboard: dress a model in real garment photos, then
@@ -1082,6 +1189,27 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
             };
           } else {
             res = specResult;
+            // A schema-valid spec that left construction.neckline unset
+            // reaches here with style.neckline===null (js/ai-spec-pipeline.js's
+            // specToStyle() leaves it nullable on purpose, for the fuseStyle()
+            // branch above — a filled-in guess there would look like a real
+            // vision read). This direct/non-fused path is exactly the case
+            // that note describes as safe to fill: nothing else here is going
+            // to supply a neckline, and AIGen.build()'s necklinePts() quietly
+            // drafts a plain round neckline for every unset case otherwise —
+            // the same "every generation looks identical" complaint this pass
+            // exists to fix. Seeded on the prompt so identical input still
+            // reproduces an identical result.
+            if(res.style && res.source==="spec" && !res.style.neckline){
+              const style = { ...res.style, neckline: AIGen.pick(`${prompt}|${state.category}|neck`,
+                res.style.type==="shirt" ? ["collar","round","v"] : ["v","round","boat","offshoulder","halter"]) };
+              const built = AIGen.build(style, currentMeas());
+              res = {
+                ...res, ...built, style,
+                attributes: AIGen.attributes(style, state.lang, provenanceMapFromSpec(res.spec)),
+                validation: PatternValidator.run(built.pieces, {}),
+              };
+            }
           }
           setStage("done");
         } else toast(T(classifyAIFallbackReason(specResult.fallbackReason)));
@@ -1114,9 +1242,18 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   // Fashion Billboard "Generate Pattern Pieces From This" — same pipeline
   // as the AI Pattern Generator's own image-upload path, sourced from the
   // generated billboard photo instead of a user-uploaded inspiration image.
+  // Used to call generatePatternFrom() with an EMPTY text prompt (image
+  // only) — a real reliability bug, not a deliberate "let the image speak
+  // for itself" design: a bare, contextless image gives a vision-capable
+  // provider nothing to anchor a specific read on beyond the general system
+  // prompt, and some OpenAI-compatible backends reject an empty user
+  // message outright. A concrete instruction steers it toward mode 1 (photo
+  // silhouette, not tech-pack tracing) and toward reading real construction
+  // details instead of a generic runway guess.
   async function runPatternPieces(btn){
     if(!bbBillboard) return;
-    await generatePatternFrom("", bbBillboard, btn, "billboardPiecesReady");
+    const prompt = "The attached image is a photorealistic photo of a professional fashion model wearing the exact garment(s) the user dressed them in with the AI Fashion Billboard tool above — read it as a real worn-garment photo (mode 1), not a technical tech-pack drawing. Identify this garment's actual construction as precisely as the photo allows: garment type, neckline, sleeve length and width, overall silhouette (fitted vs. flared), hem shape, and closure — a confident, specific read, not a generic default.";
+    await generatePatternFrom(prompt, bbBillboard, btn, "billboardPiecesReady");
   }
   // "Read Pattern Pieces From This Tech-Pack" — sourced from bbPattern (the
   // AI-drawn technical flat-sketch with individual piece diagrams and printed
