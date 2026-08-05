@@ -62,7 +62,7 @@ in the app's own header.
 | **Local model support** — Route A (local server via Ollama/LM Studio/llama.cpp/vLLM) is fully working; Route C (Hugging Face model ID, in-browser WebGPU/WASM) loads via a lazy Web Worker; a Capability Probe badges WebGPU readiness | ⚠️ Route A working; Route C structurally implemented, not live-tested with a real multi-hundred-MB model download this pass; Route B (local file picker) not wired up yet — see Honest notes |
 | **Spec-first generation** — prompt → schema-validated `PatternSpecV1` JSON → the same deterministic `AIGen.build()`/Check Pattern pipeline every other path uses, with one validate-and-retry pass and an honest fallback to the offline heuristic on failure | ✅ Working |
 | **Vision fusion** — when an image is supplied to a configured provider, the vision-informed spec is authoritative for garment type/neckline/closure; the existing pixel-analysis heuristic stays authoritative for length/flare/hem/colour | ✅ Working |
-| **AI Fashion Billboard, BYO-key** (Settings → AI Provider → Image generation) — OpenAI images, Gemini image, a local Stable Diffusion (Automatic1111) backend, plus the original proxy contract, unchanged. **"Generate Pattern Pieces From This"** on the generated photo drafts real editable pieces onto the canvas from the garment's relative silhouette (same pipeline as the AI Pattern Generator's own image upload); **"Read Pattern Pieces From This Tech-Pack"** on the generated flat-sketch/tech-pack drawing instead traces the image's *actual printed measurements* into real pieces (`pieces[].outlineCm`, needs a vision-capable Text Generation provider) — the existing "Use as Background Trace" manual path is still available for either image | ✅ Working — proxy option is byte-for-byte compatible with existing `server/billboard-proxy/worker.js` deployments |
+| **AI Fashion Billboard, BYO-key** (Settings → AI Provider → Image generation) — OpenAI images, Gemini image, a local Stable Diffusion (Automatic1111) backend, a local ComfyUI backend (hardcoded text-to-image workflow, auto-detected checkpoint), plus the original proxy contract, unchanged. **"Generate Pattern Pieces From This"** on the generated photo drafts real editable pieces onto the canvas from the garment's relative silhouette (same pipeline as the AI Pattern Generator's own image upload); **"Read Pattern Pieces From This Tech-Pack"** on the generated flat-sketch/tech-pack drawing instead traces the image's *actual printed measurements* into real pieces (`pieces[].outlineCm`, needs a vision-capable Text Generation provider) — the existing "Use as Background Trace" manual path is still available for either image | ✅ Working — proxy option is byte-for-byte compatible with existing `server/billboard-proxy/worker.js` deployments |
 | **Quick Draft builder** — pick a garment kind (Dress/Top/Shirt/Skirt/Trousers/Romper/Robe/Gown/Jacket/Coat/Suit), see only the measurements that kind actually needs, adjust Length/Flare/Fit/Sleeve, and produce real pattern pieces | ✅ Working — measurement edits here are a local draft override and don't touch your working Measures/Auto Grade |
 | **Object Browser** — a docked panel listing every Point/Construction Line/Arc/Circle/Piece/Text with live counts and a name filter; click a row to jump the canvas to it | ✅ Working |
 | **Snapshot** — freeze the pattern's current state as a translucent ghost layer (opacity/show/remove) to visually compare later edits against | ✅ Working |
@@ -424,16 +424,19 @@ in the app's own header.
   proxy contract (`{prompt, images, model}` → `{image}`) is preserved
   byte-for-byte — confirmed by a test asserting the exact request shape —
   so existing `server/billboard-proxy/worker.js` deployments keep working
-  with zero server-side changes. Of the three realistic local image-gen
-  backends, only Automatic1111's documented REST API is implemented this
-  pass (the simplest well-documented contract); ComfyUI's node-graph API in
-  particular is substantially more complex and is left as future work, not
-  silently claimed done.
+  with zero server-side changes. Of the realistic local image-gen backends,
+  Automatic1111's documented REST API and (as of Upgrade Plan v2.0 WP-23) a
+  **ComfyUI** adapter are both implemented; ComfyUI's surface area is
+  deliberately narrow — one hardcoded text-to-image workflow graph
+  (checkpoint → CLIP → sampler → VAE decode → save), not a user-editable
+  node graph, with the checkpoint to run auto-detected from what's actually
+  installed on the target instance (never guessed) and reference photos
+  silently ignored (no img2img wiring yet). SD.next remains unimplemented.
 - **Deferred, not dropped** (documented here rather than left unmentioned):
   a "draft program" generation mode against the associative point/line/arc
   system (the plan's own stretch goal beyond spec-first generation), and
-  replacing the pixel-analysis threshold scan with a real segmentation
-  model (RMBG-1.4/U²-Net/SAM-tiny) running on the same Route B/C worker
+  replacing the pixel-analysis threshold scan with a real segmentation model
+  (RMBG-1.4/U²-Net/SAM-tiny) running on the same Route B/C worker
   infrastructure — both are natural extensions of what's shipped here, not
   started this pass.
 - **True polygon nesting** (WP-11) is a first-party bottom-left-fill +

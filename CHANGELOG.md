@@ -6,6 +6,58 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-23: ComfyUI local image-gen adapter
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase B. `js/image-providers.js`
+explicitly deferred ComfyUI as future work in WP-4: its node-graph API is
+substantially more complex than Automatic1111's simple REST contract, and
+pulling in an unfamiliar workflow format risked a worse outcome than
+shipping Automatic1111 alone. That reasoning was sound for v1.0; it's a
+real gap now that Automatic1111 has proven the local-image-gen adapter
+pattern out.
+
+### Added
+- `js/image-providers.js`: a `comfyui` adapter matching every other image
+  adapter's interface exactly — `test()`/`generate()`, no key needed, one
+  optional base-URL field. `test()` hits ComfyUI's real `/system_stats`
+  endpoint and reports its version + VRAM. `generate()` ships one
+  hardcoded text-to-image workflow graph (CheckpointLoaderSimple →
+  CLIPTextEncode ×2 → EmptyLatentImage → KSampler → VAEDecode →
+  SaveImage) — not a user-editable node graph, deliberately out of scope
+  — submits it to `/prompt`, polls `/history/{prompt_id}` until it
+  renders, then fetches the output via `/view` and normalizes it to a
+  data URL like every other adapter. The checkpoint to run is
+  auto-detected from `/object_info/CheckpointLoaderSimple` (whatever's
+  actually installed on the target instance) rather than guessed — a
+  fresh ComfyUI install with no checkpoint model fails with an honest
+  "install a checkpoint" message instead of a confusing 400. Reference
+  photos (`images`) are silently ignored (no img2img/LoadImage wiring
+  yet), the same way every adapter here treats input it doesn't support.
+- `js/app.js`: the Settings → AI Provider → Image generation pane's
+  "Test Connection" button — previously text-provider-only, since no
+  image adapter had a `test()` method before this — now renders for any
+  image adapter that defines one (`comfyui` is the first). "Fetch
+  models" stays text-only; ComfyUI has no comparable models-list API
+  (`generate()` auto-detects its checkpoint instead of exposing a model
+  slot to pick from).
+- `browserLocalHint`/CORS help-note wiring: a `comfyuiHint` string
+  (EN+AR) explaining the hardcoded-workflow/no-img2img scope, plus the
+  existing `localServerCorsHint` (ComfyUI also rejects cross-origin
+  requests by default without `--enable-cors-header`).
+- `test/image-providers.test.js`: 5 new tests — real `/system_stats`
+  parsing, a clean failure when unreachable, a full
+  detect-checkpoint → submit → poll → fetch round trip against a mocked
+  ComfyUI instance, an honest failure with no checkpoint installed
+  (never guesses one), and an honest timeout if rendering never
+  finishes. `generate()`'s poll interval/timeout are now
+  opts-overridable so the round-trip and timeout tests don't burn real
+  wall-clock time — production callers never pass either override.
+
+### Changed
+- README: capability table + honest notes updated — ComfyUI is no longer
+  listed as deferred; SD.next remains the one unimplemented local
+  image-gen backend.
+
 ## WP-40: adjudicate the ~5mm front/back parity finding — verification only, no code change
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. Check Pattern's
