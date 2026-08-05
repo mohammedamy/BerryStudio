@@ -72,12 +72,16 @@ export const I18N = {
     builderPick: "Choose a garment kind above to see its required measurements.",
     builderMeas: "Required Measurements", builderMeasHint: "Pre-filled from your current working measurements — edits here only affect this draft.",
     builderLength: "Length", builderFlare: "Flare", builderFit: "Fit", builderSleeve: "Sleeve", builderPleats: "Pleats",
+    // WP-20: waist/sleeve-cap fullness is now a technique choice (pleat vs.
+    // gather vs. tuck), not just a pleat intensity — builderIntensity is
+    // shared by whichever technique row is showing.
+    builderWaistTech: "Waist Fullness", builderSleeveTech: "Sleeve Cap Fullness", builderIntensity: "Intensity",
     builderGenerate: "Generate Pattern",
     kind_dress: "Dress", kind_top: "Top", kind_shirt: "Shirt", kind_skirt: "Skirt", kind_trousers: "Trousers", kind_robe: "Robe",
     kind_gown: "Gown", kind_jacket: "Jacket", kind_coat: "Coat", kind_suit: "Suit", kind_romper: "Romper",
     opt_short: "Short", opt_medium: "Medium", opt_long: "Long", opt_slim: "Slim", opt_regular: "Regular", opt_full: "Full",
     opt_fitted: "Fitted", opt_relaxed: "Relaxed", opt_sleeveless: "Sleeveless",
-    opt_none: "None", opt_light: "Light",
+    opt_none: "None", opt_light: "Light", opt_pleat: "Pleat", opt_gather: "Gather", opt_tuck: "Tuck",
     // size pane
     sizeGrading: "Size & Grading", sizeRange: "Size Range", standard: "Measurement Standard",
     std_intl: "International (ASTM/ISO)", std_egypt: "Egyptian", std_saudi: "Saudi / Gulf",
@@ -386,11 +390,12 @@ export const I18N = {
     builderPick: "اختر نوع الملابس أعلاه لرؤية القياسات المطلوبة له.",
     builderMeas: "القياسات المطلوبة", builderMeasHint: "معبأة مسبقًا من قياساتك الحالية — التعديل هنا يؤثر فقط على هذه المسودة.",
     builderLength: "الطول", builderFlare: "الاتساع", builderFit: "القصة", builderSleeve: "الكم", builderPleats: "الكسرات",
+    builderWaistTech: "اتساع الخصر", builderSleeveTech: "اتساع رأس الكم", builderIntensity: "الشدة",
     builderGenerate: "إنشاء الباترون",
     kind_dress: "فستان", kind_top: "توب", kind_shirt: "قميص", kind_skirt: "تنورة", kind_trousers: "بنطلون", kind_robe: "عباية/ثوب",
     kind_gown: "فستان سهرة", kind_jacket: "جاكيت", kind_coat: "معطف", kind_suit: "بدلة", kind_romper: "أفرول",
     opt_short: "قصير", opt_medium: "متوسط", opt_long: "طويل", opt_slim: "ضيق", opt_regular: "عادي", opt_full: "واسع",
-    opt_none: "بدون", opt_light: "خفيف",
+    opt_none: "بدون", opt_light: "خفيف", opt_pleat: "كسرة", opt_gather: "تكشيش", opt_tuck: "طية مخيطة",
     opt_fitted: "مخصّر", opt_relaxed: "مرتاح", opt_sleeveless: "بدون كم",
     sizeGrading: "المقاس والتدريج", sizeRange: "نطاق المقاسات", standard: "معيار القياس",
     std_intl: "عالمي (ASTM/ISO)", std_egypt: "مصري", std_saudi: "سعودي / خليجي",

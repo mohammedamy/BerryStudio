@@ -76,7 +76,7 @@ in the app's own header.
 | **Cloth Lab engine** (Settings → 3D Cloth Lab engine) — "Iframe" (default) runs Cloth Lab as a separate embedded app; "Embedded" mounts it directly into this page instead, sharing this page's own React/Three.js so it starts faster and updates instantly | ⚠️ Both working; "Embedded" is newer and still being rolled out as the default |
 | **BodyForm** (`body.html`, standalone) — build a 3D avatar from measurements alone (no pattern needed), export it, or "Open in Fit Studio" to carry the category/measurements into the main app's 3D Cloth Lab | ✅ Working |
 | **Industrial grading — Grade Rules** (Size pane) — per-piece, per-outline-point dx/dy-per-size-step overrides on top of the uniform formula grade, JSON import/export, and a **Grade Nest preview** overlaying S/M/L/XL of one piece at a shared alignment point | ✅ Working — a point with no authored rule keeps grading through the normal formula, unchanged |
-| **Drafting engine upgrades** — per-edge seam allowance + real corner join styles (miter/round/bevel) in the offset engine; real bezier `piece.curves` metadata (every curved edge across the whole Fancy Collection — necklines, sleeve caps, collars, godets, capes, peplums, jacket fronts, gores — not just princess seams) feeding DXF's curve layer; dart **Pivot** / **Slash & Spread** / **Transfer** (Layers pane → piece properties → Edit Darts) — Transfer's external pivot point can be typed as X/Y or picked directly on the canvas; **Walk the Seam** (Export pane) — drag one slider to check two pieces' shared seam matches at every arc-length position, not just the ends; pleats on Quick Draft skirts (real added-width math, not a label) | ✅ Working — gathers/tucks (`js/pleats.js`) are implemented as pure, tested functions without a dedicated UI yet |
+| **Drafting engine upgrades** — per-edge seam allowance + real corner join styles (miter/round/bevel) in the offset engine; real bezier `piece.curves` metadata (every curved edge across the whole Fancy Collection — necklines, sleeve caps, collars, godets, capes, peplums, jacket fronts, gores — not just princess seams) feeding DXF's curve layer; dart **Pivot** / **Slash & Spread** / **Transfer** (Layers pane → piece properties → Edit Darts) — Transfer's external pivot point can be typed as X/Y or picked directly on the canvas; **Walk the Seam** (Export pane) — drag one slider to check two pieces' shared seam matches at every arc-length position, not just the ends; Quick Draft's Skirt (waist) and Sleeve (cap) offer a real **Pleat / Gather / Tuck** choice (real added-width math per technique, not a label) | ✅ Working |
 | **Local automation API** (`window.BerryStudio`, see below) — `generate`/`grade`/`nest`/`export`/`validate`, callable from the browser console or any injected script against the currently loaded pattern | ✅ Working |
 | **Docs site** (`docs/`, book icon in the header) — bilingual quick start, tool reference, keyboard shortcuts, an AI setup guide with one page per provider (exact CORS commands included), 3D troubleshooting, and FAQ | ✅ Working — a build-free static site, no dependency beyond the app's own theme CSS |
 | **Accessibility & UX** — real keyboard operation of the canvas (`[`/`]` cycle, arrow-key nudge scoped to whole pieces; Delete/Backspace now deletes whatever is selected — a piece, a construction point, a construction line/arc/circle, a text annotation, or a notch), `role=dialog`/focus-trap/return-focus on every modal, `aria-label`/`aria-pressed` on icon and toggle buttons, a real `:focus-visible` ring app-wide, `prefers-reduced-motion` honoured by both CSS transitions and 3D Preview's auto-rotate, and all 6 theme × light/dark variants verified at WCAG AA (4.5:1) for body and secondary text | ✅ Working (see Honest notes) |
@@ -447,9 +447,17 @@ in the app's own header.
   e.g. a fixed bust-point reference) is a real, tested pure function
   (`js/darts.js`) but has no dedicated UI yet — it needs a "pick a point on
   the canvas" interaction the current Dart Editor modal (Pivot/Spread only)
-  doesn't have. Gathers (`computeGatherWidth`) and tucks (`computeTucks`,
-  `js/pleats.js`) are likewise real and tested but only pleats are wired
-  into a generator (Quick Draft's skirt builder) today.
+  doesn't have.
+- **WP-20 wired gathers and tucks into the same builders pleats already
+  used**: `computeGatherWidth`/`computeTucks` (`js/pleats.js`) were real,
+  tested pure functions with zero call sites — only pleats had a generator
+  hookup (Quick Draft's skirt builder). Quick Draft's Skirt (waist edge)
+  and Sleeve (cap — extracted into a `sleevePiece()` helper shared by
+  `buildTop`/`buildRomper`, so both got this for free) now offer a real
+  **Pleat / Gather / Tuck** technique choice with a Light/Full intensity,
+  each changing the produced piece's finished width by the documented
+  formula — "None" (the default) keeps output byte-identical to before
+  this option existed.
 - **Walk the Seam** (WP-14) is a modal with a single drag slider, not a
   live interactive canvas tool that tracks a mouse drag along an edge in
   real time — a deliberate, smaller-blast-radius choice given the existing
