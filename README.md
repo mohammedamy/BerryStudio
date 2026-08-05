@@ -662,11 +662,25 @@ in the app's own header.
   perfect fit for 3D Preview (`js/three-view.js` just loads and scales to
   height, no skeleton needed) but means pose variants in 3D Cloth Lab
   (seated/walk/etc.) won't animate them; they'll display correctly, just
-  static, the same as any unposed model. A 9th candidate model was
-  deliberately left out: at 41MB it was 10x every other file's size,
-  bloating both the git repo and the download a visitor would pay just to
-  preview it — left for a future, properly-compressed re-export rather
-  than shipped as-is. Not precached by the service worker (same
+  static, the same as any unposed model. A 9th candidate model
+  (`Manniquin/woman.glb`, 41MB) was investigated and deliberately left out
+  (BerryStudio-Upgrade-Plan-v3 WP-32) — not just for its size. Direct
+  struct-level parsing of its GLB chunks plus running it through this
+  app's own `THREE.GLTFLoader` + `keepLargestComponent()` pipeline showed
+  1,451,001 real triangles exist, but `keepLargestComponent()` — tuned for
+  every other bundled avatar's minor debris, e.g. a small floating spike
+  on `girl3.glb` — discards ~89% of this specific mesh, keeping only one
+  arbitrary chunk (a leg) and scattering the rest as disconnected
+  fragments. It's a genuine source-asset defect (multiple legitimately-
+  separate large mesh islands, not one body + small debris), not a
+  compression problem — the same `@gltf-transform/cli` weld/simplify/
+  dedup/prune chain that compresses the other 8 avatars produced a clean
+  3.13MB output from it with no changes needed. Explicitly not shipped:
+  extending `keepLargestComponent()` to bridge legitimate multi-island
+  bodies would need a full regression pass against all 8 working avatars
+  first, and eight bundled avatars is already a reasonable gallery without
+  it — eight it stays for now, an explicit decision rather than a silently
+  open gap. Not precached by the service worker (same
   network-first-then-cache behaviour as any other same-origin asset) —
   only fetched when a user actually picks one.
 - **Bundled avatar gallery — grounding, garment, and a pre-existing model
@@ -703,20 +717,39 @@ in the app's own header.
     per-piece visibility/fabric wiring (`pieceVisMap`/`applyFabric`) then
     picks up and shows the garment that matches whatever pattern is
     actually loaded, unchanged.
-  - **Known limitation, not fixed this pass**: the garment shell's size
-    comes from your entered measurements, not from the loaded GLB mesh
-    itself, so fit is approximate. On a build stockier than that generic
-    assumption (`boy2.glb` in particular) the shell can end up mostly
-    *inside* the skin surface and only partially visible, rather than
-    fully clipped-through-naked as before, but still not a clean fit. A
-    per-mesh auto-fit was attempted and reverted: these AI-generated
-    avatars don't share one rest pose (arm position relative to the torso
-    varies model to model, confirmed by direct inspection), so no single
-    "safe" Y-band for measuring torso-only girth avoided sampling
-    outstretched-arm geometry on at least one bundled model — one attempt
-    scaled the garment to several times the body's size instead of
-    fixing it. Reverted in favor of the simpler, always-correctly-sized
-    (if occasionally under-fitting) generic version.
+  - **Known limitation**: the garment shell's size comes from your entered
+    measurements, not from the loaded GLB mesh itself, so fit is
+    approximate. A general, automated per-mesh auto-fit was attempted and
+    reverted: these AI-generated avatars don't share one rest pose (arm
+    position relative to the torso varies model to model, confirmed by
+    direct inspection), so no single "safe" Y-band for measuring
+    torso-only girth avoided sampling outstretched-arm geometry on at
+    least one bundled model — one attempt scaled the garment to several
+    times the body's size instead of fixing it. Reverted in favor of the
+    simpler, always-correctly-sized (if occasionally under-fitting)
+    generic version for the other 7 models.
+  - **`boy2.glb` specifically — fixed via measured, one-off override**
+    (BerryStudio-Upgrade-Plan-v3 WP-31). This model's shell was worse than
+    "occasionally under-fitting": it was fully swallowed by the skin
+    surface, not just partially. Direct glTF POSITION-accessor measurement
+    (a per-Y-band XZ-cluster scan, same "measure, don't guess" methodology
+    as the grounding fix above) found its actual crotch and underarm
+    landmarks sit at ~33%/~65% of its own mesh height — ~14-15 points
+    below the generic kid assumption of 47%/80%, most likely because this
+    specific reconstruction's head is proportionally larger than that
+    generic assumption accounts for. Correcting only the Y-position
+    (`AVATAR_LANDMARK_OVERRIDES.boy2` in `js/three-view.js`) was verified
+    in-browser to be *not* sufficient on its own — the shell still sat
+    inside the skin at the corrected height, because its measurement-
+    derived radius is also too small for this mesh's own scale. Fixing
+    both together (measured Y-position + a 2.3x radius scale, the same
+    factor an earlier radius-only attempt had already narrowed in on but
+    couldn't validate because it was scaling the shell at the wrong
+    height) lands a shell that sits outside the skin, verified by
+    screenshot. This is a one-off, measured correction for this specific
+    bundled file, keyed by filename — it doesn't generalize to a real
+    per-mesh auto-fit for future avatars, which remains the limitation
+    above.
 
 ---
 
