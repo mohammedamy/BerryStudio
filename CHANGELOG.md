@@ -136,6 +136,39 @@ follow-up — the same class of gap WP-22/WP-30/WP-40 already document
 elsewhere in this plan for things that need real hardware/data, not more
 code.
 
+## WP-38: draft-program generation mode — design note (verify/design only, no code)
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase B. v1.0's own honest notes
+named a "draft program" generation mode (an AI provider emitting a
+sequence of construction operations against the real associative Point/
+Line/Arc/Circle system, instead of one final `PatternSpecV1` object) as a
+deferred stretch goal — explicitly scoped by this plan as "a short design
+note (not code)... the seed for a real future WP," not an implementation.
+
+### Added
+- `docs/draft-program-design-note.md` (new): proposes a closed, schema-
+  enumerable operation vocabulary (`defineVariable`/`placePoint`/
+  `lineBetween`/`arcThrough`/`circleAt`/`offsetParallel`/
+  `intersectionPoint`/`promotePiece`/`setPieceRole`), each mapped
+  explicitly onto a real, already-shipped `js/canvas.js` function (line-
+  referenced and verified against current source, not guessed) rather
+  than proposing new geometry infrastructure. Documents that the
+  validation story needs no new design at all —
+  `js/ai-spec-pipeline.js`'s existing one-time geometry-validation retry
+  for traced tech-pack pieces is the exact mechanism a draft program's
+  output plugs into unchanged — and that the operation vocabulary's
+  formulas ARE the existing Variables system's expression language
+  (`evalExpr`), not a new one. Flags two real, disclosed gaps a future
+  implementing WP would need to close (`offsetParallel`/
+  `intersectionPoint` need small amounts of genuinely new geometry math;
+  everything else is mechanical wiring), and notes the plan's own cited
+  prerequisite (WP-25's real seam-pairing data) has already shipped, so a
+  future WP isn't blocked on anything else in this document.
+
+### Changed
+- README: honest notes updated with a pointer to the design note;
+  directory tree updated.
+
 ## WP-21: Local model Route B — a real .onnx file picker
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase B. Route B (pick a local

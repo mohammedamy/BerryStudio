@@ -482,6 +482,11 @@ in the app's own header.
   a "draft program" generation mode against the associative point/line/arc
   system (the plan's own stretch goal beyond spec-first generation) — a
   natural extension of what's shipped here, not started this pass.
+  `docs/draft-program-design-note.md` (Upgrade Plan v2.0 WP-38) is a real
+  design note seeding a future WP: the proposed operation vocabulary,
+  validation story (reusing `js/ai-spec-pipeline.js`'s existing tech-pack
+  geometry-validation retry unchanged), and relationship to the Variables
+  system — not code, by that WP's own explicit acceptance criterion.
 - **True polygon nesting** (WP-11) is a first-party bottom-left-fill +
   simulated-annealing placement search over real polygon-overlap testing
   (`js/nesting-core.js`), not a literal Minkowski-difference no-fit-polygon
@@ -730,6 +735,7 @@ BerryStudio/                (repository root)
 ├── schema/               Pattern Spec JSON Schema + example fixtures (see Honest notes)
 ├── scripts/              Dev-only tooling (schema validator codegen)
 ├── docs/                 Bilingual docs site (quick start, tools, shortcuts, AI setup, 3D troubleshooting, FAQ)
+│                         + draft-program-design-note.md (internal design note, not part of the site)
 ├── test/                 node --test unit tests for the root app (`npm test`)
 ├── e2e/                  Playwright smoke + AI settings specs (`npm run test:e2e`)
 └── icons/                App icons (SVG + PNG 192/512)
