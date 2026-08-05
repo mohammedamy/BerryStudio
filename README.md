@@ -187,10 +187,15 @@ in the app's own header.
   for Walk. Whichever pose is displayed, simulated cloth always collides
   against the standing arms-down body — a seated body's garment drape isn't
   re-simulated for the new pose.
-- **VRM avatar files** (a common photoreal-avatar format) are detected and
-  shown an honest "not supported yet" message rather than mis-positioned —
-  full VRM humanoid-bone retargeting is a separate spec from the Mixamo/
-  Ready Player Me bone-name convention this app parses, and wasn't built.
+- **VRM avatar files** (a common photoreal-avatar format) — as of WP-29
+  (v2.0), a real VRM 0.x/1.0 `humanoid.humanBones` resolver feeds the same
+  repose pipeline the Mixamo/Ready Player Me bone-name convention already
+  uses, so pose selection (standing/A-pose/T-pose/contrapposto/seated) works
+  on a VRM file the same way it does on any other recognized rig. The
+  "pose has no effect" message is shown only when a VRM file's own
+  `humanBones` data doesn't resolve a full arm rig (a custom or malformed
+  VRM export) — never a silent mis-pose, same honesty rule as the plain
+  "no recognized rig" case.
 - **USDZ export** (3D Cloth Lab → Export) produces a structurally valid file
   with no runtime errors, but hasn't been confirmed to open correctly in
   Apple Quick Look on real iOS hardware — no device was available to test
