@@ -6,6 +6,44 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-40: adjudicate the ~5mm front/back parity finding — verification only, no code change
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. Check Pattern's
+`seamLengthParity` check has flagged a consistent ~5mm front/back "side
+length" delta across many catalogue garments since it first shipped,
+undecided ever since: intentional (a deeper front neckline commonly does
+shift things by a small margin) or a real defect.
+
+### Investigated
+- Every one of the 61 flagged pairs across the 164-pattern library (size
+  M) differs by *exactly* 5.0mm — zero variance. A real, independent
+  construction defect across dozens of unrelated garments would not land
+  on the identical value every time; one deterministic authored source
+  would.
+- Traced to `js/ai.js`'s `buildTop()`: `necklinePts(style, chestW*0.42, 1)`
+  for the front vs. `necklinePts({...}, chestW*0.3, 1.5)` for the back —
+  the back neckline is drafted both narrower (`chestW*0.3` vs `0.42`,
+  already a clearly intentional asymmetry) AND 0.5cm (5mm) higher/shallower
+  (`y0=1.5` vs `1`) than the front — verified directly against real
+  generated coordinates: `w01`'s front and back outlines share an
+  identical hem Y; only the neckline-driven top-of-piece Y differs, by
+  exactly 0.5cm.
+- Only `AIGen.build()`-drafted garments (library.js's 94 entries, Quick
+  Draft, AI-generated pieces) show this — `js/data.js`'s 6 hand-crafted
+  patterns and the Fancy Collection (different construction entirely)
+  don't.
+
+### Conclusion: confirmed intentional, not a defect
+The 0.5cm neckline-height offset is the back-neckline-narrowing choice's
+companion parameter, not an independent oversight — narrower AND
+slightly higher/shallower at the back neck is standard patternmaking
+practice. `checkSeamLengthParity`'s own `SEAM_LENGTH_TOL_MM = 3` is
+simply tighter than this legitimate variation, and its height-based proxy
+(whole vertical extent, not the literal side-seam edge) conflates "the
+neckline sits 5mm higher" with "the side seam is 5mm longer." No code
+changed; no follow-up WP assigned. README's Honest notes updated with
+this conclusion and its reasoning.
+
 ## WP-20: gathers & tucks wired into Quick Draft (skirt waist + sleeve cap)
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. `computeGatherWidth()`

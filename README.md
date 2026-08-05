@@ -333,9 +333,36 @@ in the app's own header.
   flag). Not adjudicated here —
   a negative-ease "Fitted" preset is legitimate for stretch knit fabric
   and a real defect for anything else, and nothing in the current data
-  says which is intended; this is the same category of open question as
-  WP-40's ~5mm finding below, and is tracked alongside it rather than
-  guessed at.
+  says which is intended — not adjudicated here.
+  **WP-40 adjudicated the ~5mm seam-length-parity finding above: confirmed
+  intentional, not a defect.** All 61 flagged pairs (library.js's
+  `AIGen.build()`-drafted garments — the hand-crafted `js/data.js`
+  patterns and the Fancy Collection don't show it) differ by *exactly*
+  5.0mm, zero variance — itself a strong signal this is one deterministic
+  authored value, not a spread of independent construction mistakes.
+  Traced to `js/ai.js`'s `necklinePts(style, half, y0)` calls in
+  `buildTop()`: the front neckline is drafted with `y0=1`, the back with
+  `y0=1.5` — a 0.5cm (5mm) difference in the neckline's own starting
+  height, verified directly against real generated coordinates (`w01`'s
+  front/back both span the identical hem Y; only the neckline-driven
+  top-of-piece Y differs, by exactly 0.5cm). This is the *same* call site
+  that already gives front and back deliberately different neckline
+  **widths** (`chestW*0.42` front vs. the narrower `chestW*0.3` back) — a
+  real, standard patternmaking convention (the back neck is conventionally
+  drafted narrower and slightly higher/shallower than the front) — the
+  0.5cm height offset is evidently the same deliberate choice's companion
+  parameter, not an independent oversight. `checkSeamLengthParity`'s own
+  tolerance (`SEAM_LENGTH_TOL_MM = 3`, `js/validate.js`) is simply tighter
+  than this legitimate neckline variation; the check's own height-based
+  proxy (front/back's whole vertical extent, not the literal side-seam
+  edge) conflates "neckline sits 5mm higher" with "side seam is 5mm
+  longer," which is why every affected pair reads identically regardless
+  of neckline shape (v/round/boat/halter/collar/mock all inherit the same
+  `y0` values). No code changed — this is a verification-only conclusion,
+  and no follow-up WP is needed. The 8-piece Ease failure above is a
+  genuinely separate, still-open question (a negative-ease "Fitted"
+  preset vs. a real defect) — WP-40's own investigation covered only the
+  seam-length-parity finding, not Ease's.
 - **Bring Your Own AI** (`js/ai-providers.js`, `js/ai-keystore.js`, Settings →
   AI Provider): API keys default to `sessionStorage` (cleared when the tab
   closes) and never enter `state`/the `localStorage["pps"]` blob at all —
