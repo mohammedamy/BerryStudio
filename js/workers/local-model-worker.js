@@ -18,12 +18,16 @@
    sw.js's precache list.
 
    Message protocol (main thread -> worker):
-     { type:"loadRoute", route:"file"|"file-restore"|"hf", payload }
+     { type:"loadRoute", route:"file"|"file-restore"|"hf"|"segmentation", payload }
        route "file":         payload = { name, mimeType, bytes: ArrayBuffer }
        route "file-restore": payload = {} — reload whatever's in
          js/workers/model-file-cache.js's cache, no bytes sent (there
          are none to send — the worker reads the cache itself)
        route "hf":           payload = { modelId }
+       route "segmentation": payload = { modelId } — a Hugging Face model
+         ID for an image-matting/segmentation architecture, loaded via
+         transformers.js's `AutoModel`/`AutoProcessor` (NOT the generic
+         `pipeline()` helper — see the honesty note below on why).
      { type:"complete", req: {system, messages, images, schema} }
        — only valid after a "ready" message from route "hf"; runs one
          inference call and returns a NormalizedResult-shaped message (see
@@ -39,12 +43,23 @@
          probe — "does this model actually run in this browser" — not a
          meaningful classification of anything, since there's no real
          input to give it yet; see the honesty note below).
+     { type:"runSegmentation", pixels, width, height }
+       — only valid after a "ready" message from route "segmentation".
+         `pixels` is a real RGBA `Uint8ClampedArray` (an `ImageData`'s
+         `.data`, as read straight off js/ai.js's own working canvas) —
+         unlike `runOnnxInference`, this is a REAL forward pass over real
+         pixels, not a synthetic probe.
 
    Message protocol (worker -> main thread):
      { type:"progress", pct }
-     { type:"ready", route, name?, inputNames?, outputNames? }
+     { type:"ready", route, name?, inputNames?, outputNames?, modelId? }
      { type:"result", ok, providerId, text, json, raw, usage }
      { type:"onnxInferenceResult", ok, modelName, inputs, outputs, latencyMs }
+     { type:"segmentationResult", ok, width, height, data, latencyMs }
+       — `data` is a flat array of `width*height` floats in [0,1] (row-
+         major, one alpha value per matte pixel — NOT the same resolution
+         as the input photo; js/ai.js resamples it into its own working
+         grid).
      { type:"error", message }
 
    Honesty notes (deliberately not glossed over):
@@ -55,12 +70,46 @@
      a real photo — it proves the picked .onnx graph actually loads and
      executes on this device/runtime (WebGPU or WASM), which is real,
      useful signal on its own, but the output values are meaningless
-     (garbage-in). Real per-model image preprocessing (resize, channel
-     order, mean/std normalization — all of which vary by model and
-     can't be guessed generically) is exactly what WP-39's segmentation
-     feature builds concretely for one specific, known model pipeline,
-     rather than attempting it generically here for an arbitrary
-     user-supplied .onnx file.
+     (garbage-in). Real per-model image preprocessing for an arbitrary
+     user-supplied .onnx file is deliberately NOT attempted generically —
+     `runSegmentation` below is the concrete, real-preprocessing version
+     of this idea, scoped to one known, verified model family instead.
+   - `runSegmentation`'s model/processor loading uses transformers.js's
+     `AutoModel.from_pretrained()`/`AutoProcessor.from_pretrained()`
+     directly, NOT the `pipeline()` convenience helper — confirmed
+     empirically that `pipeline('image-segmentation', …)` rejects every
+     real background-removal/matting architecture tried against this
+     pinned transformers.js version (`SegformerForSemanticSegmentation`
+     — briaai/RMBG-1.4's real architecture — and `modnet` both raise
+     "Unsupported model type"; the pipeline helper's task registry only
+     covers standard multi-class segmentation heads). `Xenova/modnet` is
+     the one model family actually verified end-to-end this pass (real
+     model+processor load, real forward pass, real [1,1,H,W] alpha-matte
+     output) — documented as the suggested default, not a promise every
+     Hugging Face "segmentation" model ID will work: an architecture this
+     reader hasn't seen fails with ORT/transformers.js's own real error,
+     never a silent wrong result. The forward pass tries `model(inputs)`
+     first (the normal transformers.js convention) and falls back to
+     `model({input: inputs.pixel_values})` only on failure — MODNet's
+     specific input-naming quirk, confirmed empirically, not assumed.
+     Output values are read as already-normalized [0,1] alpha (true for
+     MODNet's own sigmoid-activated head) — a model whose output needs a
+     different activation would misread, an honest, documented limit of
+     targeting one verified family rather than building a generic
+     per-architecture postprocessing registry.
+   - `loadRouteSegmentation` requests WASM ONLY, deliberately not the
+     "try WebGPU, catch, fall back to WASM" pattern route "hf" uses just
+     above — confirmed empirically that pattern isn't safe to reuse here:
+     `AutoModel.from_pretrained({device:'webgpu'})` reports success even
+     with no real GPU adapter present, and the resulting failure (deep
+     inside onnxruntime-web's backend glue, only surfacing on an actual
+     forward pass) was NOT reliably catchable/retryable within the same
+     loaded model+processor pair in testing — a genuinely device-less
+     environment reproduced a stuck "[webgpu] Failed to get GPU adapter"
+     error that persisted even after explicitly retrying with
+     {device:'wasm'}. A real warm-up forward pass at load time (see
+     `segmentationForward`) still fails fast and honestly if the model
+     can't run at all, just without a same-session WebGPU retry.
    - Shape metadata for `runOnnxInference`'s synthetic input comes from
      PARSING THE .onnx FILE'S OWN BYTES (js/workers/onnx-shape-reader.js),
      not from onnxruntime-web's JS API — confirmed empirically that
@@ -103,6 +152,9 @@ let ortModule = null;
 let onnxSession = null;
 let onnxModelName = null;
 let onnxInputSpecs = null; // [{name, elemType, shape}] parsed from the .onnx file itself — see onnx-shape-reader.js
+let segModel = null;
+let segProcessor = null;
+let segModelId = null;
 
 function post(msg) { self.postMessage(msg); }
 
@@ -138,6 +190,63 @@ async function loadRouteHF(modelId) {
     pipelineInstance = await pipeline('text-generation', modelId, { device: 'wasm', progress_callback: progressCb });
   }
   post({ type: 'ready' });
+}
+
+// WASM only — deliberately NOT the "try webgpu, catch, fall back to wasm"
+// pattern route "hf" uses just above. Confirmed empirically during this
+// WP that the pattern isn't safe to reuse here:
+// AutoModel.from_pretrained({device:'webgpu'}) reports SUCCESS even with
+// no real GPU adapter present (unlike onnxruntime-web's own
+// InferenceSession.create(), which validates its execution provider
+// immediately) — the failure only surfaces on the first actual forward
+// pass, deep inside onnxruntime-web's WASM/WebGPU backend glue, and in
+// testing that failure was NOT reliably catchable/retryable within the
+// same loaded model+processor pair (a real device-less environment —
+// this repo's own headless e2e suite included — reproduced a stuck
+// "[webgpu] Failed to get GPU adapter" error that persisted even after
+// explicitly retrying with {device:'wasm'}). WASM alone is what was
+// actually verified working end-to-end this pass — see the header
+// honesty note.
+async function segmentationForward(t, model, processor, image) {
+  const inputs = await processor(image);
+  try { return { out: await model(inputs), inputs }; }
+  catch (e) {
+    // MODNet (the one verified model family — see the header honesty
+    // note) names its sole input "input" rather than accepting the
+    // processor's own output object directly like most transformers.js
+    // architectures do — real, confirmed fallback, not a guess.
+    return { out: await model({ input: inputs.pixel_values }), inputs };
+  }
+}
+async function loadRouteSegmentation(modelId) {
+  const t = await loadTransformers();
+  post({ type: 'progress', pct: 10 });
+  const progressCb = (p) => { if (p && typeof p.progress === 'number') post({ type: 'progress', pct: 10 + Math.round(p.progress * 0.6) }); };
+  const model = await t.AutoModel.from_pretrained(modelId, { device: 'wasm', progress_callback: progressCb });
+  const processor = await t.AutoProcessor.from_pretrained(modelId);
+  post({ type: 'progress', pct: 90 });
+  // A real warm-up forward pass — fails fast and honestly here (a clear
+  // "loadRoute failed" error, module-level state left untouched) rather
+  // than letting a broken model/architecture look "loaded" and only fail
+  // later on a user's real photo.
+  const probeImage = new t.RawImage(new Uint8ClampedArray(4 * 4 * 4).fill(128), 4, 4, 4);
+  await segmentationForward(t, model, processor, probeImage);
+  segModel = model; segProcessor = processor; segModelId = modelId;
+  post({ type: 'ready', route: 'segmentation', modelId });
+}
+
+async function runSegmentation({ pixels, width, height }) {
+  if (!segModel || !segProcessor) {
+    post({ type: 'error', message: 'no segmentation model loaded — send loadRoute route:"segmentation" first' });
+    return;
+  }
+  const t = await loadTransformers();
+  const t0 = Date.now();
+  const image = new t.RawImage(pixels, width, height, 4);
+  const { out } = await segmentationForward(t, segModel, segProcessor, image);
+  const tensor = out[Object.keys(out)[0]];
+  const [, , mh, mw] = tensor.dims; // [1,1,H,W] — a single-channel alpha matte
+  post({ type: 'segmentationResult', ok: true, width: mw, height: mh, data: Array.from(tensor.data), latencyMs: Date.now() - t0 });
 }
 
 async function loadOnnxFromBytes({ name, mimeType, bytes }) {
@@ -260,6 +369,7 @@ self.onmessage = async (e) => {
       if (msg.route === 'hf') await loadRouteHF(msg.payload && msg.payload.modelId);
       else if (msg.route === 'file') await loadRouteFile(msg.payload);
       else if (msg.route === 'file-restore') await loadRouteFileFromCache();
+      else if (msg.route === 'segmentation') await loadRouteSegmentation(msg.payload && msg.payload.modelId);
       else post({ type: 'error', message: `unknown route "${msg.route}"` });
     } else if (msg.type === 'complete') {
       if (!pipelineInstance) { post({ type: 'error', message: 'no model loaded — send loadRoute first' }); return; }
@@ -271,6 +381,8 @@ self.onmessage = async (e) => {
       post({ type: 'result', ok: true, providerId: 'browser-local', text: text || null, json, raw: out, usage: { latencyMs: Date.now() - t0 } });
     } else if (msg.type === 'runOnnxInference') {
       await runOnnxInference();
+    } else if (msg.type === 'runSegmentation') {
+      await runSegmentation(msg);
     } else {
       post({ type: 'error', message: `unknown message type "${msg.type}"` });
     }

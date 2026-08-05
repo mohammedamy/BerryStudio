@@ -494,6 +494,31 @@ export async function runOnnxTestInference() {
   return postToWorker({ type: 'runOnnxInference' });
 }
 
+// ---------- Real segmentation (BerryStudio-Upgrade-Plan-v2.0 WP-39) ----------
+// Also UI-driven, not part of the AIProviders adapter map — same reasoning
+// as Route B above (js/ai.js's `opts.segment` shape doesn't fit the
+// {system,messages,schema}->NormalizedResult contract either). Shares the
+// same lazily-instantiated worker as Routes B/C.
+let loadedSegModelId = null;
+export async function loadSegmentationModel(modelId, onProgress) {
+  if (loadedSegModelId === modelId) return { ok: true, cached: true };
+  const result = await postToWorker({ type: 'loadRoute', route: 'segmentation', payload: { modelId } }, onProgress);
+  loadedSegModelId = modelId;
+  return result;
+}
+// imageData: a real {width, height, data:Uint8ClampedArray} (an ImageData,
+// or anything shaped like one) — returns { width, height, data } where
+// `data` is the matte's OWN resolution (not necessarily imageData's), a
+// flat array of width*height alpha floats in [0,1]. Throws (does not
+// silently return null) on failure — js/ai.js's analyzeImage() is what
+// turns a throw into a byte-identical-to-before fallback; this function
+// itself stays honest about failing.
+export async function runSegmentationOn(imageData) {
+  if (!loadedSegModelId) throw new Error('no segmentation model loaded — call loadSegmentationModel() first');
+  const result = await postToWorker({ type: 'runSegmentation', pixels: imageData.data, width: imageData.width, height: imageData.height });
+  return { width: result.width, height: result.height, data: result.data };
+}
+
 export const AIProviders = {
   anthropic, openai, gemini, 'openai-compatible': openaiCompatible,
   ollama, lmstudio, llamacpp, vllm, 'browser-local': browserLocal, proxy,
