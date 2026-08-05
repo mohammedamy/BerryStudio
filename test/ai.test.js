@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AIGen } from '../js/ai.js';
 import { computeMeasurements } from '../js/data.js';
+import { computeGatherWidth, computeTucks } from '../js/pleats.js';
 
 const meas = computeMeasurements({ category: 'women', size: 'M', standard: 'intl' });
 
@@ -128,4 +129,73 @@ test('buildFromMeasuredPieces output passes PatternValidator with no failures', 
     const validation = PatternValidator.run(built, {});
     assert.equal(validation.summary.fail, 0);
   });
+});
+
+// WP-20: gathers & tucks wired into the same builders pleats already uses.
+const baseSkirtStyle = () => ({ ...AIGen.deriveStyle({ metrics: null, prompt: 'skirt', category: 'women', imageDataURL: null }), type: 'skirt' });
+const frontSkirtWidth = (built) => built.pieces.find((p) => p.name.en === 'Front Skirt').outline[1][0];
+
+test('buildSkirt: no technique selected keeps the panel at its plain finished width (byte-identical baseline)', () => {
+  const style = baseSkirtStyle();
+  const built = AIGen.build(style, meas);
+  const w = (meas.hips / 4 + 2) * style.fitF;
+  assert.ok(Math.abs(frontSkirtWidth(built) - w) < 1e-9);
+  assert.equal(built.pieces.find((p) => p.name.en === 'Front Skirt').pleats, undefined);
+});
+
+test('buildSkirt: gatherRatio widens the panel to computeGatherWidth(w, ratio), no discrete pleats metadata', () => {
+  const style = { ...baseSkirtStyle(), gatherRatio: 1.5 };
+  const built = AIGen.build(style, meas);
+  const w = (meas.hips / 4 + 2) * style.fitF;
+  assert.ok(Math.abs(frontSkirtWidth(built) - computeGatherWidth(w, 1.5)) < 1e-9);
+  assert.equal(built.pieces.find((p) => p.name.en === 'Front Skirt').pleats, undefined);
+});
+
+test('buildSkirt: tuckCount widens the panel via computeTucks and records discrete tuck positions', () => {
+  const style = { ...baseSkirtStyle(), tuckCount: 4 };
+  const built = AIGen.build(style, meas);
+  const w = (meas.hips / 4 + 2) * style.fitF;
+  const { addedWidthCm, pleats } = computeTucks(w, 4, 1.5);
+  const front = built.pieces.find((p) => p.name.en === 'Front Skirt');
+  assert.ok(Math.abs(frontSkirtWidth(built) - (w + addedWidthCm)) < 1e-9);
+  assert.deepEqual(front.pleats, pleats);
+});
+
+test('buildSkirt: gatherRatio takes priority over a simultaneously-set pleatCount/tuckCount (never silently combines two techniques)', () => {
+  const style = { ...baseSkirtStyle(), gatherRatio: 1.4, pleatCount: 6, tuckCount: 4 };
+  const built = AIGen.build(style, meas);
+  const w = (meas.hips / 4 + 2) * style.fitF;
+  assert.ok(Math.abs(frontSkirtWidth(built) - computeGatherWidth(w, 1.4)) < 1e-9);
+});
+
+const sleeveCapWidth = (built) => built.pieces.find((p) => p.name.en === 'Sleeve').outline[2][0];
+
+test('sleeve cap: no technique selected keeps the cap at its plain finished width (byte-identical baseline)', () => {
+  const style = { ...AIGen.deriveStyle('short sleeve top', 'en'), type: 'top', sleeveLenF: 1 };
+  const built = AIGen.build(style, meas);
+  const finishedCapW = (meas.bicep / 4) * style.sleeveWideF * 2;
+  assert.ok(Math.abs(sleeveCapWidth(built) - finishedCapW) < 1e-9);
+});
+
+test('sleeve cap: sleeveGatherRatio widens it to computeGatherWidth(finishedCapW, ratio) — a real gathered puff-sleeve cap', () => {
+  const style = { ...AIGen.deriveStyle('short sleeve top', 'en'), type: 'top', sleeveLenF: 1, sleeveGatherRatio: 1.6 };
+  const built = AIGen.build(style, meas);
+  const finishedCapW = (meas.bicep / 4) * style.sleeveWideF * 2;
+  assert.ok(Math.abs(sleeveCapWidth(built) - computeGatherWidth(finishedCapW, 1.6)) < 1e-9);
+});
+
+test('sleeve cap: sleevePleatCount widens it via computePleats and records discrete pleat positions', () => {
+  const style = { ...AIGen.deriveStyle('short sleeve top', 'en'), type: 'top', sleeveLenF: 1, sleevePleatCount: 3 };
+  const built = AIGen.build(style, meas);
+  const finishedCapW = (meas.bicep / 4) * style.sleeveWideF * 2;
+  const sleeve = built.pieces.find((p) => p.name.en === 'Sleeve');
+  assert.ok(sleeve.pleats && sleeve.pleats.length === 3);
+  assert.ok(sleeveCapWidth(built) > finishedCapW);
+});
+
+test('buildRomper sleeve honors the same gather/pleat/tuck technique as buildTop (shared sleevePiece helper)', () => {
+  const style = { ...AIGen.deriveStyle({ metrics: null, prompt: 'romper', category: 'women', imageDataURL: null }), sleeveLenF: 1.0, sleeveGatherRatio: 1.5 };
+  const built = AIGen.build(style, meas);
+  const finishedCapW = (meas.bicep / 4) * style.sleeveWideF * 2;
+  assert.ok(Math.abs(sleeveCapWidth(built) - computeGatherWidth(finishedCapW, 1.5)) < 1e-9);
 });

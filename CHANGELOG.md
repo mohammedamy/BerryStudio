@@ -6,6 +6,45 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-20: gathers & tucks wired into Quick Draft (skirt waist + sleeve cap)
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. `computeGatherWidth()`
+and `computeTucks()` (`js/pleats.js`) were real, tested pure functions with
+zero call sites anywhere in the codebase (confirmed by a repo-wide grep) —
+only pleats had a generator hookup, in Quick Draft's skirt builder.
+
+### Added
+- `js/ai.js`: `buildSkirt()`'s waist-edge width now supports Gather
+  (`computeGatherWidth`) and Tuck (`computeTucks`) alongside its existing
+  Pleat option, picked via a priority chain (gather → pleat → tuck, never
+  silently combined) so Quick Draft's UI only ever needs to set one.
+- Extracted a shared `sleevePiece(style, m)` helper (`buildTop` and
+  `buildRomper` drafted byte-identical sleeve geometry inline — a real
+  duplication, now a single source) and gave it the same three-technique
+  treatment for the sleeve cap's finished width
+  (`sleeveGatherRatio`/`sleevePleatCount`/`sleeveTuckCount`) — a real
+  gathered/pleated/tucked puff-sleeve cap, not sleeveWideF alone. `capW`
+  stays byte-identical to before this option existed when none are set.
+- Quick Draft (`js/app.js`): the old "Pleats: None/Light/Full" row is now
+  "Waist Fullness: None/Pleat/Gather/Tuck" (skirt) with an Intensity
+  (Light/Full) row that only appears once a real technique is picked; a
+  parallel "Sleeve Cap Fullness" row appears for every AIGen-built kind
+  with a real sleeve (dress/top/shirt/robe/romper — not `gown`, which has
+  a sleeve length picker too but is drafted by `FancyGen.build()`, which
+  never reads these fields). New `builderWaistTech`/`builderSleeveTech`/
+  `builderIntensity`/`opt_pleat`/`opt_gather`/`opt_tuck` i18n strings, EN+AR.
+- 17 new unit tests (`test/ai.test.js`) verifying the exact added-width
+  formula per technique, the no-technique byte-identical baseline, and the
+  buildTop/buildRomper shared-helper parity.
+
+### Verified
+Manually exercised both new controls end-to-end in the live app: Quick
+Draft → Skirt → Waist Fullness → Gather → Full visibly widens the front/
+back skirt panel's waist edge well beyond the waistband below it (a real
+gathered waist, not a cosmetic label); Quick Draft → Top → Sleeve Cap
+Fullness → Gather → Full visibly widens the sleeve piece's base while
+keeping its cap peak centered.
+
 ## Cloth Lab: simulated pieces render in their real 2D-canvas color
 
 ### Fixed

@@ -44,7 +44,12 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     aiProvider: "proxy", aiProviderCfg: null, aiKeyPersist: false,
     aiImageProvider: "proxy", aiImageProviderCfg: null,
     lastMarkerYards: null, lastMarkerWidth: null,
-    builderKind: null, builderOpts: { length:"medium", flare:"regular", fit:"regular", sleeve:"short", pleats:"none" }, builderCustom: {},
+    builderKind: null,
+    // WP-20: waistTech/sleeveTech pick a real technique (pleat/gather/tuck),
+    // not just an intensity — waistIntensity/sleeveIntensity (light/full)
+    // apply to whichever technique is selected. "none" on either keeps
+    // AIGen.build()'s output byte-identical to before this option existed.
+    builderOpts: { length:"medium", flare:"regular", fit:"regular", sleeve:"short", waistTech:"none", waistIntensity:"light", sleeveTech:"none", sleeveIntensity:"light" }, builderCustom: {},
     avatarGLB: { women: "", men: "", girls: "", boys: "" },
     // BerryStudio-Upgrade-Plan WP-5: "iframe" (default, unchanged behavior)
     // or "embedded" (cloth-lab's lib build mounted directly into this page,
@@ -1124,21 +1129,32 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     coat:["chest","waist","hips","shoulder","backLen","neck","sleeve","bicep"],
     suit:["chest","waist","hips","backLen","neck","sleeve","bicep","thigh","inseam"],
   };
+  // `sleeveCap` (WP-20): only the AIGen (not FancyGen) kinds with a real
+  // sleeve — style.sleeveGatherRatio/sleevePleatCount/sleeveTuckCount only
+  // ever reach AIGen.build()'s sleevePiece(); "gown" has `sleeve:1` for its
+  // length picker but is drafted by FancyGen.build(), which never reads
+  // those fields, so it deliberately does NOT get `sleeveCap`.
   const KIND_STYLE = {
-    dress:{length:1,flare:1,fit:1,sleeve:1}, top:{length:1,flare:1,fit:1,sleeve:1}, shirt:{length:1,flare:1,fit:1,sleeve:1},
-    skirt:{length:1,flare:1,fit:1,pleats:1}, trousers:{length:1,flare:1,fit:1}, romper:{length:1,fit:1,sleeve:1},
-    robe:{length:1,flare:1,fit:1,sleeve:1},
+    dress:{length:1,flare:1,fit:1,sleeve:1,sleeveCap:1}, top:{length:1,flare:1,fit:1,sleeve:1,sleeveCap:1}, shirt:{length:1,flare:1,fit:1,sleeve:1,sleeveCap:1},
+    skirt:{length:1,flare:1,fit:1,pleats:1}, trousers:{length:1,flare:1,fit:1}, romper:{length:1,fit:1,sleeve:1,sleeveCap:1},
+    robe:{length:1,flare:1,fit:1,sleeve:1,sleeveCap:1},
     gown:{length:1,sleeve:1}, jacket:{length:1}, coat:{length:1}, suit:{},
   };
   const LEN_MAP = {short:0.65, medium:1.0, long:1.35};
   const FLARE_MAP = {slim:0.9, regular:1.15, full:1.5};
   const FIT_MAP = {fitted:0.85, regular:1.0, relaxed:1.15};
   const SLEEVE_MAP = {sleeveless:0, short:0.45, long:1.3};
-  // WP-14: knife-pleat count per waist panel; depth is fixed at a
-  // realistic 3cm per pleat (2x that in added waist-edge width — see
-  // js/pleats.js's computePleats). "none" keeps buildSkirt's output
-  // byte-identical to before this option existed.
+  // WP-14: knife-pleat/tuck count per waist or sleeve-cap edge; each
+  // technique's depth is fixed inside buildSkirt/sleevePiece (js/ai.js) —
+  // this maps the UI's Light/Full intensity to a pleat/tuck COUNT, same
+  // count scale reused for both since they share computePleats' math
+  // (see js/pleats.js's computeTucks). "none" keeps AIGen.build()'s
+  // output byte-identical to before this option existed.
   const PLEAT_MAP = {none:0, light:3, full:6};
+  // WP-20: gather is a continuous ease ratio (raw edge length ÷ finished
+  // length), not a discrete count — computeGatherWidth(w, ratio) (js/pleats.js).
+  // 1.3x/1.6x are realistic light/full shirring ratios.
+  const GATHER_MAP = {none:1, light:1.3, full:1.6};
 
   function renderBuilderPane() {
     const c = $(".rail-pane[data-pane=builder]"); c.innerHTML = "";
@@ -1184,13 +1200,38 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     if (st.flare) segRow(T("builderFlare"), "flare", ["slim","regular","full"]);
     if (st.fit) segRow(T("builderFit"), "fit", ["fitted","regular","relaxed"]);
     if (st.sleeve) segRow(T("builderSleeve"), "sleeve", ["sleeveless","short","long"]);
-    if (st.pleats) segRow(T("builderPleats"), "pleats", ["none","light","full"]);
+    // WP-20: waist/sleeve-cap fullness is a technique choice (Pleat/Gather/
+    // Tuck), not just an intensity — the Intensity row only appears once a
+    // real technique is picked, same "don't show a control with nothing to
+    // control" pattern the rest of this pane already follows.
+    if (st.pleats) {
+      segRow(T("builderWaistTech"), "waistTech", ["none","pleat","gather","tuck"]);
+      if ((state.builderOpts.waistTech||"none") !== "none") segRow(T("builderIntensity"), "waistIntensity", ["light","full"]);
+    }
+    if (st.sleeveCap) {
+      segRow(T("builderSleeveTech"), "sleeveTech", ["none","pleat","gather","tuck"]);
+      if ((state.builderOpts.sleeveTech||"none") !== "none") segRow(T("builderIntensity"), "sleeveIntensity", ["light","full"]);
+    }
 
     const genBtn = el("button","big-btn",IC.check+T("builderGenerate")); genBtn.style.marginTop="16px";
     genBtn.onclick = () => generateBuilderPattern(kind);
     c.appendChild(genBtn);
   }
 
+  // WP-20: turns a {tech, intensity} pair from the builder pane into the
+  // one style field the chosen technique actually reads — the other two
+  // stay at their off-default (0 / 0 / 1), so buildSkirt/sleevePiece's own
+  // gather-first priority chain never has more than one real value to see.
+  // `keys` is [pleatCountKey, tuckCountKey, gatherRatioKey] — pass the
+  // skirt/waist names for the waist row, the sleeve-prefixed names for the
+  // sleeve-cap row.
+  function fullnessStyle(tech, intensity, [pleatKey, tuckKey, gatherKey]){
+    const n = { [pleatKey]:0, [tuckKey]:0, [gatherKey]:1 };
+    if (tech === "pleat") n[pleatKey] = PLEAT_MAP[intensity] ?? 0;
+    else if (tech === "tuck") n[tuckKey] = PLEAT_MAP[intensity] ?? 0;
+    else if (tech === "gather") n[gatherKey] = GATHER_MAP[intensity] ?? 1;
+    return n;
+  }
   function generateBuilderPattern(kind) {
     const m = Object.assign({}, currentMeas(), state.builderCustom);
     const o = state.builderOpts;
@@ -1203,7 +1244,8 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         fitF: FIT_MAP[o.fit] ?? 1,
         sleeveLenF: KIND_STYLE[kind].sleeve ? (SLEEVE_MAP[o.sleeve] ?? 0.45) : 0,
         sleeveWideF: 1,
-        pleatCount: KIND_STYLE[kind].pleats ? (PLEAT_MAP[o.pleats] ?? 0) : 0,
+        ...(KIND_STYLE[kind].pleats ? fullnessStyle(o.waistTech, o.waistIntensity, ["pleatCount","tuckCount","gatherRatio"]) : {}),
+        ...(KIND_STYLE[kind].sleeveCap ? fullnessStyle(o.sleeveTech, o.sleeveIntensity, ["sleevePleatCount","sleeveTuckCount","sleeveGatherRatio"]) : {}),
       };
       pieces = AIGen.build(style, m).pieces;
     } else {

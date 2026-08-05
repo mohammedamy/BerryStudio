@@ -27,7 +27,7 @@
    random) variety so the same input always reproduces the same
    result, but different inputs actually look different.
    ============================================================ */
-import { computePleats } from './pleats.js';
+import { computePleats, computeGatherWidth, computeTucks } from './pleats.js';
 export const AIGen = (() => {
   const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
   const q = v => v / 4;
@@ -322,6 +322,43 @@ export const AIGen = (() => {
     return { pieces, colors, colorInt: style.color ? rgbToInt(style.color) : null };
   }
 
+  // Shared set-in sleeve builder (buildTop and buildRomper draft the
+  // identical shape). WP-20: the sleeve cap's finished width normally
+  // comes straight from sleeveWideF (2x the bicep-based half-width) —
+  // style.sleeveGatherRatio/sleevePleatCount/sleeveTuckCount (mutually
+  // exclusive; Quick Draft's UI only ever sets one) widen it using the
+  // exact same added-width math js/pleats.js already established for
+  // skirts, eased/folded back down to that same finished cap width — a
+  // real gathered/pleated/tucked sleeve cap, not a cosmetic label. capW
+  // stays exactly bic*2 (byte-identical to before this option existed)
+  // when none of the three are set.
+  function sleevePiece(style, m){
+    const slen=clamp(m.sleeve*style.sleeveLenF, 8, m.sleeve*1.35);
+    const bic=q(m.bicep)*style.sleeveWideF, cap=6*style.sleeveWideF;
+    const finishedCapW = bic*2;
+    let capW = finishedCapW, capMeta = null;
+    if (style.sleeveGatherRatio > 1){
+      capW = computeGatherWidth(finishedCapW, style.sleeveGatherRatio);
+    } else if (style.sleevePleatCount){
+      const { addedWidthCm, pleats } = computePleats(finishedCapW, style.sleevePleatCount, 1.5);
+      capW = finishedCapW + addedWidthCm; capMeta = pleats;
+    } else if (style.sleeveTuckCount){
+      const { addedWidthCm, pleats } = computeTucks(finishedCapW, style.sleeveTuckCount, 1);
+      capW = finishedCapW + addedWidthCm; capMeta = pleats;
+    }
+    const piece = {
+      name:{en:"Sleeve", ar:"كم"},
+      desc:{en:"Generated sleeve — length and width read from the reference.",
+            ar:"كم مولّد — الطول والاتساع من المرجع."},
+      outline:[[0,0],[capW/2,-cap],[capW,0],[capW-1,slen],[1,slen]],
+      darts:[], notches:[[capW/2,-cap]],
+      grain:[[capW/2,4],[capW/2,slen-4]],
+      role:"sleeve", bilateral:true,
+    };
+    if (capMeta) piece.pleats = capMeta;
+    return piece;
+  }
+
   function buildTop(style, m){
     const fit=style.fitF, bod=m.backLen;
     const lenBase = { top:bod+22, shirt:bod+34, dress:bod+62, robe:m.height-26 }[style.type] || bod+56;
@@ -364,17 +401,7 @@ export const AIGen = (() => {
     const pieces=[front, back];
 
     if(style.sleeveLenF > 0.05){
-      const slen=clamp(m.sleeve*style.sleeveLenF, 8, m.sleeve*1.35);
-      const bic=q(m.bicep)*style.sleeveWideF, cap=6*style.sleeveWideF;
-      pieces.push({
-        name:{en:"Sleeve", ar:"كم"},
-        desc:{en:"Generated sleeve — length and width read from the reference.",
-              ar:"كم مولّد — الطول والاتساع من المرجع."},
-        outline:[[0,0],[bic,-cap],[bic*2,0],[bic*2-1,slen],[1,slen]],
-        darts:[], notches:[[bic,-cap]],
-        grain:[[bic,4],[bic,slen-4]],
-        role:"sleeve", bilateral:true,
-      });
+      pieces.push(sleevePiece(style, m));
     }
     if(style.neckline==="collar" && style.type==="shirt"){
       const nc = m.neck/2+3;
@@ -435,10 +462,26 @@ export const AIGen = (() => {
     // waist, since the extra panel width is what gets folded/pleated
     // INTO that band, not added to it. pleatCount=0 (the default before
     // this option existed) makes panelW===w — byte-identical output.
+    // WP-20: gather and tuck are the same "extra waist-edge width" idea,
+    // just different real techniques — gatherRatio uses computeGatherWidth
+    // (a continuous ease ratio, no discrete fold positions); tuckCount
+    // reuses computeTucks (shallower, stitched-shut pleats). Quick Draft's
+    // UI only ever sets one of the three, but they're handled as a
+    // priority chain here regardless, gather first, so nothing silently
+    // combines two techniques into one waist edge.
     const pleatCount = style.pleatCount || 0;
-    const pleatDepthCm = pleatCount ? 3 : 0;
-    const { addedWidthCm, pleats } = computePleats(w, pleatCount, pleatDepthCm);
-    const panelW = w + addedWidthCm;
+    const tuckCount = style.tuckCount || 0;
+    const gatherRatio = style.gatherRatio || 1;
+    let panelW = w, waistMeta = null;
+    if (gatherRatio > 1){
+      panelW = computeGatherWidth(w, gatherRatio);
+    } else if (pleatCount){
+      const { addedWidthCm, pleats } = computePleats(w, pleatCount, 3);
+      panelW = w + addedWidthCm; waistMeta = pleats;
+    } else if (tuckCount){
+      const { addedWidthCm, pleats } = computeTucks(w, tuckCount, 1.5);
+      panelW = w + addedWidthCm; waistMeta = pleats;
+    }
     // front/back panels get no declared role here: they're genuinely
     // half-width fold pieces whenever !style.wrap (like buildTop's front/
     // back), but roles.js's hip-panel-front/hip-panel-back have no
@@ -454,7 +497,7 @@ export const AIGen = (() => {
       const piece = { name:{en, ar},
         desc:{en:"Generated skirt panel — flare and hem read from the reference.", ar:"بنل تنورة مولّد — الاتساع والحاشية من المرجع."},
         outline:[[0,0],[panelW,0],...hemLine], grain:[[panelW/2,5],[panelW/2,gh-5]] };
-      if (pleats.length) piece.pleats = pleats;
+      if (waistMeta) piece.pleats = waistMeta;
       return piece;
     };
     const band={ name:{en:"Waistband", ar:"الحزام"},
@@ -519,16 +562,7 @@ export const AIGen = (() => {
     const pieces=[front, back];
 
     if(style.sleeveLenF > 0.05){
-      const slen=clamp(m.sleeve*style.sleeveLenF, 8, m.sleeve*1.35);
-      const bic=q(m.bicep)*style.sleeveWideF, cap=6*style.sleeveWideF;
-      pieces.push({
-        name:{en:"Sleeve", ar:"كم"},
-        desc:{en:"Generated sleeve — length and width read from the reference.", ar:"كم مولّد — الطول والاتساع من المرجع."},
-        outline:[[0,0],[bic,-cap],[bic*2,0],[bic*2-1,slen],[1,slen]],
-        darts:[], notches:[[bic,-cap]],
-        grain:[[bic,4],[bic,slen-4]],
-        role:"sleeve", bilateral:true,
-      });
+      pieces.push(sleevePiece(style, m));
     } else {
       const armholeCirc = m.bicep + 6;
       pieces.push({
