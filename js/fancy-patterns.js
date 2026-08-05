@@ -43,6 +43,101 @@ export let FancyGen;
   }
   const lerp = (a, b, t) => a + (b - a) * t;
 
+  // WP-27: piece.curves (WP-14) fed DXF's curve layer for princess seams
+  // only — princessCurve() is the one function that emitted it, since it
+  // builds cubic segments directly with authored c1/c2. Every OTHER
+  // curved shape in this file samples a QUADRATIC bezier via qBez(),
+  // which has no c1/c2 of its own to report. qBezToCubic() closes that
+  // gap: a cubic bezier with these control points traces the IDENTICAL
+  // curve as the quadratic (p0,c,p1) — exact degree elevation, not an
+  // approximation — so every qBez()-built curve can carry the same real
+  // metadata princessCurve() already does, with zero change to any
+  // already-flattened point.
+  function qBezToCubic(p0, c, p1) {
+    return {
+      c1: [p0[0] + (2/3)*(c[0]-p0[0]), p0[1] + (2/3)*(c[1]-p0[1])],
+      c2: [p1[0] + (2/3)*(c[0]-p1[0]), p1[1] + (2/3)*(c[1]-p1[1])],
+    };
+  }
+  // Attaches curve metadata to an outline array WITHOUT changing any of
+  // its existing point values or call sites — every `outlineHelperFn(...)`
+  // call across this file keeps working exactly as before (`outline:
+  // godetPc(...)` etc.), because the array itself is still exactly what's
+  // returned. `def()` and `FancyGen.build()` (this file's only two piece-
+  // registration choke points) hoist `.curves` from an outline onto the
+  // piece object that wraps it, once, centrally — instead of every one of
+  // the ~300 individual piece-literal call sites needing its own edit.
+  function withCurves(outline, curves) {
+    if (curves && curves.length) outline.curves = curves;
+    return outline;
+  }
+  // The other half of the withCurves() mechanism: called once, centrally,
+  // on every piece list a design or generic builder produces (def() below
+  // and FancyGen.build()'s four generic kinds) — hoists whatever curve
+  // metadata a shape helper attached to `piece.outline` onto `piece.curves`
+  // itself, which is where js/pattern-export.js's DXF layer-3 code (and
+  // Check Pattern's WP-14 curve-consuming checks) actually look. Never
+  // overwrites a `curves` a piece already declares explicitly (princessBodice's
+  // frontCenter/backCenter set it directly, combining their neckline AND
+  // princess-seam curves — see princessBodice's own comment).
+  function hoistCurves(pieces) {
+    for (const p of pieces) {
+      if (!p.curves && p.outline && p.outline.curves) p.curves = p.outline.curves;
+    }
+    return pieces;
+  }
+  // WP-26: two dedupe helpers for a bezier-sampling boundary condition that
+  // shipped a real, reproducible bug — a curve segment's sampled endpoint
+  // sometimes lands exactly on a point that's already in the outline
+  // (either the next segment's own start, or the outline's own [0,0]
+  // origin when a shape's final curve sweeps back to close on itself).
+  // Both read as a literal duplicate consecutive point to checkClosedOutline
+  // (js/validate.js), which treats every outline as implicitly closed —
+  // the wrap-around from the last point back to the first is real, so a
+  // curve that re-lands on the start point IS the closing edge and the
+  // extra sample must be dropped, not kept alongside it.
+  //
+  // dedupeJoin: drop `a`'s trailing point if it coincides with `b`'s
+  // leading point — used where a neckline curve's endpoint is defined to
+  // exactly match the following curve's start (e.g. princessBodice below).
+  // Only fires when the points genuinely coincide, so neckline variants
+  // that don't share that endpoint (e.g. "offshoulder") are untouched.
+  function dedupeJoin(a, b) {
+    if (!a.length || !b.length) return a;
+    const last = a[a.length - 1], first = b[0];
+    return (last[0] === first[0] && last[1] === first[1]) ? a.slice(0, -1) : a;
+  }
+  // dedupeClose: drop a polyline's own trailing point if it coincides with
+  // its own first point — used where a shape's last curve segment sweeps
+  // back to the same [0,0] origin the outline started at (godetPc, capePc,
+  // peplumPc below all close this way).
+  function dedupeClose(pts) {
+    if (pts.length < 2) return pts;
+    const first = pts[0], last = pts[pts.length - 1];
+    return (first[0] === last[0] && first[1] === last[1]) ? pts.slice(0, -1) : pts;
+  }
+  // WP-26+WP-27 integration: when dedupeClose() actually removes a point
+  // (the shape's final curve sample duplicated the outline's own [0,0]
+  // start), whichever curve segment claimed that now-removed index as its
+  // toIdx no longer has anywhere valid to point — its true mathematical
+  // endpoint IS the outline's own start (index 0), which the wrap-around
+  // closing edge already draws as a straight line, same as before WP-26
+  // existed (when that span was a literal duplicate point instead of a
+  // removed one). Re-deriving a shortened bezier for just that last
+  // sample (de Casteljau subdivision) is possible but not worth the
+  // complexity for what's typically a sub-centimeter facet at a hem/godet
+  // tip — the curve entry is dropped rather than emitting metadata that
+  // points at an index that no longer exists, or claiming an endpoint the
+  // shortened outline doesn't actually reach. Segments unaffected by the
+  // dedup (their toIdx is still in range) are kept exactly as computed.
+  function dedupeCloseWithCurves(pts, curves) {
+    const before = pts.length;
+    const deduped = dedupeClose(pts);
+    if (deduped.length === before) return withCurves(deduped, curves);
+    const maxValidIdx = deduped.length - 1;
+    return withCurves(deduped, curves.filter((c) => c.toIdx <= maxValidIdx));
+  }
+
   // Shared S-curve for a princess seam: 4 waypoints (shoulder→bust→waist→hip→hem),
   // out at bust/hip, in at waist. Reused as the shared edge between a bodice's
   // center panel and side panel — one curve, two panels, always seam-consistent.
@@ -75,19 +170,27 @@ export let FancyGen;
   function sleeve2pc(bicep, sleeveLen) {
     const bw = bicep / 2;
     const capTop = [bw*0.55, -9];
+    const upperSeg1 = [[0,6], [bw*0.3,-8], capTop];   // [p0, c, p1]
+    const upperSeg2 = [capTop, [bw*1.3,-7], [bw*1.7,8]];
     const upper = [
       [0, 6],
-      ...qBez([0,6], [bw*0.3,-8], capTop, 6),
-      ...qBez(capTop, [bw*1.3,-7], [bw*1.7,8], 6),
+      ...qBez(...upperSeg1, 6),
+      ...qBez(...upperSeg2, 6),
       [bw*1.55, sleeveLen-6],
       [bw*0.15, sleeveLen-2],
     ];
+    withCurves(upper, [
+      { fromIdx: 0, toIdx: 6, ...qBezToCubic(...upperSeg1) },
+      { fromIdx: 6, toIdx: 12, ...qBezToCubic(...upperSeg2) },
+    ]);
+    const underSeg = [[0,11], [bw*0.5,3], [bw*1.15,13]];
     const under = [
       [0, 11],
-      ...qBez([0,11], [bw*0.5,3], [bw*1.15,13], 6),
+      ...qBez(...underSeg, 6),
       [bw*1.02, sleeveLen-9],
       [bw*0.1, sleeveLen-5],
     ];
+    withCurves(under, [{ fromIdx: 0, toIdx: 6, ...qBezToCubic(...underSeg) }]);
     return { upper, under };
   }
   // Simple one-piece sleeve with a curved cap (dresses/gowns/robes).
@@ -95,15 +198,23 @@ export let FancyGen;
     wideF = wideF || 1;
     const bw = (bicep/2) * wideF;
     const capTop = [bw, -10];
-    return [
-      [0,6], ...qBez([0,6],[bw*0.4,-9],capTop,6), ...qBez(capTop,[bw*1.6,-8],[bw*2,6],6),
+    const seg1 = [[0,6], [bw*0.4,-9], capTop];
+    const seg2 = [capTop, [bw*1.6,-8], [bw*2,6]];
+    const outline = [
+      [0,6], ...qBez(...seg1, 6), ...qBez(...seg2, 6),
       [bw*1.85, sleeveLen], [0.1, sleeveLen-2],
     ];
+    return withCurves(outline, [
+      { fromIdx: 0, toIdx: 6, ...qBezToCubic(...seg1) },
+      { fromIdx: 6, toIdx: 12, ...qBezToCubic(...seg2) },
+    ]);
   }
   // Shirt-style 2-piece collar (curved collar + straight stand band).
   function collarStand(neck) {
     const h = neck/2;
-    const collar = [ [0,0], ...qBez([0,0],[h*0.5,-2],[h,1],6), [h,6], [0,7] ];
+    const collarSeg = [[0,0], [h*0.5,-2], [h,1]];
+    const collar = [ [0,0], ...qBez(...collarSeg, 6), [h,6], [0,7] ];
+    withCurves(collar, [{ fromIdx: 0, toIdx: 6, ...qBezToCubic(...collarSeg) }]);
     const stand = [ [0,0],[h+2,0],[h+2,4],[0,4] ];
     return { collar, stand };
   }
@@ -111,80 +222,128 @@ export let FancyGen;
   function shawlCollar(neck, depth) {
     depth = depth || 22;
     const h = neck/2 + 4;
-    return [
+    const seg1 = [[0,0], [h*0.6,-3], [h,4]];
+    const seg2 = [[h,4], [h*1.15, depth*0.5], [h*0.85, depth]];
+    const outline = [
       [0,0],
-      ...qBez([0,0],[h*0.6,-3],[h,4],6),
-      ...qBez([h,4],[h*1.15, depth*0.5],[h*0.85, depth],8),
+      ...qBez(...seg1, 6),
+      ...qBez(...seg2, 8),
       [h*0.3, depth+4],
       [0,10],
     ];
+    return withCurves(outline, [
+      { fromIdx: 0, toIdx: 6, ...qBezToCubic(...seg1) },
+      { fromIdx: 6, toIdx: 14, ...qBezToCubic(...seg2) },
+    ]);
   }
   // Notched-lapel front facing strip — curved lapel roll-line.
   function lapelFacing(neck, len) {
     const h = neck/2;
-    return [
+    const seg1 = [[h*0.8,2], [h*1.3,len*0.18], [h*0.55,len*0.32]];
+    const seg2 = [[h*0.55,len*0.32], [h*0.3,len*0.7], [h*0.15,len]];
+    const outline = [
       [0,0], [h*0.8,2],
-      ...qBez([h*0.8,2], [h*1.3,len*0.18], [h*0.55,len*0.32], 7),
-      ...qBez([h*0.55,len*0.32], [h*0.3,len*0.7], [h*0.15,len], 7),
+      ...qBez(...seg1, 7),
+      ...qBez(...seg2, 7),
       [0,len],
     ];
+    return withCurves(outline, [
+      { fromIdx: 1, toIdx: 8, ...qBezToCubic(...seg1) },
+      { fromIdx: 8, toIdx: 15, ...qBezToCubic(...seg2) },
+    ]);
   }
   function cuffPc(wristW) { return [[0,0],[wristW+4,0],[wristW+4,7],[0,8]]; }
   function waistbandPc(waistW, h) { h = h || 7; return [[0,0],[waistW+4,0],[waistW+6,h],[0,h]]; }
   // Welt/patch pocket, gently curved bottom.
   function pocketPc(w, h) {
-    return [ [0,0],[w,0],[w,h], ...qBez([w,h],[w/2,h+3],[0,h],6) ];
+    const seg = [[w,h], [w/2,h+3], [0,h]];
+    const outline = [ [0,0],[w,0],[w,h], ...qBez(...seg, 6) ];
+    return withCurves(outline, [{ fromIdx: 2, toIdx: 8, ...qBezToCubic(...seg) }]);
   }
   // Triangular flare insert (godet) — two curved sides meeting at a point.
   function godetPc(topW, len) {
     const bottom = [topW/2, len];
-    return [
+    const seg1 = [[topW,0], [topW*0.85, len*0.6], bottom];
+    const seg2 = [bottom, [topW*0.15, len*0.6], [0,0]]; // closes back to the [0,0] start — see dedupeCloseWithCurves
+    const outline = [
       [0,0],[topW,0],
-      ...qBez([topW,0], [topW*0.85, len*0.6], bottom, 7),
-      ...qBez(bottom, [topW*0.15, len*0.6], [0,0], 7),
+      ...qBez(...seg1, 7),
+      ...qBez(...seg2, 7),
     ];
+    return dedupeCloseWithCurves(outline, [
+      { fromIdx: 1, toIdx: 8, ...qBezToCubic(...seg1) },
+      { fromIdx: 8, toIdx: 15, ...qBezToCubic(...seg2) },
+    ]);
   }
   // One half of a two-piece hood — curved crown + curved face-opening.
   function hoodHalf(headC, depth) {
     depth = depth || 34;
     const w = headC * 0.28;
     const crownTop = [w*0.5, -depth];
-    return [
+    const seg1 = [[0,4], [w*0.1,-depth*0.7], crownTop];
+    const seg2 = [crownTop, [w*1.05,-depth*0.5], [w*1.15,2]];
+    const outline = [
       [0,4],
-      ...qBez([0,4], [w*0.1,-depth*0.7], crownTop, 7),
-      ...qBez(crownTop, [w*1.05,-depth*0.5], [w*1.15,2], 7),
+      ...qBez(...seg1, 7),
+      ...qBez(...seg2, 7),
       [w*0.95, 14],
     ];
+    return withCurves(outline, [
+      { fromIdx: 0, toIdx: 7, ...qBezToCubic(...seg1) },
+      { fromIdx: 7, toIdx: 14, ...qBezToCubic(...seg2) },
+    ]);
   }
   function yokePc(shoulderW, depth) {
     depth = depth || 9;
-    return [ [0,0],[shoulderW,0],[shoulderW,depth*0.6], ...qBez([shoulderW,depth*0.6],[shoulderW/2,depth+3],[0,depth*0.6],8) ];
+    const seg = [[shoulderW,depth*0.6], [shoulderW/2,depth+3], [0,depth*0.6]];
+    const outline = [ [0,0],[shoulderW,0],[shoulderW,depth*0.6], ...qBez(...seg, 8) ];
+    return withCurves(outline, [{ fromIdx: 2, toIdx: 10, ...qBezToCubic(...seg) }]);
   }
   // Flared peplum panel with a gently waved curved hem.
   function peplumPc(waistW, flareLen) {
     const bulge = flareLen * 0.15;
-    return [
+    const seg1 = [[waistW,0], [waistW*1.3,flareLen*0.6], [waistW*1.05,flareLen]];
+    const seg2 = [[waistW*1.05,flareLen], [waistW*0.5,flareLen+bulge], [-waistW*0.05,flareLen]];
+    const seg3 = [[-waistW*0.05,flareLen], [-waistW*0.3,flareLen*0.6], [0,0]]; // closes back to the [0,0] start — see dedupeCloseWithCurves
+    const outline = [
       [0,0],[waistW,0],
-      ...qBez([waistW,0], [waistW*1.3,flareLen*0.6], [waistW*1.05,flareLen], 6),
-      ...qBez([waistW*1.05,flareLen], [waistW*0.5,flareLen+bulge], [-waistW*0.05,flareLen], 6),
-      ...qBez([-waistW*0.05,flareLen], [-waistW*0.3,flareLen*0.6], [0,0], 6),
+      ...qBez(...seg1, 6),
+      ...qBez(...seg2, 6),
+      ...qBez(...seg3, 6),
     ];
+    return dedupeCloseWithCurves(outline, [
+      { fromIdx: 1, toIdx: 7, ...qBezToCubic(...seg1) },
+      { fromIdx: 7, toIdx: 13, ...qBezToCubic(...seg2) },
+      { fromIdx: 13, toIdx: 19, ...qBezToCubic(...seg3) },
+    ]);
   }
   function sashPc(width, tailLen) {
-    return [ [0,0],[width,0],[width,5],[width+tailLen,5], ...qBez([width+tailLen,5],[width+tailLen+10,2.5],[width+tailLen,0],5) ];
+    const seg = [[width+tailLen,5], [width+tailLen+10,2.5], [width+tailLen,0]];
+    const outline = [ [0,0],[width,0],[width,5],[width+tailLen,5], ...qBez(...seg, 5) ];
+    return withCurves(outline, [{ fromIdx: 3, toIdx: 8, ...qBezToCubic(...seg) }]);
   }
   // Tiered ruffle skirt panel, curved hem.
   function tierPc(topW, botW, height) {
-    return [ [0,0],[topW,0],[botW,height], ...qBez([botW,height],[botW*0.5,height+4],[0,height],8) ];
+    const seg = [[botW,height], [botW*0.5,height+4], [0,height]];
+    const outline = [ [0,0],[topW,0],[botW,height], ...qBez(...seg, 8) ];
+    return withCurves(outline, [{ fromIdx: 2, toIdx: 10, ...qBezToCubic(...seg) }]);
   }
   // Draped cape overlay, curved swooping hem.
   function capePc(neckW, len) {
-    return [
+    const seg1 = [[neckW,0], [neckW*1.8,len*0.5], [neckW*1.5,len]];
+    const seg2 = [[neckW*1.5,len], [neckW*0.7,len+6], [0,len*0.85]];
+    const seg3 = [[0,len*0.85], [-neckW*0.1,len*0.4], [0,0]]; // closes back to the [0,0] start — see dedupeCloseWithCurves
+    const outline = [
       [0,0],[neckW,0],
-      ...qBez([neckW,0], [neckW*1.8,len*0.5], [neckW*1.5,len], 8),
-      ...qBez([neckW*1.5,len], [neckW*0.7,len+6], [0,len*0.85], 8),
-      ...qBez([0,len*0.85], [-neckW*0.1,len*0.4], [0,0], 5),
+      ...qBez(...seg1, 8),
+      ...qBez(...seg2, 8),
+      ...qBez(...seg3, 5),
     ];
+    return dedupeCloseWithCurves(outline, [
+      { fromIdx: 1, toIdx: 9, ...qBezToCubic(...seg1) },
+      { fromIdx: 9, toIdx: 17, ...qBezToCubic(...seg2) },
+      { fromIdx: 17, toIdx: 22, ...qBezToCubic(...seg3) },
+    ]);
   }
 
   // Princess-seamed bodice: shared curved side-seam between a narrow center
@@ -214,40 +373,73 @@ export let FancyGen;
     const { points: backCurve, curves: backCurveCurves } = princessCurve(shoulderX, topY, bBustX, bustY, bWaistX, waistY, bHipX, hipY, bHemX, hemY);
 
     // Neckline: a curved cutout from center-front down to the shoulder point.
-    let neckPts;
+    // WP-27: `neckSeg` records whichever variant fired as a [p0,c,p1]
+    // triple so its real curve metadata can be computed the same way
+    // every other shape in this file now does, without duplicating the
+    // per-neckline control points a second time.
+    let neckPts, neckSeg;
     switch (o.neckline) {
       case "sweetheart":
-        neckPts = qBez([0, necklineY+8], [shoulderX*0.35, necklineY+14], [shoulderX, topY], 7);
+        neckSeg = [[0, necklineY+8], [shoulderX*0.35, necklineY+14], [shoulderX, topY]];
+        neckPts = qBez(...neckSeg, 7);
         break;
       case "offshoulder":
-        neckPts = qBez([0, necklineY+10], [shoulderX*0.5, necklineY+13], [shoulderX*1.15, topY+3], 7);
+        neckSeg = [[0, necklineY+10], [shoulderX*0.5, necklineY+13], [shoulderX*1.15, topY+3]];
+        neckPts = qBez(...neckSeg, 7);
         break;
       case "scoop":
-        neckPts = qBez([0, necklineY+4], [shoulderX*0.5, necklineY+9], [shoulderX, topY], 7);
+        neckSeg = [[0, necklineY+4], [shoulderX*0.5, necklineY+9], [shoulderX, topY]];
+        neckPts = qBez(...neckSeg, 7);
         break;
       default:
-        neckPts = qBez([0, necklineY], [shoulderX*0.5, necklineY-2], [shoulderX, topY], 6);
+        neckSeg = [[0, necklineY], [shoulderX*0.5, necklineY-2], [shoulderX, topY]];
+        neckPts = qBez(...neckSeg, 6);
     }
 
-    const frontCenter = [ [0, necklineY], ...neckPts, ...frontCurve, [0, hemY] ];
+    // WP-26: neckPts' last sampled point and frontCurve's first point are
+    // the same coordinate for every neckline variant whose curve is
+    // defined to end exactly at the shoulder point ([shoulderX, topY]) —
+    // "offshoulder" ends somewhere else on purpose and is left untouched.
+    const frontNeck = dedupeJoin(neckPts, frontCurve);
+    const frontCenter = [ [0, necklineY], ...frontNeck, ...frontCurve, [0, hemY] ];
+    // WP-26+WP-27 integration: the neckline curve's real endpoint (p1,
+    // computed once in neckSeg) lives at ONE of two different indices in
+    // frontCenter depending on whether dedupeJoin actually fired above —
+    // if it didn't, p1 is still `neck`'s own last point; if it did (p1
+    // duplicated `curve[0]` and got removed), p1 now lives at `curve[0]`
+    // itself, one index further along. `neck.length` alone (this WP's
+    // first attempt) is wrong in the fired case — caught by
+    // test/fancy-patterns-curves.test.js re-sampling every claimed curve
+    // against the real outline, not by inspection.
+    function neckCurveToIdx(neck, curve, p1) {
+      const last = neck[neck.length - 1];
+      const lastIsP1 = last && last[0] === p1[0] && last[1] === p1[1];
+      return lastIsP1 ? neck.length : neck.length + 1;
+    }
+    const frontSideSeg = [[shoulderX+shoulderW, topY-2], [sideX*0.9, bustY*0.55], [sideX, bustY]];
     const frontSide = [
       ...frontCurve.slice().reverse(),
       [shoulderX + shoulderW, topY - 2],
-      ...qBez([shoulderX+shoulderW, topY-2], [sideX*0.9, bustY*0.55], [sideX, bustY], 6),
+      ...qBez(...frontSideSeg, 6),
       [sideX*1.02, waistY],
       [sideX*1.04, hipY],
       [fHemX + (sideX*1.04 - fHipX), hemY],
     ];
-    const backNeckPts = qBez([0, necklineY*0.4], [shoulderX*0.5, -1], [shoulderX, topY], 5);
-    const backCenter = [ [0, necklineY*0.4], ...backNeckPts, ...backCurve, [0, hemY] ];
+    withCurves(frontSide, [{ fromIdx: frontCurve.length, toIdx: frontCurve.length + 6, ...qBezToCubic(...frontSideSeg) }]);
+    const backNeckSeg = [[0, necklineY*0.4], [shoulderX*0.5, -1], [shoulderX, topY]];
+    const backNeckPts = qBez(...backNeckSeg, 5);
+    const backNeck = dedupeJoin(backNeckPts, backCurve); // WP-26, same coincident-endpoint case as frontNeck
+    const backCenter = [ [0, necklineY*0.4], ...backNeck, ...backCurve, [0, hemY] ];
+    const backSideSeg = [[shoulderX+shoulderW, topY-2], [sideX*0.88, bustY*0.55], [sideX*0.98, bustY]];
     const backSide = [
       ...backCurve.slice().reverse(),
       [shoulderX + shoulderW, topY - 2],
-      ...qBez([shoulderX+shoulderW, topY-2], [sideX*0.88, bustY*0.55], [sideX*0.98, bustY], 6),
+      ...qBez(...backSideSeg, 6),
       [sideX*1.0, waistY],
       [sideX*1.02, hipY],
       [bHemX + (sideX*1.02 - bHipX), hemY],
     ];
+    withCurves(backSide, [{ fromIdx: backCurve.length, toIdx: backCurve.length + 6, ...qBezToCubic(...backSideSeg) }]);
 
     // WP-6 metadata: princess-seam edge index ranges, computed from the
     // construction above (not re-derived geometrically later) — this
@@ -266,9 +458,12 @@ export let FancyGen;
     // SAME curve in reverse, which would need separate reversed-index
     // math; since both pieces show the identical physical seam, only one
     // needs to carry the authoritative curve data). Offsets account for
-    // the leading `[0,y]` point and neckPts this curve is spliced after.
-    const frontCurveOffset = 1 + neckPts.length;
-    const backCurveOffset = 1 + backNeckPts.length;
+    // the leading `[0,y]` point and frontNeck/backNeck (WP-26: the
+    // deduped neck arrays actually spliced into frontCenter/backCenter
+    // above, one point shorter than neckPts/backNeckPts whenever the
+    // dedupe fired) this curve is spliced after.
+    const frontCurveOffset = 1 + frontNeck.length;
+    const backCurveOffset = 1 + backNeck.length;
     const offsetCurves = (curves, off) => curves.map((c) => ({ fromIdx: c.fromIdx + off, toIdx: c.toIdx + off, c1: c.c1, c2: c.c2 }));
     // frontCenter/backCenter ALSO get a real `edges[].seamId` (alongside
     // princessSeamId, which the cloth-lab importer's cutOnFold branch
@@ -280,11 +475,47 @@ export let FancyGen;
     // frontSide/backSide (one piece each) declared edges at all.
     const frontCenterEdge = { fromIdx: frontCurveOffset, toIdx: frontCurveOffset + frontCurve.length - 1, seamId: 'princessFront' };
     const backCenterEdge = { fromIdx: backCurveOffset, toIdx: backCurveOffset + backCurve.length - 1, seamId: 'princessBack' };
+    // WP-27: frontCenter/backCenter's curves now also carry their OWN
+    // neckline segment, prepended before the princess-seam curves already
+    // emitted above; frontSide/backSide's side-seam-to-bust curve
+    // (attached to the array itself via withCurves() above) is threaded
+    // through here too.
+    //
+    // The neckline segment is only valid metadata when the qBez() call
+    // that built neckPts actually started AT frontCenter's own leading
+    // point [0,necklineY] — true for the "default" (round) neckline, but
+    // NOT for sweetheart/offshoulder/scoop: those three deliberately open
+    // deeper, so their curve's own p0 sits several cm below [0,necklineY]
+    // — the flattened outline already has a real (pre-existing, unrelated
+    // to this WP — geometry is unchanged, confirmed by comparing every
+    // outline point against the pre-WP-27 source) straight jog from
+    // [0,necklineY] to the curve's first sample there, not a continuous
+    // curve starting at index 0. Caught by verifying every emitted
+    // {fromIdx,toIdx,c1,c2} actually reproduces the real flattened points
+    // in `outline` — claiming a curve starts at a point it doesn't would
+    // be exactly the kind of guessed metadata this file's honesty
+    // convention exists to avoid, so those three variants get no neckline
+    // curve entry (their princess-seam curve is still real and present).
+    //
+    // WP-26 integration: the curve's toIdx is NOT reliably frontNeck.length
+    // (that was this integration's first attempt, and it's wrong — caught
+    // by test/fancy-patterns-curves.test.js re-sampling the claimed curve
+    // against the real outline). frontCenter splices in frontNeck (WP-26's
+    // deduped array), but dedupeJoin only actually REMOVES a point when
+    // neck's own last sample duplicates curve[0] — and when it does, the
+    // curve's true endpoint moved to curve[0] itself, one index further
+    // along than frontNeck.length. See neckCurveToIdx() above: it checks
+    // whether the dedupe actually fired for THIS neck/curve pair rather
+    // than assuming it always does. Same reasoning for backNeck/backCurve
+    // on the back side (in practice backNeckCurve's dedupe always fires:
+    // backNeckSeg's own p1 unconditionally matches backCurve[0]).
+    const neckStartsAtOrigin = neckSeg[0][0] === 0 && neckSeg[0][1] === necklineY;
+    const frontNeckCurve = neckStartsAtOrigin ? [{ fromIdx: 0, toIdx: neckCurveToIdx(frontNeck, frontCurve, neckSeg[2]), ...qBezToCubic(...neckSeg) }] : [];
     const meta = {
-      frontCenter: { role: 'bodice-front-center', cutOnFold: true, princessSeamId: 'princessFront', curves: offsetCurves(frontCurveCurves, frontCurveOffset), edges: [frontCenterEdge] },
-      frontSide: { role: 'bodice-front-side', bilateral: true, edges: [{ fromIdx: 0, toIdx: frontCurve.length - 1, seamId: 'princessFront' }] },
-      backCenter: { role: 'bodice-back-center', cutOnFold: true, princessSeamId: 'princessBack', curves: offsetCurves(backCurveCurves, backCurveOffset), edges: [backCenterEdge] },
-      backSide: { role: 'bodice-back-side', bilateral: true, edges: [{ fromIdx: 0, toIdx: backCurve.length - 1, seamId: 'princessBack' }] },
+      frontCenter: { role: 'bodice-front-center', cutOnFold: true, princessSeamId: 'princessFront', curves: [...frontNeckCurve, ...offsetCurves(frontCurveCurves, frontCurveOffset)], edges: [frontCenterEdge] },
+      frontSide: { role: 'bodice-front-side', bilateral: true, curves: frontSide.curves || [], edges: [{ fromIdx: 0, toIdx: frontCurve.length - 1, seamId: 'princessFront' }] },
+      backCenter: { role: 'bodice-back-center', cutOnFold: true, princessSeamId: 'princessBack', curves: [{ fromIdx: 0, toIdx: neckCurveToIdx(backNeck, backCurve, backNeckSeg[2]), ...qBezToCubic(...backNeckSeg) }, ...offsetCurves(backCurveCurves, backCurveOffset)], edges: [backCenterEdge] },
+      backSide: { role: 'bodice-back-side', bilateral: true, curves: backSide.curves || [], edges: [{ fromIdx: 0, toIdx: backCurve.length - 1, seamId: 'princessBack' }] },
     };
     return { frontCenter, frontSide, backCenter, backSide, hemY, sideX, meta };
   }
@@ -295,47 +526,61 @@ export let FancyGen;
     const qc = q(m.chest);
     const hemW = qc * (o.hemFlareF || 1.05);
     const closureX = o.closureX != null ? o.closureX : qc * 0.12;
+    const frontSeg1 = [[closureX,4], [qc*0.45, len*0.1], [qc*0.30, len*0.34]];
+    const frontSeg2 = [[qc*0.30, len*0.34], [qc*0.55, len*0.7], [hemW*0.62, len]];
     const front = [
       [closureX, 4],
-      ...qBez([closureX,4], [qc*0.45, len*0.1], [qc*0.30, len*0.34], 7),
-      ...qBez([qc*0.30, len*0.34], [qc*0.55, len*0.7], [hemW*0.62, len], 7),
+      ...qBez(...frontSeg1, 7),
+      ...qBez(...frontSeg2, 7),
       [closureX*0.3, len],
       [closureX*0.3, 8],
     ];
+    withCurves(front, [
+      { fromIdx: 0, toIdx: 7, ...qBezToCubic(...frontSeg1) },
+      { fromIdx: 7, toIdx: 14, ...qBezToCubic(...frontSeg2) },
+    ]);
+    const backSeg = [[qc*0.9,2], [qc*1.02, len*0.5], [hemW, len]];
     const back = [
       [0,0], [qc*0.9, 2],
-      ...qBez([qc*0.9,2], [qc*1.02, len*0.5], [hemW, len], 8),
+      ...qBez(...backSeg, 8),
       [0, len],
     ];
+    withCurves(back, [{ fromIdx: 1, toIdx: 9, ...qBezToCubic(...backSeg) }]);
     return { front, back };
   }
   // Simple gore/panel for a paneled or A-line skirt, gently curved side seam.
   function gorePanel(topW, botW, len, curveOut) {
     curveOut = curveOut || 0;
-    return [
+    const seg = [[topW,0], [topW+curveOut, len*0.55], [botW, len]];
+    const outline = [
       [0,0],[topW,0],
-      ...qBez([topW,0], [topW+curveOut, len*0.55], [botW, len], 6),
+      ...qBez(...seg, 6),
       [0, len],
     ];
+    return withCurves(outline, [{ fromIdx: 1, toIdx: 7, ...qBezToCubic(...seg) }]);
   }
   // Asymmetric wrap/surplice front panel (wrap dresses, sherwani-style closures).
   function wrapPanel(qc, qw, len, side) {
     const d = side === "L" ? 1 : -1;
-    return [
+    const seg = [[qc*0.9*d,6], [qc*0.5*d, len*0.35], [qw*0.15*d, len*0.55]];
+    const outline = [
       [0, 4], [qc*0.9*d, 6],
-      ...qBez([qc*0.9*d,6], [qc*0.5*d, len*0.35], [qw*0.15*d, len*0.55], 7),
+      ...qBez(...seg, 7),
       [qw*0.15*d, len], [0, len],
     ];
+    return withCurves(outline, [{ fromIdx: 1, toIdx: 8, ...qBezToCubic(...seg) }]);
   }
   // Trouser front/back panel with a curved crotch seam.
   function trouserPanel(qw, qh, thigh, inseam, front) {
     const crotchDrop = front ? thigh*0.28 : thigh*0.34;
     const w = front ? qh*0.52 : qh*0.56;
-    return [
+    const seg = [[w,crotchDrop*0.4], [w*1.05,crotchDrop*0.85], [w*0.85,crotchDrop]];
+    const outline = [
       [0,0], [qw*0.5,0], [w, crotchDrop*0.4],
-      ...qBez([w,crotchDrop*0.4], [w*1.05,crotchDrop*0.85], [w*0.85,crotchDrop], 6),
+      ...qBez(...seg, 6),
       [w*0.6, crotchDrop+inseam], [w*0.15, crotchDrop+inseam], [0, crotchDrop*0.5],
     ];
+    return withCurves(outline, [{ fromIdx: 2, toIdx: 8, ...qBezToCubic(...seg) }]);
   }
 
   // ---------------- generic builders (for the Quick Draft builder pane) ----------------
@@ -422,10 +667,12 @@ export let FancyGen;
 
   FancyGen = {
     build(kind, m, opts) {
-      if (kind === "gown") return buildFancyGown(m, opts);
-      if (kind === "jacket") return buildFancyJacket(m, opts);
-      if (kind === "coat") return buildFancyCoat(m, opts);
-      if (kind === "suit") return buildFancySuit(m);
+      // WP-27: same hoistCurves() def() uses for the 64 named designs —
+      // Quick Draft's 4 generic kinds get real DXF curve-layer metadata too.
+      if (kind === "gown") return hoistCurves(buildFancyGown(m, opts));
+      if (kind === "jacket") return hoistCurves(buildFancyJacket(m, opts));
+      if (kind === "coat") return hoistCurves(buildFancyCoat(m, opts));
+      if (kind === "suit") return hoistCurves(buildFancySuit(m));
       return [];
     },
   };
@@ -437,7 +684,9 @@ export let FancyGen;
     PATTERNS[id] = {
       id, category, name: { en: nameEn, ar: nameAr },
       desc: { en: descEn, ar: descAr },
-      pieces: piecesFn,
+      // WP-27: every one of this design's curved pieces gets real DXF
+      // curve-layer metadata via hoistCurves(), not just princess seams.
+      pieces: (m) => hoistCurves(piecesFn(m)),
     };
     LIBRARY.push({ id, cat: category, tag: { en: tagEn, ar: tagAr }, type });
   }

@@ -76,7 +76,7 @@ in the app's own header.
 | **Cloth Lab engine** (Settings → 3D Cloth Lab engine) — "Iframe" (default) runs Cloth Lab as a separate embedded app; "Embedded" mounts it directly into this page instead, sharing this page's own React/Three.js so it starts faster and updates instantly | ⚠️ Both working; "Embedded" is newer and still being rolled out as the default |
 | **BodyForm** (`body.html`, standalone) — build a 3D avatar from measurements alone (no pattern needed), export it, or "Open in Fit Studio" to carry the category/measurements into the main app's 3D Cloth Lab | ✅ Working |
 | **Industrial grading — Grade Rules** (Size pane) — per-piece, per-outline-point dx/dy-per-size-step overrides on top of the uniform formula grade, JSON import/export, and a **Grade Nest preview** overlaying S/M/L/XL of one piece at a shared alignment point | ✅ Working — a point with no authored rule keeps grading through the normal formula, unchanged |
-| **Drafting engine upgrades** — per-edge seam allowance + real corner join styles (miter/round/bevel) in the offset engine; real bezier `piece.curves` metadata (princess-seam designs) feeding DXF's curve layer; dart **Pivot** / **Slash & Spread** (Layers pane → piece properties → Edit Darts); **Walk the Seam** (Export pane) — drag one slider to check two pieces' shared seam matches at every arc-length position, not just the ends; pleats on Quick Draft skirts (real added-width math, not a label) | ✅ Working — dart **Transfer** (rotate around an external pivot) and gathers/tucks are implemented as pure, tested functions (`js/darts.js`, `js/pleats.js`) without a dedicated UI yet |
+| **Drafting engine upgrades** — per-edge seam allowance + real corner join styles (miter/round/bevel) in the offset engine; real bezier `piece.curves` metadata (every curved edge across the whole Fancy Collection — necklines, sleeve caps, collars, godets, capes, peplums, jacket fronts, gores — not just princess seams) feeding DXF's curve layer; dart **Pivot** / **Slash & Spread** (Layers pane → piece properties → Edit Darts); **Walk the Seam** (Export pane) — drag one slider to check two pieces' shared seam matches at every arc-length position, not just the ends; pleats on Quick Draft skirts (real added-width math, not a label) | ✅ Working — dart **Transfer** (rotate around an external pivot) and gathers/tucks are implemented as pure, tested functions (`js/darts.js`, `js/pleats.js`) without a dedicated UI yet |
 | **Local automation API** (`window.BerryStudio`, see below) — `generate`/`grade`/`nest`/`export`/`validate`, callable from the browser console or any injected script against the currently loaded pattern | ✅ Working |
 | **Docs site** (`docs/`, book icon in the header) — bilingual quick start, tool reference, keyboard shortcuts, an AI setup guide with one page per provider (exact CORS commands included), 3D troubleshooting, and FAQ | ✅ Working — a build-free static site, no dependency beyond the app's own theme CSS |
 | **Accessibility & UX** — real keyboard operation of the canvas (`[`/`]` cycle, arrow-key nudge scoped to whole pieces; Delete/Backspace now deletes whatever is selected — a piece, a construction point, a construction line/arc/circle, a text annotation, or a notch), `role=dialog`/focus-trap/return-focus on every modal, `aria-label`/`aria-pressed` on icon and toggle buttons, a real `:focus-visible` ring app-wide, `prefers-reduced-motion` honoured by both CSS transitions and 3D Preview's auto-rotate, and all 6 theme × light/dark variants verified at WCAG AA (4.5:1) for body and secondary text | ✅ Working (see Honest notes) |
@@ -258,12 +258,22 @@ in the app's own header.
   own geometry with full confidence. **Seam-length parity** and **notch
   alignment** need to know which piece's edges correspond to which other
   piece's. Running it over the full pattern library on its first pass
-  genuinely found real issues, not hypothetical ones — 30 Fancy Collection
-  pieces have a duplicate consecutive point in their outline (a likely
-  bezier-sampling boundary bug in `js/fancy-patterns.js`, not yet fixed
-  here) and a consistent ~5mm front/back "side length" delta shows up
-  across many catalogue garments (still undecided — tracked as WP-40, not
-  yet adjudicated as of this note).
+  genuinely found real issues, not hypothetical ones — 67 Fancy Collection
+  piece instances (across 30+ unique designs) had a duplicate consecutive
+  point in their outline, and a consistent ~5mm front/back "side length"
+  delta shows up across many catalogue garments (still undecided — tracked
+  as WP-40, not yet adjudicated as of this note). **WP-26 fixed the
+  duplicate-point bug**: it traced to exactly four shape helpers in
+  `js/fancy-patterns.js` (`godetPc`, `capePc`, `peplumPc`, and
+  `princessBodice`'s neckline/princess-curve join) where a bezier segment's
+  sampled endpoint re-landed exactly on a point already in the outline —
+  either the next segment's own start, or the shape's own `[0,0]` origin
+  when a closing curve swept back to it. Fixed at the source with two small
+  dedupe helpers rather than papering over it downstream; `npm test` now
+  asserts zero `closedOutline` failures across the library so this exact
+  class of bug can't silently regress. The ~5mm side-length finding is
+  exactly the kind of result a *heuristic* check is supposed to produce: a
+  lead for a human to judge, not a verified fact.
   **WP-25 upgraded front/back pairing itself**, per pair: `js/data.js`,
   `js/ai.js` and `js/fancy-patterns.js` already attach a real `role` to
   most pieces at construction time (WP-6) — the same vocabulary
@@ -387,13 +397,33 @@ in the app's own header.
   unfamiliar, unverified nesting dependency for it risked a worse outcome
   than a well-tested first-party search that already demonstrably nests
   pieces into each other's concave notches.
-- **Curve metadata** (`piece.curves`, WP-14) is wired into `princessCurve()`
-  only — the one curve-generating function `js/fancy-patterns.js`'s
-  `princessBodice()` shares across 10+ of the 24 Fancy Collection designs —
-  not into every individual `qBez()` call site across all 24 designs
-  (necklines, sleeve caps, collar curves, etc. stay flattened-polyline-only,
-  unchanged). DXF's curve layer (layer 3) is empty for those, exactly as it
-  was before this metadata existed anywhere.
+- **WP-27 extended curve metadata (`piece.curves`, WP-14) to every curved
+  shape in the Fancy Collection, not just princess seams.** It used to be
+  wired into `princessCurve()` alone — every other curve (necklines,
+  sleeve caps, collars, godets, capes, peplums, jacket fronts, gores,
+  trouser crotch seams — 46 `qBez()` call sites across ~16 shape helpers
+  in `js/fancy-patterns.js`) stayed flattened-polyline-only, with an empty
+  DXF curve layer. `qBezToCubic()` closes the gap (an exact quadratic→cubic
+  degree elevation, not an approximation, so it needs zero change to any
+  already-flattened point), attached to each shape helper's own returned
+  outline and hoisted onto the owning piece centrally (`def()`/
+  `FancyGen.build()`, the file's only two piece-registration points)
+  rather than editing each of the ~300 individual piece-literal call
+  sites by hand. Verified exhaustively, not just spot-checked: every
+  outline point across all 70 patterns (6 hand-crafted + 64 Fancy
+  Collection) is byte-identical to before this change, and every one of
+  the 911 curve segments this produced is confirmed to reproduce its
+  own piece's real flattened points, not just claim to. That verification
+  caught a real, pre-existing bug: 3 of 4 princess-bodice neckline
+  variants (sweetheart/offshoulder/scoop) sample a curve whose own
+  starting point sits several centimeters from the outline's literal
+  first point — a genuine jog in that construction, unrelated to this WP
+  and not fixed here — so those three honestly get no neckline curve
+  entry (their princess-seam curve is still real) rather than wrong
+  metadata. 569 of 656 pieces across the full library now carry real
+  curve metadata (the rest — waistbands, gussets, cuffs, straight sash
+  ends — legitimately have none); exporting any of the 64 Fancy
+  Collection designs to DXF now produces a non-empty curve layer.
 - **Dart Transfer** (rotate a whole dart around an *external* pivot point,
   e.g. a fixed bust-point reference) is a real, tested pure function
   (`js/darts.js`) but has no dedicated UI yet — it needs a "pick a point on
