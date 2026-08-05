@@ -169,14 +169,29 @@ in the app's own header.
   a reload.
 - Three.js + OrbitControls load from a CDN (via an import map) on first visit,
   then are cached for offline use.
-- **3D Cloth Lab**'s cloth solver uses a distance-based hinge/fold spring for
-  bend resistance (not a true dihedral-angle constraint) and brute-force
-  O(N²) self-collision (not a GPU spatial hash) — both deliberate, documented
-  trade-offs matched to this app's particle counts, not oversights. Fabric
-  `structStiff`/`bendStiff` values are tuned "feel" sliders, not
-  Kawabata-instrument-calibrated SI values. Seams weld at mesh-build time
-  (no gradual sewing ramp-in) — a garment can show a brief pop at the seam
-  on the very first frame after a pattern change, not during normal wear.
+- **3D Cloth Lab**'s cloth solver defaults to a distance-based hinge/fold
+  spring for bend resistance, matched to this app's particle counts — a
+  deliberate, documented trade-off, not an oversight. As of WP-35 (v2.0), an
+  opt-in "High (dihedral bend)" quality tier (Fabric panel → Simulation
+  quality) replaces it with a true angle-based fold constraint for a
+  sharper, more accurate drape on dense garments — the default tier's own
+  behavior and performance are completely unchanged; switching tiers rebuilds
+  the simulation rather than live-swapping. Self-collision stays brute-force
+  O(N²) in both tiers: `GPUComputationRenderer` (this solver's plain-WebGL2
+  GPGPU approach) has no compute-shader/atomics access, and a real GPU
+  spatial hash needs either a scatter-with-atomics compaction pass or a full
+  bitonic sort to build actual per-cell particle lists — neither available
+  here without adopting WebGPU compute shaders or a from-scratch verified
+  sort, a materially larger undertaking than an opt-in tier. A cheaper
+  middle ground (bucket each particle into a coarse grid cell, skip
+  obviously-far pairs) was considered and deliberately not shipped: the
+  loop's actual cost is the two texture fetches needed just to find out
+  where another particle IS, which a cell-based early-out can't avoid —
+  see `ClothSimulation.js`'s own comment. Fabric `structStiff`/`bendStiff`
+  values are tuned "feel" sliders, not Kawabata-instrument-calibrated SI
+  values. Seams weld at mesh-build time (no gradual sewing ramp-in) — a
+  garment can show a brief pop at the seam on the very first frame after a
+  pattern change, not during normal wear.
 - **3D Cloth Lab pose variants** (Standing/A-pose/T-pose/Contrapposto/Seated/
   Walk): all six work on the built-in procedural avatar. On a loaded GLB
   avatar, Seated's knee bend derives "forward" from the character's own hip
