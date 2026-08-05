@@ -6,6 +6,35 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-19: Dart Transfer — pick the pivot on canvas
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. `transferDart()`
+(`js/darts.js`) and its Dart Editor modal already worked — this closed a
+missing *interaction*, not a missing feature: the pivot was two raw number
+inputs defaulting to the dart's own apex, so transferring around an
+external pivot (e.g. a bust point) meant already knowing that point's
+coordinates, which defeats the point of transferring around a point you
+can usually just see on the canvas.
+
+### Added
+- `js/canvas.js`: `Canvas.armPick(cb)`/`Canvas.cancelPick()` — a one-shot
+  "pick a point on canvas" mode independent of the active drafting tool.
+  The very next `pointerdown` (regardless of `tool`) is intercepted, run
+  through the same snap affordance the Point construction tool already
+  uses (magnet to an existing construction point, else grid-snap), and
+  handed to the callback instead of doing whatever that tool normally
+  does; then it disarms itself.
+- Dart Editor's Transfer row gets a new "Pick on canvas" button. Clicking
+  it closes the modal (so the real canvas underneath is clickable), arms
+  a pick, and reopens the same modal with that dart's Pivot X/Y (and the
+  angle you'd already typed) pre-filled from the click — construction
+  point, dart apex, or empty canvas space all work, and the numeric
+  inputs stay directly editable afterward. New `dartPivotPick`/
+  `dartPivotPickHint` i18n strings, EN+AR.
+- Escape now also cancels a still-armed pick (alongside its existing
+  close-every-overlay behavior), so backing out mid-pick doesn't leave a
+  stray click armed against whatever you click next.
+
 ## WP-24: implement the Ease check via a real construction-time hint
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. Check Pattern's Ease

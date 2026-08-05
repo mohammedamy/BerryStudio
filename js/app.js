@@ -536,7 +536,11 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   // piece, same mechanism opacity/color use) rather than a full
   // interactive canvas drag-tool — see js/darts.js for the pure,
   // independently-tested math this wraps.
-  function openDartEditorModal(pieceIdx){
+  // `presetPivot` (WP-19, optional): {dartIndex,x,y} — set right after a
+  // "pick on canvas" click reopens this modal, so that one dart's pivot
+  // fields show the picked point instead of resetting to the apex default.
+  function openDartEditorModal(pieceIdx, presetPivot){
+    Canvas.cancelPick(); // modal is (re)open — any still-armed pick from a previous call is stale
     const p = Canvas.getPieces()[pieceIdx]; if(!p || !p.darts || !p.darts.length) return;
     openModal(T("editDarts"), "", true);
     const body = $("#genericModal .modal-body"); body.innerHTML="";
@@ -578,16 +582,30 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       // visible no-op; moving the pivot away from the apex is what actually
       // makes this "transfer" rather than "pivot".
       const [apex] = dart;
+      const preset = (presetPivot && presetPivot.dartIndex===di) ? presetPivot : null;
       const row3 = el("div","row"); row3.style.cssText="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap";
-      const pivotX = el("input","input"); pivotX.type="number"; pivotX.step="0.1"; pivotX.value=apex[0].toFixed(1); pivotX.style.cssText="flex:1;min-width:60px";
-      const pivotY = el("input","input"); pivotY.type="number"; pivotY.step="0.1"; pivotY.value=apex[1].toFixed(1); pivotY.style.cssText="flex:1;min-width:60px";
-      const transferDeg = el("input","input"); transferDeg.type="number"; transferDeg.step="1"; transferDeg.value="0"; transferDeg.style.cssText="flex:1;min-width:60px";
+      const pivotX = el("input","input"); pivotX.type="number"; pivotX.step="0.1"; pivotX.value=(preset?preset.x:apex[0]).toFixed(1); pivotX.style.cssText="flex:1;min-width:60px";
+      const pivotY = el("input","input"); pivotY.type="number"; pivotY.step="0.1"; pivotY.value=(preset?preset.y:apex[1]).toFixed(1); pivotY.style.cssText="flex:1;min-width:60px";
+      const transferDeg = el("input","input"); transferDeg.type="number"; transferDeg.step="1"; transferDeg.value=String((preset&&preset.deg!=null)?preset.deg:0); transferDeg.style.cssText="flex:1;min-width:60px";
       const transferBtn = el("button","big-btn ghost",T("dartTransferApply")); transferBtn.style.flex="0 0 auto";
+      // WP-19: pick the pivot on canvas instead of typing coordinates you'd
+      // have to already know — the whole point of transferring around an
+      // external pivot is usually a point you can SEE (e.g. the bust
+      // point), not one you've measured. Closes the modal so the real
+      // canvas underneath is clickable, arms a one-shot pick, then reopens
+      // this same modal with that dart's pivot fields pre-filled.
+      const pickBtn = el("button","big-btn ghost",T("dartPivotPick")); pickBtn.style.flex="0 0 auto"; pickBtn.type="button";
       row3.appendChild(el("span",null,T("dartTransferPivot")+":"));
-      row3.appendChild(pivotX); row3.appendChild(pivotY);
+      row3.appendChild(pivotX); row3.appendChild(pivotY); row3.appendChild(pickBtn);
       row3.appendChild(el("span",null,T("dartPivotDeg")+":"));
       row3.appendChild(transferDeg); row3.appendChild(transferBtn);
       body.appendChild(row3);
+      pickBtn.onclick = () => {
+        const deg = +transferDeg.value || 0;
+        closeModal("#genericModal");
+        toast(T("dartPivotPickHint"));
+        Canvas.armPick(({x,y}) => openDartEditorModal(pieceIdx, {dartIndex:di, x, y, deg}));
+      };
       transferBtn.onclick = () => {
         const px = +pivotX.value, py = +pivotY.value;
         const deg = +transferDeg.value || 0;
@@ -3094,7 +3112,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       if(e.key==="Escape")closeModal("#cmdModal");
       return;
     }
-    if(e.key==="Escape"){ $$(".overlay.show").forEach(o=>o.classList.remove("show")); closeAnyMenu(); closeTextEditor(); }
+    if(e.key==="Escape"){ $$(".overlay.show").forEach(o=>o.classList.remove("show")); closeAnyMenu(); closeTextEditor(); Canvas.cancelPick(); }
     const typing = document.activeElement.tagName==="INPUT" || document.activeElement.tagName==="TEXTAREA" || document.activeElement.isContentEditable;
     // tool shortcuts
     const map={v:"select",p:"pen",l:"line",a:"arc",m:"measure",r:"rotate",s:"scale",t:"text"};
