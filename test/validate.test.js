@@ -74,9 +74,52 @@ test('a sleeve piece is excluded from front/back pairing entirely', () => {
   assert.equal(report.crossPiece.length, 0);
 });
 
-test('ease is always reported as deferred, never guessed', () => {
-  const report = run([goodSquare]);
-  assert.equal(report.ease.status, 'deferred');
+// WP-24: ease is a real per-piece check now, driven entirely by a
+// generator-populated `chestEdgeIndices` hint — never guessed post-hoc.
+test('ease reports "not applicable" for a piece with no chestEdgeIndices hint, even with a body chest supplied', () => {
+  const report = run([goodSquare], { bodyChestCm: 88 });
+  assert.equal(report.perPiece[0].checks.ease.status, 'deferred');
+});
+
+test('ease reports "not applicable" for a hinted piece when no body chest was supplied', () => {
+  const hinted = { ...goodSquare, chestEdgeIndices: [1] }; // outline[1] = [10,0]
+  const report = run([hinted]);
+  assert.equal(report.perPiece[0].checks.ease.status, 'deferred');
+});
+
+test('ease passes when the hinted vertex implies comfortably more than the minimum wearing ease', () => {
+  // half=10 -> implied full chest = 40cm; body chest 30cm -> 10cm ease (>= 5cm floor)
+  const hinted = { ...goodSquare, chestEdgeIndices: [1] };
+  const report = run([hinted], { bodyChestCm: 30 });
+  assert.equal(report.perPiece[0].checks.ease.status, 'pass');
+});
+
+test('ease warns when the hinted vertex implies positive but sub-minimum wearing ease', () => {
+  // half=10 -> implied full chest = 40cm; body chest 38cm -> 2cm ease (0 < 2 < 5cm floor)
+  const hinted = { ...goodSquare, chestEdgeIndices: [1] };
+  const report = run([hinted], { bodyChestCm: 38 });
+  assert.equal(report.perPiece[0].checks.ease.status, 'warn');
+});
+
+test('ease is invariant to Canvas.getPieces()\' layout translation (a real bug: raw absolute X, not measured from the piece\'s own fold edge, gave a wrong reading for any piece not already sitting at X=0)', () => {
+  const hinted = { ...goodSquare, chestEdgeIndices: [1] }; // outline[1] = [10,0], fold (minX) at 0 -> half=10
+  const baseline = run([hinted], { bodyChestCm: 30 }).perPiece[0].checks.ease;
+  assert.equal(baseline.status, 'pass');
+  // Simulate layoutPieces() shifting this piece 42cm to the right, exactly
+  // as Canvas.getPieces() does in the real app — every coordinate moves,
+  // including the hinted vertex AND the fold edge, so the piece's own
+  // finished width (and thus the ease verdict) must be unchanged.
+  const shifted = { ...hinted, outline: hinted.outline.map(([x, y]) => [x + 42, y]) };
+  const afterShift = run([shifted], { bodyChestCm: 30 }).perPiece[0].checks.ease;
+  assert.equal(afterShift.status, baseline.status);
+  assert.equal(afterShift.message, baseline.message);
+});
+
+test('ease fails when the hinted vertex implies a finished chest smaller than the body', () => {
+  // half=10 -> implied full chest = 40cm; body chest 50cm -> garment can't close
+  const hinted = { ...goodSquare, chestEdgeIndices: [1] };
+  const report = run([hinted], { bodyChestCm: 50 });
+  assert.equal(report.perPiece[0].checks.ease.status, 'fail');
 });
 
 test('summary tallies match the individual check verdicts', () => {
@@ -84,5 +127,5 @@ test('summary tallies match the individual check verdicts', () => {
   const total = report.summary.pass + report.summary.warn + report.summary.fail + report.summary.deferred;
   const perPieceCount = report.perPiece.reduce((n, p) => n + Object.keys(p.checks).length, 0);
   const crossPieceCount = report.crossPiece.reduce((n, p) => n + Object.keys(p.checks).length, 0);
-  assert.equal(total, perPieceCount + crossPieceCount + 1); // +1 for ease
+  assert.equal(total, perPieceCount + crossPieceCount);
 });

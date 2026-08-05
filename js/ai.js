@@ -351,6 +351,12 @@ export const AIGen = (() => {
       // into a symmetric double-wide front, so wrap gets the un-folded
       // front-panel role instead of bodice-front-center.
       role: style.wrap ? "front-panel" : "bodice-front-center", cutOnFold: !style.wrap,
+      // WP-24: index2 is [chestW,3] — necklinePts() always returns exactly
+      // 2 points, so the chest vertex always lands there regardless of
+      // neckline. Only meaningful for the cut-on-fold (non-wrap) case —
+      // Ease's fold-doubling assumption doesn't hold for wrap's un-folded
+      // asymmetric front, so it deliberately gets no hint.
+      ...(style.wrap ? {} : { chestEdgeIndices:[2] }),
     };
     const back = {
       name:{en:en+" Back", ar:"ظهر "+ar},
@@ -360,7 +366,7 @@ export const AIGen = (() => {
                [hipW+0.5,bod+(gh-bod)*0.42], ...hemBack],
       darts:waistDart, notches:[[chestW,3.5]],
       grain:[[2,9],[2,gh-6]],
-      role:"bodice-back-center", cutOnFold:true,
+      role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[2],
     };
     const pieces=[front, back];
 
@@ -507,7 +513,7 @@ export const AIGen = (() => {
       outline:[...neckFront,[chestW,3],[chestW+1,bodiceLen*0.55],[waistW+1,bodiceLen],[0,bodiceLen]],
       darts:waistDart, notches:[[chestW,3],[waistW+1,bodiceLen]],
       grain:[[chestW*0.5,6],[chestW*0.5,bodiceLen-6]],
-      role:"bodice-front-center", cutOnFold:true,
+      role:"bodice-front-center", cutOnFold:true, chestEdgeIndices:[2], // WP-24
     };
     const back = {
       name:{en:"Romper Back Bodice", ar:"ظهر صدرية الأفرول"},
@@ -515,7 +521,7 @@ export const AIGen = (() => {
       outline:[...neckBack,[chestW,3.5],[chestW+1,bodiceLen*0.55],[waistW+0.5,bodiceLen],[0,bodiceLen]],
       darts:waistDart, notches:[[chestW,3.5]],
       grain:[[2,6],[2,bodiceLen-6]],
-      role:"bodice-back-center", cutOnFold:true,
+      role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[2],
     };
     const pieces=[front, back];
 
