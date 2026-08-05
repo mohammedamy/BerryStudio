@@ -66,6 +66,14 @@ export const SCHEMA_ROLE_INFO = {
   cape: { placement: 'attachNeck' },
   'cape-overlay': { placement: 'attachNeck' },
   yoke: { placement: 'attachNeck' },
+  // WP-25: js/fancy-patterns.js authors this role on 6 Fancy Collection
+  // designs' shoulder tab/epaulette piece ("buttoned at the collar seam")
+  // but it was never added here — resolveSchemaRole returned null for it,
+  // so convertAppPattern fell back to classifyLegacy, which can't tell
+  // front from back from the name "Shoulder Epaulette"/"Shoulder Tab" and
+  // skips the piece. attachNeck (not attachBody) matches its real
+  // shoulder/collar position — attachBody would place it at hip height.
+  epaulette: { placement: 'attachNeck' },
 
   // waist-attached accessories
   'peplum-front': { placement: 'attachWaist' },
