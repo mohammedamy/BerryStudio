@@ -6,6 +6,45 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-36: Make "Embedded" the default Cloth Lab engine
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase D. WP-5 shipped the
+"Embedded" engine (Cloth Lab mounted directly into this page, sharing its
+React/Three.js) opt-in behind Settings, defaulting to "Iframe" (the
+original cross-document engine) so nothing changed for existing users
+until they opted in. Gated on real evidence it's ready, per that WP's own
+plan.
+
+### Changed
+- `js/app.js`: `DEF.clothLabEngine` flipped from `"iframe"` to
+  `"embedded"`. Since state is built as
+  `Object.assign({}, DEF, savedRaw)`, this only changes behavior for a
+  `savedRaw` with no `clothLabEngine` key — i.e. a genuinely new install.
+  Any existing user's browser already has this key baked into its saved
+  `"pps"` `localStorage` blob from a prior `save()` call (state always
+  serializes every key, not just ones the user explicitly touched), so
+  their engine — chosen or not — is unconditionally preserved. "Iframe"
+  remains fully selectable and functional as a fallback via Settings.
+- `README.md`'s Cloth Lab engine row updated to describe "Embedded" as
+  the default and drop the "still being rolled out" caveat.
+
+### Verified
+- Established a baseline first: full Playwright e2e suite on `main`
+  (pre-change) — 16 passed, 1 pre-existing unrelated flake
+  (`select-anything`, already named as flaky in `playwright.config.js`'s
+  own comments).
+- Same suite after the change: **17/17 passed**, including
+  `smoke.spec.js`'s dedicated "embedded Cloth Lab engine mounts real
+  content with no console errors" test (explicitly selects Embedded via
+  the real Settings UI, asserts a real `<canvas>` mounted into
+  `#clothLabEmbed`, `.engine-embedded` is active, and zero console
+  errors) — the flaky test passed this run, confirming it, not the engine
+  change. No regression in the blank-canvas bug class the Honest notes
+  describe fighting twice.
+- Manually confirmed a genuinely fresh session (`localStorage.clear()`,
+  reload) persists `clothLabEngine: "embedded"` on first save, matching
+  the new default.
+
 ## WP-23: ComfyUI local image-gen adapter
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase B. `js/image-providers.js`
