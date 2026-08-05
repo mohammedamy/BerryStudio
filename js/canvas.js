@@ -32,6 +32,15 @@ export const Canvas = (() => {
   let onText = () => {};              // app callback to open the text editor
   let onPick = () => {};
   let getT = k => k;                            // translator injected
+  // WP-19: one-shot "pick a point on canvas" arming, independent of the
+  // active drafting tool — used by callers outside the canvas (e.g. the
+  // Dart Editor modal's dart-transfer pivot fields) that just want the
+  // next click's pattern-space coordinate, not a tool switch. Intercepts
+  // the very next pointerdown regardless of `tool`, then disarms itself.
+  let pickCb = null;
+
+  function armPick(cb){ pickCb = cb || null; }
+  function cancelPick(){ pickCb = null; }
 
   // ---- construction geometry: points, referential lines/arcs/circles,
   // custom parametric variables, "promote to pattern piece", trace image ----
@@ -912,6 +921,22 @@ export const Canvas = (() => {
     cv.addEventListener("pointerdown", e=>{
       cv.setPointerCapture(e.pointerId);
       const [wx,wy]=toWorld(e.offsetX,e.offsetY);
+
+      // WP-19: an armed external pick takes priority over everything else
+      // — the current tool's own click behavior is suppressed for this one
+      // click. Same snap affordance the Point construction tool uses
+      // (magnet to an existing construction point, else grid-snap), so a
+      // click on a construction point, a dart apex (no dedicated snap
+      // target — lands on its grid-snapped click position), or empty
+      // canvas space all produce a real pattern-space coordinate.
+      if (pickCb){
+        const s = snapConstruction(wx, wy, e.shiftKey);
+        const cb = pickCb; pickCb = null;
+        cb({ x: s.x, y: s.y });
+        render();
+        return;
+      }
+
       if (e.button===1 || e.spaceKey || tool==="pan"){ pan={x:e.offsetX,y:e.offsetY,vx:view.x,vy:view.y}; userAdjusted=true; return; }
 
       // (0) construction points / lines-arcs-circles / notches — select
@@ -1658,7 +1683,7 @@ export const Canvas = (() => {
            setVariable, removeVariable, getVariables, setMeasureProvider, recomputeConstruction, evalExpr,
            setBackgroundImage, setBgOpacity, setBgVisible, removeBackground, hasBackground, getBgOpacity,
            moveBackground, onCalibrationRequest, applyCalibration,
-           centerOn, selectPoint, selectCons, clearHighlight,
+           centerOn, selectPoint, selectCons, clearHighlight, armPick, cancelPick,
            freezeSnapshot, showSnapshot, setSnapshotOpacity, removeSnapshot, hasSnapshot, getSnapshotOpacity,
            // exposed for js/validate.js (WP-0.4) — a pure function, safe to reuse rather than reimplement
            offsetPoly };
