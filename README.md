@@ -267,10 +267,35 @@ in the app's own header.
   hypothetical ones — 30 Fancy Collection pieces have a duplicate consecutive
   point in their outline (a likely bezier-sampling boundary bug in
   `js/fancy-patterns.js`, not yet fixed here) and a consistent ~5mm
-  front/back "side length" delta across many catalogue garments that most
-  likely reflects an intentionally deeper front neckline rather than a real
-  defect — exactly the kind of result a *heuristic* check is supposed to
-  produce: a lead for a human to judge, not a verified fact. **Ease**
+  front/back "side length" delta across many catalogue garments — exactly
+  the kind of result a *heuristic* check is supposed to produce: a lead
+  for a human to judge, not a verified fact.
+  **WP-40 adjudicated the ~5mm finding: confirmed intentional, not a
+  defect.** All 61 flagged pairs (library.js's `AIGen.build()`-drafted
+  garments — the hand-crafted `js/data.js` patterns and the Fancy
+  Collection don't show it) differ by *exactly* 5.0mm, zero variance —
+  itself a strong signal this is one deterministic authored value, not a
+  spread of independent construction mistakes. Traced to `js/ai.js`'s
+  `necklinePts(style, half, y0)` calls in `buildTop()`: the front
+  neckline is drafted with `y0=1`, the back with `y0=1.5` — a 0.5cm
+  (5mm) difference in the neckline's own starting height, verified
+  directly against real generated coordinates (`w01`'s front/back both
+  span the identical hem Y; only the neckline-driven top-of-piece Y
+  differs, by exactly 0.5cm). This is the *same* call site that already
+  gives front and back deliberately different neckline **widths**
+  (`chestW*0.42` front vs. the narrower `chestW*0.3` back) — a real,
+  standard patternmaking convention (the back neck is conventionally
+  drafted narrower and slightly higher/shallower than the front) — the
+  0.5cm height offset is evidently the same deliberate choice's
+  companion parameter, not an independent oversight. `checkSeamLengthParity`'s
+  own tolerance (`SEAM_LENGTH_TOL_MM = 3`, `js/validate.js`) is simply
+  tighter than this legitimate neckline variation; the check's own
+  height-based proxy (front/back's whole vertical extent, not the literal
+  side-seam edge) conflates "neckline sits 5mm higher" with "side seam is
+  5mm longer," which is why every affected pair reads identically
+  regardless of neckline shape (v/round/boat/halter/collar/mock all
+  inherit the same `y0` values). No code changed — this is a
+  verification-only conclusion, and no follow-up WP is needed. **Ease**
   (finished chest vs. body chest + minimum ease) is not implemented at all —
   it would need a second, unverifiable heuristic on top of the first (which
   edge is the chest measurement) — this is left as a documented gap rather
