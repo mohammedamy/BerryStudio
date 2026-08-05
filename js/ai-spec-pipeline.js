@@ -154,6 +154,54 @@ const FEW_SHOT_EXAMPLES = [
     },
   },
   {
+    // Deliberately vague — no style words at all. This example exists to
+    // demonstrate the "never leave silhouette/construction bland" rule in
+    // buildSystemPrompt() below: even here, every factor still gets a real,
+    // specific value (not a flat 1.0/omitted), just at LOWER provenance
+    // confidence than a prompt that actually said "v-neck" or "a-line". A
+    // model that copies this pattern stops producing an identical featureless
+    // block dress for every under-specified request.
+    prompt: 'something pretty for a summer garden party, nothing too fussy',
+    spec: {
+      specVersion: '1',
+      garment: { type: 'dress', category: 'women', closure: 'none' },
+      silhouette: { lengthF: 1.05, flareF: 1.3, fitF: 1.0 },
+      construction: { neckline: 'v', sleeve: { kind: 'set-in', lengthF: 0.45, widthF: 1.0 }, hem: 'curved', seams: ['waist', 'side'] },
+      pieces: [
+        { id: 'bodice-front', role: 'bodice-front', cutOnFold: true, quantity: 1, grainline: 'straight' },
+        { id: 'bodice-back', role: 'bodice-back', cutOnFold: true, quantity: 1, grainline: 'straight' },
+        { id: 'sleeve', role: 'sleeve', cutOnFold: false, quantity: 2, grainline: 'straight' },
+      ],
+      seams: [],
+      provenance: [
+        { field: 'garment.type', source: 'llm-inferred', confidence: 0.6 },
+        { field: 'silhouette.flareF', source: 'llm-inferred', confidence: 0.45 },
+        { field: 'construction.neckline', source: 'llm-inferred', confidence: 0.4 },
+        { field: 'construction.hem', source: 'llm-inferred', confidence: 0.4 },
+      ],
+    },
+  },
+  {
+    // Lower-body-only garment: construction.neckline/sleeve genuinely don't
+    // apply (there's nothing to guess), so they're correctly omitted
+    // entirely rather than forced — see the "only for dress/top/shirt/robe/
+    // romper" clause in buildSystemPrompt() below. silhouette is still
+    // populated, because every garment type has SOME silhouette to state.
+    prompt: "a girl's pleated A-line skirt, knee length",
+    spec: {
+      specVersion: '1',
+      garment: { type: 'skirt', category: 'girls', closure: 'none' },
+      silhouette: { lengthF: 1.0, flareF: 1.4, fitF: 1.0 },
+      pieces: [
+        { id: 'skirt-front', role: 'skirt-front', cutOnFold: true, quantity: 1, grainline: 'straight' },
+        { id: 'skirt-back', role: 'skirt-back', cutOnFold: true, quantity: 1, grainline: 'straight' },
+        { id: 'waistband', role: 'waistband', cutOnFold: false, quantity: 1, grainline: 'straight' },
+      ],
+      seams: [],
+      provenance: [{ field: 'garment.type', source: 'llm-inferred', confidence: 0.95 }],
+    },
+  },
+  {
     prompt: 'read the pattern pieces and measurements directly from this attached tech-pack image (a wrap skirt with a front panel and a waistband, with its own printed body-measurement table)',
     spec: {
       specVersion: '1',
@@ -203,12 +251,23 @@ export function buildSystemPrompt(category, lang) {
     '- construction.sleeve.lengthF (0-3): 0 = sleeveless; ~0.45 = short; ~0.8 = three-quarter; ~1.3 = long.',
     '- construction.sleeve.widthF (0-3): 1.0 = regular; >1.4 = wide/puffed.',
     '',
+    'construction.neckline and construction.sleeve only apply to upper-body garments (dress, top, shirt, robe, romper) — omit both entirely for skirt/trousers, which have neither. silhouette still applies to every garment type.',
+    '',
+    // The single most important rule for output QUALITY (not just schema
+    // validity): a spec that leaves silhouette/construction empty because
+    // the prompt was generic drafts a bland, featureless block shape via
+    // AIGen.build()'s own neutral defaults — every under-specified request
+    // ends up looking identical. Examples 4 and 5 below both demonstrate
+    // this: even a near-content-free prompt still gets a real, specific
+    // silhouette/construction, just at lower provenance confidence.
+    "CRITICAL — never leave a design undecided: unless every piece already carries `outlineCm` (mode 2), you MUST populate `silhouette.lengthF/flareF/fitF`, and — for upper-body garment types only — `construction.neckline`/`construction.hem`/`construction.sleeve`, with real, specific values reflecting ONE coherent, fashion-plausible garment. This applies even when the prompt gives you nothing to go on: pick a concrete, appropriate combination for the garment type and category standard (see example 4) rather than defaulting everything to a neutral 1.0 or omitting the fields — a bland block shape is a worse answer than a confident guess. Mark any field you had to guess outright with a genuinely LOW confidence (0.3-0.5) in provenance, and any field the prompt actually implied with a higher one — never omit the field just because confidence is low.",
+    '',
     'Before emitting JSON, briefly reason (to yourself, not in the output) about ease — how much room this silhouette needs beyond the body measurements — and drape — how the flare/fit factors should interact for the described fabric or style — then output the final spec.',
     'Every piece must declare a role, cutOnFold, quantity, and grainline. Populate `pieces` with at least a front and back bodice/panel appropriate for the garment type, plus any sleeves/collar/waistband the description implies.',
     'Add a `provenance` entry for every field you inferred rather than copied verbatim from the prompt, with source "llm-inferred" and an honest confidence between 0 and 1 — never claim confidence 1.0 for a guess. Use a dotted path for `field` (e.g. "garment.type", "silhouette.flareF", "construction.neckline"), matching the field\'s actual location in the JSON you emit.',
     localeNote,
     '',
-    'Four examples:',
+    `${FEW_SHOT_EXAMPLES.length} examples:`,
     ...FEW_SHOT_EXAMPLES.flatMap((ex, i) => [`Example ${i + 1} prompt: "${ex.prompt}"`, `Example ${i + 1} JSON: ${JSON.stringify(ex.spec)}`]),
   ].join('\n');
 }
@@ -217,17 +276,54 @@ function summarizeErrors(errors) {
   return (errors || []).slice(0, 6).map((e) => `${e.path}: ${e.message}`).join('; ');
 }
 
-export function specToStyle(spec) {
+// Fallback option sets for a factor the provider left unset even after
+// buildSystemPrompt()'s explicit "never leave this bland" instruction and
+// generateFromSpec()'s bare-spec retry (below) — a real safety net for
+// providers that don't reliably follow structured-output instructions
+// (small local models via Ollama/LM Studio in particular), not the primary
+// mechanism. AIGen.pick()/hashStr() give the SAME seed the SAME choice
+// every time (same prompt -> same pattern) while still varying across
+// different input — exactly js/ai.js's deriveStyle() philosophy, reused
+// rather than reimplemented.
+const FALLBACK_LEN = [0.85, 1.0, 1.1, 1.25];
+const FALLBACK_FLARE = [0.9, 1.0, 1.25, 1.5];
+const FALLBACK_FIT = [0.88, 1.0, 1.12];
+const FALLBACK_HEM = ['straight', 'straight', 'curved', 'highlow'];
+
+export function specToStyle(spec, seed) {
   const g = spec.garment || {}, sil = spec.silhouette || {}, con = spec.construction || {}, sleeve = con.sleeve || {};
+  const type = g.type || 'dress';
+  const sd = seed != null ? String(seed) : `${type}|${(spec.pieces || []).length}`;
+  const has = (v) => v != null;
   return {
-    type: g.type || 'dress',
-    lengthF: clamp(num(sil.lengthF, 1), 0.55, 1.6),
-    flareF: clamp(num(sil.flareF, 1), 0.82, 1.9),
-    fitF: clamp(num(sil.fitF, 1), 0.72, 1.28),
+    type,
+    // lengthF/flareF/fitF/hem are safe to default here — js/ai-fusion.js's
+    // fuseStyle() never reads these off `specStyle` at all (length/flare/
+    // fit/hem/colour there are always authoritative from the pixel/prompt
+    // read, regardless of what the spec said), so a seeded guess here can
+    // never masquerade as a "vision" read on the fused (image+prompt) path.
+    lengthF: clamp(has(sil.lengthF) ? num(sil.lengthF, 1) : AIGen.pick(`${sd}|len`, FALLBACK_LEN), 0.55, 1.6),
+    flareF: clamp(has(sil.flareF) ? num(sil.flareF, 1) : AIGen.pick(`${sd}|flare`, FALLBACK_FLARE), 0.82, 1.9),
+    fitF: clamp(has(sil.fitF) ? num(sil.fitF, 1) : AIGen.pick(`${sd}|fit`, FALLBACK_FIT), 0.72, 1.28),
+    // sleeveLenF/sleeveWideF stay flat-defaulted (unlike the three factors
+    // above): js/ai-fusion.js's fuseStyle() DOES read `specStyle.sleeveLenF`
+    // (specifically whether it's exactly 0, meaning "vision saw no
+    // sleeves") — a seeded guess could land on 0 by chance and get read as
+    // a false "the photo shows a sleeveless garment", which real pixel/
+    // prompt evidence never said. Not worth that risk for this one field.
     sleeveLenF: clamp(num(sleeve.lengthF, 1), 0, 1.5),
     sleeveWideF: clamp(num(sleeve.widthF, 1), 0.8, 2),
+    // neckline ALSO stays nullable here on purpose, for the same reason —
+    // js/app.js's generatePatternFrom() reads `specStyle.neckline != null`
+    // (via fuseStyle) as "the vision-informed spec actually said something"
+    // and deliberately falls back to the prompt/pixel read otherwise; a
+    // seeded guess here would make every fused generation's neckline look
+    // vision-sourced even when the provider said nothing. The direct
+    // (non-fused) path fills a seeded default itself — see
+    // generateFromSpec() below, which is the one place that knows this
+    // result will NOT be fused.
     neckline: mapNeckline(con.neckline),
-    hemShape: con.hem || null,
+    hemShape: con.hem || AIGen.pick(`${sd}|hem`, FALLBACK_HEM),
     wrap: g.closure === 'wrap',
     zip: g.closure === 'zip',
     color: null, twoTone: false, colorHem: null,
@@ -242,6 +338,30 @@ export function provenanceMapFromSpec(spec) {
     out[uiKey] = { source: PROVENANCE_SOURCE_MAP[p.source] || 'spec', confidence: p.confidence };
   });
   return out;
+}
+
+// A schema-VALID spec that still leaves silhouette/construction completely
+// empty is the concrete shape of "the model didn't engage with the design
+// at all" — buildSystemPrompt() now explicitly forbids this, but nothing
+// stops a provider from ignoring that instruction while still emitting
+// perfectly valid JSON (garment + a bare pieces array validates fine).
+// Traced pieces (outlineCm) are a legitimate reason for both to be empty —
+// see the schema's own honesty note — so those are never flagged. Skirts/
+// trousers legitimately have no construction.neckline/sleeve either (see
+// buildSystemPrompt()'s "only for upper-body garments" clause), so only
+// silhouette is required for those; upper-body types need both.
+const UPPER_BODY_TYPES = new Set(['dress', 'top', 'shirt', 'robe', 'romper']);
+function isBareSpec(spec) {
+  const hasMeasuredPieces = (spec.pieces || []).some((p) => Array.isArray(p.outlineCm) && p.outlineCm.length >= 3);
+  if (hasMeasuredPieces) return false;
+  const sil = spec.silhouette;
+  const hasSilhouette = !!(sil && (sil.lengthF != null || sil.flareF != null || sil.fitF != null));
+  if (!hasSilhouette) return true;
+  const type = spec.garment && spec.garment.type;
+  if (!UPPER_BODY_TYPES.has(type)) return false;
+  const con = spec.construction || {};
+  const hasConstruction = !!(con.neckline || con.hem || (con.sleeve && (con.sleeve.kind || con.sleeve.lengthF != null)));
+  return !hasConstruction;
 }
 
 function fromLegacyResult(json, measurements, lang) {
@@ -264,6 +384,9 @@ function fromLegacyResult(json, measurements, lang) {
 export async function generateFromSpec({ adapter, cfg, prompt, measurements, category, lang, schema, images }) {
   const system = buildSystemPrompt(category, lang);
   const messages = [{ role: 'user', content: prompt }];
+  // Mirrors js/ai.js's deriveStyle() seed convention — same prompt/category/
+  // image reproduces the same "provider left this unset" fallback choice.
+  const seed = `${prompt || ''}|${category || ''}|${images && images.length || 0}`;
 
   let res;
   try { res = await adapter.complete(cfg, { system, messages, images, schema, kind: 'text' }); }
@@ -292,12 +415,35 @@ export async function generateFromSpec({ adapter, cfg, prompt, measurements, cat
     convo = [...convo, { role: 'assistant', content: JSON.stringify(spec) }];
   }
 
+  // Schema-valid but substantively empty (see isBareSpec()'s own comment) —
+  // give the provider one more chance with the actual complaint spelled
+  // out, mirroring the schema-invalid retry above but for "technically
+  // valid, nobody home" instead of "invalid JSON". A retry failure here
+  // just keeps the original bare-but-valid spec rather than failing the
+  // whole generation over what's ultimately a nice-to-have improvement —
+  // specToStyle()'s own seeded fallback (above) still keeps the result from
+  // being a flat, identical-every-time block shape either way.
+  if (isBareSpec(spec)) {
+    const retryMessages = [
+      ...convo,
+      { role: 'assistant', content: JSON.stringify(spec) },
+      { role: 'user', content: 'That JSON is schema-valid but left silhouette (and, for an upper-body garment, construction) completely empty, which drafts a generic, featureless block shape instead of a real garment. Make an actual design decision: fill in silhouette.lengthF/flareF/fitF, and — if this is a dress/top/shirt/robe/romper — construction.neckline/hem/sleeve, with values reflecting one specific, coherent garment appropriate to the description (or the category standard, if the description is vague). Mark any field you had to guess with a low confidence (0.3-0.5) in provenance rather than leaving it out. Return corrected JSON only.' },
+    ];
+    let res2;
+    try { res2 = await adapter.complete(cfg, { system, messages: retryMessages, images, schema, kind: 'text' }); }
+    catch (e) { res2 = null; }
+    if (res2 && res2.ok && res2.json && !res2.json.legacy) {
+      const retryValidation = PatternSpecValidator.validate(res2.json);
+      if (retryValidation.valid) spec = res2.json;
+    }
+  }
+
   const hasMeasuredPieces = (spec.pieces || []).some((p) => Array.isArray(p.outlineCm) && p.outlineCm.length >= 3);
   if (hasMeasuredPieces) {
     return finishMeasuredPieces({ adapter, cfg, system, convo, images, schema, spec, measurements, lang });
   }
 
-  const style = specToStyle(spec);
+  const style = specToStyle(spec, seed);
   const built = AIGen.build(style, measurements);
   const provenance = provenanceMapFromSpec(spec);
   const attrs = AIGen.attributes(style, lang, provenance);

@@ -15,17 +15,21 @@ function mockAdapter(responses) {
   return { complete: async () => responses[Math.min(call++, responses.length - 1)] };
 }
 
-test('buildSystemPrompt embeds the schema vocabulary and all four few-shot examples', () => {
+test('buildSystemPrompt embeds the schema vocabulary and all six few-shot examples', () => {
   const p = buildSystemPrompt('women', 'en');
   assert.match(p, /garment\.type: dress \| top \| shirt \| skirt \| trousers \| robe \| romper/);
   assert.match(p, /construction\.neckline: v \| round \| boat \| off-shoulder \| halter \| collar \| mock/);
-  assert.match(p, /Four examples:/);
+  assert.match(p, /6 examples:/);
   assert.match(p, /Example 1 prompt/);
   assert.match(p, /Example 2 prompt/);
   assert.match(p, /Example 3 prompt/);
   assert.match(p, /Example 4 prompt/);
+  assert.match(p, /Example 5 prompt/);
+  assert.match(p, /Example 6 prompt/);
   assert.match(p, /outlineCm/);
   assert.match(p, /referenceMeasurementsCm/);
+  // the core "never leave it bland" rule this pass exists to add
+  assert.match(p, /never leave a design undecided/i);
 });
 
 test('specToStyle maps a zip closure', () => {
@@ -63,6 +67,54 @@ test('retry-once: an invalid first response is retried and a valid second respon
   const result = await generateFromSpec({ adapter, cfg: {}, prompt: 'a dress', measurements, category: 'women', lang: 'en', schema });
   assert.equal(result.fellBack, undefined);
   assert.equal(result.source, 'spec');
+});
+
+test('bare spec retry: schema-valid but empty silhouette/construction triggers one retry, and a populated retry response is used', async () => {
+  const bareSpec = {
+    specVersion: '1',
+    garment: { type: 'dress', category: 'women' },
+    pieces: [
+      { id: 'bodice-front', role: 'bodice-front', cutOnFold: true, quantity: 1, grainline: 'straight' },
+      { id: 'bodice-back', role: 'bodice-back', cutOnFold: true, quantity: 1, grainline: 'straight' },
+    ],
+  };
+  const adapter = mockAdapter([
+    { ok: true, providerId: 'test', json: bareSpec, usage: {} },
+    { ok: true, providerId: 'test', json: validSpec, usage: {} },
+  ]);
+  const result = await generateFromSpec({ adapter, cfg: {}, prompt: 'a dress', measurements, category: 'women', lang: 'en', schema });
+  assert.equal(result.fellBack, undefined);
+  assert.equal(result.source, 'spec');
+  assert.equal(result.spec.silhouette.lengthF, validSpec.silhouette.lengthF, 'the populated retry response should be the one actually used, not the original bare spec');
+});
+
+test('bare spec retry: a failed retry keeps the original bare-but-valid spec instead of failing the whole generation', async () => {
+  const bareSpec = {
+    specVersion: '1',
+    garment: { type: 'dress', category: 'women' },
+    pieces: [
+      { id: 'bodice-front', role: 'bodice-front', cutOnFold: true, quantity: 1, grainline: 'straight' },
+      { id: 'bodice-back', role: 'bodice-back', cutOnFold: true, quantity: 1, grainline: 'straight' },
+    ],
+  };
+  const adapter = mockAdapter([
+    { ok: true, providerId: 'test', json: bareSpec, usage: {} },
+    { ok: false, providerId: 'test', error: 'timeout' },
+  ]);
+  const result = await generateFromSpec({ adapter, cfg: {}, prompt: 'a plain dress', measurements, category: 'women', lang: 'en', schema });
+  assert.equal(result.fellBack, undefined);
+  assert.equal(result.source, 'spec');
+  // specToStyle()'s own seeded fallback still produced a real, buildable style
+  assert.ok(Array.isArray(result.pieces) && result.pieces.length > 0);
+});
+
+test('specToStyle seeded fallback is deterministic for a bare spec (same seed -> same style)', () => {
+  const bare = { garment: { type: 'dress' } };
+  const a = specToStyle(bare, 'a dress|women|0');
+  const b = specToStyle(bare, 'a dress|women|0');
+  assert.deepEqual(a, b);
+  const c = specToStyle(bare, 'a totally different prompt|men|0');
+  assert.ok(c.lengthF >= 0.55 && c.lengthF <= 1.6);
 });
 
 test('invalid twice: falls back honestly instead of showing broken output', async () => {
