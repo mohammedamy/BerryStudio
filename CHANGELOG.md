@@ -6,6 +6,67 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-27: extend curve metadata to every qBez() call site, not just princess seams
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. `piece.curves` (WP-14)
+fed DXF's curve layer (layer 3) for princess seams only — `princessCurve()`
+was the one function that emitted it, since it builds cubic segments
+directly with authored `c1`/`c2`. Every other curved shape in
+`js/fancy-patterns.js` samples a QUADRATIC bezier via `qBez()` (46 call
+sites across ~16 shape helpers: `sleeve2pc`, `sleeve1pc`, `collarStand`,
+`shawlCollar`, `lapelFacing`, `pocketPc`, `godetPc`, `hoodHalf`, `yokePc`,
+`peplumPc`, `sashPc`, `tierPc`, `capePc`, `jacketFrontBack`, `gorePanel`,
+`wrapPanel`, `trouserPanel`, plus `princessBodice`'s own neckline/side-seam
+calls) — necklines, sleeve caps, collars, godets, capes, peplums, jacket
+fronts, gores, trouser crotch seams all stayed flattened-polyline-only.
+
+### Added
+- `qBezToCubic(p0, c, p1)` — exact quadratic→cubic degree elevation (not
+  an approximation): a cubic bezier with these control points traces the
+  IDENTICAL curve as the quadratic, so every `qBez()`-built curve can
+  carry the same real metadata `princessCurve()` already does, with zero
+  change to any already-flattened point.
+- `withCurves(outline, curves)` / `hoistCurves(pieces)` — rather than
+  changing every shape helper's return type (which would have meant
+  editing ~300 individual `outline: someHelper(...)` piece-literal call
+  sites across the file), each helper attaches its curve metadata to the
+  outline array it already returns unchanged; `hoistCurves()` copies it
+  onto the owning piece once, centrally, at this file's only two piece-
+  registration points (`def()` for the 64 named designs, `FancyGen.build()`
+  for Quick Draft's 4 generic kinds) — never overwriting a `curves` a
+  piece already declares explicitly (princessBodice's frontCenter/
+  backCenter combine their neckline AND princess-seam curves that way).
+- `princessBodice()`'s `frontSide`/`backSide` (the princess side panels)
+  get real curve metadata for their own side-seam-to-bust curve for the
+  first time — previously only the princess-seam edge itself had any.
+
+### Verified (exhaustively, not spot-checked)
+- Every outline point across all 70 patterns (6 hand-crafted + 64 Fancy
+  Collection) is confirmed byte-identical to the pre-WP-27 source —
+  compared programmatically, not by eye, across 656 pieces.
+- Every one of the 911 resulting curve segments is confirmed to actually
+  reproduce its own piece's real flattened outline points (re-sampling
+  the reported cubic and diffing against `outline`), not just claim to —
+  added as a permanent regression test
+  (`test/fancy-patterns-curves.test.js`).
+- Exporting all 64 Fancy Collection designs to DXF produces a non-empty
+  curve layer — verified both via a Node-level sweep and live in the
+  running app (`window.BerryStudio.export('dxf')` on a real loaded
+  design).
+
+### Fixed (caught by the geometric verification above, not by eye)
+- That same verification found a real, pre-existing bug in 3 of 4
+  princess-bodice neckline variants (sweetheart/offshoulder/scoop): the
+  `qBez()` call that builds the neckline samples a curve whose own
+  starting point (`p0`) sits several centimeters from `frontCenter`'s
+  literal first outline point — a genuine jog in that construction that
+  predates this WP (outline geometry is unchanged, confirmed above) and
+  is not fixed here. Attaching neckline curve metadata for those three
+  would have been wrong metadata, not just incomplete, so they correctly
+  get no neckline curve entry (their princess-seam curve is still real
+  and present) — the same "no hint, no guess" convention this file's
+  other checks already use.
+
 ## Cloth Lab: simulated pieces render in their real 2D-canvas color
 
 ### Fixed
