@@ -58,6 +58,95 @@ pattern out.
   listed as deferred; SD.next remains the one unimplemented local
   image-gen backend.
 
+## WP-21: Local model Route B — a real .onnx file picker
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase B. Route B (pick a local
+model file directly, no server) was honestly documented as not wired up:
+GGUF genuinely isn't supported by any in-browser runtime, but `.onnx`
+picks were also rejected — the IndexedDB/OPFS storage and
+`onnxruntime-web` `InferenceSession` wiring it needs simply didn't exist
+yet. That's the real gap this WP closes; GGUF stays exactly as
+unsupported as before, correctly.
+
+### Added
+- `js/workers/model-file-cache.js` (new): a small IndexedDB/OPFS byte
+  cache for one user-picked local model file at a time, shared unmodified
+  between the main thread and the worker. Files up to ~2GB are cached
+  directly in IndexedDB; a raw `.onnx` export above that goes to OPFS
+  instead. `getModelFileMeta()` reads metadata (name/size/storage) without
+  ever touching the bytes, so the Settings panel can cheaply show
+  "cached: foo.onnx" on every render.
+- `js/workers/onnx-shape-reader.js` (new): a small hand-rolled protobuf
+  reader for exactly the fields `runOnnxInference` needs — a `.onnx`
+  file's own declared per-input shape and element type
+  (`ModelProto.graph.input[]`), not a pulled-in protobuf library. This
+  exists because of a real finding from testing this WP end-to-end
+  against a real model, not a guess: `onnxruntime-web@1.20.1`'s actual
+  `InferenceSession` (and its internal handler) expose NO shape metadata
+  at all on their JS API — confirmed by introspecting a live session's
+  prototype (`inputNames`/`outputNames` only). The first version of this
+  WP assumed a `session.inputMetadata` API that turned out not to exist,
+  and a real `.onnx` file picked in a real browser failed with ORT's own
+  "Got invalid dimensions" error as a result — caught by the real
+  end-to-end e2e test below, not left for a user to discover.
+- `js/workers/local-model-worker.js`: `.onnx` picks now run for real —
+  bytes get cached (best-effort; persistence failure doesn't block using
+  the model this session), then loaded through `onnxruntime-web` (pinned
+  CDN import, WebGPU with a WASM fallback, exactly like Route C's own
+  runtime preference), lazily and only on first use. New `file-restore`
+  route reloads whatever's cached without the file-picker dialog
+  reappearing. New `runOnnxInference` message: since an arbitrary `.onnx`
+  file's architecture is unknown ahead of time (unlike Route C's
+  text-generation pipeline), this runs a real forward pass against a
+  synthetic zero-filled tensor per input, shaped and typed from
+  `onnx-shape-reader.js`'s real read of the file (falling back to a
+  documented guess — a common mobile vision-classifier shape — only when
+  a dimension is genuinely dynamic/absent in the file itself, and saying
+  so honestly per-input in the result; an input whose element type isn't
+  one this reader synthesizes, e.g. float16/string, is reported rather
+  than guessed at with a wrong byte layout) — proof the model actually
+  executes on-device, not a meaningful read of real data.
+- `js/ai-providers.js`: `loadLocalModelFromFile()`, `restoreLocalModelFromCache()`,
+  `runOnnxTestInference()` — Route B's UI-driven entry points. Not part of
+  the `AIProviders` adapter map (its request shape doesn't fit the
+  `{system,messages,schema}`→`NormalizedResult` contract every other
+  provider shares).
+- `js/app.js`: Settings → AI Provider → Text generation → "browser-local"
+  gets a Hugging Face model ID / Local .onnx file toggle. The file route
+  gets its own panel — pick a file, see a real loaded/not-loaded status
+  that is deliberately **never** persisted to `state`/localStorage (only
+  in-memory, so a plain reload honestly reads "no model loaded" even
+  though the bytes are still cached), a cache row with Load/Clear, and a
+  "Run test inference" button reporting real output tensor shapes +
+  latency. New `routeBToggleHF`/`routeBToggleFile`/`onnxHint`/
+  `onnxPickFile`/`onnxLoadCached`/`onnxClearCached`/`onnxNoModelLoaded`/
+  `onnxNoCached`/`onnxCachedLabel`/`onnxModelLoaded`/`onnxRunTest`/
+  `onnxTestHint`/`onnxLoading` i18n strings, EN+AR.
+- `test/model-file-cache.test.js` (new): 5 tests against a minimal
+  in-memory IndexedDB shim (same no-new-dependency approach
+  `test/ai-keystore.test.js` already used for `sessionStorage`) — the
+  OPFS (>~2GB) storage branch isn't unit-tested, honestly noted inline,
+  since exercising it needs an actual 2GB+ buffer.
+- `test/onnx-shape-reader.test.js` (new): 4 tests against a real (327-byte)
+  `.onnx` fixture, not a hand-crafted byte string that could accidentally
+  match this reader's own bugs.
+- `e2e/fixtures/tiny-classifier.onnx` (new): a real, tiny, valid ONNX graph
+  (`GlobalAveragePool` → `Flatten` → `MatMul` → `Softmax`, static
+  `[1,3,8,8]` float32 input) authored for this WP's e2e coverage — small
+  enough to commit, real enough to actually load and run.
+- `e2e/smoke.spec.js`: two new Playwright tests. One confirms Route B's UI
+  renders the honest no-model/no-cache state against real Chromium
+  IndexedDB. The other is the real end-to-end path this WP actually
+  promises: pick `tiny-classifier.onnx` for real, run it through the real
+  `onnxruntime-web` CDN import (WASM — no GPU device in headless
+  Chromium), get a real `output [1×4] float32` inference result, reload
+  the page and confirm the model does NOT silently reappear (the worker
+  restarts fresh every reload), then confirm "Load cached model" brings
+  back the same real cached bytes. This test is what caught the
+  `onnx-shape-reader.js`-motivating bug above — the first version of this
+  WP passed the lighter "UI renders" test while being silently broken end
+  to end, which is exactly why this heavier test exists too.
+
 ## WP-40: adjudicate the ~5mm front/back parity finding — verification only, no code change
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. Check Pattern's

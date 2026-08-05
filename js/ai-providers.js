@@ -399,13 +399,20 @@ const proxy = {
   },
 };
 
-// ---------- browser-local (WP-2 Route C — Hugging Face model ID, in-browser) ----------
-// Route B (file picker -> local .onnx/.gguf) is NOT offered here — it isn't
-// wired up yet (see js/workers/local-model-worker.js's own honest note) and
-// the plan's own rule is to never offer a route that can't actually work.
-// This adapter wraps js/workers/local-model-worker.js, instantiated lazily
-// (only on first use of this adapter, never at module load) so a user who
-// never touches this provider never causes the worker — let alone the
+// ---------- browser-local (WP-2 Route C — Hugging Face model ID, in-browser;
+//            + BerryStudio-Upgrade-Plan-v2.0 WP-21 Route B — local .onnx file) ----------
+// Route B (file picker -> local .onnx) is a real, working path as of
+// WP-21 — GGUF still isn't (no in-browser GGUF runtime exists to wire up;
+// that message stays honest, not a placeholder). Route B has no
+// {test,complete} adapter surface of its own — its request shape (pick a
+// file, run a generic capability-probe inference) doesn't fit the
+// {system,messages,schema}->NormalizedResult contract every other AI
+// provider here shares, so it isn't a member of `AIProviders` below; it's
+// UI-driven directly by Settings' "Local .onnx file" toggle via the three
+// functions exported at the bottom of this section instead.
+// This adapter (and Route B's functions) wrap js/workers/local-model-worker.js,
+// instantiated lazily (only on first use, never at module load) so a user
+// who never touches either route never causes the worker — let alone the
 // CDN-loaded ML runtime inside it — to be created at all.
 let localWorker = null;
 let loadedModelId = null;
@@ -463,6 +470,29 @@ const browserLocal = {
     } catch (e) { return fail('browser-local', e); }
   },
 };
+
+// ---------- Route B — local .onnx file (WP-21) ----------
+// UI-driven, not part of the AIProviders adapter map — see the honesty
+// note above. `bytes` is a real ArrayBuffer read from the picked File;
+// js/workers/model-file-cache.js persists it (IndexedDB/OPFS) so a later
+// call to restoreLocalModelFromCache() can reload it without the browser's
+// file picker dialog reappearing.
+export async function loadLocalModelFromFile(name, mimeType, bytes, onProgress) {
+  const result = await postToWorker({ type: 'loadRoute', route: 'file', payload: { name, mimeType, bytes } }, onProgress);
+  loadedModelId = null; // invalidate any "HF model already loaded" memo — the worker's active model just changed
+  return result; // { type:'ready', route:'file', name, inputNames, outputNames }
+}
+export async function restoreLocalModelFromCache(onProgress) {
+  const result = await postToWorker({ type: 'loadRoute', route: 'file-restore', payload: {} }, onProgress);
+  loadedModelId = null;
+  return result;
+}
+// A generic capability-probe forward pass (synthetic input — see the
+// worker's own honesty note on why) against whatever .onnx model is
+// currently loaded via either function above.
+export async function runOnnxTestInference() {
+  return postToWorker({ type: 'runOnnxInference' });
+}
 
 export const AIProviders = {
   anthropic, openai, gemini, 'openai-compatible': openaiCompatible,
