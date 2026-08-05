@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest'
-import '../../../js/fancy-patterns.js' // side effect: registers all 24 designs into PATTERNS/LIBRARY
+import '../../../js/fancy-patterns.js' // side effect: registers all 64 designs into PATTERNS/LIBRARY
 import { PATTERNS } from '../../../js/data.js'
 import { convertAppPattern } from './importFromApp.js'
 import { createDraftPiece, addEdge, finalizeDraftPiece } from './seamAuthoring.js'
@@ -7,14 +7,27 @@ import { triangulateAll } from './triangulate.js'
 import { assembleCloth } from '../cloth/assemble.js'
 import { computeBodyDims } from '../body/computeBodyDims.js'
 
-// BerryStudio-Upgrade-Plan WP-6 acceptance criterion, automated: "all 24
+// BerryStudio-Upgrade-Plan WP-6 acceptance criterion, automated: "all
 // Fancy Collection designs import into Cloth Lab and simulate without
 // manual seam authoring." Exercises the exact same pipeline the real app
 // does once a user clicks "Simulate This Garment" — convert -> seed the
 // seam editor's draft pieces -> finalize -> triangulate -> assemble — so a
 // pass here is a genuine end-to-end guarantee, not just "didn't throw in
 // convertAppPattern."
-const FANCY_IDS = Object.keys(PATTERNS).filter((id) => /^[wmgb]f0[1-6]$/.test(id))
+//
+// WP-25: this originally only covered ids 01-06 per category (the
+// Collection's first 24 designs) — by the time it was written to cover
+// "all 24," 40 more designs (07-16 per category) had already shipped
+// without this test's regex ever being widened to match, so they were
+// never actually exercised. Widening it to `f\d+` (all 64) caught a real
+// bug: 6 designs' "Shoulder Epaulette"/"Shoulder Tab" piece has
+// `role:"epaulette"`, a role fancy-patterns.js authors but
+// pattern/roles.js never registered — resolveSchemaRole returned null,
+// so convertAppPattern fell back to classifyLegacy, which can't tell
+// front from back from that name and skips the piece. Fixed in
+// pattern/roles.js (registered `epaulette` -> attachNeck placement); this
+// widened regex is what makes sure it can't quietly narrow back to 24.
+const FANCY_IDS = Object.keys(PATTERNS).filter((id) => /^[wmgb]f\d+$/.test(id))
 
 const SAMPLE_MEASUREMENTS = {
   women: { chest: 92, waist: 74, hips: 100, shoulder: 40, backLen: 40, sleeve: 58, neck: 36, bicep: 28, inseam: 76, thigh: 56, height: 165 },
@@ -37,7 +50,7 @@ function toPayloadPiece(p, i) {
 }
 
 test('every Fancy Collection design id is discovered (sanity check on the id pattern)', () => {
-  expect(FANCY_IDS.length).toBe(24)
+  expect(FANCY_IDS.length).toBe(64)
 })
 
 describe.each(FANCY_IDS)('%s', (id) => {

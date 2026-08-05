@@ -1870,11 +1870,17 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 
   // ================= CHECK PATTERN (WP-0.4) =================
   const CP_COLOR = { pass: "var(--ok)", warn: "var(--warn)", fail: "var(--danger)", deferred: "var(--ink-2)" };
-  function cpChip(checkKey, result, heuristic){
+  // `confidence`: null for per-piece checks (no pairing involved, no badge);
+  // 'verified' for a crossPiece pair matched by a real declared role
+  // (WP-25 — js/validate.js's pairByRole); 'heuristic' for one matched by
+  // name-guessing (js/validate.js's pairFrontBack, the pre-WP-25 fallback).
+  function cpChip(checkKey, result, confidence){
     const color = CP_COLOR[result.status] || "var(--ink-2)";
-    const title = [result.message, heuristic ? T("cp_heuristicNote") : ""].filter(Boolean).join(" — ");
+    const note = confidence === 'verified' ? T("cp_verifiedNote") : confidence === 'heuristic' ? T("cp_heuristicNote") : "";
+    const title = [result.message, note].filter(Boolean).join(" — ");
+    const badge = confidence === 'verified' ? ` · ${T("cp_verified")}` : confidence === 'heuristic' ? ` · ${T("cp_heuristic")}` : "";
     return `<span title="${title.replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid ${color};color:${color};font-size:11px;font-weight:700;white-space:nowrap">
-      ${T("cp_"+checkKey)}${heuristic?` · ${T("cp_heuristic")}`:""}: ${T("cp_"+result.status)}
+      ${T("cp_"+checkKey)}${badge}: ${T("cp_"+result.status)}
     </span>`;
   }
   function runCheckPattern(){
@@ -1893,7 +1899,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       html += `<div style="padding:8px 0;border-bottom:1px solid var(--line-2)">
         <div style="font-weight:700;margin-bottom:6px">${p.label}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,false)).join("")}
+          ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,null)).join("")}
         </div>
       </div>`;
     });
@@ -1901,10 +1907,11 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     if (report.crossPiece.length){
       html += `<h3 style="margin:14px 0 6px">${T("cp_crossPiece")}</h3>`;
       report.crossPiece.forEach((p)=>{
+        const confidence = p.verified ? 'verified' : 'heuristic';
         html += `<div style="padding:8px 0;border-bottom:1px solid var(--line-2)">
           <div style="font-weight:700;margin-bottom:6px">${p.label}</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,true)).join("")}
+            ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,confidence)).join("")}
           </div>
         </div>`;
       });

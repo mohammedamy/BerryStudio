@@ -82,3 +82,61 @@ test('validator runs cleanly over every pattern in the library, reports what it 
     throw new Error(`closedOutline found ${closedOutlineFails.length} duplicate-point failure(s) — regression of WP-26:\n  ${closedOutlineFails.join('\n  ')}`);
   }
 });
+
+// WP-25: js/validate.js's crossPiece pairing now trusts a piece's declared
+// `role` (WP-6 metadata already used by cloth-lab to build real 3D seams)
+// over name-guessing, when a real front/back role pair exists — reported
+// as "Verified" rather than "Heuristic" in Check Pattern's output (see
+// js/validate.js's pairByRole). This is a round-trip check that the
+// upgrade actually took effect across the library, not just in isolated
+// unit tests: every pattern whose front/back pieces declare a real
+// ROLE_PAIR relationship must report a verified pair, and the total count
+// must not silently regress.
+test('front/back pairs with a declared role are reported "Verified", not "Heuristic"', () => {
+  const ids = Object.keys(PATTERNS);
+  let verified = 0, heuristic = 0, unmatched = 0;
+  const missingVerification = [];
+
+  for (const id of ids) {
+    const entry = PATTERNS[id];
+    const category = entry.category || 'women';
+    const m = computeMeasurements({ category, size: 'M', standard: 'intl' });
+    const pieces = entry.pieces(m);
+    // Mirrors js/validate.js's pairByRole cardinality rule exactly: only a
+    // pattern with EXACTLY ONE piece of each paired role is unambiguous —
+    // 2+ pieces sharing a role (e.g. an asymmetric wrap design's two
+    // independent "front-panel" pieces, real cases found in this library)
+    // has no single correct pairing and correctly stays unverified.
+    const ROLE_PAIRS_FOR_TEST = [
+      ['bodice-front-center', 'bodice-back-center'],
+      ['bodice-front-side', 'bodice-back-side'],
+      ['front-panel', 'back-panel'],
+      ['hip-panel-front', 'hip-panel-back'],
+      ['skirt-front-gore', 'skirt-back-gore'],
+    ];
+    const countByRole = (role) => pieces.filter((p) => p.role === role).length;
+    const hasRolePair = ROLE_PAIRS_FOR_TEST.some(([f, b]) => countByRole(f) === 1 && countByRole(b) === 1);
+    const report = run(pieces);
+    for (const cp of report.crossPiece) {
+      if (cp.label.includes('(unmatched)')) { unmatched++; continue; }
+      if (cp.verified) verified++; else heuristic++;
+    }
+    // A pattern with a real declared front/back role pair must actually
+    // produce at least one verified crossPiece pair — never silently fall
+    // through to the name-guessing fallback.
+    if (hasRolePair && !report.crossPiece.some((cp) => cp.verified)) {
+      missingVerification.push(id);
+    }
+  }
+
+  console.log(`  crossPiece pairs: ${verified} verified, ${heuristic} heuristic, ${unmatched} unmatched`);
+  if (missingVerification.length > 0) {
+    throw new Error(`pattern(s) declare a real front/back role pair but validate.js didn't report it as Verified: ${missingVerification.join(', ')}`);
+  }
+  // Confirmed baseline (2026-08-05): 148 verified across the 164-pattern
+  // library. A drop below that is a real regression in pairByRole or in a
+  // generator's declared roles, not noise.
+  if (verified < 148) {
+    throw new Error(`only ${verified} crossPiece pairs verified — expected at least 148 (regression of WP-25)`);
+  }
+});

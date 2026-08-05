@@ -71,7 +71,7 @@ in the app's own header.
 | PWA manifest + service worker (offline, installable) | ✅ Working |
 | **ES modules** — `js/*.js` are real `import`/`export` modules (was: 9 classic IIFE scripts sharing sibling browser scope) | ✅ Working (`window.X` globals kept as a temporary compat layer — see Honest notes) |
 | **Pattern Spec schema** (`schema/pattern-spec.v1.json`) — a declarative JSON Schema for future AI-generated garments | ✅ Schema + validator defined (not yet wired into the AI generator — see Honest notes) |
-| **Check Pattern validator** (`js/validate.js`, Export pane / ⌘K) — 8 patternmaking checks: closed outline, self-intersection, grainline, seam-allowance offset, cut-on-fold symmetry, seam-length parity, notch alignment, ease | ✅ 5 full-confidence, 2 heuristic, 1 deferred (see Honest notes) |
+| **Check Pattern validator** (`js/validate.js`, Export pane / ⌘K) — 8 patternmaking checks: closed outline, self-intersection, grainline, seam-allowance offset, cut-on-fold symmetry, seam-length parity, notch alignment, ease | ✅ 5 full-confidence, 2 Verified-or-Heuristic per pair (real declared-role pairing when available, name-matching fallback otherwise — see Honest notes), 1 deferred |
 | **3D Cloth Lab** ("3D Cloth Lab" tab) — real-time GPU cloth simulation (strain-limited structural + bend + self-collision + body collision) of your actual pattern, with fabric presets (mass/stiffness/anisotropy/PBR sheen-transmission), an avatar matching your measurements (FFD-deformed if you supply a GLB), 6 pose variants, 6 skin tones, and GLB/OBJ/USDZ/turntable export. The **Cloth** and **Pieces** debug views render each simulated piece in its own real color from the 2D canvas's Layers panel, not a flat garment-wide tint — **Weld** and **Seams** intentionally keep their own diagnostic coloring (weld-topology / seam-assignment state) instead, since that's each view's actual job | ✅ Working — princess seams, gores, capes, hoods, tiers and other Fancy Collection shapes import as connected garments, not disjoint pieces (see Honest notes) |
 | **Cloth Lab engine** (Settings → 3D Cloth Lab engine) — "Iframe" (default) runs Cloth Lab as a separate embedded app; "Embedded" mounts it directly into this page instead, sharing this page's own React/Three.js so it starts faster and updates instantly | ⚠️ Both working; "Embedded" is newer and still being rolled out as the default |
 | **BodyForm** (`body.html`, standalone) — build a 3D avatar from measurements alone (no pattern needed), export it, or "Open in Fit Studio" to carry the category/measurements into the main app's 3D Cloth Lab | ✅ Working |
@@ -257,28 +257,62 @@ in the app's own header.
   offset validity, cut-on-fold symmetry) can be verified from a single piece's
   own geometry with full confidence. **Seam-length parity** and **notch
   alignment** need to know which piece's edges correspond to which other
-  piece's — data that doesn't exist anywhere in the current pattern library
-  (confirmed via a repo-wide search for any seam-pairing structure) — so those
-  two reuse the same closed-world front/back name-matching heuristic Cloth
-  Lab's importer already uses (`cloth-lab/src/pattern/importFromApp.js`), and
-  are labelled "Heuristic" in the report: a piece with no plausible front/back
-  counterpart is flagged as unpairable, never guessed at. Running it over the
-  full pattern library on its first pass genuinely found real issues, not
-  hypothetical ones — 67 Fancy Collection piece instances (across 30+ unique
-  designs) had a duplicate consecutive point in their outline, and a
-  consistent ~5mm front/back "side length" delta shows up across many
-  catalogue garments (still undecided — tracked as WP-40, not yet adjudicated
-  as of this note). **WP-26 fixed the duplicate-point bug**: it traced to
-  exactly four shape helpers in `js/fancy-patterns.js` (`godetPc`, `capePc`,
-  `peplumPc`, and `princessBodice`'s neckline/princess-curve join) where a
-  bezier segment's sampled endpoint re-landed exactly on a point already in
-  the outline — either the next segment's own start, or the shape's own
-  `[0,0]` origin when a closing curve swept back to it. Fixed at the source
-  with two small dedupe helpers rather than papering over it downstream;
-  `npm test` now asserts zero `closedOutline` failures across the library so
-  this exact class of bug can't silently regress. The ~5mm side-length
-  finding is exactly the kind of result a *heuristic* check is supposed to
-  produce: a lead for a human to judge, not a verified fact. **Ease**
+  piece's. Running it over the full pattern library on its first pass
+  genuinely found real issues, not hypothetical ones — 67 Fancy Collection
+  piece instances (across 30+ unique designs) had a duplicate consecutive
+  point in their outline, and a consistent ~5mm front/back "side length"
+  delta shows up across many catalogue garments (still undecided — tracked
+  as WP-40, not yet adjudicated as of this note). **WP-26 fixed the
+  duplicate-point bug**: it traced to exactly four shape helpers in
+  `js/fancy-patterns.js` (`godetPc`, `capePc`, `peplumPc`, and
+  `princessBodice`'s neckline/princess-curve join) where a bezier segment's
+  sampled endpoint re-landed exactly on a point already in the outline —
+  either the next segment's own start, or the shape's own `[0,0]` origin
+  when a closing curve swept back to it. Fixed at the source with two small
+  dedupe helpers rather than papering over it downstream; `npm test` now
+  asserts zero `closedOutline` failures across the library so this exact
+  class of bug can't silently regress. The ~5mm side-length finding is
+  exactly the kind of result a *heuristic* check is supposed to produce: a
+  lead for a human to judge, not a verified fact.
+  **WP-25 upgraded front/back pairing itself**, per pair: `js/data.js`,
+  `js/ai.js` and `js/fancy-patterns.js` already attach a real `role` to
+  most pieces at construction time (WP-6) — the same vocabulary
+  `cloth-lab/src/pattern/roles.js` uses to build real 3D seams, not a name
+  guess. `pairByRole()` now pairs on that declared relationship first,
+  reported as **"Verified"**; only pieces with no declared role, or a role
+  with no front/back counterpart declared (hand-imported pieces;
+  `js/ai.js`'s `buildTrousers`/`buildSkirt`, which deliberately have no
+  placement role either — see those functions' own comments), fall back to
+  the pre-WP-25 closed-world name-matching heuristic Cloth Lab's importer
+  already uses (`cloth-lab/src/pattern/importFromApp.js:classifyLegacy`),
+  labelled **"Heuristic"**, same as before. The comparison math itself
+  (seam-length parity's height proxy, notch alignment's arc-position
+  proxy) is unchanged either way — the design choice is that "Verified"
+  means confidence in the *pairing* (a real authored relationship, not a
+  guess), not a claim that every paired role literally shares one cut
+  edge — a princess-seamed "Bodice Front Center"/"Bodice Back Center"
+  pair, for instance, doesn't (each meets its own `*Side` piece at the
+  princess seam instead), but knowing they're genuinely the declared
+  front/back counterpart of the same construction block is still real,
+  useful information a name guess can't offer. Across the 164-pattern
+  library at size M, this took 148 pairs from Heuristic to Verified,
+  leaving 71 honestly on Heuristic (trousers/skirts with no declared
+  placement role by original design, plus the abaya's asymmetric
+  open-front construction) and 23 correctly flagged unpairable — a real
+  round-trip test (`test/validate-library.test.js`) asserts this doesn't
+  regress. While verifying this WP's cloth-lab claim ("importFromApp.js
+  rejects Fancy Collection designs on principle") against current
+  source, direct testing showed it was stale — cloth-lab's own
+  role-declared metadata path already handles Fancy Collection pieces via
+  real geometric edge derivation, not name-guessing — but widening its own
+  regression test from the original 24 designs to the current 64 (it had
+  quietly stopped covering the 40 added later) caught one real, narrow bug:
+  `role:"epaulette"` (6 designs' shoulder tab/epaulette piece) was authored
+  in `js/fancy-patterns.js` but never registered in
+  `cloth-lab/src/pattern/roles.js`, so those 6 pieces silently dropped on
+  import. Fixed (registered, placed at the shoulder/collar — not the hip,
+  which the generic fallback role would have used) and now covered by that
+  widened test. **Ease**
   (finished chest vs. body chest + minimum ease) is not implemented at all —
   it would need a second, unverifiable heuristic on top of the first (which
   edge is the chest measurement) — this is left as a documented gap rather

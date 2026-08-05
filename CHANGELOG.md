@@ -6,6 +6,60 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-25: real, declared-role front/back pairing for Check Pattern
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A — the sequencing
+recommendation's WP-25, the one foundational item Phase A's remaining
+quick/mid items build on.
+
+### Changed
+- `js/validate.js`'s Check Pattern **seam-length parity** and **notch
+  alignment** checks paired every front/back piece by name-guessing alone,
+  even for pieces that already carry a real, declared `role` from their
+  generator (`js/data.js`, `js/ai.js`, `js/fancy-patterns.js` — WP-6
+  metadata, the same vocabulary `cloth-lab/src/pattern/roles.js` already
+  uses to build real 3D seams). Added `pairByRole()`: pairs on that
+  declared relationship first (reported **"Verified"**) when exactly one
+  piece of each role in a `ROLE_PAIR` exists in the set; anything left
+  over falls back to the pre-existing name-matching heuristic (reported
+  **"Heuristic"**), same as before this change. The comparison math itself
+  (seam-length parity's height proxy, notch alignment's arc-position
+  proxy) is unchanged — only pairing confidence changes.
+- `js/app.js`'s `cpChip()` now takes a `confidence` mode
+  (`null`/`'verified'`/`'heuristic'`) instead of a hardcoded `heuristic`
+  boolean on every crossPiece chip, and renders a green "Verified" badge
+  (new `cp_verified`/`cp_verifiedNote` i18n strings, EN+AR) alongside the
+  existing "Heuristic" one.
+- Across the 164-pattern library (size M): 148 crossPiece pairs went from
+  Heuristic to Verified; 71 honestly remain Heuristic
+  (`js/ai.js`'s `buildTrousers`/`buildSkirt`, which deliberately declare
+  no placement role — same reason cloth-lab doesn't place trouser legs in
+  3D either — plus the abaya's asymmetric open-front construction); 23
+  correctly flagged unpairable. `test/validate-library.test.js` adds a
+  round-trip regression test asserting this doesn't silently drop.
+
+### Fixed (found while verifying this WP's cloth-lab claim against source — rule 7)
+- This WP's premise included "`importFromApp.js` rejects Fancy Collection
+  designs on principle." Direct testing (widening
+  `cloth-lab/src/pattern/importFromApp.fancyCollection.test.js`'s coverage
+  from the original 24 designs to the current 64 — it had quietly stopped
+  covering the 40 added later) showed that premise was stale: cloth-lab's
+  WP-6 role-declared metadata path already handles Fancy Collection pieces
+  via real geometric edge derivation, not name-guessing. It did catch one
+  real, narrow bug: `role:"epaulette"` (6 designs' "Shoulder
+  Epaulette"/"Shoulder Tab" piece) was authored in `js/fancy-patterns.js`
+  but never registered in `cloth-lab/src/pattern/roles.js` — `resolveSchemaRole`
+  returned `null`, so `convertAppPattern` fell back to `classifyLegacy`,
+  which can't tell front from back from that name and silently dropped
+  the piece on import. Fixed: registered `epaulette` → `attachNeck`
+  placement (matching its real shoulder/collar position — the generic
+  `attachBody` fallback would have placed it at hip height). Added
+  `"epaulette"` to `schema/pattern-spec.v1.json`'s role enum too, for
+  consistency, and regenerated `js/vendor/pattern-spec-validate.generated.js`.
+- `importFromApp.fancyCollection.test.js`'s id regex and sanity-check
+  count are now `f\d+`/64 (were `f0[1-6]`/24) so this can't quietly narrow
+  back down as more Fancy Collection designs ship.
+
 ## WP-26: fix the Fancy Collection duplicate-outline-point bug
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A (drafting & construction
