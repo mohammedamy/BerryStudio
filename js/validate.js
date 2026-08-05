@@ -6,20 +6,31 @@
    FULL CONFIDENCE (pure single-piece geometry, no guessing):
      closedOutline, selfIntersection, grainline, seamAllowance, foldSymmetry
 
-   HEURISTIC (need to know which piece pairs with which — no such data
-   exists anywhere in the 148-pattern library today; confirmed by a
-   repo-wide search for any seam/edge-pairing structure). Reuses the SAME
-   closed-world front/back name-matching idiom cloth-lab's
-   importFromApp.js:classify() already uses for the identical problem,
-   rather than inventing a second heuristic. Unpairable pieces are
-   flagged as such, never silently guessed:
+   VERIFIED-OR-HEURISTIC, per pair (WP-25): need to know which piece pairs
+   with which. js/data.js/js/ai.js/js/fancy-patterns.js attach a real
+   `role` to most pieces at construction time (WP-6) — the SAME vocabulary
+   cloth-lab/src/pattern/roles.js uses to build real 3D seams, not a name
+   guess. pairByRole() pairs on that declared relationship first
+   ("Verified" in Check Pattern's report). Whatever's left — pieces with
+   no declared role, or a role with no front/back counterpart declared
+   (hand-imported pieces; js/ai.js's buildTrousers/buildSkirt, which
+   deliberately have no placement role either — see their own comments) —
+   falls back to the SAME closed-world front/back name-matching idiom
+   cloth-lab's importFromApp.js:classifyLegacy() uses for the identical
+   fallback case ("Heuristic"). Unpairable pieces are flagged as such,
+   never silently guessed. The comparison math itself is identical either
+   way — only pairing confidence changes:
      seamLengthParity, notchAlignment
 
-   DEFERRED (would need a SECOND unverifiable heuristic — which edge/level
-   *is* the finished-chest line — stacked on the first, with no ground
-   truth to check it against; a wrong FAIL here would actively mislead a
-   patternmaker, which is worse than an honest gap):
-     ease — see future WP-6 (metadata-at-source) for the real fix.
+   REAL-OR-DEFERRED, PER PIECE (WP-24): ease needs to know which outline
+   vertex sits at the chest/bust level — js/data.js/js/ai.js now populate
+   a `chestEdgeIndices` hint at construction time for the pieces where
+   that's unambiguous (simple cut-on-fold bodice front/back). A piece
+   with the hint gets a real pass/warn/fail; a piece without one (hand-
+   imported, princess-seamed, or an asymmetric wrap/jacket front — see
+   checkEase's own comment for why those are deliberately left unhinted)
+   reports "not applicable," never guessed at:
+     ease
    ============================================================ */
 
 // ---------- geometry helpers ----------
@@ -198,6 +209,55 @@ function pairFrontBack(pieces) {
   return pairs;
 }
 
+// ---------- WP-25: real, declared-relationship pairing ----------
+// js/data.js, js/ai.js and js/fancy-patterns.js already attach a `role` to
+// most pieces at construction time (BerryStudio-Upgrade-Plan WP-6) — the
+// SAME vocabulary cloth-lab/src/pattern/roles.js already uses to build
+// real 3D seams, not a guess. Pairing on a piece's declared role (when
+// present) is a genuine authored relationship, not a name-matching guess
+// — pieceLabel-based pairFrontBack() above stays as the fallback for
+// pieces with no declared role (hand-imported/legacy pieces, or a
+// generator that deliberately left role undeclared — e.g. js/ai.js's
+// buildTrousers/buildSkirt, which have no placement heuristic in
+// cloth-lab either; see those functions' own comments).
+//
+// The parity/notch MATH below (checkSeamLengthParity/checkNotchAlignment)
+// is UNCHANGED by this — only which two pieces get compared, and how much
+// to trust that the comparison is even meaningful, changes. A role-paired
+// front/back is real regardless of whether the two pieces happen to share
+// a literal cut edge (e.g. a princess-seamed "Bodice Front Center"/"Bodice
+// Back Center" don't — each meets its own *Side piece at the princess
+// seam instead) — "Verified" here means "we know this is the declared
+// front/back counterpart of the same construction block," which is
+// exactly what front/back length-parity is checking for either way.
+const ROLE_PAIR = {
+  'bodice-front-center': 'bodice-back-center',
+  'bodice-front-side': 'bodice-back-side',
+  'front-panel': 'back-panel',
+  'hip-panel-front': 'hip-panel-back',
+  'skirt-front-gore': 'skirt-back-gore',
+};
+
+function pairByRole(pieces) {
+  const byRole = {};
+  for (const p of pieces) if (p.role) (byRole[p.role] = byRole[p.role] || []).push(p);
+  const pairs = [];
+  const used = new Set();
+  for (const [frontRole, backRole] of Object.entries(ROLE_PAIR)) {
+    const fronts = byRole[frontRole] || [], backs = byRole[backRole] || [];
+    // Only pair when there's exactly one of each role in this piece set —
+    // 2+ pieces sharing a role (e.g. a wrap design's two independent front
+    // panels) has no single unambiguous pairing; same "never guess"
+    // principle cloth-lab's importFromApp.js already applies.
+    if (fronts.length === 1 && backs.length === 1) {
+      pairs.push({ front: fronts[0], back: backs[0], verified: true });
+      used.add(fronts[0]); used.add(backs[0]);
+    }
+  }
+  const remaining = pieces.filter((p) => !used.has(p));
+  return { pairs, remaining };
+}
+
 const SEAM_LENGTH_TOL_MM = 3;
 const NOTCH_ARC_TOL_FRACTION = 0.05; // 5% of perimeter
 
@@ -230,17 +290,78 @@ function checkNotchAlignment(pair) {
   return { status: 'fail', message: `notch position differs by ${(worst * 100).toFixed(1)}% of perimeter between front and back` };
 }
 
-// ---------- deferred ----------
-function checkEase() {
-  return { status: 'deferred', message: 'needs a declared finished-chest edge to compare against the body — no such metadata exists yet; see future WP-6 (metadata-at-source)' };
+// ---------- ease (WP-24) ----------
+// "Finished chest ≥ body chest + minimum wearing ease" is only genuinely
+// verifiable for a piece whose generator already knows which outline
+// vertex sits at the chest/bust level — `chestEdgeIndices`, populated at
+// CONSTRUCTION time (js/data.js, js/ai.js) alongside the same `role`
+// metadata WP-25's pairByRole already trusts, not re-derived post-hoc by
+// guessing which edge "looks like" the chest line. A piece with no hint
+// (hand-imported; princess-seamed, where the chest edge is split across
+// two pieces — center+side — not one; an asymmetric wrap/jacket front,
+// where a fold-doubling assumption doesn't hold) is honestly reported
+// "not applicable," never guessed at — same convention as every other
+// check here.
+//
+// The hinted vertex's X coordinate is a cut-on-fold half-piece's own
+// contribution to ONE side (front or back) of the finished garment at
+// that fold-doubled width. Every generator that populates this hint
+// drafts front and back to nearly the same chest width, so doubling once
+// more (assuming the piece's usual counterpart contributes about the
+// same) gives a real, checkable estimate of the finished garment's full
+// chest circumference — stated as an assumption in the message, not
+// hidden.
+//
+// MIN_WEARING_EASE_CM is an absolute floor, not a style target: a
+// commonly-cited minimum total chest ease for a non-stretch woven bodice
+// to allow arm movement/breathing at all — below it the garment is a
+// functional defect regardless of intended fit. A close-fitting vs.
+// relaxed silhouette's actual target ease varies far more than this and
+// needs garment-intent context this check doesn't have; that ambiguity
+// is exactly why the zone between 0 and this floor is "warn," not "pass"
+// or "fail" — an honest hedge, not a guess either way.
+const MIN_WEARING_EASE_CM = 5;
+
+// Canvas.getPieces() (Check Pattern's real caller) returns every piece
+// already shifted by an arbitrary per-piece layout offset — layoutPieces()
+// positions pieces left-to-right in the 2D canvas, so a piece authored
+// with its fold at X=0 can come back with its fold at X=42 (cloth-lab's
+// importFromApp.js:relocalize hits the exact same issue for the exact
+// same reason). chestEdgeIndices' hinted vertex is only meaningful
+// relative to THIS piece's own fold edge — checkFoldSymmetry's own
+// established convention is that the fold sits at the piece's own
+// leftmost X extent — so measure from that, never from raw absolute X.
+function halfChestWidth(piece) {
+  const idx = piece && piece.chestEdgeIndices;
+  if (!idx || !idx.length || !piece.outline || !piece.outline.length) return null;
+  const pt = piece.outline[idx[0]];
+  if (!pt || !Number.isFinite(pt[0])) return null;
+  const foldX = Math.min(...piece.outline.map((p) => p[0]));
+  if (!Number.isFinite(foldX)) return null;
+  return Math.abs(pt[0] - foldX);
+}
+
+function checkEase(piece, bodyChestCm) {
+  const half = halfChestWidth(piece);
+  if (half == null) return { status: 'deferred', message: 'not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)' };
+  if (bodyChestCm == null || !Number.isFinite(bodyChestCm)) return { status: 'deferred', message: 'not applicable — no body chest measurement was supplied to Check Pattern' };
+  const impliedFullChest = half * 4;
+  const easeCm = impliedFullChest - bodyChestCm;
+  if (easeCm < 0) return { status: 'fail', message: `implied finished chest (${impliedFullChest.toFixed(1)}cm) is ${Math.abs(easeCm).toFixed(1)}cm SMALLER than the body chest (${bodyChestCm.toFixed(1)}cm) — this garment cannot physically close` };
+  if (easeCm < MIN_WEARING_EASE_CM) return { status: 'warn', message: `only ${easeCm.toFixed(1)}cm of implied chest ease (finished ${impliedFullChest.toFixed(1)}cm vs body ${bodyChestCm.toFixed(1)}cm) — tight enough to be an intentional close-fitting style, or a defect; this check can't tell style intent from a mistake` };
+  return { status: 'pass', message: `${easeCm.toFixed(1)}cm of implied chest ease (finished ${impliedFullChest.toFixed(1)}cm vs body ${bodyChestCm.toFixed(1)}cm)` };
 }
 
 // ---------- entry point ----------
 // `ctx.offsetPoly` should be Canvas.offsetPoly (a pure function, reused
 // rather than reimplemented). `ctx.seamAllowanceCm` defaults to 1.
+// `ctx.bodyChestCm` (WP-24, optional): the wearer's body chest
+// measurement — without it, Ease reports "not applicable" for every
+// piece rather than guessing what body it was drafted for.
 export function run(pieces, ctx = {}) {
   const seamCm = ctx.seamAllowanceCm != null ? ctx.seamAllowanceCm : 1;
   const offsetPolyFn = ctx.offsetPoly || null;
+  const bodyChestCm = ctx.bodyChestCm != null ? ctx.bodyChestCm : null;
 
   const perPiece = (pieces || []).map((p) => ({
     label: pieceLabel(p),
@@ -250,27 +371,34 @@ export function run(pieces, ctx = {}) {
       grainline: checkGrainline(p),
       seamAllowance: checkSeamAllowance(p, seamCm, offsetPolyFn),
       foldSymmetry: checkFoldSymmetry(p),
+      ease: checkEase(p, bodyChestCm),
     },
   }));
 
-  const pairs = pairFrontBack(pieces || []);
+  // WP-25: pair by declared role first (real relationship — "Verified");
+  // whatever's left over (no role, or a role with no ROLE_PAIR entry)
+  // falls back to name-matching (a guess — "Heuristic"), same as before
+  // this WP. A piece already consumed by role-pairing is excluded from
+  // the name-matching pool so it can't also show up in a second, guessed
+  // pair.
+  const { pairs: rolePairs, remaining } = pairByRole(pieces || []);
+  const namePairs = pairFrontBack(remaining).map((pair) => ({ ...pair, verified: false }));
+  const pairs = [...rolePairs, ...namePairs];
   const crossPiece = pairs.map((pair) => ({
     label: `${pair.front ? pieceLabel(pair.front) : '(unmatched)'} / ${pair.back ? pieceLabel(pair.back) : '(unmatched)'}`,
+    verified: !!pair.verified,
     checks: {
       seamLengthParity: checkSeamLengthParity(pair),
       notchAlignment: checkNotchAlignment(pair),
     },
   }));
 
-  const ease = checkEase();
-
   const summary = { pass: 0, warn: 0, fail: 0, deferred: 0 };
   const tally = (r) => { summary[r.status] = (summary[r.status] || 0) + 1; };
   perPiece.forEach((p) => Object.values(p.checks).forEach(tally));
   crossPiece.forEach((p) => Object.values(p.checks).forEach(tally));
-  tally(ease);
 
-  return { perPiece, crossPiece, ease, summary };
+  return { perPiece, crossPiece, summary };
 }
 
 export const PatternValidator = { run };

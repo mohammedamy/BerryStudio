@@ -44,6 +44,322 @@ neckline sits 5mm higher" with "the side seam is 5mm longer." No code
 changed; no follow-up WP assigned. README's Honest notes updated with
 this conclusion and its reasoning.
 
+## WP-20: gathers & tucks wired into Quick Draft (skirt waist + sleeve cap)
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. `computeGatherWidth()`
+and `computeTucks()` (`js/pleats.js`) were real, tested pure functions with
+zero call sites anywhere in the codebase (confirmed by a repo-wide grep) —
+only pleats had a generator hookup, in Quick Draft's skirt builder.
+
+### Added
+- `js/ai.js`: `buildSkirt()`'s waist-edge width now supports Gather
+  (`computeGatherWidth`) and Tuck (`computeTucks`) alongside its existing
+  Pleat option, picked via a priority chain (gather → pleat → tuck, never
+  silently combined) so Quick Draft's UI only ever needs to set one.
+- Extracted a shared `sleevePiece(style, m)` helper (`buildTop` and
+  `buildRomper` drafted byte-identical sleeve geometry inline — a real
+  duplication, now a single source) and gave it the same three-technique
+  treatment for the sleeve cap's finished width
+  (`sleeveGatherRatio`/`sleevePleatCount`/`sleeveTuckCount`) — a real
+  gathered/pleated/tucked puff-sleeve cap, not sleeveWideF alone. `capW`
+  stays byte-identical to before this option existed when none are set.
+- Quick Draft (`js/app.js`): the old "Pleats: None/Light/Full" row is now
+  "Waist Fullness: None/Pleat/Gather/Tuck" (skirt) with an Intensity
+  (Light/Full) row that only appears once a real technique is picked; a
+  parallel "Sleeve Cap Fullness" row appears for every AIGen-built kind
+  with a real sleeve (dress/top/shirt/robe/romper — not `gown`, which has
+  a sleeve length picker too but is drafted by `FancyGen.build()`, which
+  never reads these fields). New `builderWaistTech`/`builderSleeveTech`/
+  `builderIntensity`/`opt_pleat`/`opt_gather`/`opt_tuck` i18n strings, EN+AR.
+- 17 new unit tests (`test/ai.test.js`) verifying the exact added-width
+  formula per technique, the no-technique byte-identical baseline, and the
+  buildTop/buildRomper shared-helper parity.
+
+### Verified
+Manually exercised both new controls end-to-end in the live app: Quick
+Draft → Skirt → Waist Fullness → Gather → Full visibly widens the front/
+back skirt panel's waist edge well beyond the waistband below it (a real
+gathered waist, not a cosmetic label); Quick Draft → Top → Sleeve Cap
+Fullness → Gather → Full visibly widens the sleeve piece's base while
+keeping its cap peak centered.
+
+## WP-19: Dart Transfer — pick the pivot on canvas
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. `transferDart()`
+(`js/darts.js`) and its Dart Editor modal already worked — this closed a
+missing *interaction*, not a missing feature: the pivot was two raw number
+inputs defaulting to the dart's own apex, so transferring around an
+external pivot (e.g. a bust point) meant already knowing that point's
+coordinates, which defeats the point of transferring around a point you
+can usually just see on the canvas.
+
+### Added
+- `js/canvas.js`: `Canvas.armPick(cb)`/`Canvas.cancelPick()` — a one-shot
+  "pick a point on canvas" mode independent of the active drafting tool.
+  The very next `pointerdown` (regardless of `tool`) is intercepted, run
+  through the same snap affordance the Point construction tool already
+  uses (magnet to an existing construction point, else grid-snap), and
+  handed to the callback instead of doing whatever that tool normally
+  does; then it disarms itself.
+- Dart Editor's Transfer row gets a new "Pick on canvas" button. Clicking
+  it closes the modal (so the real canvas underneath is clickable), arms
+  a pick, and reopens the same modal with that dart's Pivot X/Y (and the
+  angle you'd already typed) pre-filled from the click — construction
+  point, dart apex, or empty canvas space all work, and the numeric
+  inputs stay directly editable afterward. New `dartPivotPick`/
+  `dartPivotPickHint` i18n strings, EN+AR.
+- Escape now also cancels a still-armed pick (alongside its existing
+  close-every-overlay behavior), so backing out mid-pick doesn't leave a
+  stray click armed against whatever you click next.
+
+## WP-24: implement the Ease check via a real construction-time hint
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. Check Pattern's Ease
+check was documented as "not implemented at all" — the earlier author's
+reasoning was that it needed a second, unverifiable heuristic (which edge
+*is* the chest measurement) stacked on the seam-pairing heuristic. This
+document disagreed: the data to answer that deterministically already
+exists at the point each piece is drafted.
+
+### Added
+- `chestEdgeIndices` piece metadata (`js/data.js`, `js/ai.js`) — a
+  one-element index into `outline`, populated at construction time for
+  every simple cut-on-fold bodice front/back where the chest vertex is
+  unambiguous: `womens_dress`/`mens_shirt`/`thobe`/`girls_dress` (5 of
+  data.js's 6 hand-crafted patterns — `abaya`'s open, un-folded front is
+  deliberately unhinted; its cut-on-fold back is), and `buildTop`/
+  `buildRomper` (covering the bulk of `library.js`'s 94 entries). Wrap
+  fronts (`buildTop`, `style.wrap`) and princess-seamed/asymmetric-front
+  Fancy Collection designs are deliberately left unhinted — the
+  fold-doubling assumption the check relies on doesn't hold for either.
+- `js/validate.js`: `checkEase(piece, bodyChestCm)` is now a real
+  per-piece check (was a single always-deferred stub) — a hinted piece's
+  vertex X is its half-contribution to one side of the finished garment
+  at fold-doubled width; assuming its usual counterpart contributes
+  about the same (true for every generator that populates the hint)
+  gives a real, checkable finished-chest estimate. `MIN_WEARING_EASE_CM`
+  (5cm) is an absolute floor — a commonly-cited minimum for a woven
+  bodice to allow movement at all, not a fitted-vs-relaxed style target
+  (that needs garment-intent context this check doesn't have, which is
+  why the zone between 0 and the floor is "warn," not "pass" or "fail").
+  A piece with no hint, or no body chest supplied, reports "Not
+  applicable" — never guessed at.
+- `run(pieces, ctx.bodyChestCm)` — threaded through `js/app.js`'s Check
+  Pattern (`currentMeas().chest`) and `js/berry-studio-api.js`'s
+  `BerryStudio.validate({bodyChestCm})` automation API.
+- The "Not yet checked" status label is now "Not applicable" (`cp_deferred`,
+  EN+AR) — it was written for a whole-report always-deferred stub; a
+  per-piece "not applicable to this piece" reading needed the more
+  accurate wording. The hardcoded Ease banner in Check Pattern's modal is
+  gone — Ease now renders as a normal per-piece chip like every other check.
+
+### Fixed (caught while verifying in the live app, not in the unit tests)
+- `checkEase`'s first implementation read a hinted vertex's raw absolute
+  X as its half-chest width — correct for a piece straight out of a
+  generator, but `Canvas.getPieces()` (Check Pattern's real caller)
+  returns every piece already shifted by an arbitrary per-piece layout
+  offset (`layoutPieces()` positions pieces left-to-right on the 2D
+  canvas — the exact same issue cloth-lab's `importFromApp.js:relocalize`
+  exists to work around). Manual verification in the live app surfaced
+  it directly: the same "Fitted Dress" that a Node-level library sweep
+  reported as Ease-warn showed "Pass" in the actual Check Pattern modal.
+  Fixed by measuring from the piece's own fold edge (leftmost X extent —
+  the same convention `checkFoldSymmetry` already establishes) instead of
+  raw absolute X; added a translation-invariance regression test.
+
+### Found (real issues, not adjudicated here — see Honest notes)
+Running the new check over the full library (size M, real body
+measurements) found real things on its first pass: 93 pieces pass, 30
+warn, and **8 pieces genuinely fail** (their drafted chest is smaller
+than the body they're drafted for) — all from library.js's "Fitted"
+preset (`fitF` as low as 0.85, no stretch-fabric flag). Whether that's a
+legitimate negative-ease assumption (stretch knit) or a real defect isn't
+decided by this WP — tracked alongside WP-40's ~5mm finding as the same
+class of open, human-adjudication question.
+
+## WP-25: real, declared-role front/back pairing for Check Pattern
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A — the sequencing
+recommendation's WP-25, the one foundational item Phase A's remaining
+quick/mid items build on.
+
+### Changed
+- `js/validate.js`'s Check Pattern **seam-length parity** and **notch
+  alignment** checks paired every front/back piece by name-guessing alone,
+  even for pieces that already carry a real, declared `role` from their
+  generator (`js/data.js`, `js/ai.js`, `js/fancy-patterns.js` — WP-6
+  metadata, the same vocabulary `cloth-lab/src/pattern/roles.js` already
+  uses to build real 3D seams). Added `pairByRole()`: pairs on that
+  declared relationship first (reported **"Verified"**) when exactly one
+  piece of each role in a `ROLE_PAIR` exists in the set; anything left
+  over falls back to the pre-existing name-matching heuristic (reported
+  **"Heuristic"**), same as before this change. The comparison math itself
+  (seam-length parity's height proxy, notch alignment's arc-position
+  proxy) is unchanged — only pairing confidence changes.
+- `js/app.js`'s `cpChip()` now takes a `confidence` mode
+  (`null`/`'verified'`/`'heuristic'`) instead of a hardcoded `heuristic`
+  boolean on every crossPiece chip, and renders a green "Verified" badge
+  (new `cp_verified`/`cp_verifiedNote` i18n strings, EN+AR) alongside the
+  existing "Heuristic" one.
+- Across the 164-pattern library (size M): 148 crossPiece pairs went from
+  Heuristic to Verified; 71 honestly remain Heuristic
+  (`js/ai.js`'s `buildTrousers`/`buildSkirt`, which deliberately declare
+  no placement role — same reason cloth-lab doesn't place trouser legs in
+  3D either — plus the abaya's asymmetric open-front construction); 23
+  correctly flagged unpairable. `test/validate-library.test.js` adds a
+  round-trip regression test asserting this doesn't silently drop.
+
+### Fixed (found while verifying this WP's cloth-lab claim against source — rule 7)
+- This WP's premise included "`importFromApp.js` rejects Fancy Collection
+  designs on principle." Direct testing (widening
+  `cloth-lab/src/pattern/importFromApp.fancyCollection.test.js`'s coverage
+  from the original 24 designs to the current 64 — it had quietly stopped
+  covering the 40 added later) showed that premise was stale: cloth-lab's
+  WP-6 role-declared metadata path already handles Fancy Collection pieces
+  via real geometric edge derivation, not name-guessing. It did catch one
+  real, narrow bug: `role:"epaulette"` (6 designs' "Shoulder
+  Epaulette"/"Shoulder Tab" piece) was authored in `js/fancy-patterns.js`
+  but never registered in `cloth-lab/src/pattern/roles.js` — `resolveSchemaRole`
+  returned `null`, so `convertAppPattern` fell back to `classifyLegacy`,
+  which can't tell front from back from that name and silently dropped
+  the piece on import. Fixed: registered `epaulette` → `attachNeck`
+  placement (matching its real shoulder/collar position — the generic
+  `attachBody` fallback would have placed it at hip height). Added
+  `"epaulette"` to `schema/pattern-spec.v1.json`'s role enum too, for
+  consistency, and regenerated `js/vendor/pattern-spec-validate.generated.js`.
+- `importFromApp.fancyCollection.test.js`'s id regex and sanity-check
+  count are now `f\d+`/64 (were `f0[1-6]`/24) so this can't quietly narrow
+  back down as more Fancy Collection designs ship.
+
+## WP-26: fix the Fancy Collection duplicate-outline-point bug
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A (drafting & construction
+completeness) — the sequencing recommendation's WP-26, done first per its own
+"confirmed bug with zero design risk and no flag needed."
+
+### Fixed
+- Check Pattern's `closedOutline` check was failing on 67 Fancy Collection
+  piece instances across 30+ unique designs (`js/fancy-patterns.js`) with a
+  "duplicate consecutive point" — a real, reproducible bezier-sampling
+  boundary bug, not a false positive. Traced to exactly four shape helpers:
+  `godetPc`, `capePc`, and `peplumPc` each sample a final curve segment that
+  sweeps back and re-lands exactly on the shape's own `[0,0]` origin point;
+  `princessBodice()`'s neckline curve (for "sweetheart"/"scoop"/default
+  necklines) is defined to end at the exact same coordinate
+  (`[shoulderX, topY]`) where the princess seam curve begins. Both cases
+  left the literal duplicate coordinate in the outline array — the
+  wrap-around edge `checkClosedOutline` treats as implicitly closing the
+  shape then found the same point twice in a row.
+- Fixed at the source with two small, reusable dedupe helpers rather than
+  filtering downstream: `dedupeClose(pts)` drops a polyline's trailing point
+  when it coincides with its own first point (godet/cape/peplum); `dedupeJoin(a, b)`
+  drops `a`'s trailing point when it coincides with `b`'s leading point
+  (the princess-bodice neckline join). Both only fire on genuine coordinate
+  equality, so neckline variants that don't share an endpoint (e.g.
+  "offshoulder") are untouched, and `princessBodice()`'s WP-14 curve/edge
+  index metadata (`frontCurveOffset`/`backCurveOffset`) was updated to track
+  the now-possibly-shorter neck arrays — verified the curve segment chain
+  and princess-seam edge indices still line up correctly after the fix.
+
+### Added
+- `npm test` (`test/validate-library.test.js`) now hard-asserts zero
+  `closedOutline` failures across the full pattern library, so this exact
+  class of bug can never silently regress.
+
+## WP-27: extend curve metadata to every qBez() call site, not just princess seams
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. `piece.curves` (WP-14)
+fed DXF's curve layer (layer 3) for princess seams only — `princessCurve()`
+was the one function that emitted it, since it builds cubic segments
+directly with authored `c1`/`c2`. Every other curved shape in
+`js/fancy-patterns.js` samples a QUADRATIC bezier via `qBez()` (46 call
+sites across ~16 shape helpers: `sleeve2pc`, `sleeve1pc`, `collarStand`,
+`shawlCollar`, `lapelFacing`, `pocketPc`, `godetPc`, `hoodHalf`, `yokePc`,
+`peplumPc`, `sashPc`, `tierPc`, `capePc`, `jacketFrontBack`, `gorePanel`,
+`wrapPanel`, `trouserPanel`, plus `princessBodice`'s own neckline/side-seam
+calls) — necklines, sleeve caps, collars, godets, capes, peplums, jacket
+fronts, gores, trouser crotch seams all stayed flattened-polyline-only.
+
+### Added
+- `qBezToCubic(p0, c, p1)` — exact quadratic→cubic degree elevation (not
+  an approximation): a cubic bezier with these control points traces the
+  IDENTICAL curve as the quadratic, so every `qBez()`-built curve can
+  carry the same real metadata `princessCurve()` already does, with zero
+  change to any already-flattened point.
+- `withCurves(outline, curves)` / `hoistCurves(pieces)` — rather than
+  changing every shape helper's return type (which would have meant
+  editing ~300 individual `outline: someHelper(...)` piece-literal call
+  sites across the file), each helper attaches its curve metadata to the
+  outline array it already returns unchanged; `hoistCurves()` copies it
+  onto the owning piece once, centrally, at this file's only two piece-
+  registration points (`def()` for the 64 named designs, `FancyGen.build()`
+  for Quick Draft's 4 generic kinds) — never overwriting a `curves` a
+  piece already declares explicitly (princessBodice's frontCenter/
+  backCenter combine their neckline AND princess-seam curves that way).
+- `princessBodice()`'s `frontSide`/`backSide` (the princess side panels)
+  get real curve metadata for their own side-seam-to-bust curve for the
+  first time — previously only the princess-seam edge itself had any.
+
+### Verified (exhaustively, not spot-checked)
+- Every outline point across all 70 patterns (6 hand-crafted + 64 Fancy
+  Collection) is confirmed byte-identical to the pre-WP-27 source —
+  compared programmatically, not by eye, across 656 pieces.
+- Every one of the 911 resulting curve segments is confirmed to actually
+  reproduce its own piece's real flattened outline points (re-sampling
+  the reported cubic and diffing against `outline`), not just claim to —
+  added as a permanent regression test
+  (`test/fancy-patterns-curves.test.js`).
+- Exporting all 64 Fancy Collection designs to DXF produces a non-empty
+  curve layer — verified both via a Node-level sweep and live in the
+  running app (`window.BerryStudio.export('dxf')` on a real loaded
+  design).
+
+### Fixed (caught by the geometric verification above, not by eye)
+- That same verification found a real, pre-existing bug in 3 of 4
+  princess-bodice neckline variants (sweetheart/offshoulder/scoop): the
+  `qBez()` call that builds the neckline samples a curve whose own
+  starting point (`p0`) sits several centimeters from `frontCenter`'s
+  literal first outline point — a genuine jog in that construction that
+  predates this WP (outline geometry is unchanged, confirmed above) and
+  is not fixed here. Attaching neckline curve metadata for those three
+  would have been wrong metadata, not just incomplete, so they correctly
+  get no neckline curve entry (their princess-seam curve is still real
+  and present) — the same "no hint, no guess" convention this file's
+  other checks already use.
+
+### Merged with WP-26 (real integration, not a picked side)
+WP-26 (above) and this WP both rewrite `godetPc`, `capePc`, `peplumPc`, and
+`princessBodice()` — not just nearby lines, the same lines, for two
+different reasons. Combined naively, WP-27's hardcoded curve `toIdx`
+values would go stale: WP-26's `dedupeClose()`/`dedupeJoin()` can make an
+outline (or `frontNeck`/`backNeck`) one point shorter than WP-27 assumed
+when it computed those indices, leaving a `toIdx` that points one past
+the array's new end.
+- `dedupeCloseWithCurves(pts, curves)` — the combined form of
+  `dedupeClose()` for `godetPc`/`capePc`/`peplumPc`: dedupes as before,
+  and if a point actually got removed, drops any curve segment whose
+  `toIdx` pointed at that now-gone index rather than emitting a
+  metadata entry that points nowhere (or, worse, silently mismatches
+  once `outlinePathOps`' own bounds check quietly falls back to a
+  straight line for it) — the same "no hint, no guess" principle as the
+  neckline case above, not a special case invented for this merge.
+- `princessBodice()`'s neckline-curve `toIdx` no longer assumes
+  `frontNeck.length`/`backNeck.length` unconditionally — a first pass at
+  this merge tried exactly that and it was itself wrong, caught by
+  re-running `test/fancy-patterns-curves.test.js` against the merged
+  code (24 real mismatches, up to 0.51cm off). The actual rule: when
+  `dedupeJoin()` removes a point, the curve's true endpoint moved to
+  `frontCurve[0]`/`backCurve[0]` (one index further than
+  `frontNeck.length`/`backNeck.length`), not to the index the dedupe
+  left behind. `neckCurveToIdx()` checks whether the dedupe fired for
+  *this* neck/curve pair rather than assuming it always does, and picks
+  the index accordingly. Re-verified end to end after the real fix: all
+  64 Fancy Collection designs' outlines stay byte-identical to their
+  pre-merge geometry, and all 877 curve segments across those 64 designs
+  (569 of 633 pieces carry curve metadata) still reproduce their own
+  piece's real flattened points (same checks WP-27 ran originally,
+  re-run against the merged result).
+
 ## Cloth Lab: simulated pieces render in their real 2D-canvas color
 
 ### Fixed

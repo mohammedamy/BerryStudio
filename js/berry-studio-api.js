@@ -84,16 +84,20 @@ export const BerryStudio = {
     throw new Error(`BerryStudio.export: unknown format "${fmt}" (expected svg/dxf/hpgl/pdf/png/jpeg)`);
   },
 
-  // ---- validate({ pieceIds, seamAllowanceCm }) -> PatternValidator's full report ----
+  // ---- validate({ pieceIds, seamAllowanceCm, bodyChestCm }) -> PatternValidator's full report ----
   // `pieceIds` optionally scopes the run to a subset (default: every
   // loaded piece) — front/back seam-length-parity pairing (js/validate.js)
   // still runs against exactly the pieces given, so validating a deliberate
-  // subset can genuinely change which pairs are found.
+  // subset can genuinely change which pairs are found. `bodyChestCm`
+  // (WP-24, optional) is the wearer's body chest measurement — e.g. the
+  // same value BerryStudio.grade(...)'s result carries as `.chest` —
+  // needed for the Ease check to compare a hinted piece's finished chest
+  // against a real body; omitted, Ease honestly reports "not applicable".
   validate(opts) {
-    const { pieceIds, seamAllowanceCm } = opts || {};
+    const { pieceIds, seamAllowanceCm, bodyChestCm } = opts || {};
     const all = Canvas.getPieces();
     const pieces = pieceIds && pieceIds.length ? pieceIds.map((i) => all[i]).filter(Boolean) : all;
-    return PatternValidator.run(pieces, { seamAllowanceCm, offsetPoly: Canvas.offsetPoly });
+    return PatternValidator.run(pieces, { seamAllowanceCm, offsetPoly: Canvas.offsetPoly, bodyChestCm });
   },
 };
 
