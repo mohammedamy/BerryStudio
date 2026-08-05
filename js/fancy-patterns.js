@@ -86,6 +86,57 @@ export let FancyGen;
     }
     return pieces;
   }
+  // WP-26: two dedupe helpers for a bezier-sampling boundary condition that
+  // shipped a real, reproducible bug — a curve segment's sampled endpoint
+  // sometimes lands exactly on a point that's already in the outline
+  // (either the next segment's own start, or the outline's own [0,0]
+  // origin when a shape's final curve sweeps back to close on itself).
+  // Both read as a literal duplicate consecutive point to checkClosedOutline
+  // (js/validate.js), which treats every outline as implicitly closed —
+  // the wrap-around from the last point back to the first is real, so a
+  // curve that re-lands on the start point IS the closing edge and the
+  // extra sample must be dropped, not kept alongside it.
+  //
+  // dedupeJoin: drop `a`'s trailing point if it coincides with `b`'s
+  // leading point — used where a neckline curve's endpoint is defined to
+  // exactly match the following curve's start (e.g. princessBodice below).
+  // Only fires when the points genuinely coincide, so neckline variants
+  // that don't share that endpoint (e.g. "offshoulder") are untouched.
+  function dedupeJoin(a, b) {
+    if (!a.length || !b.length) return a;
+    const last = a[a.length - 1], first = b[0];
+    return (last[0] === first[0] && last[1] === first[1]) ? a.slice(0, -1) : a;
+  }
+  // dedupeClose: drop a polyline's own trailing point if it coincides with
+  // its own first point — used where a shape's last curve segment sweeps
+  // back to the same [0,0] origin the outline started at (godetPc, capePc,
+  // peplumPc below all close this way).
+  function dedupeClose(pts) {
+    if (pts.length < 2) return pts;
+    const first = pts[0], last = pts[pts.length - 1];
+    return (first[0] === last[0] && first[1] === last[1]) ? pts.slice(0, -1) : pts;
+  }
+  // WP-26+WP-27 integration: when dedupeClose() actually removes a point
+  // (the shape's final curve sample duplicated the outline's own [0,0]
+  // start), whichever curve segment claimed that now-removed index as its
+  // toIdx no longer has anywhere valid to point — its true mathematical
+  // endpoint IS the outline's own start (index 0), which the wrap-around
+  // closing edge already draws as a straight line, same as before WP-26
+  // existed (when that span was a literal duplicate point instead of a
+  // removed one). Re-deriving a shortened bezier for just that last
+  // sample (de Casteljau subdivision) is possible but not worth the
+  // complexity for what's typically a sub-centimeter facet at a hem/godet
+  // tip — the curve entry is dropped rather than emitting metadata that
+  // points at an index that no longer exists, or claiming an endpoint the
+  // shortened outline doesn't actually reach. Segments unaffected by the
+  // dedup (their toIdx is still in range) are kept exactly as computed.
+  function dedupeCloseWithCurves(pts, curves) {
+    const before = pts.length;
+    const deduped = dedupeClose(pts);
+    if (deduped.length === before) return withCurves(deduped, curves);
+    const maxValidIdx = deduped.length - 1;
+    return withCurves(deduped, curves.filter((c) => c.toIdx <= maxValidIdx));
+  }
 
   // Shared S-curve for a princess seam: 4 waypoints (shoulder→bust→waist→hip→hem),
   // out at bust/hip, in at waist. Reused as the shared edge between a bodice's
@@ -213,13 +264,13 @@ export let FancyGen;
   function godetPc(topW, len) {
     const bottom = [topW/2, len];
     const seg1 = [[topW,0], [topW*0.85, len*0.6], bottom];
-    const seg2 = [bottom, [topW*0.15, len*0.6], [0,0]];
+    const seg2 = [bottom, [topW*0.15, len*0.6], [0,0]]; // closes back to the [0,0] start — see dedupeCloseWithCurves
     const outline = [
       [0,0],[topW,0],
       ...qBez(...seg1, 7),
       ...qBez(...seg2, 7),
     ];
-    return withCurves(outline, [
+    return dedupeCloseWithCurves(outline, [
       { fromIdx: 1, toIdx: 8, ...qBezToCubic(...seg1) },
       { fromIdx: 8, toIdx: 15, ...qBezToCubic(...seg2) },
     ]);
@@ -253,14 +304,14 @@ export let FancyGen;
     const bulge = flareLen * 0.15;
     const seg1 = [[waistW,0], [waistW*1.3,flareLen*0.6], [waistW*1.05,flareLen]];
     const seg2 = [[waistW*1.05,flareLen], [waistW*0.5,flareLen+bulge], [-waistW*0.05,flareLen]];
-    const seg3 = [[-waistW*0.05,flareLen], [-waistW*0.3,flareLen*0.6], [0,0]];
+    const seg3 = [[-waistW*0.05,flareLen], [-waistW*0.3,flareLen*0.6], [0,0]]; // closes back to the [0,0] start — see dedupeCloseWithCurves
     const outline = [
       [0,0],[waistW,0],
       ...qBez(...seg1, 6),
       ...qBez(...seg2, 6),
       ...qBez(...seg3, 6),
     ];
-    return withCurves(outline, [
+    return dedupeCloseWithCurves(outline, [
       { fromIdx: 1, toIdx: 7, ...qBezToCubic(...seg1) },
       { fromIdx: 7, toIdx: 13, ...qBezToCubic(...seg2) },
       { fromIdx: 13, toIdx: 19, ...qBezToCubic(...seg3) },
@@ -281,14 +332,14 @@ export let FancyGen;
   function capePc(neckW, len) {
     const seg1 = [[neckW,0], [neckW*1.8,len*0.5], [neckW*1.5,len]];
     const seg2 = [[neckW*1.5,len], [neckW*0.7,len+6], [0,len*0.85]];
-    const seg3 = [[0,len*0.85], [-neckW*0.1,len*0.4], [0,0]];
+    const seg3 = [[0,len*0.85], [-neckW*0.1,len*0.4], [0,0]]; // closes back to the [0,0] start — see dedupeCloseWithCurves
     const outline = [
       [0,0],[neckW,0],
       ...qBez(...seg1, 8),
       ...qBez(...seg2, 8),
       ...qBez(...seg3, 5),
     ];
-    return withCurves(outline, [
+    return dedupeCloseWithCurves(outline, [
       { fromIdx: 1, toIdx: 9, ...qBezToCubic(...seg1) },
       { fromIdx: 9, toIdx: 17, ...qBezToCubic(...seg2) },
       { fromIdx: 17, toIdx: 22, ...qBezToCubic(...seg3) },
@@ -345,7 +396,26 @@ export let FancyGen;
         neckPts = qBez(...neckSeg, 6);
     }
 
-    const frontCenter = [ [0, necklineY], ...neckPts, ...frontCurve, [0, hemY] ];
+    // WP-26: neckPts' last sampled point and frontCurve's first point are
+    // the same coordinate for every neckline variant whose curve is
+    // defined to end exactly at the shoulder point ([shoulderX, topY]) —
+    // "offshoulder" ends somewhere else on purpose and is left untouched.
+    const frontNeck = dedupeJoin(neckPts, frontCurve);
+    const frontCenter = [ [0, necklineY], ...frontNeck, ...frontCurve, [0, hemY] ];
+    // WP-26+WP-27 integration: the neckline curve's real endpoint (p1,
+    // computed once in neckSeg) lives at ONE of two different indices in
+    // frontCenter depending on whether dedupeJoin actually fired above —
+    // if it didn't, p1 is still `neck`'s own last point; if it did (p1
+    // duplicated `curve[0]` and got removed), p1 now lives at `curve[0]`
+    // itself, one index further along. `neck.length` alone (this WP's
+    // first attempt) is wrong in the fired case — caught by
+    // test/fancy-patterns-curves.test.js re-sampling every claimed curve
+    // against the real outline, not by inspection.
+    function neckCurveToIdx(neck, curve, p1) {
+      const last = neck[neck.length - 1];
+      const lastIsP1 = last && last[0] === p1[0] && last[1] === p1[1];
+      return lastIsP1 ? neck.length : neck.length + 1;
+    }
     const frontSideSeg = [[shoulderX+shoulderW, topY-2], [sideX*0.9, bustY*0.55], [sideX, bustY]];
     const frontSide = [
       ...frontCurve.slice().reverse(),
@@ -358,7 +428,8 @@ export let FancyGen;
     withCurves(frontSide, [{ fromIdx: frontCurve.length, toIdx: frontCurve.length + 6, ...qBezToCubic(...frontSideSeg) }]);
     const backNeckSeg = [[0, necklineY*0.4], [shoulderX*0.5, -1], [shoulderX, topY]];
     const backNeckPts = qBez(...backNeckSeg, 5);
-    const backCenter = [ [0, necklineY*0.4], ...backNeckPts, ...backCurve, [0, hemY] ];
+    const backNeck = dedupeJoin(backNeckPts, backCurve); // WP-26, same coincident-endpoint case as frontNeck
+    const backCenter = [ [0, necklineY*0.4], ...backNeck, ...backCurve, [0, hemY] ];
     const backSideSeg = [[shoulderX+shoulderW, topY-2], [sideX*0.88, bustY*0.55], [sideX*0.98, bustY]];
     const backSide = [
       ...backCurve.slice().reverse(),
@@ -387,9 +458,12 @@ export let FancyGen;
     // SAME curve in reverse, which would need separate reversed-index
     // math; since both pieces show the identical physical seam, only one
     // needs to carry the authoritative curve data). Offsets account for
-    // the leading `[0,y]` point and neckPts this curve is spliced after.
-    const frontCurveOffset = 1 + neckPts.length;
-    const backCurveOffset = 1 + backNeckPts.length;
+    // the leading `[0,y]` point and frontNeck/backNeck (WP-26: the
+    // deduped neck arrays actually spliced into frontCenter/backCenter
+    // above, one point shorter than neckPts/backNeckPts whenever the
+    // dedupe fired) this curve is spliced after.
+    const frontCurveOffset = 1 + frontNeck.length;
+    const backCurveOffset = 1 + backNeck.length;
     const offsetCurves = (curves, off) => curves.map((c) => ({ fromIdx: c.fromIdx + off, toIdx: c.toIdx + off, c1: c.c1, c2: c.c2 }));
     // frontCenter/backCenter ALSO get a real `edges[].seamId` (alongside
     // princessSeamId, which the cloth-lab importer's cutOnFold branch
@@ -402,10 +476,10 @@ export let FancyGen;
     const frontCenterEdge = { fromIdx: frontCurveOffset, toIdx: frontCurveOffset + frontCurve.length - 1, seamId: 'princessFront' };
     const backCenterEdge = { fromIdx: backCurveOffset, toIdx: backCurveOffset + backCurve.length - 1, seamId: 'princessBack' };
     // WP-27: frontCenter/backCenter's curves now also carry their OWN
-    // neckline segment (fromIdx 0 through neckPts.length), prepended
-    // before the princess-seam curves already emitted above; frontSide/
-    // backSide's side-seam-to-bust curve (attached to the array itself via
-    // withCurves() above) is threaded through here too.
+    // neckline segment, prepended before the princess-seam curves already
+    // emitted above; frontSide/backSide's side-seam-to-bust curve
+    // (attached to the array itself via withCurves() above) is threaded
+    // through here too.
     //
     // The neckline segment is only valid metadata when the qBez() call
     // that built neckPts actually started AT frontCenter's own leading
@@ -422,12 +496,25 @@ export let FancyGen;
     // be exactly the kind of guessed metadata this file's honesty
     // convention exists to avoid, so those three variants get no neckline
     // curve entry (their princess-seam curve is still real and present).
+    //
+    // WP-26 integration: the curve's toIdx is NOT reliably frontNeck.length
+    // (that was this integration's first attempt, and it's wrong — caught
+    // by test/fancy-patterns-curves.test.js re-sampling the claimed curve
+    // against the real outline). frontCenter splices in frontNeck (WP-26's
+    // deduped array), but dedupeJoin only actually REMOVES a point when
+    // neck's own last sample duplicates curve[0] — and when it does, the
+    // curve's true endpoint moved to curve[0] itself, one index further
+    // along than frontNeck.length. See neckCurveToIdx() above: it checks
+    // whether the dedupe actually fired for THIS neck/curve pair rather
+    // than assuming it always does. Same reasoning for backNeck/backCurve
+    // on the back side (in practice backNeckCurve's dedupe always fires:
+    // backNeckSeg's own p1 unconditionally matches backCurve[0]).
     const neckStartsAtOrigin = neckSeg[0][0] === 0 && neckSeg[0][1] === necklineY;
-    const frontNeckCurve = neckStartsAtOrigin ? [{ fromIdx: 0, toIdx: neckPts.length, ...qBezToCubic(...neckSeg) }] : [];
+    const frontNeckCurve = neckStartsAtOrigin ? [{ fromIdx: 0, toIdx: neckCurveToIdx(frontNeck, frontCurve, neckSeg[2]), ...qBezToCubic(...neckSeg) }] : [];
     const meta = {
       frontCenter: { role: 'bodice-front-center', cutOnFold: true, princessSeamId: 'princessFront', curves: [...frontNeckCurve, ...offsetCurves(frontCurveCurves, frontCurveOffset)], edges: [frontCenterEdge] },
       frontSide: { role: 'bodice-front-side', bilateral: true, curves: frontSide.curves || [], edges: [{ fromIdx: 0, toIdx: frontCurve.length - 1, seamId: 'princessFront' }] },
-      backCenter: { role: 'bodice-back-center', cutOnFold: true, princessSeamId: 'princessBack', curves: [{ fromIdx: 0, toIdx: backNeckPts.length, ...qBezToCubic(...backNeckSeg) }, ...offsetCurves(backCurveCurves, backCurveOffset)], edges: [backCenterEdge] },
+      backCenter: { role: 'bodice-back-center', cutOnFold: true, princessSeamId: 'princessBack', curves: [{ fromIdx: 0, toIdx: neckCurveToIdx(backNeck, backCurve, backNeckSeg[2]), ...qBezToCubic(...backNeckSeg) }, ...offsetCurves(backCurveCurves, backCurveOffset)], edges: [backCenterEdge] },
       backSide: { role: 'bodice-back-side', bilateral: true, curves: backSide.curves || [], edges: [{ fromIdx: 0, toIdx: backCurve.length - 1, seamId: 'princessBack' }] },
     };
     return { frontCenter, frontSide, backCenter, backSide, hemY, sideX, meta };

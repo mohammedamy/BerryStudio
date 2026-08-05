@@ -73,11 +73,12 @@ test('every piece.curves entry in every Fancy Collection design reproduces the r
   }
   console.log(`  ${piecesWithCurves}/${totalPieces} pieces carry real curve metadata, ${totalCurveSegs} curve segments total`);
   if (badSegs.length) throw new Error(`${badSegs.length} curve segment(s) don't reproduce their own piece's flattened outline:\n  ${badSegs.join('\n  ')}`);
-  // Confirmed baseline (2026-08-05): 569/656 pieces across the full
-  // 70-pattern set (6 hand-crafted + 64 Fancy Collection) carry real
-  // curve metadata — straight-edged accessories (waistbands, gussets,
-  // cuffs, sashes' straight ends, etc.) legitimately have none. A drop
-  // here is a real regression in a shape helper or the hoisting wrapper.
+  // Confirmed baseline (2026-08-05, after merging WP-26's dedup fix in):
+  // 569/633 pieces across the 64 Fancy Collection designs this loop
+  // actually covers carry real curve metadata (877 curve segments total)
+  // — straight-edged accessories (waistbands, gussets, cuffs, sashes'
+  // straight ends, etc.) legitimately have none. A drop here is a real
+  // regression in a shape helper or the hoisting wrapper.
   assert.ok(piecesWithCurves >= 500, `expected at least 500 curved pieces, found ${piecesWithCurves}`);
 });
 

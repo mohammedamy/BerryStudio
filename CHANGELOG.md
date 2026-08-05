@@ -6,6 +6,41 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-26: fix the Fancy Collection duplicate-outline-point bug
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A (drafting & construction
+completeness) — the sequencing recommendation's WP-26, done first per its own
+"confirmed bug with zero design risk and no flag needed."
+
+### Fixed
+- Check Pattern's `closedOutline` check was failing on 67 Fancy Collection
+  piece instances across 30+ unique designs (`js/fancy-patterns.js`) with a
+  "duplicate consecutive point" — a real, reproducible bezier-sampling
+  boundary bug, not a false positive. Traced to exactly four shape helpers:
+  `godetPc`, `capePc`, and `peplumPc` each sample a final curve segment that
+  sweeps back and re-lands exactly on the shape's own `[0,0]` origin point;
+  `princessBodice()`'s neckline curve (for "sweetheart"/"scoop"/default
+  necklines) is defined to end at the exact same coordinate
+  (`[shoulderX, topY]`) where the princess seam curve begins. Both cases
+  left the literal duplicate coordinate in the outline array — the
+  wrap-around edge `checkClosedOutline` treats as implicitly closing the
+  shape then found the same point twice in a row.
+- Fixed at the source with two small, reusable dedupe helpers rather than
+  filtering downstream: `dedupeClose(pts)` drops a polyline's trailing point
+  when it coincides with its own first point (godet/cape/peplum); `dedupeJoin(a, b)`
+  drops `a`'s trailing point when it coincides with `b`'s leading point
+  (the princess-bodice neckline join). Both only fire on genuine coordinate
+  equality, so neckline variants that don't share an endpoint (e.g.
+  "offshoulder") are untouched, and `princessBodice()`'s WP-14 curve/edge
+  index metadata (`frontCurveOffset`/`backCurveOffset`) was updated to track
+  the now-possibly-shorter neck arrays — verified the curve segment chain
+  and princess-seam edge indices still line up correctly after the fix.
+
+### Added
+- `npm test` (`test/validate-library.test.js`) now hard-asserts zero
+  `closedOutline` failures across the full pattern library, so this exact
+  class of bug can never silently regress.
+
 ## WP-27: extend curve metadata to every qBez() call site, not just princess seams
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. `piece.curves` (WP-14)
@@ -66,6 +101,39 @@ fronts, gores, trouser crotch seams all stayed flattened-polyline-only.
   get no neckline curve entry (their princess-seam curve is still real
   and present) — the same "no hint, no guess" convention this file's
   other checks already use.
+
+### Merged with WP-26 (real integration, not a picked side)
+WP-26 (above) and this WP both rewrite `godetPc`, `capePc`, `peplumPc`, and
+`princessBodice()` — not just nearby lines, the same lines, for two
+different reasons. Combined naively, WP-27's hardcoded curve `toIdx`
+values would go stale: WP-26's `dedupeClose()`/`dedupeJoin()` can make an
+outline (or `frontNeck`/`backNeck`) one point shorter than WP-27 assumed
+when it computed those indices, leaving a `toIdx` that points one past
+the array's new end.
+- `dedupeCloseWithCurves(pts, curves)` — the combined form of
+  `dedupeClose()` for `godetPc`/`capePc`/`peplumPc`: dedupes as before,
+  and if a point actually got removed, drops any curve segment whose
+  `toIdx` pointed at that now-gone index rather than emitting a
+  metadata entry that points nowhere (or, worse, silently mismatches
+  once `outlinePathOps`' own bounds check quietly falls back to a
+  straight line for it) — the same "no hint, no guess" principle as the
+  neckline case above, not a special case invented for this merge.
+- `princessBodice()`'s neckline-curve `toIdx` no longer assumes
+  `frontNeck.length`/`backNeck.length` unconditionally — a first pass at
+  this merge tried exactly that and it was itself wrong, caught by
+  re-running `test/fancy-patterns-curves.test.js` against the merged
+  code (24 real mismatches, up to 0.51cm off). The actual rule: when
+  `dedupeJoin()` removes a point, the curve's true endpoint moved to
+  `frontCurve[0]`/`backCurve[0]` (one index further than
+  `frontNeck.length`/`backNeck.length`), not to the index the dedupe
+  left behind. `neckCurveToIdx()` checks whether the dedupe fired for
+  *this* neck/curve pair rather than assuming it always does, and picks
+  the index accordingly. Re-verified end to end after the real fix: all
+  64 Fancy Collection designs' outlines stay byte-identical to their
+  pre-merge geometry, and all 877 curve segments across those 64 designs
+  (569 of 633 pieces carry curve metadata) still reproduce their own
+  piece's real flattened points (same checks WP-27 ran originally,
+  re-run against the merged result).
 
 ## Cloth Lab: simulated pieces render in their real 2D-canvas color
 
