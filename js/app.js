@@ -2881,7 +2881,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   function renderProviderPane(pane, isImage){
     pane.innerHTML="";
     // BerryStudio-Upgrade-Plan WP-4: image-generation adapters
-    // (openai-images/gemini-image/local-image, js/image-providers.js) —
+    // (openai-images/gemini-image/local-image/comfyui, js/image-providers.js) —
     // `proxy` here preserves today's exact "AI Image endpoint" behaviour.
     const providerList = isImage ? IMAGE_PROVIDER_IDS : AI_PROVIDER_IDS;
     const providerSet = isImage ? ImageProviders : AIProviders;
@@ -2900,6 +2900,10 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     selWrap.appendChild(sel); pane.appendChild(selWrap);
     if(isImage && activeId==="local-image"){
       pane.appendChild(el("div","help-note",T("localImageHint")));
+    }
+    if(isImage && activeId==="comfyui"){
+      pane.appendChild(el("div","help-note",T("comfyuiHint")));
+      pane.appendChild(el("div","help-note",T("localServerCorsHint")));
     }
     if(!isImage && activeId==="browser-local"){
       pane.appendChild(el("div","help-note",T("browserLocalHint")));
@@ -2978,23 +2982,31 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       dlVision=el("datalist"); dlVision.id="dl-vision-"+activeId;
       visionRow.appendChild(visionInput); visionRow.appendChild(dlVision); pane.appendChild(visionRow);
     }
-    if(isImage) return; // image adapters have no models()/test() API — nothing further to render
+    // Most image adapters have no models()/test() API — nothing further to
+    // render for those. comfyui is the exception (WP-23): it's a local
+    // server worth a real Test Connection round-trip, same as the local
+    // text-provider adapters below, just without a "Fetch models" button
+    // (ComfyUI's checkpoint list isn't a "model slot" the way text/vision
+    // providers have one — generate() auto-detects it instead).
+    if(isImage && !adapter.test) return;
 
     const btnRow=el("div"); btnRow.style.cssText="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap";
-    const fetchBtn=el("button","big-btn ghost", T("fetchModels"));
-    fetchBtn.type="button";
-    fetchBtn.onclick=async()=>{
-      const orig=fetchBtn.textContent; fetchBtn.disabled=true; fetchBtn.textContent=T("loading");
-      try{
-        const resolved=await resolveAICfg(activeId, cfg, false);
-        const {text, vision}=await adapter.models(resolved);
-        dlText.innerHTML=text.map(m=>`<option value="${m.replace(/"/g,'')}">`).join("");
-        if(dlVision) dlVision.innerHTML=vision.map(m=>`<option value="${m.replace(/"/g,'')}">`).join("");
-        toast(text.length ? `✓ ${text.length}` : T("noModelsFound"));
-      }catch(e){ toast(T("aiRequestFailed")); }
-      finally{ fetchBtn.disabled=false; fetchBtn.textContent=orig; }
-    };
-    btnRow.appendChild(fetchBtn);
+    if(!isImage){
+      const fetchBtn=el("button","big-btn ghost", T("fetchModels"));
+      fetchBtn.type="button";
+      fetchBtn.onclick=async()=>{
+        const orig=fetchBtn.textContent; fetchBtn.disabled=true; fetchBtn.textContent=T("loading");
+        try{
+          const resolved=await resolveAICfg(activeId, cfg, false);
+          const {text, vision}=await adapter.models(resolved);
+          dlText.innerHTML=text.map(m=>`<option value="${m.replace(/"/g,'')}">`).join("");
+          if(dlVision) dlVision.innerHTML=vision.map(m=>`<option value="${m.replace(/"/g,'')}">`).join("");
+          toast(text.length ? `✓ ${text.length}` : T("noModelsFound"));
+        }catch(e){ toast(T("aiRequestFailed")); }
+        finally{ fetchBtn.disabled=false; fetchBtn.textContent=orig; }
+      };
+      btnRow.appendChild(fetchBtn);
+    }
 
     const testBtn=el("button","big-btn ghost", T("testConnection"));
     testBtn.type="button";

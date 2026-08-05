@@ -4,12 +4,16 @@ import { ImageProviders, getImageProvider } from '../js/image-providers.js';
 
 function mockFetch(handler) { return async (url, options) => handler(url, options); }
 function jsonResponse(status, body) { return { ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body) }; }
+function blobResponse(status, bytes, type) {
+  const blob = { type, arrayBuffer: async () => new Uint8Array(bytes).buffer };
+  return { ok: status >= 200 && status < 300, status, blob: async () => blob, text: async () => '' };
+}
 
 test('getImageProvider returns null for an unknown id', () => {
   assert.equal(getImageProvider('made-up'), null);
 });
 
-test('all 4 image adapters implement the interface', () => {
+test('all 5 image adapters implement the interface', () => {
   for (const [id, adapter] of Object.entries(ImageProviders)) {
     assert.equal(adapter.id, id);
     assert.equal(typeof adapter.generate, 'function');
@@ -94,4 +98,72 @@ test('gemini-image.generate extracts an inline_data image from the candidates re
   const r = await ImageProviders['gemini-image'].generate({ apiKey: 'k' }, { prompt: 'p', images: [] }, { fetchImpl });
   assert.equal(r.ok, true);
   assert.equal(r.image, 'data:image/png;base64,QUJD');
+});
+
+test('comfyui.test reports the real /system_stats response', async () => {
+  const fetchImpl = mockFetch((url) => {
+    assert.match(url, /\/system_stats$/);
+    return jsonResponse(200, { system: { comfyui_version: '0.3.1' }, devices: [{ vram_total: 8_000_000_000 }] });
+  });
+  const r = await ImageProviders.comfyui.test({}, { fetchImpl });
+  assert.equal(r.ok, true);
+  assert.match(r.message, /0\.3\.1/);
+  assert.match(r.message, /8GB VRAM/);
+});
+
+test('comfyui.test fails cleanly when the server is unreachable', async () => {
+  const fetchImpl = mockFetch(() => jsonResponse(500, {}));
+  const r = await ImageProviders.comfyui.test({}, { fetchImpl });
+  assert.equal(r.ok, false);
+});
+
+test('comfyui.generate auto-detects the installed checkpoint, submits a workflow, polls history, and fetches the rendered image', async () => {
+  let submittedWorkflow = null;
+  const fetchImpl = mockFetch((url, options) => {
+    if (/\/object_info\/CheckpointLoaderSimple$/.test(url)) {
+      return jsonResponse(200, { CheckpointLoaderSimple: { input: { required: { ckpt_name: [['sd_xl_base.safetensors']] } } } });
+    }
+    if (/\/prompt$/.test(url)) {
+      submittedWorkflow = JSON.parse(options.body).prompt;
+      return jsonResponse(200, { prompt_id: 'abc123' });
+    }
+    if (/\/history\/abc123$/.test(url)) {
+      return jsonResponse(200, { abc123: { outputs: { '7': { images: [{ filename: 'berrystudio_00001.png', subfolder: '', type: 'output' }] } } } });
+    }
+    if (/\/view\?/.test(url)) {
+      return blobResponse(200, [1, 2, 3], 'image/png');
+    }
+    throw new Error(`unexpected url ${url}`);
+  });
+  const r = await ImageProviders.comfyui.generate({}, { prompt: 'a red dress' }, { fetchImpl, pollIntervalMs: 1 });
+  assert.equal(r.ok, true);
+  assert.equal(r.image, 'data:image/png;base64,AQID');
+  assert.equal(submittedWorkflow['1'].inputs.ckpt_name, 'sd_xl_base.safetensors');
+  assert.equal(submittedWorkflow['2'].inputs.text, 'a red dress');
+});
+
+test('comfyui.generate fails honestly with no checkpoint installed, never guesses one', async () => {
+  const fetchImpl = mockFetch((url) => {
+    if (/\/object_info\/CheckpointLoaderSimple$/.test(url)) {
+      return jsonResponse(200, { CheckpointLoaderSimple: { input: { required: { ckpt_name: [[]] } } } });
+    }
+    throw new Error(`unexpected url ${url}`);
+  });
+  const r = await ImageProviders.comfyui.generate({}, { prompt: 'p' }, { fetchImpl });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /no checkpoint/);
+});
+
+test('comfyui.generate times out honestly if ComfyUI never finishes rendering', async () => {
+  const fetchImpl = mockFetch((url) => {
+    if (/\/object_info\/CheckpointLoaderSimple$/.test(url)) {
+      return jsonResponse(200, { CheckpointLoaderSimple: { input: { required: { ckpt_name: [['a.safetensors']] } } } });
+    }
+    if (/\/prompt$/.test(url)) return jsonResponse(200, { prompt_id: 'abc123' });
+    if (/\/history\/abc123$/.test(url)) return jsonResponse(200, {});
+    throw new Error(`unexpected url ${url}`);
+  });
+  const r = await ImageProviders.comfyui.generate({}, { prompt: 'p' }, { fetchImpl, pollIntervalMs: 1, pollTimeoutMs: 5 });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /timed out/);
 });

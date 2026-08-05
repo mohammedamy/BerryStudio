@@ -38,10 +38,20 @@
      inline, verify against current docs before relying on it.
    - local-image targets Automatic1111 stable-diffusion-webui's documented
      txt2img/img2img REST API (the simplest well-documented local HTTP
-     contract of the realistic options) — ComfyUI/SD.next are NOT
-     implemented here (ComfyUI's node-graph API in particular is
-     substantially more complex); documented as future work, not silently
-     claimed done.
+     contract of the realistic options).
+   - comfyui (BerryStudio-Upgrade-Plan v2.0 WP-23) targets ComfyUI's
+     node-graph API — real, but far more complex than Automatic1111's
+     simple REST contract, so the surface area shipped here is
+     deliberately narrow: one hardcoded "text-to-image" workflow graph
+     (CheckpointLoaderSimple -> CLIPTextEncode x2 -> EmptyLatentImage ->
+     KSampler -> VAEDecode -> SaveImage), not a user-editable node graph —
+     that stays out of scope. Reference photos (`images`) are silently
+     ignored by this adapter (no LoadImage/img2img wiring) rather than
+     erroring, exactly like every other adapter here treats an unsupported
+     input; the checkpoint to run is auto-detected from whatever's
+     actually installed on the user's ComfyUI instance (object_info),
+     never guessed, so a fresh install with no checkpoint fails with an
+     honest "install a checkpoint" message instead of a confusing 400.
    ============================================================ */
 import { getFetch, timedFetch, readErrorText, parseDataUrl, fail } from './ai-providers.js';
 
@@ -177,6 +187,113 @@ const localImage = {
   },
 };
 
-export const ImageProviders = { proxy, 'openai-images': openaiImages, 'gemini-image': geminiImage, 'local-image': localImage };
+// ---------- comfyui (ComfyUI local node-graph server) ----------
+function comfyRandomId() {
+  return 'bs-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+async function blobToDataURL(blob) {
+  const buf = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return `data:${blob.type || 'image/png'};base64,${btoa(bin)}`;
+}
+// One hardcoded ComfyUI API-format workflow graph — the same default
+// checkpoint -> CLIP -> KSampler -> VAEDecode -> SaveImage chain ComfyUI's
+// own examples ship, with `ckpt_name`/the two CLIPTextEncode prompts filled
+// in at request time. Node ids are arbitrary strings, only the internal
+// [nodeId, outputSlot] links matter.
+function buildComfyWorkflow({ ckptName, prompt, seed }) {
+  return {
+    '1': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckptName } },
+    '2': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['1', 1] } },
+    '3': { class_type: 'CLIPTextEncode', inputs: { text: '', clip: ['1', 1] } },
+    '4': { class_type: 'EmptyLatentImage', inputs: { width: 512, height: 512, batch_size: 1 } },
+    '5': {
+      class_type: 'KSampler',
+      inputs: {
+        seed, steps: 20, cfg: 7, sampler_name: 'euler', scheduler: 'normal', denoise: 1,
+        model: ['1', 0], positive: ['2', 0], negative: ['3', 0], latent_image: ['4', 0],
+      },
+    },
+    '6': { class_type: 'VAEDecode', inputs: { samples: ['5', 0], vae: ['1', 2] } },
+    '7': { class_type: 'SaveImage', inputs: { images: ['6', 0], filename_prefix: 'berrystudio' } },
+  };
+}
+const comfyui = {
+  id: 'comfyui', label: 'ComfyUI (local)', needsKey: false,
+  defaultBaseUrl: 'http://127.0.0.1:8188',
+  fields: [{ key: 'baseUrl', type: 'url', required: false }],
+  async test(cfg, opts = {}) {
+    const fetchImpl = getFetch(opts);
+    if (!fetchImpl) return { ok: false, message: 'fetch is not available in this environment' };
+    const baseUrl = cfg.baseUrl || this.defaultBaseUrl;
+    try {
+      const { res, latencyMs } = await timedFetch(fetchImpl, `${baseUrl}/system_stats`, {}, 10000);
+      if (!res.ok) return { ok: false, message: await readErrorText(res) };
+      const stats = await res.json();
+      const ver = (stats.system && stats.system.comfyui_version) || 'unknown version';
+      const vram = stats.devices && stats.devices[0] && stats.devices[0].vram_total;
+      return { ok: true, message: `Connected — ComfyUI ${ver}${vram ? `, ${Math.round(vram / 1e9)}GB VRAM` : ''}`, latencyMs };
+    } catch (e) { return { ok: false, message: (e && e.message) || String(e) }; }
+  },
+  async generate(cfg, { prompt }, opts = {}) {
+    const fetchImpl = getFetch(opts);
+    if (!fetchImpl) return fail('comfyui', 'fetch is not available in this environment');
+    const baseUrl = cfg.baseUrl || this.defaultBaseUrl;
+    // Overridable only so tests don't spend real wall-clock time on
+    // ComfyUI's poll interval — production callers never pass these.
+    const pollIntervalMs = opts.pollIntervalMs || 1500;
+    const pollTimeoutMs = opts.pollTimeoutMs || 120000;
+    try {
+      // Never guess a checkpoint filename — ask the running instance what's
+      // actually installed, exactly like `object_info` is meant for.
+      const { res: infoRes } = await timedFetch(fetchImpl, `${baseUrl}/object_info/CheckpointLoaderSimple`, {}, 15000);
+      if (!infoRes.ok) return fail('comfyui', await readErrorText(infoRes));
+      const info = await infoRes.json();
+      const ckpts = info && info.CheckpointLoaderSimple && info.CheckpointLoaderSimple.input &&
+        info.CheckpointLoaderSimple.input.required && info.CheckpointLoaderSimple.input.required.ckpt_name &&
+        info.CheckpointLoaderSimple.input.required.ckpt_name[0];
+      if (!Array.isArray(ckpts) || !ckpts.length) {
+        return fail('comfyui', 'no checkpoint model installed on this ComfyUI instance — install one first (models/checkpoints)');
+      }
+      const clientId = comfyRandomId();
+      const workflow = buildComfyWorkflow({ ckptName: ckpts[0], prompt, seed: Math.floor(Math.random() * 1e9) });
+      const { res: submitRes } = await timedFetch(fetchImpl, `${baseUrl}/prompt`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt: workflow, client_id: clientId }),
+      }, 15000);
+      if (!submitRes.ok) return fail('comfyui', await readErrorText(submitRes));
+      const submitted = await submitRes.json();
+      const promptId = submitted.prompt_id;
+      if (!promptId) return fail('comfyui', (submitted.node_errors && JSON.stringify(submitted.node_errors)) || 'ComfyUI did not return a prompt_id');
+
+      // Poll /history — ComfyUI has no long-poll/webhook option on this
+      // endpoint, so a short interval poll is the documented way to wait
+      // for a queued prompt to finish rendering.
+      const deadline = Date.now() + pollTimeoutMs;
+      let output = null;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, pollIntervalMs));
+        const { res: histRes } = await timedFetch(fetchImpl, `${baseUrl}/history/${promptId}`, {}, 10000);
+        if (!histRes.ok) continue;
+        const hist = await histRes.json();
+        const entry = hist && hist[promptId];
+        if (entry && entry.outputs) { output = entry.outputs; break; }
+      }
+      if (!output) return fail('comfyui', 'timed out waiting for ComfyUI to finish rendering');
+      const saveNode = Object.values(output).find((n) => Array.isArray(n.images) && n.images.length);
+      const img = saveNode && saveNode.images[0];
+      if (!img) return fail('comfyui', 'ComfyUI finished but returned no image');
+      const viewUrl = `${baseUrl}/view?filename=${encodeURIComponent(img.filename)}&subfolder=${encodeURIComponent(img.subfolder || '')}&type=${encodeURIComponent(img.type || 'output')}`;
+      const { res: viewRes } = await timedFetch(fetchImpl, viewUrl, {}, 30000);
+      if (!viewRes.ok) return fail('comfyui', await readErrorText(viewRes));
+      const image = await blobToDataURL(await viewRes.blob());
+      return { ok: true, providerId: 'comfyui', image };
+    } catch (e) { return fail('comfyui', e); }
+  },
+};
+
+export const ImageProviders = { proxy, 'openai-images': openaiImages, 'gemini-image': geminiImage, 'local-image': localImage, comfyui };
 export const IMAGE_PROVIDER_IDS = Object.keys(ImageProviders);
 export function getImageProvider(id) { return ImageProviders[id] || null; }
