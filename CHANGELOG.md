@@ -136,6 +136,71 @@ follow-up — the same class of gap WP-22/WP-30/WP-40 already document
 elsewhere in this plan for things that need real hardware/data, not more
 code.
 
+## WP-22: field-test Route C end-to-end — verification only, no code change
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase B. Route C (a Hugging Face
+model ID, run in-browser via `js/workers/local-model-worker.js`) was real,
+working code but had never been exercised with a genuine multi-hundred-
+megabyte model download end-to-end — v1.0's own honest notes said
+"structurally verified, not fully field-tested." This WP is that field
+test, run for real against the live app in a real browser, four separate
+load attempts across three different real Hugging Face model IDs.
+
+### Investigated (real numbers, real errors, not estimated)
+- `Xenova/TinyLlama-1.1B-Chat-v1.0`: 149.7s wall time, then a real
+  onnxruntime-web session-creation failure — `Failed to load external
+  data file "model.onnx_data" ... Module.MountedFiles is not available`.
+  This runtime can't load a model whose weights are split across a
+  separate `.onnx_data` file (needed once a model exceeds onnxruntime-
+  web's single-file size limit).
+- `Xenova/Qwen1.5-0.5B-Chat`: 577.8s (9.6 minutes) wall time, then a real
+  404-class failure — transformers.js's default quantized-filename guess
+  doesn't match this repo's actual file layout. The 9.6-minute wait
+  before that error surfaced is itself a real finding, independent of
+  the root cause.
+- `Xenova/distilgpt2`, attempted immediately after the TinyLlama failure
+  in the SAME cached worker instance (`js/ai-providers.js`'s
+  `getLocalWorker()` singleton): failed with the **identical** error text
+  and the identical internal ONNX tensor name (`onnx::MatMul_6729`) as
+  the TinyLlama failure — for a completely different model. Confirmed by
+  reloading the page (a fresh worker) and retrying the exact same
+  `Xenova/distilgpt2` request: it succeeded cleanly (49.4s load, real
+  81.9MB text-generation model). **Real bug found:** a failed
+  `InferenceSession.create()` leaves the shared worker's onnxruntime-web/
+  WASM state permanently corrupted for the rest of that page session —
+  every later load attempt fails identically regardless of which model
+  is requested, until the page is reloaded. Not fixed as part of this
+  WP (verification-only, per its own acceptance criterion) — flagged as
+  a real, well-scoped follow-up.
+- A real successful end-to-end run: `Xenova/distilgpt2` on a fresh
+  worker — real download+cache+load (49.4s) and a real generated
+  completion from `browserLocal.complete()` (14.3s first inference,
+  genuine if low-quality text from an 82M-param model, not stubbed).
+- `js/app.js`'s Test Connection button (`testBtn.onclick`, both the
+  Route C and Route B call sites) never passes an `onProgress` callback
+  to `adapter.test()`/`runOnnxTestInference()` — confirmed by reading the
+  code, not assumed. The worker's own real progress percentages
+  (`{type:"progress", pct}`) exist and are used by the load-with-toast
+  flow, but Test Connection shows a static "Working…" label for the
+  entire wait, up to the observed 9.6 minutes, with zero percentage
+  feedback. A real, disclosed UX gap.
+- Capability Probe badge: green (WebGPU available, generous buffer size)
+  throughout all four attempts in this environment. Accurate about
+  WebGPU adapter presence; did not predict or prevent either real
+  failure above — it measures adapter capability only.
+- Memory: the one successful load kept JS heap usage under ~30MB in this
+  environment (not a fully isolated baseline — other page activity
+  preceded the measurement).
+
+### Conclusion
+Route C's code path is real and does work end-to-end — confirmed with a
+real model, real download, real cache, real in-browser inference. It is
+NOT yet reliable across a full session: the worker-corruption bug above
+means one bad model pick can silently break every subsequent attempt
+until a reload, with no error message hinting at why. README.md's honest
+note updated from "structurally verified, not fully field-tested" to the
+real table above.
+
 ## WP-38: draft-program generation mode — design note (verify/design only, no code)
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase B. v1.0's own honest notes

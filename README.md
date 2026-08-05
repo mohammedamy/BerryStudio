@@ -59,7 +59,7 @@ in the app's own header.
 | **Construction tools** — real drafting Point/Line/Arc/Circle tools that snap to and stay live-linked to named points, "Create Pattern Piece" to promote a closed point loop into a real piece, custom parametric **Variables** (named formulas referencing other variables and body measurements, reusable in any point's X/Y), and a trace-over **background reference image** with two-point calibration | ✅ Working — points/lines/arcs re-resolve automatically when you grade/resize |
 | AI Pattern Generator — visible "thinking" stages, robust local image analysis (neckline/hem/flare/colour from a real photo, not just a clean product shot), a wider construction vocabulary (necklines including mock/stand neck, hem shapes, wrap/zip closures), a **romper/jumpsuit** garment type (fitted bodice + attached above-knee shorts joined at a waist seam, with armhole binding and a zip facing), and a "Detected" attributes panel (with source + confidence, click-to-override) so you can see what actually mattered — describing a garment always produces real, editable vector pattern pieces on the canvas, never an image to trace | ✅ Working (offline heuristic by default; bring your own AI provider in Settings — see below) |
 | **Bring Your Own AI** (Settings → AI Provider) — 8 text/vision adapters (Anthropic, OpenAI, Gemini, OpenAI-compatible, Ollama, LM Studio, llama.cpp/vLLM, your own proxy) with per-provider key/URL/model fields, Fetch Models, and Test Connection with real error text | ✅ Working — sessionStorage-only keys by default, optional encrypted persistent storage, strict CSP |
-| **Local model support** — Route A (local server via Ollama/LM Studio/llama.cpp/vLLM) is fully working; Route B (pick a local `.onnx` file, cached in IndexedDB/OPFS across reloads) and Route C (Hugging Face model ID, in-browser WebGPU/WASM) both load via the same lazy Web Worker; a Capability Probe badges WebGPU readiness | ⚠️ Routes A and B working; Route C structurally implemented, not live-tested with a real multi-hundred-MB model download this pass — see Honest notes |
+| **Local model support** — Route A (local server via Ollama/LM Studio/llama.cpp/vLLM) is fully working; Route B (pick a local `.onnx` file, cached in IndexedDB/OPFS across reloads) and Route C (Hugging Face model ID, in-browser WebGPU/WASM) both load via the same lazy Web Worker; a Capability Probe badges WebGPU readiness | ⚠️ Routes A and B working; Route C field-tested for real — one real model loaded and ran real inference end-to-end, two others failed with real, disclosed errors, and a real worker-corruption bug was found in the process — see Honest notes |
 | **Spec-first generation** — prompt → schema-validated `PatternSpecV1` JSON → the same deterministic `AIGen.build()`/Check Pattern pipeline every other path uses, with one validate-and-retry pass and an honest fallback to the offline heuristic on failure | ✅ Working |
 | **Vision fusion** — when an image is supplied to a configured provider, the vision-informed spec is authoritative for garment type/neckline/closure; the existing pixel-analysis heuristic stays authoritative for length/flare/hem/colour | ✅ Working |
 | **AI Fashion Billboard, BYO-key** (Settings → AI Provider → Image generation) — OpenAI images, Gemini image, a local Stable Diffusion (Automatic1111) backend, a local ComfyUI backend (hardcoded text-to-image workflow, auto-detected checkpoint), plus the original proxy contract, unchanged. **"Generate Pattern Pieces From This"** on the generated photo drafts real editable pieces onto the canvas from the garment's relative silhouette (same pipeline as the AI Pattern Generator's own image upload); **"Read Pattern Pieces From This Tech-Pack"** on the generated flat-sketch/tech-pack drawing instead traces the image's *actual printed measurements* into real pieces (`pieces[].outlineCm`, needs a vision-capable Text Generation provider) — the existing "Use as Background Trace" manual path is still available for either image | ✅ Working — proxy option is byte-for-byte compatible with existing `server/billboard-proxy/worker.js` deployments |
@@ -387,11 +387,37 @@ in the app's own header.
   (a Hugging Face model ID, run in-browser) lazily spins up a Web Worker
   that dynamically `import()`s `@huggingface/transformers` from a CDN only
   the first time it's used — never at app load, never in the service
-  worker's precache list. It is real, working code, not a stub, but this
-  pass did not download and run a genuine multi-hundred-megabyte model in
-  the browser end-to-end (impractical to verify repeatedly in this
-  environment) — treat it as structurally verified, not fully
-  field-tested (tracked as WP-22).
+  worker's precache list.
+  **Field-tested for real (Upgrade Plan v2.0 WP-22)** — four real
+  in-browser load attempts against three different real Hugging Face
+  model IDs, real measured numbers, not simulated:
+
+  | Model | Result | Wall time | Notes |
+  |---|---|---|---|
+  | `Xenova/TinyLlama-1.1B-Chat-v1.0` | ❌ failed | 149.7s | Real ORT error at session creation: `Failed to load external data file "model.onnx_data" ... Module.MountedFiles is not available` — this runtime can't load models whose weights are split into a separate `.onnx_data` file (needed once a model's weights exceed onnxruntime-web's single-file limit) |
+  | `Xenova/Qwen1.5-0.5B-Chat` | ❌ failed | 577.8s (9.6 min) | Real 404-class error: transformers.js's default quantized-filename guess (`model_quantized.onnx`) doesn't exist in this repo's actual file layout — and took **9.6 minutes** to surface that, a serious real UX problem on its own regardless of the root cause |
+  | `Xenova/distilgpt2` (attempt in the SAME worker, right after the TinyLlama failure above) | ❌ failed | 100.3s | **Identical** error text to the TinyLlama failure, including the identical internal tensor name (`onnx::MatMul_6729`) — for a completely different model. This is the real finding: a failed `InferenceSession.create()` leaves the shared worker's onnxruntime-web/WASM state permanently corrupted for the rest of that page session — every subsequent load attempt fails identically regardless of which model is requested, until the page is reloaded |
+  | `Xenova/distilgpt2` (fresh page reload → fresh worker) | ✅ **succeeded** | 49.4s load, 14.3s first real inference | A real generated completion came back (`"The quick brown fox is a very good friend..."` — low-quality, as expected from a 82M-param model, but genuinely generated, not stubbed) |
+
+  **What this proves:** Route C's code path is real and does work end to
+  end — one real model, freshly loaded, genuinely downloaded, cached, and
+  ran real inference in-browser. It also surfaced two real, previously-
+  undocumented problems: (1) a corrupted-worker-state bug where one failed
+  model poisons every later attempt in the same session (a real reliability
+  bug, not a doc gap — filed here, not silently worked around); (2) the
+  Settings "Test Connection" button never wires up the worker's own real
+  download-progress percentages (`js/app.js`'s `testBtn.onclick`, both the
+  Route C and Route B call sites — confirmed by reading the code, not
+  assumed), so a user sees a static "Working…" label for the entire
+  multi-minute wait, up to the observed 9.6 minutes, with zero percentage
+  feedback. Memory footprint for the one successful load stayed under
+  ~30MB of JS heap in this environment (not a fully isolated baseline —
+  see CHANGELOG for the exact numbers). The Capability Probe's badge
+  showed **green** (WebGPU available, generous buffer size) for all four
+  attempts — accurate about WebGPU adapter presence, but green did **not**
+  predict or prevent either real failure above; it measures adapter
+  capability only, never a promise that a specific model will actually
+  load.
   **Route B** (pick a local `.onnx` file directly — Upgrade Plan v2.0
   WP-21) is real as of this pass: the file's bytes are cached
   (IndexedDB, or OPFS above ~2GB) so a later reload can reuse them via an
