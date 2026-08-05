@@ -6,6 +6,71 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-24: implement the Ease check via a real construction-time hint
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A. Check Pattern's Ease
+check was documented as "not implemented at all" — the earlier author's
+reasoning was that it needed a second, unverifiable heuristic (which edge
+*is* the chest measurement) stacked on the seam-pairing heuristic. This
+document disagreed: the data to answer that deterministically already
+exists at the point each piece is drafted.
+
+### Added
+- `chestEdgeIndices` piece metadata (`js/data.js`, `js/ai.js`) — a
+  one-element index into `outline`, populated at construction time for
+  every simple cut-on-fold bodice front/back where the chest vertex is
+  unambiguous: `womens_dress`/`mens_shirt`/`thobe`/`girls_dress` (5 of
+  data.js's 6 hand-crafted patterns — `abaya`'s open, un-folded front is
+  deliberately unhinted; its cut-on-fold back is), and `buildTop`/
+  `buildRomper` (covering the bulk of `library.js`'s 94 entries). Wrap
+  fronts (`buildTop`, `style.wrap`) and princess-seamed/asymmetric-front
+  Fancy Collection designs are deliberately left unhinted — the
+  fold-doubling assumption the check relies on doesn't hold for either.
+- `js/validate.js`: `checkEase(piece, bodyChestCm)` is now a real
+  per-piece check (was a single always-deferred stub) — a hinted piece's
+  vertex X is its half-contribution to one side of the finished garment
+  at fold-doubled width; assuming its usual counterpart contributes
+  about the same (true for every generator that populates the hint)
+  gives a real, checkable finished-chest estimate. `MIN_WEARING_EASE_CM`
+  (5cm) is an absolute floor — a commonly-cited minimum for a woven
+  bodice to allow movement at all, not a fitted-vs-relaxed style target
+  (that needs garment-intent context this check doesn't have, which is
+  why the zone between 0 and the floor is "warn," not "pass" or "fail").
+  A piece with no hint, or no body chest supplied, reports "Not
+  applicable" — never guessed at.
+- `run(pieces, ctx.bodyChestCm)` — threaded through `js/app.js`'s Check
+  Pattern (`currentMeas().chest`) and `js/berry-studio-api.js`'s
+  `BerryStudio.validate({bodyChestCm})` automation API.
+- The "Not yet checked" status label is now "Not applicable" (`cp_deferred`,
+  EN+AR) — it was written for a whole-report always-deferred stub; a
+  per-piece "not applicable to this piece" reading needed the more
+  accurate wording. The hardcoded Ease banner in Check Pattern's modal is
+  gone — Ease now renders as a normal per-piece chip like every other check.
+
+### Fixed (caught while verifying in the live app, not in the unit tests)
+- `checkEase`'s first implementation read a hinted vertex's raw absolute
+  X as its half-chest width — correct for a piece straight out of a
+  generator, but `Canvas.getPieces()` (Check Pattern's real caller)
+  returns every piece already shifted by an arbitrary per-piece layout
+  offset (`layoutPieces()` positions pieces left-to-right on the 2D
+  canvas — the exact same issue cloth-lab's `importFromApp.js:relocalize`
+  exists to work around). Manual verification in the live app surfaced
+  it directly: the same "Fitted Dress" that a Node-level library sweep
+  reported as Ease-warn showed "Pass" in the actual Check Pattern modal.
+  Fixed by measuring from the piece's own fold edge (leftmost X extent —
+  the same convention `checkFoldSymmetry` already establishes) instead of
+  raw absolute X; added a translation-invariance regression test.
+
+### Found (real issues, not adjudicated here — see Honest notes)
+Running the new check over the full library (size M, real body
+measurements) found real things on its first pass: 93 pieces pass, 30
+warn, and **8 pieces genuinely fail** (their drafted chest is smaller
+than the body they're drafted for) — all from library.js's "Fitted"
+preset (`fitF` as low as 0.85, no stretch-fabric flag). Whether that's a
+legitimate negative-ease assumption (stretch knit) or a real defect isn't
+decided by this WP — tracked alongside WP-40's ~5mm finding as the same
+class of open, human-adjudication question.
+
 ## Cloth Lab: simulated pieces render in their real 2D-canvas color
 
 ### Fixed

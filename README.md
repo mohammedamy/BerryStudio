@@ -71,7 +71,7 @@ in the app's own header.
 | PWA manifest + service worker (offline, installable) | ✅ Working |
 | **ES modules** — `js/*.js` are real `import`/`export` modules (was: 9 classic IIFE scripts sharing sibling browser scope) | ✅ Working (`window.X` globals kept as a temporary compat layer — see Honest notes) |
 | **Pattern Spec schema** (`schema/pattern-spec.v1.json`) — a declarative JSON Schema for future AI-generated garments | ✅ Schema + validator defined (not yet wired into the AI generator — see Honest notes) |
-| **Check Pattern validator** (`js/validate.js`, Export pane / ⌘K) — 8 patternmaking checks: closed outline, self-intersection, grainline, seam-allowance offset, cut-on-fold symmetry, seam-length parity, notch alignment, ease | ✅ 5 full-confidence, 2 heuristic, 1 deferred (see Honest notes) |
+| **Check Pattern validator** (`js/validate.js`, Export pane / ⌘K) — 8 patternmaking checks: closed outline, self-intersection, grainline, seam-allowance offset, cut-on-fold symmetry, seam-length parity, notch alignment, ease | ✅ 5 full-confidence, 2 heuristic, 1 real-when-hinted (ease reports pass/warn/fail for pieces with a declared chest edge, "Not applicable" otherwise — see Honest notes) |
 | **3D Cloth Lab** ("3D Cloth Lab" tab) — real-time GPU cloth simulation (strain-limited structural + bend + self-collision + body collision) of your actual pattern, with fabric presets (mass/stiffness/anisotropy/PBR sheen-transmission), an avatar matching your measurements (FFD-deformed if you supply a GLB), 6 pose variants, 6 skin tones, and GLB/OBJ/USDZ/turntable export. The **Cloth** and **Pieces** debug views render each simulated piece in its own real color from the 2D canvas's Layers panel, not a flat garment-wide tint — **Weld** and **Seams** intentionally keep their own diagnostic coloring (weld-topology / seam-assignment state) instead, since that's each view's actual job | ✅ Working — princess seams, gores, capes, hoods, tiers and other Fancy Collection shapes import as connected garments, not disjoint pieces (see Honest notes) |
 | **Cloth Lab engine** (Settings → 3D Cloth Lab engine) — "Iframe" (default) runs Cloth Lab as a separate embedded app; "Embedded" mounts it directly into this page instead, sharing this page's own React/Three.js so it starts faster and updates instantly | ⚠️ Both working; "Embedded" is newer and still being rolled out as the default |
 | **BodyForm** (`body.html`, standalone) — build a 3D avatar from measurements alone (no pattern needed), export it, or "Open in Fit Studio" to carry the category/measurements into the main app's 3D Cloth Lab | ✅ Working |
@@ -270,11 +270,29 @@ in the app's own header.
   front/back "side length" delta across many catalogue garments that most
   likely reflects an intentionally deeper front neckline rather than a real
   defect — exactly the kind of result a *heuristic* check is supposed to
-  produce: a lead for a human to judge, not a verified fact. **Ease**
-  (finished chest vs. body chest + minimum ease) is not implemented at all —
-  it would need a second, unverifiable heuristic on top of the first (which
-  edge is the chest measurement) — this is left as a documented gap rather
-  than faked.
+  produce: a lead for a human to judge, not a verified fact.
+  **WP-24 implemented Ease** (finished chest ≥ body chest + minimum wearing
+  ease) — the earlier conclusion that it needed "a second, unverifiable
+  heuristic on top of the first (which edge is the chest measurement)"
+  turned out to be avoidable: `js/data.js` and `js/ai.js` now populate a
+  `chestEdgeIndices` hint at construction time (the same role-driven
+  metadata WP-25's pairing depends on) for every simple cut-on-fold bodice
+  front/back, so Check Pattern reads which vertex is the chest edge
+  instead of guessing. A piece with no hint (hand-imported; princess-
+  seamed, where the chest edge is split across two pieces; an asymmetric
+  wrap/jacket front, where the fold-doubling assumption doesn't hold)
+  reports "Not applicable," never a guess. Running it over the full
+  library at size M (with a real body chest supplied) found real things
+  on its first pass too — 93 pieces pass, 30 warn (positive but under a
+  5cm minimum-wearing-ease floor), and **8 pieces genuinely fail**
+  (their drafted chest is smaller than the body chest they're drafted
+  for): `w10`/`w11`/`w17`/`m10`, all from library.js's "Fitted" style
+  preset (`fitF` as low as 0.85 with no accompanying stretch-fabric
+  flag). Not adjudicated here — a negative-ease "Fitted" preset is
+  legitimate for stretch knit fabric and a real defect for anything
+  else, and nothing in the current data says which is intended; this is
+  the same category of open question as WP-40's ~5mm finding below, and
+  is tracked alongside it rather than guessed at.
 - **Bring Your Own AI** (`js/ai-providers.js`, `js/ai-keystore.js`, Settings →
   AI Provider): API keys default to `sessionStorage` (cleared when the tab
   closes) and never enter `state`/the `localStorage["pps"]` blob at all —

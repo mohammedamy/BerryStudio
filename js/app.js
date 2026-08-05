@@ -1877,7 +1877,10 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   }
   function runCheckPattern(){
     const pieces=Canvas.getPieces(); if(!pieces.length){toast(T("empty2d"));return;}
-    const report = PatternValidator.run(pieces, { seamAllowanceCm: state.seamCm||1, offsetPoly: Canvas.offsetPoly });
+    // WP-24: bodyChestCm lets Ease compare a hinted piece's finished chest
+    // against the actual wearer body — without it Ease honestly reports
+    // "not applicable" for every piece rather than guessing a body.
+    const report = PatternValidator.run(pieces, { seamAllowanceCm: state.seamCm||1, offsetPoly: Canvas.offsetPoly, bodyChestCm: currentMeas().chest });
     const s = report.summary;
     let html = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       <span style="color:var(--ok);font-weight:700">${s.pass||0} ${T("cp_pass")}</span>
@@ -1907,10 +1910,6 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         </div>`;
       });
     }
-
-    html += `<div style="margin-top:14px;padding:10px;border-radius:8px;background:var(--panel-2);font-size:12.5px;color:var(--ink-2)">
-      <b>${T("cp_ease")}:</b> ${T("cp_deferred")} — ${T("cp_easeNote")}
-    </div>`;
 
     openModal(T("checkPattern"), html, true);
   }
