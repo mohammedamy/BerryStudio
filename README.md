@@ -445,13 +445,43 @@ in the app's own header.
   node graph, with the checkpoint to run auto-detected from what's actually
   installed on the target instance (never guessed) and reference photos
   silently ignored (no img2img wiring yet). SD.next remains unimplemented.
+- **Real segmentation for the AI silhouette read** (Settings → AI Provider →
+  Text generation → "Silhouette segmentation model", Upgrade Plan v2.0
+  WP-39): optional, opt-in, empty by default. When set to a Hugging Face
+  model ID for a real matting/segmentation architecture, `js/ai.js`'s
+  `analyzeImage()` runs it (via the same lazily-instantiated worker Route C
+  uses) and reads the garment silhouette from its real learned
+  foreground/background matte instead of the default colour-threshold
+  heuristic — everything downstream (per-row run scan, neckline-gap
+  detection, hem-shape read) is unchanged either way. Left empty, every
+  photo read is byte-identical to before this WP. `Xenova/modnet` (human/
+  portrait matting) is the one model family actually verified end-to-end
+  this pass — real model+processor load, real forward pass, real
+  differentiated alpha output on a synthetic humanlike test image
+  (foreground ~0.98-0.9998, background ~1e-6) — not every Hugging Face
+  "segmentation" model ID is expected to work: confirmed empirically that
+  `pipeline('image-segmentation', …)` rejects real matting architectures in
+  this pinned transformers.js version (including briaai/RMBG-1.4's real
+  `SegformerForSemanticSegmentation` architecture and `modnet` itself, both
+  "Unsupported model type"), so this loads via `AutoModel`/`AutoProcessor`
+  directly instead. Runs WASM-only, not WebGPU-accelerated like Route C's
+  text-generation path — a "try WebGPU, fall back to WASM" attempt was
+  tried and reverted after testing found the failure mode wasn't safely
+  retryable within one loaded model/processor pair (see
+  `js/workers/local-model-worker.js`'s own honesty note). **Not verified
+  this pass:** the plan's specific "a genuinely low-contrast dark-garment-
+  on-dark-background real photo" accuracy claim — MODNet is trained on real
+  photographic texture, and flat vector canvas art (tried during
+  investigation) didn't give it a reliable signal even for shapes that
+  worked fine on a plain background, so a synthetic low-contrast test would
+  have tested this reader's own canvas-art limitations, not the model's
+  real-photo behaviour. Real-photo field verification is the natural
+  follow-up (same "VERIFY, not code" gap WP-22/WP-30/WP-40 document
+  elsewhere in this plan).
 - **Deferred, not dropped** (documented here rather than left unmentioned):
   a "draft program" generation mode against the associative point/line/arc
-  system (the plan's own stretch goal beyond spec-first generation), and
-  replacing the pixel-analysis threshold scan with a real segmentation model
-  (RMBG-1.4/U²-Net/SAM-tiny) running on the same Route B/C worker
-  infrastructure — both are natural extensions of what's shipped here, not
-  started this pass.
+  system (the plan's own stretch goal beyond spec-first generation) — a
+  natural extension of what's shipped here, not started this pass.
 - **True polygon nesting** (WP-11) is a first-party bottom-left-fill +
   simulated-annealing placement search over real polygon-overlap testing
   (`js/nesting-core.js`), not a literal Minkowski-difference no-fit-polygon

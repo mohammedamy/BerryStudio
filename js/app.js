@@ -12,7 +12,7 @@ import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, expor
 import './girls-leotards.js'; // side-effect only — adds the 100-pattern Girls' Gymnastics Leotards collection
 import { FancyGen } from './fancy-patterns.js';
 import { PatternValidator } from './validate.js';
-import { AIProviders, AI_PROVIDER_IDS, getProvider, loadLocalModelFromFile, restoreLocalModelFromCache, runOnnxTestInference } from './ai-providers.js';
+import { AIProviders, AI_PROVIDER_IDS, getProvider, loadLocalModelFromFile, restoreLocalModelFromCache, runOnnxTestInference, loadSegmentationModel, runSegmentationOn } from './ai-providers.js';
 import { getModelFileMeta, clearModelFile } from './workers/model-file-cache.js';
 import { KeyStore } from './ai-keystore.js';
 import { probeCapabilities } from './capability-probe.js';
@@ -1069,7 +1069,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
           // is today. Text-only or legacy-proxy generations skip this and
           // use the spec result as-is.
           if(imageDataURL && specResult.source==="spec"){
-            const pixelMetrics = await AIGen.analyzeImage(imageDataURL);
+            const pixelMetrics = await AIGen.analyzeImage(imageDataURL, { segment: getSegmentFn() });
             const promptStyle = AIGen.deriveStyle({ metrics: pixelMetrics, prompt, category: state.category, imageDataURL });
             const { style: fusedStyle, sourceMap } = fuseStyle({ specStyle: specResult.style, promptStyle });
             const built = AIGen.build(fusedStyle, currentMeas());
@@ -1094,7 +1094,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         res = await AIGen.generate({
           prompt, imageDataURL, category: state.category,
           measurements: currentMeas(), endpoint: "", lang: state.lang,
-          onStage: setStage,
+          onStage: setStage, segment: getSegmentFn(),
         });
       }
       state.loaded = null;
@@ -2884,6 +2884,36 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     wrap.appendChild(pane);
     body.appendChild(wrap);
     renderProviderPane(pane, aiSettingsTab==="image");
+    renderSegmentationSettings(body);
+  }
+
+  // BerryStudio-Upgrade-Plan-v2.0 WP-39: an optional real segmentation
+  // model, orthogonal to whichever text/image AI provider is selected
+  // above (it augments js/ai.js's own local silhouette read, not any
+  // provider's request) — a Hugging Face model ID for a matting/
+  // segmentation architecture, run in-browser via the same worker Route
+  // C's Hugging Face route uses. Empty (the default) keeps every existing
+  // photo read byte-identical to before this WP — see getSegmentFn().
+  function renderSegmentationSettings(body){
+    const wrap=el("div","field"); wrap.style.marginTop="14px";
+    wrap.innerHTML=`<label>${T("segModelLabel")}</label>`;
+    const inp=el("input","input"); inp.dir="ltr"; inp.placeholder="Xenova/modnet";
+    inp.value = state.segmentationModelId || "";
+    inp.onchange=()=>{ state.segmentationModelId = inp.value.trim(); save(); };
+    wrap.appendChild(inp);
+    wrap.appendChild(el("div","help-note", T("segModelHint")));
+    body.appendChild(wrap);
+  }
+  // undefined (not null) when unconfigured — js/ai.js's analyzeImage()
+  // only branches on `opts.segment` at all when it's truthy, so this stays
+  // a plain pass-through with zero special-casing on either side.
+  function getSegmentFn(){
+    const modelId = (state.segmentationModelId||"").trim();
+    if(!modelId) return undefined;
+    return async (imageData) => {
+      await loadSegmentationModel(modelId);
+      return await runSegmentationOn(imageData);
+    };
   }
 
   // WP-21 Route B panel: pick a .onnx file, restore/clear whatever's

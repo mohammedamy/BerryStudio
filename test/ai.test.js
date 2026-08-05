@@ -199,3 +199,36 @@ test('buildRomper sleeve honors the same gather/pleat/tuck technique as buildTop
   const finishedCapW = (meas.bicep / 4) * style.sleeveWideF * 2;
   assert.ok(Math.abs(sleeveCapWidth(built) - computeGatherWidth(finishedCapW, 1.5)) < 1e-9);
 });
+
+// ---------- WP-39: real segmentation — sampleMatte() ----------
+// The one piece of new logic in the segmentation path that's pure and
+// DOM-independent (analyzeImage() itself needs a real Image/canvas, so
+// its segmentation integration is covered by e2e/smoke.spec.js instead —
+// see that file's WP-39 test).
+test('sampleMatte reads the matte pixel a working-canvas coordinate maps to, nearest-neighbour', () => {
+  // a 2x2 matte: top-left=0 (background), top-right=1, bottom-left=0.5, bottom-right=0.25
+  const matte = { width: 2, height: 2, data: [0, 1, 0.5, 0.25] };
+  // W=4,H=4 working canvas — each matte cell covers a 2x2 block of it
+  assert.equal(AIGen.sampleMatte(matte, 4, 4, 0, 0), 0);
+  assert.equal(AIGen.sampleMatte(matte, 4, 4, 3, 0), 1);
+  assert.equal(AIGen.sampleMatte(matte, 4, 4, 0, 3), 0.5);
+  assert.equal(AIGen.sampleMatte(matte, 4, 4, 3, 3), 0.25);
+});
+
+test('sampleMatte clamps out-of-range coordinates instead of reading out of bounds', () => {
+  const matte = { width: 1, height: 1, data: [0.7] };
+  assert.equal(AIGen.sampleMatte(matte, 10, 10, -5, -5), 0.7);
+  assert.equal(AIGen.sampleMatte(matte, 10, 10, 999, 999), 0.7);
+});
+
+test('sampleMatte works when the matte resolution is HIGHER than the working canvas (the real case — a model matte at one resolution vs. analyzeImage\'s own 180px-wide working canvas)', () => {
+  // an exact 2x scale-up (W=100->mw=200, H=100->mh=200) keeps the
+  // coordinate math exact, no floating-point rounding ambiguity to work
+  // around in the test itself.
+  const W = 100, H = 100, mw = 200, mh = 200;
+  const data = new Array(mw * mh).fill(0);
+  data[120 * mw + 100] = 1; // one bright matte pixel at (100,120)
+  const matte = { width: mw, height: mh, data };
+  assert.equal(AIGen.sampleMatte(matte, W, H, 50, 60), 1); // (50,60) working -> (100,120) matte, exactly
+  assert.equal(AIGen.sampleMatte(matte, W, H, 49, 60), 0); // one working-pixel off misses it
+});

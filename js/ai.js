@@ -17,15 +17,29 @@
                or { pieces:[…], colors?, summary? }.
                Any failure falls back to the local path.
 
-   Honesty note: the local path is a lightweight heuristic, not real
-   computer vision. It segments the garment via a border-adaptive
-   threshold + largest-contiguous-run-per-row (robust to background
-   clutter that simple corner-sampling isn't), then reads neckline/hem
-   shape from the silhouette profile. It will still misread busy or
-   low-contrast photos — when it can't get a confident read it falls
-   back to prompt text, then to deterministic (input-seeded, not
-   random) variety so the same input always reproduces the same
-   result, but different inputs actually look different.
+   Honesty note: the local path's DEFAULT segmentation is a lightweight
+   heuristic, not real computer vision — a border-adaptive threshold +
+   largest-contiguous-run-per-row (robust to background clutter that
+   simple corner-sampling isn't), then neckline/hem shape read from the
+   silhouette profile. It still misreads busy or low-contrast photos
+   (a dark garment against a dark background, in particular, since the
+   whole approach is a colour-distance-from-border test) — when it can't
+   get a confident read it falls back to prompt text, then to
+   deterministic (input-seeded, not random) variety so the same input
+   always reproduces the same result, but different inputs actually look
+   different.
+
+   BerryStudio-Upgrade-Plan-v2.0 WP-39: `analyzeImage(dataURL, opts)`
+   accepts an optional `opts.segment(imageData) -> Promise<{width,height,
+   data}>` callback — a real, learned foreground/background matte (0..1
+   alpha per pixel), used in place of the colour-threshold test when
+   supplied. Everything downstream (per-row largest-run scan, neckline-
+   gap detection, hem-shape read) is UNCHANGED either way — only which
+   pixels count as "foreground" changes. No `opts`/a callback that
+   returns nothing usable falls back to the exact heuristic above, byte-
+   identical to before this WP (see js/app.js's `getSegmentFn()` for what
+   actually supplies the callback, and js/workers/local-model-worker.js's
+   own honesty notes for what the real model behind it can and can't do).
    ============================================================ */
 import { computePleats, computeGatherWidth, computeTucks } from './pleats.js';
 export const AIGen = (() => {
@@ -45,31 +59,58 @@ export const AIGen = (() => {
   function pick(seed, options){ return options[hashStr(seed) % options.length]; }
 
   // ---------- image silhouette analysis ----------
-  // Segmentation: adaptive threshold from the border ring's colour
-  // statistics, then per-row the LARGEST CONTIGUOUS run of foreground
-  // pixels (not just min/max of any foreground pixel) — this is what
-  // makes it tolerant of background clutter/noise instead of latching
+  // Nearest-neighbour lookup from a WxH working-canvas coordinate into a
+  // (typically different-resolution) alpha matte's own grid — a pure,
+  // independently-testable function since it's the one piece of WP-39's
+  // segmentation path with real "did I map coordinates correctly" logic
+  // (everything else is either the untouched pre-existing scan or a thin
+  // pass-through to a real model).
+  function sampleMatte(matte, W, H, x, y){
+    const mx = Math.min(matte.width-1, Math.max(0, Math.floor(x / W * matte.width)));
+    const my = Math.min(matte.height-1, Math.max(0, Math.floor(y / H * matte.height)));
+    return matte.data[my*matte.width + mx];
+  }
+
+  // Segmentation: by default, an adaptive threshold from the border ring's
+  // colour statistics (see analyzeImage's own honesty note above for when
+  // this misreads); a real learned matte when `opts.segment` is supplied
+  // and succeeds. Either way, per-row the LARGEST CONTIGUOUS run of
+  // foreground pixels (not just min/max of any foreground pixel) — this is
+  // what makes it tolerant of background clutter/noise instead of latching
   // onto an unrelated bright pixel far from the subject.
-  function analyzeImage(dataURL){
+  function analyzeImage(dataURL, opts={}){
     return new Promise((resolve)=>{
       if(!dataURL){ resolve(null); return; }
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         try {
           const W = 180, H = Math.max(1, Math.round(W * img.height / img.width));
           const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
           const ctx = cv.getContext("2d"); ctx.drawImage(img, 0, 0, W, H);
-          const d = ctx.getImageData(0, 0, W, H).data;
+          const imageData = ctx.getImageData(0, 0, W, H);
+          const d = imageData.data;
           const at = (x,y)=>{ const i=(y*W+x)*4; return [d[i],d[i+1],d[i+2]]; };
 
-          // border ring statistics (mean + spread) → adaptive threshold
-          const border=[];
-          for(let x=0;x<W;x+=4){ border.push(at(x,0)); border.push(at(x,H-1)); }
-          for(let y=0;y<H;y+=4){ border.push(at(0,y)); border.push(at(W-1,y)); }
-          const mean=border.reduce((a,v)=>[a[0]+v[0],a[1]+v[1],a[2]+v[2]],[0,0,0]).map(v=>v/border.length);
-          const spread=Math.sqrt(border.reduce((a,v)=>a+Math.hypot(v[0]-mean[0],v[1]-mean[1],v[2]-mean[2])**2,0)/border.length);
-          const THRESH = clamp(spread*2.1, 34, 85);
-          const isFg=(r,g,b)=>Math.hypot(r-mean[0],g-mean[1],b-mean[2])>THRESH;
+          let isFg, segmented=false;
+          if(opts.segment){
+            try {
+              const matte = await opts.segment(imageData);
+              if(matte && matte.data && matte.width>0 && matte.height>0){
+                isFg = (x,y) => sampleMatte(matte, W, H, x, y) > 0.5;
+                segmented = true;
+              }
+            } catch(e){ /* segmentation failed — fall through to the threshold scan below, honestly, not a hard error */ }
+          }
+          if(!isFg){
+            // border ring statistics (mean + spread) → adaptive threshold
+            const border=[];
+            for(let x=0;x<W;x+=4){ border.push(at(x,0)); border.push(at(x,H-1)); }
+            for(let y=0;y<H;y+=4){ border.push(at(0,y)); border.push(at(W-1,y)); }
+            const mean=border.reduce((a,v)=>[a[0]+v[0],a[1]+v[1],a[2]+v[2]],[0,0,0]).map(v=>v/border.length);
+            const spread=Math.sqrt(border.reduce((a,v)=>a+Math.hypot(v[0]-mean[0],v[1]-mean[1],v[2]-mean[2])**2,0)/border.length);
+            const THRESH = clamp(spread*2.1, 34, 85);
+            isFg=(x,y)=>{ const [r,g,b]=at(x,y); return Math.hypot(r-mean[0],g-mean[1],b-mean[2])>THRESH; };
+          }
 
           // Full run list for a row (used once per row for the main scan, and
           // re-used on a handful of top rows to look for a NECKLINE GAP — in
@@ -79,7 +120,7 @@ export const AIGen = (() => {
           function scanRuns(y){
             const list=[]; let x=0;
             while(x<W){
-              if(isFg(...at(x,y))){ const s=x; while(x<W && isFg(...at(x,y))) x++; list.push({l:s,r:x-1,w:x-s,cx:(s+x-1)/2}); }
+              if(isFg(x,y)){ const s=x; while(x<W && isFg(x,y)) x++; list.push({l:s,r:x-1,w:x-s,cx:(s+x-1)/2}); }
               else x++;
             }
             return list;
@@ -160,6 +201,7 @@ export const AIGen = (() => {
             sleeveFactor: +(Math.max(0,(shoulderW-chestW)/chestW).toFixed(2)),
             neckline, hemShape, color, colorHem,
             twoTone: !!(color && colorHem && colorDist(color,colorHem) > 60),
+            segmented, // WP-39: true when a real matte (not the colour-threshold heuristic) was used
           });
         } catch(e){ resolve({ ok:false }); }
       };
@@ -999,7 +1041,7 @@ export const AIGen = (() => {
   // ---------- orchestrator (with a visible "thinking" stage sequence) ----------
   const STAGE_MS = 380;
   const wait = (ms) => new Promise(r=>setTimeout(r,ms));
-  async function generate({ prompt, imageDataURL, category, measurements, endpoint, lang, onStage }){
+  async function generate({ prompt, imageDataURL, category, measurements, endpoint, lang, onStage, segment }){
     const stage = (key) => { if(onStage) onStage(key); };
 
     // 1) remote path if configured — falls back to local on any failure
@@ -1022,7 +1064,7 @@ export const AIGen = (() => {
 
     // 2) local: visible multi-stage silhouette analysis + drafting
     stage("analyzing");
-    const metrics = imageDataURL ? await analyzeImage(imageDataURL) : null;
+    const metrics = imageDataURL ? await analyzeImage(imageDataURL, { segment }) : null;
     await wait(STAGE_MS);
 
     stage("silhouette");
@@ -1045,7 +1087,7 @@ export const AIGen = (() => {
              source:"local", usedImage: !!(metrics && metrics.ok), imageSupplied: !!imageDataURL };
   }
 
-  return { analyzeImage, deriveStyle, build, buildFromMeasuredPieces, summary, attributes, generate };
+  return { analyzeImage, deriveStyle, build, buildFromMeasuredPieces, summary, attributes, generate, sampleMatte };
 })();
 // TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.
 if (typeof window !== 'undefined') window.AIGen = AIGen;

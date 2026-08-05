@@ -58,6 +58,84 @@ pattern out.
   listed as deferred; SD.next remains the one unimplemented local
   image-gen backend.
 
+## WP-39: real segmentation model for the AI silhouette read
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase B. `js/ai.js`'s
+`analyzeImage()` was a border-adaptive colour-threshold heuristic only,
+documented as misreading busy or low-contrast photos (a dark garment
+against a dark background in particular, since the whole approach is a
+colour-distance-from-border test) — v1.0 named RMBG-1.4/U²-Net/SAM-tiny
+as deferred replacements pending Route B/C worker infrastructure, which
+WP-21/WP-22 now provide.
+
+### Added
+- `js/ai.js`: `analyzeImage(dataURL, opts)` accepts an optional
+  `opts.segment(imageData) -> Promise<{width,height,data}>` callback — a
+  real learned foreground/background matte, used in place of the colour-
+  threshold test when supplied. Everything downstream (per-row largest-
+  run scan, neckline-gap detection, hem-shape read) is byte-identical
+  either way; only which pixels count as "foreground" changes. No
+  `opts`/a callback that fails falls back to the exact pre-existing
+  heuristic. New `sampleMatte()` — nearest-neighbour lookup from the
+  180px-wide working canvas into a (different-resolution) matte's own
+  grid — is the one piece of genuinely new, independently-testable logic
+  here.
+- `js/workers/local-model-worker.js`: new `loadRoute` route
+  `"segmentation"` and `runSegmentation` message, loading a Hugging Face
+  matting/segmentation model via transformers.js's `AutoModel`/
+  `AutoProcessor` directly — confirmed empirically that the generic
+  `pipeline('image-segmentation', …)` helper rejects every real
+  background-removal architecture tried against this pinned transformers.js
+  version (briaai/RMBG-1.4's real `SegformerForSemanticSegmentation`
+  architecture and `modnet` itself both raise "Unsupported model type").
+  `Xenova/modnet` is the one model family actually verified end-to-end —
+  real load, real forward pass, real [1,1,H,W] alpha-matte output, clearly
+  differentiated on a synthetic humanlike test image (foreground
+  ~0.98-0.9998, background ~1e-6). Runs WASM-only: a "try WebGPU, fall
+  back to WASM" attempt (matching route "hf"'s own pattern) was tried and
+  reverted after real testing found `AutoModel.from_pretrained
+  ({device:'webgpu'})` reports success even with no GPU adapter present,
+  with the real failure only surfacing on first forward pass and NOT
+  reliably catchable/retryable within the same loaded model+processor pair
+  — a genuinely device-less environment (this repo's own headless e2e
+  suite included) reproduced a stuck WebGPU error that persisted even
+  after explicitly retrying with `{device:'wasm'}` in the same worker. A
+  real synthetic warm-up forward pass at load time still fails fast and
+  honestly if a model can't run at all.
+- `js/ai-providers.js`: `loadSegmentationModel()`, `runSegmentationOn()` —
+  UI-driven entry points, not part of the `AIProviders` adapter map (same
+  reasoning as Route B's own functions: this request shape doesn't fit
+  the shared adapter contract).
+- `js/app.js`: Settings → AI Provider → Text generation gets a new
+  "Silhouette segmentation model (optional)" field, orthogonal to
+  whichever provider is selected above — empty by default, a Hugging
+  Face model ID when set. Wired into both places `analyzeImage()`/
+  `AIGen.generate()` already run (the vision-fusion pixel-read path and
+  the local-generation fallback path). New `segModelLabel`/`segModelHint`
+  i18n strings, EN+AR.
+- `test/ai.test.js`: 3 new `sampleMatte()` tests (pure, DOM-independent).
+- `e2e/smoke.spec.js`: one new Playwright test against the real
+  `Xenova/modnet` model (not mocked) — real load, real forward pass on a
+  synthetic humanlike photo, confirms `metrics.segmented` is `true` with
+  a model configured and falsy with none, proving the byte-identical
+  fallback claim for real rather than by inspection.
+
+### Honesty note — scope actually verified this pass
+The plan's specific acceptance wording — "a genuinely low-contrast
+dark-garment-on-dark-background **real photo** that the threshold scan
+misreads produces a correct silhouette" — was **not** conclusively
+verified. MODNet is trained on real photographic texture; flat vector
+canvas art (tried repeatedly during this WP's investigation) didn't give
+it a reliable foreground signal even for shapes that worked fine on a
+plain background, so a synthetic low-contrast test would have measured
+this reader's own canvas-art limitations, not the model's real-photo
+accuracy. What IS verified: the full pipeline is real (real model, real
+inference, real differentiated matte, real fallback behavior). Real-photo
+field verification of the specific low-contrast claim is the natural
+follow-up — the same class of gap WP-22/WP-30/WP-40 already document
+elsewhere in this plan for things that need real hardware/data, not more
+code.
+
 ## WP-21: Local model Route B — a real .onnx file picker
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase B. Route B (pick a local
