@@ -6,6 +6,47 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-28: Per-piece 3D material for the procedural avatar
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase C. The procedural 3D
+avatar's garment shell only has 4 mesh groups (bodice/sleeve/skirt/
+trousers), so two 2D pieces mapping to the same part — e.g. Front Bodice
+and Back Bodice — collapsed to one shared 3D material: whichever visible
+piece for that part was assigned last won, silently dropping the other
+piece's colour/fabric.
+
+### Added
+- `js/three-view.js`: a `latheHalves()` helper that builds a garment part
+  as two independent `LatheGeometry` half-revolutions (front `phiStart:
+  -PI/2`, back `phiStart: PI/2`, each `phiLength: PI`) instead of one full
+  revolution — front (Z>=0) and back (Z<0) per three.js's own vertex
+  formula (`x=r·sin(phi), z=r·cos(phi)`). The two halves share every vertex
+  along the phi=±PI/2 side seams with a full-revolution lathe of the same
+  profile, so they meet with no gap when materials match, and show a real
+  seam only where front/back fabrics genuinely differ. Applied to bodice,
+  skirt, and both trousers meshes (seat + legs); sleeve stays a single
+  capsule mesh (can't be angle-split, and is conventionally one piece in
+  real patternmaking anyway) — a documented exception, not a gap.
+- `fabricState`'s per-part slot is now `{front:{color,material},
+  back:{color,material}|null, opacity}` instead of a single flat
+  `{color,material}` (+ the old vertex-color-hack `colorBack`); `back` is
+  null whenever there's no distinct back piece, so the back sub-mesh just
+  mirrors front and a single-piece part still renders as one seamless
+  whole exactly as before this change.
+
+### Changed
+- `js/app.js`'s `partsFabric()` now emits a full `{color,material}`
+  descriptor for a part's back pieces (previously just a fallback
+  `colorBack` int, dropping the back piece's fabric type entirely), and
+  only includes it when the back piece is genuinely distinct from front
+  (matching color AND material means nothing to render differently).
+- Removed `applyFrontBackColor()` (the old per-vertex color-paint
+  workaround) — real per-mesh materials replace it, so front/back can now
+  differ by fabric type, roughness, opacity-per-fabric, etc., not just
+  base color.
+- `README.md`'s honest-notes entry for per-part 3D material updated to
+  describe the new front/back sub-mesh split and the sleeve exception.
+
 ## WP-23: ComfyUI local image-gen adapter
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase B. `js/image-providers.js`

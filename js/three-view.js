@@ -296,49 +296,27 @@ export const View3D = (() => {
     leather: { rough: 0.4,  metal: 0.2,  sheen: 0.2, clear: 0.35, om: 1 },
   };
   // One fabric slot per garment part — the procedural body only has 4 named mesh
-  // groups (bodice/sleeve/skirt/trousers), so material assignment is per-part, not
-  // per-arbitrary-2D-piece (the 2D canvas itself still supports true per-piece material).
-  const defaultFabricSlot = () => ({ color: 0x6d5efc, material: "cotton", opacity: 0.85 });
+  // groups (bodice/sleeve/skirt/trousers). Each slot now holds a real `front` and
+  // (optionally) `back` sub-material rather than one flat color+material, so a
+  // front-bodice/back-bodice pair with different fabrics doesn't collapse into
+  // "whichever piece was set last wins" (WP-28). `back` is null whenever the
+  // pattern has no distinct back piece for that part — the back sub-mesh (see
+  // latheHalves() below) then just mirrors `front`, so a single-piece part still
+  // renders as one seamless whole exactly as before this change.
+  const defaultFabricSlot = () => ({ front: { color: 0x6d5efc, material: "cotton" }, back: null, opacity: 0.85 });
   let fabricState = { bodice: defaultFabricSlot(), sleeve: defaultFabricSlot(), skirt: defaultFabricSlot(), trousers: defaultFabricSlot() };
-  function fabricMat(part) {
+  function fabricMat(part, side) {
     const st = fabricState[part] || fabricState.bodice;
-    const f = FABRIC[st.material] || FABRIC.cotton;
+    const slot = (side === "back" && st.back) ? st.back : st.front;
+    const f = FABRIC[slot.material] || FABRIC.cotton;
     const op = Math.max(0.25, Math.min(1, st.opacity * f.om));
     return new THREE.MeshPhysicalMaterial({
-      color: st.color, roughness: f.rough, metalness: f.metal,
+      color: slot.color, roughness: f.rough, metalness: f.metal,
       sheen: f.sheen, sheenRoughness: 0.5, clearcoat: f.clear, clearcoatRoughness: 0.4,
       transparent: op < 0.99, opacity: op, side: THREE.DoubleSide,
       ...(f.transmission != null && { transmission: f.transmission, thickness: 0.001 }),
       ...(f.anisotropy != null && { anisotropy: f.anisotropy, anisotropyRotation: f.anisoRot ?? 0 }),
     });
-  }
-  // A part's mesh is one continuous front+back lathe shell — no separate
-  // front/back mesh to give a different material to. When the 2D pattern
-  // genuinely has both (app.js's partsFabric() only ever sets `colorBack`
-  // in that case, never for a single-piece part), paint the mesh's own
-  // vertices by which side of the body they're on instead of losing the
-  // back piece's color entirely. LatheGeometry revolves around Y with the
-  // profile's local Z = radius*sin(theta); the camera/character convention
-  // elsewhere in this file (frameCamera, camera.position.z>0) already
-  // treats +Z as the side facing the viewer, so that same sign split here
-  // lines up with "front" without needing any extra rotation bookkeeping.
-  // A no-op (leaves the plain flat material from fabricMat() alone) for
-  // every part that doesn't have a colorBack — i.e. everything, normally.
-  function applyFrontBackColor(mesh, part) {
-    const st = fabricState[part];
-    if (!st || st.colorBack == null) return;
-    const geo = mesh.geometry, pos = geo && geo.attributes && geo.attributes.position;
-    if (!pos) return;
-    const front = new THREE.Color(st.color), back = new THREE.Color(st.colorBack);
-    const colors = new Float32Array(pos.count * 3);
-    for (let i = 0; i < pos.count; i++) {
-      const c = pos.getZ(i) >= 0 ? front : back;
-      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
-    }
-    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-    mesh.material.vertexColors = true;
-    mesh.material.color.set(0xffffff);
-    mesh.material.needsUpdate = true;
   }
 
   // ---------- geometry helpers ----------
@@ -352,6 +330,30 @@ export const View3D = (() => {
     const pts = profile.map(p => new THREE.Vector2(Math.max(0.001, p[0]), p[1]));
     const m = new THREE.Mesh(new THREE.LatheGeometry(pts, seg), mat);
     m.castShadow = true; return m;
+  }
+  // Garment panels (bodice/skirt/trousers) as two independent sub-meshes split
+  // at the body's side seams, instead of one full-revolution shell — so a
+  // front piece and a back piece with different fabrics/colors (WP-28) each
+  // get their own real material, not a shared one. three.js's own
+  // LatheGeometry source (geometries/LatheGeometry.js) builds each vertex as
+  // x = radius*sin(phi), z = radius*cos(phi); cos(phi) >= 0 exactly for
+  // phi in [-PI/2, PI/2], so a phiStart=-PI/2/phiLength=PI half is exactly
+  // the Z>=0 ("front", matching frameCamera's camera.position.z>0 convention
+  // above) half of a full revolution, and phiStart=PI/2/phiLength=PI is
+  // exactly the back. Both halves are built from the same profile at the
+  // same angles as a full-revolution lathe would use, so they share vertex
+  // positions along the phi=+-PI/2 side seams with no gap — front and back
+  // meet seamlessly when their materials match, and show a real (correct)
+  // seam line only where the fabrics actually differ.
+  function latheHalves(profile, matFront, matBack, part, seg = 32) {
+    const pts = profile.map(p => new THREE.Vector2(Math.max(0.001, p[0]), p[1]));
+    const half = Math.max(2, Math.round(seg / 2));
+    const front = new THREE.Mesh(new THREE.LatheGeometry(pts, half, -Math.PI / 2, Math.PI), matFront);
+    const back = new THREE.Mesh(new THREE.LatheGeometry(pts, half, Math.PI / 2, Math.PI), matBack);
+    front.castShadow = back.castShadow = true;
+    front.name = back.name = part;
+    front.userData.side = "front"; back.userData.side = "back";
+    return [front, back];
   }
   function sphere(r, mat) { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), mat); m.castShadow = true; return m; }
 
@@ -531,44 +533,49 @@ export const View3D = (() => {
     const t = 0.014; // ease / thickness
     const topY = d.shoulderY - d.span * 0.06;
     const waistYY = d.hipY + d.span * 0.44;
-    const bodice = lathe([
+    const bodiceProfile = [
       [d.hipR + t, d.hipY + d.span * 0.02],
       [d.waistR + t, waistYY],
       [d.chestR * (female ? 1.08 : 1.05) + t, d.hipY + d.span * 0.76],
       [d.chestR * (female ? 0.98 : 1.08) + t, topY],
-    ], fabricMat("bodice"), 32);
-    bodice.scale.z = female ? 0.82 : 0.82; bodice.name = "bodice"; garmentGroup.add(bodice);
-    applyFrontBackColor(bodice, "bodice");
+    ];
+    const [bodiceFront, bodiceBack] = latheHalves(bodiceProfile, fabricMat("bodice", "front"), fabricMat("bodice", "back"), "bodice", 32);
+    bodiceFront.scale.z = bodiceBack.scale.z = female ? 0.82 : 0.82;
+    garmentGroup.add(bodiceFront, bodiceBack);
 
     // skirt / lower — dress for women & girls, trousers for men & boys
     if (female) {
       const hemY = category === "girls" ? d.H * 0.30 : d.H * 0.14;
       const flare = category === "girls" ? 1.9 : 1.7;
-      const skirt = lathe([
+      const skirtProfile = [
         [d.waistR + t, waistYY + 0.005],
         [d.hipR + t, d.hipY],
         [d.hipR * 1.25, (d.hipY + hemY) / 2],
         [d.hipR * flare, hemY],
-      ], fabricMat("skirt"), 40);
-      skirt.name = "skirt"; garmentGroup.add(skirt);
-      applyFrontBackColor(skirt, "skirt");
+      ];
+      const [skirtFront, skirtBack] = latheHalves(skirtProfile, fabricMat("skirt", "front"), fabricMat("skirt", "back"), "skirt", 40);
+      garmentGroup.add(skirtFront, skirtBack);
     } else {
       const hemY = category === "boys" ? d.H * 0.30 : d.H * 0.02;
       // hip / seat cover bridging the two legs (closes the crotch gap)
-      const seat = lathe([
+      const seatProfile = [
         [d.waistR * 1.02 + t, waistYY],
         [d.hipR * 1.12 + t, d.hipY],
         [d.hipR * 1.08 + t, d.hipY - d.span * 0.16],
-      ], fabricMat("trousers"), 26);
-      seat.scale.z = 0.86; seat.name = "trousers"; garmentGroup.add(seat);
+      ];
+      const [seatFront, seatBack] = latheHalves(seatProfile, fabricMat("trousers", "front"), fabricMat("trousers", "back"), "trousers", 26);
+      seatFront.scale.z = seatBack.scale.z = 0.86;
+      garmentGroup.add(seatFront, seatBack);
       [-1, 1].forEach(s => {
-        const leg = lathe([
+        const legProfile = [
           [d.thighR * 1.3, d.hipY + d.span * 0.02],
           [d.thighR * 1.28, d.hipY - d.span * 0.05],
           [d.thighR * 1.12, (d.hipY + hemY) * 0.5],
           [d.thighR * 1.02, hemY],
-        ], fabricMat("trousers"), 22);
-        leg.position.x = s * d.hipR * 0.5; leg.name = "trousers"; garmentGroup.add(leg);
+        ];
+        const [legFront, legBack] = latheHalves(legProfile, fabricMat("trousers", "front"), fabricMat("trousers", "back"), "trousers", 22);
+        legFront.position.x = legBack.position.x = s * d.hipR * 0.5;
+        garmentGroup.add(legFront, legBack);
       });
     }
 
@@ -772,14 +779,17 @@ export const View3D = (() => {
     if (opts.parts) {
       Object.entries(opts.parts).forEach(([part, v]) => {
         if (!fabricState[part] || !v) return;
-        if (v.color != null) fabricState[part].color = v.color;
-        fabricState[part].colorBack = v.colorBack != null ? v.colorBack : null;
-        if (v.material) fabricState[part].material = v.material;
+        if (v.front) {
+          if (v.front.color != null) fabricState[part].front.color = v.front.color;
+          if (v.front.material) fabricState[part].front.material = v.front.material;
+        }
+        fabricState[part].back = v.back ? { ...fabricState[part].back, ...v.back } : null;
       });
     } else {
       Object.values(fabricState).forEach(st => {
-        if (opts.color != null) st.color = opts.color;
-        if (opts.material) st.material = opts.material;
+        if (opts.color != null) st.front.color = opts.color;
+        if (opts.material) st.front.material = opts.material;
+        st.back = null;
       });
     }
     if (opts.opacity != null) Object.values(fabricState).forEach(st => st.opacity = opts.opacity);
@@ -822,31 +832,39 @@ export const View3D = (() => {
   }
 
   // ---------- live fabric / visibility ----------
-  // parts: { bodice:{color,material}, sleeve:{...}, skirt:{...}, trousers:{...} } — any
-  // subset; opacity applies to all 4 slots (there's no per-part transparency control).
+  // parts: { bodice:{front:{color,material},back:{color,material}|null}, sleeve:{...},
+  // skirt:{...}, trousers:{...} } — any subset; `back` omitted/falsy means "no distinct
+  // back piece, mirror front" (WP-28). opacity applies to all 4 slots (there's no
+  // per-part transparency control).
   function setFabric({ parts, color, material, opacity } = {}) {
     if (opacity != null) Object.values(fabricState).forEach(st => st.opacity = opacity);
     // back-compat: a flat {color,material} with no `parts` applies to every part
     if (parts) {
       Object.entries(parts).forEach(([part, v]) => {
         if (!fabricState[part] || !v) return;
-        if (v.color != null) fabricState[part].color = v.color;
-        fabricState[part].colorBack = v.colorBack != null ? v.colorBack : null;
-        if (v.material) fabricState[part].material = v.material;
+        if (v.front) {
+          if (v.front.color != null) fabricState[part].front.color = v.front.color;
+          if (v.front.material) fabricState[part].front.material = v.front.material;
+        }
+        fabricState[part].back = v.back ? { ...fabricState[part].back, ...v.back } : null;
       });
     } else if (color != null || material) {
       Object.values(fabricState).forEach(st => {
-        if (color != null) st.color = color;
-        if (material) st.material = material;
+        if (color != null) st.front.color = color;
+        if (material) st.front.material = material;
+        st.back = null;
       });
     }
     applyFabric();
   }
+  // Each garment part is now (WP-28) two real sub-meshes — front and back,
+  // tagged via userData.side by latheHalves() — sharing the same `mesh.name`
+  // so this traversal and applyPieceVisibility() below don't need to change.
   function applyFabric() {
     if (!garmentGroup) return;
-    garmentGroup.traverse(o => { if (o.isMesh && fabricState[o.name]) { o.material = fabricMat(o.name); applyFrontBackColor(o, o.name); } });
+    garmentGroup.traverse(o => { if (o.isMesh && fabricState[o.name]) o.material = fabricMat(o.name, o.userData.side || "front"); });
     // sleeves live under the arm groups
-    Object.values(limbs).forEach(g => g.traverse(o => { if (o.isMesh && o.name === "sleeve") { o.material = fabricMat("sleeve"); applyFrontBackColor(o, "sleeve"); } }));
+    Object.values(limbs).forEach(g => g.traverse(o => { if (o.isMesh && o.name === "sleeve") o.material = fabricMat("sleeve", "front"); }));
   }
   let lastPieceVis = null;
   function setPieceVisibility(pieces) { lastPieceVis = pieces; applyPieceVisibility(); }
