@@ -66,4 +66,19 @@ test('validator runs cleanly over every pattern in the library, reports what it 
   // fail is reported above, not asserted away — that's the actual
   // deliverable here, not a green checkmark.
   if (crashed > 0) throw new Error(`validator threw on ${crashed} pattern(s) — see log above`);
+
+  // WP-26: this sweep's first full pass over the library found a real,
+  // reproducible defect — 67 Fancy Collection piece instances (30+ unique
+  // designs) with a duplicate consecutive outline point, all traced to a
+  // bezier-sampling boundary condition in js/fancy-patterns.js (a curve's
+  // sampled endpoint re-landing on a point already in the outline — either
+  // the next segment's own start, or the shape's own [0,0] origin when a
+  // closing curve sweeps back to it). Fixed at the source (godetPc, capePc,
+  // peplumPc, princessBodice's neckline/princess-curve join) via the
+  // dedupeJoin/dedupeClose helpers. Asserted here, per WP-26's acceptance
+  // criteria, so this exact class of bug can never silently regress.
+  const closedOutlineFails = failuresByCheck.closedOutline || [];
+  if (closedOutlineFails.length > 0) {
+    throw new Error(`closedOutline found ${closedOutlineFails.length} duplicate-point failure(s) — regression of WP-26:\n  ${closedOutlineFails.join('\n  ')}`);
+  }
 });

@@ -43,6 +43,37 @@ export let FancyGen;
   }
   const lerp = (a, b, t) => a + (b - a) * t;
 
+  // WP-26: two dedupe helpers for a bezier-sampling boundary condition that
+  // shipped a real, reproducible bug — a curve segment's sampled endpoint
+  // sometimes lands exactly on a point that's already in the outline
+  // (either the next segment's own start, or the outline's own [0,0]
+  // origin when a shape's final curve sweeps back to close on itself).
+  // Both read as a literal duplicate consecutive point to checkClosedOutline
+  // (js/validate.js), which treats every outline as implicitly closed —
+  // the wrap-around from the last point back to the first is real, so a
+  // curve that re-lands on the start point IS the closing edge and the
+  // extra sample must be dropped, not kept alongside it.
+  //
+  // dedupeJoin: drop `a`'s trailing point if it coincides with `b`'s
+  // leading point — used where a neckline curve's endpoint is defined to
+  // exactly match the following curve's start (e.g. princessBodice below).
+  // Only fires when the points genuinely coincide, so neckline variants
+  // that don't share that endpoint (e.g. "offshoulder") are untouched.
+  function dedupeJoin(a, b) {
+    if (!a.length || !b.length) return a;
+    const last = a[a.length - 1], first = b[0];
+    return (last[0] === first[0] && last[1] === first[1]) ? a.slice(0, -1) : a;
+  }
+  // dedupeClose: drop a polyline's own trailing point if it coincides with
+  // its own first point — used where a shape's last curve segment sweeps
+  // back to the same [0,0] origin the outline started at (godetPc, capePc,
+  // peplumPc below all close this way).
+  function dedupeClose(pts) {
+    if (pts.length < 2) return pts;
+    const first = pts[0], last = pts[pts.length - 1];
+    return (first[0] === last[0] && first[1] === last[1]) ? pts.slice(0, -1) : pts;
+  }
+
   // Shared S-curve for a princess seam: 4 waypoints (shoulder→bust→waist→hip→hem),
   // out at bust/hip, in at waist. Reused as the shared edge between a bodice's
   // center panel and side panel — one curve, two panels, always seam-consistent.
@@ -138,11 +169,11 @@ export let FancyGen;
   // Triangular flare insert (godet) — two curved sides meeting at a point.
   function godetPc(topW, len) {
     const bottom = [topW/2, len];
-    return [
+    return dedupeClose([
       [0,0],[topW,0],
       ...qBez([topW,0], [topW*0.85, len*0.6], bottom, 7),
       ...qBez(bottom, [topW*0.15, len*0.6], [0,0], 7),
-    ];
+    ]);
   }
   // One half of a two-piece hood — curved crown + curved face-opening.
   function hoodHalf(headC, depth) {
@@ -163,12 +194,12 @@ export let FancyGen;
   // Flared peplum panel with a gently waved curved hem.
   function peplumPc(waistW, flareLen) {
     const bulge = flareLen * 0.15;
-    return [
+    return dedupeClose([
       [0,0],[waistW,0],
       ...qBez([waistW,0], [waistW*1.3,flareLen*0.6], [waistW*1.05,flareLen], 6),
       ...qBez([waistW*1.05,flareLen], [waistW*0.5,flareLen+bulge], [-waistW*0.05,flareLen], 6),
       ...qBez([-waistW*0.05,flareLen], [-waistW*0.3,flareLen*0.6], [0,0], 6),
-    ];
+    ]);
   }
   function sashPc(width, tailLen) {
     return [ [0,0],[width,0],[width,5],[width+tailLen,5], ...qBez([width+tailLen,5],[width+tailLen+10,2.5],[width+tailLen,0],5) ];
@@ -179,12 +210,12 @@ export let FancyGen;
   }
   // Draped cape overlay, curved swooping hem.
   function capePc(neckW, len) {
-    return [
+    return dedupeClose([
       [0,0],[neckW,0],
       ...qBez([neckW,0], [neckW*1.8,len*0.5], [neckW*1.5,len], 8),
       ...qBez([neckW*1.5,len], [neckW*0.7,len+6], [0,len*0.85], 8),
       ...qBez([0,len*0.85], [-neckW*0.1,len*0.4], [0,0], 5),
-    ];
+    ]);
   }
 
   // Princess-seamed bodice: shared curved side-seam between a narrow center
@@ -229,7 +260,12 @@ export let FancyGen;
         neckPts = qBez([0, necklineY], [shoulderX*0.5, necklineY-2], [shoulderX, topY], 6);
     }
 
-    const frontCenter = [ [0, necklineY], ...neckPts, ...frontCurve, [0, hemY] ];
+    // WP-26: neckPts' last sampled point and frontCurve's first point are
+    // the same coordinate for every neckline variant whose curve is
+    // defined to end exactly at the shoulder point ([shoulderX, topY]) —
+    // "offshoulder" ends somewhere else on purpose and is left untouched.
+    const frontNeck = dedupeJoin(neckPts, frontCurve);
+    const frontCenter = [ [0, necklineY], ...frontNeck, ...frontCurve, [0, hemY] ];
     const frontSide = [
       ...frontCurve.slice().reverse(),
       [shoulderX + shoulderW, topY - 2],
@@ -239,7 +275,8 @@ export let FancyGen;
       [fHemX + (sideX*1.04 - fHipX), hemY],
     ];
     const backNeckPts = qBez([0, necklineY*0.4], [shoulderX*0.5, -1], [shoulderX, topY], 5);
-    const backCenter = [ [0, necklineY*0.4], ...backNeckPts, ...backCurve, [0, hemY] ];
+    const backNeck = dedupeJoin(backNeckPts, backCurve); // WP-26, same coincident-endpoint case as frontNeck
+    const backCenter = [ [0, necklineY*0.4], ...backNeck, ...backCurve, [0, hemY] ];
     const backSide = [
       ...backCurve.slice().reverse(),
       [shoulderX + shoulderW, topY - 2],
@@ -266,9 +303,12 @@ export let FancyGen;
     // SAME curve in reverse, which would need separate reversed-index
     // math; since both pieces show the identical physical seam, only one
     // needs to carry the authoritative curve data). Offsets account for
-    // the leading `[0,y]` point and neckPts this curve is spliced after.
-    const frontCurveOffset = 1 + neckPts.length;
-    const backCurveOffset = 1 + backNeckPts.length;
+    // the leading `[0,y]` point and frontNeck/backNeck (WP-26: the
+    // deduped neck arrays actually spliced into frontCenter/backCenter
+    // above, one point shorter than neckPts/backNeckPts whenever the
+    // dedupe fired) this curve is spliced after.
+    const frontCurveOffset = 1 + frontNeck.length;
+    const backCurveOffset = 1 + backNeck.length;
     const offsetCurves = (curves, off) => curves.map((c) => ({ fromIdx: c.fromIdx + off, toIdx: c.toIdx + off, c1: c.c1, c2: c.c2 }));
     // frontCenter/backCenter ALSO get a real `edges[].seamId` (alongside
     // princessSeamId, which the cloth-lab importer's cutOnFold branch

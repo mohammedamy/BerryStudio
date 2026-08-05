@@ -6,6 +6,41 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-26: fix the Fancy Collection duplicate-outline-point bug
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase A (drafting & construction
+completeness) — the sequencing recommendation's WP-26, done first per its own
+"confirmed bug with zero design risk and no flag needed."
+
+### Fixed
+- Check Pattern's `closedOutline` check was failing on 67 Fancy Collection
+  piece instances across 30+ unique designs (`js/fancy-patterns.js`) with a
+  "duplicate consecutive point" — a real, reproducible bezier-sampling
+  boundary bug, not a false positive. Traced to exactly four shape helpers:
+  `godetPc`, `capePc`, and `peplumPc` each sample a final curve segment that
+  sweeps back and re-lands exactly on the shape's own `[0,0]` origin point;
+  `princessBodice()`'s neckline curve (for "sweetheart"/"scoop"/default
+  necklines) is defined to end at the exact same coordinate
+  (`[shoulderX, topY]`) where the princess seam curve begins. Both cases
+  left the literal duplicate coordinate in the outline array — the
+  wrap-around edge `checkClosedOutline` treats as implicitly closing the
+  shape then found the same point twice in a row.
+- Fixed at the source with two small, reusable dedupe helpers rather than
+  filtering downstream: `dedupeClose(pts)` drops a polyline's trailing point
+  when it coincides with its own first point (godet/cape/peplum); `dedupeJoin(a, b)`
+  drops `a`'s trailing point when it coincides with `b`'s leading point
+  (the princess-bodice neckline join). Both only fire on genuine coordinate
+  equality, so neckline variants that don't share an endpoint (e.g.
+  "offshoulder") are untouched, and `princessBodice()`'s WP-14 curve/edge
+  index metadata (`frontCurveOffset`/`backCurveOffset`) was updated to track
+  the now-possibly-shorter neck arrays — verified the curve segment chain
+  and princess-seam edge indices still line up correctly after the fix.
+
+### Added
+- `npm test` (`test/validate-library.test.js`) now hard-asserts zero
+  `closedOutline` failures across the full pattern library, so this exact
+  class of bug can never silently regress.
+
 ## Cloth Lab: simulated pieces render in their real 2D-canvas color
 
 ### Fixed
