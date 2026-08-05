@@ -9,6 +9,7 @@ import { View3D } from './three-view.js';
 import { AIGen } from './ai.js';
 import { Billboard } from './billboard.js';
 import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, exports nothing
+import './girls-leotards.js'; // side-effect only — adds the 100-pattern Girls' Gymnastics Leotards collection
 import { FancyGen } from './fancy-patterns.js';
 import { PatternValidator } from './validate.js';
 import { AIProviders, AI_PROVIDER_IDS, getProvider } from './ai-providers.js';
@@ -210,6 +211,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     suit:'<svg viewBox="0 0 24 24"><path d="M9 2L6 4 4 8l2 2v11a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10l2-2-2-4-3-2-3 2.6z" fill="#3c3f46"/><path d="M9 2l1.6 2.4L9.4 20H8V10L6 8l1-3z" fill="#f2f2f2"/><path d="M15 2l-1.6 2.4L14.6 20H16V10l2-2-1-3z" fill="#f2f2f2"/><path d="M11 4.6l1 2 1-2-1-1.6z" fill="#7c2432"/><path d="M11.4 6.2h1.2l-.4 6-.4 0z" fill="#7c2432"/></svg>',
     trousers:'<svg viewBox="0 0 24 24"><path d="M6 2h12l.6 8-1 2 .8 12h-4l-1-11-1 11H8l.8-12-1-2z" fill="#3c5f95"/><path d="M6 2h12l.3 3.6H5.7z" fill="#294570"/><path d="M12 4v6" stroke="#294570" stroke-width="1"/></svg>',
     skirt:'<svg viewBox="0 0 24 24"><path d="M9 3h6l1 4h-8z" fill="#3c5f95"/><path d="M8 7h8l3 13H5z" fill="#e8a33e"/><path d="M12 7v13" stroke="#c1811f" stroke-width=".8" stroke-dasharray="1.4 1.4"/></svg>',
+    leotard:'<svg viewBox="0 0 24 24"><path d="M9 2l3 2 3-2 2 4-2 2v6l2 8h-4l-1-7-1 7H7l2-8V8L7 6z" fill="#b23e78"/><path d="M9 2l3 2 3-2 .8 1.8L12 6.4 8.2 3.8z" fill="#f6d4e3"/><path d="M8.6 12.4h6.8" stroke="#7c2a54" stroke-width="1" stroke-linecap="round"/></svg>',
   };
 
   // ---------------- TOOLS ----------------
@@ -539,7 +541,11 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   // piece, same mechanism opacity/color use) rather than a full
   // interactive canvas drag-tool — see js/darts.js for the pure,
   // independently-tested math this wraps.
-  function openDartEditorModal(pieceIdx){
+  // `presetPivot` (WP-19, optional): {dartIndex,x,y} — set right after a
+  // "pick on canvas" click reopens this modal, so that one dart's pivot
+  // fields show the picked point instead of resetting to the apex default.
+  function openDartEditorModal(pieceIdx, presetPivot){
+    Canvas.cancelPick(); // modal is (re)open — any still-armed pick from a previous call is stale
     const p = Canvas.getPieces()[pieceIdx]; if(!p || !p.darts || !p.darts.length) return;
     openModal(T("editDarts"), "", true);
     const body = $("#genericModal .modal-body"); body.innerHTML="";
@@ -581,16 +587,30 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       // visible no-op; moving the pivot away from the apex is what actually
       // makes this "transfer" rather than "pivot".
       const [apex] = dart;
+      const preset = (presetPivot && presetPivot.dartIndex===di) ? presetPivot : null;
       const row3 = el("div","row"); row3.style.cssText="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap";
-      const pivotX = el("input","input"); pivotX.type="number"; pivotX.step="0.1"; pivotX.value=apex[0].toFixed(1); pivotX.style.cssText="flex:1;min-width:60px";
-      const pivotY = el("input","input"); pivotY.type="number"; pivotY.step="0.1"; pivotY.value=apex[1].toFixed(1); pivotY.style.cssText="flex:1;min-width:60px";
-      const transferDeg = el("input","input"); transferDeg.type="number"; transferDeg.step="1"; transferDeg.value="0"; transferDeg.style.cssText="flex:1;min-width:60px";
+      const pivotX = el("input","input"); pivotX.type="number"; pivotX.step="0.1"; pivotX.value=(preset?preset.x:apex[0]).toFixed(1); pivotX.style.cssText="flex:1;min-width:60px";
+      const pivotY = el("input","input"); pivotY.type="number"; pivotY.step="0.1"; pivotY.value=(preset?preset.y:apex[1]).toFixed(1); pivotY.style.cssText="flex:1;min-width:60px";
+      const transferDeg = el("input","input"); transferDeg.type="number"; transferDeg.step="1"; transferDeg.value=String((preset&&preset.deg!=null)?preset.deg:0); transferDeg.style.cssText="flex:1;min-width:60px";
       const transferBtn = el("button","big-btn ghost",T("dartTransferApply")); transferBtn.style.flex="0 0 auto";
+      // WP-19: pick the pivot on canvas instead of typing coordinates you'd
+      // have to already know — the whole point of transferring around an
+      // external pivot is usually a point you can SEE (e.g. the bust
+      // point), not one you've measured. Closes the modal so the real
+      // canvas underneath is clickable, arms a one-shot pick, then reopens
+      // this same modal with that dart's pivot fields pre-filled.
+      const pickBtn = el("button","big-btn ghost",T("dartPivotPick")); pickBtn.style.flex="0 0 auto"; pickBtn.type="button";
       row3.appendChild(el("span",null,T("dartTransferPivot")+":"));
-      row3.appendChild(pivotX); row3.appendChild(pivotY);
+      row3.appendChild(pivotX); row3.appendChild(pivotY); row3.appendChild(pickBtn);
       row3.appendChild(el("span",null,T("dartPivotDeg")+":"));
       row3.appendChild(transferDeg); row3.appendChild(transferBtn);
       body.appendChild(row3);
+      pickBtn.onclick = () => {
+        const deg = +transferDeg.value || 0;
+        closeModal("#genericModal");
+        toast(T("dartPivotPickHint"));
+        Canvas.armPick(({x,y}) => openDartEditorModal(pieceIdx, {dartIndex:di, x, y, deg}));
+      };
       transferBtn.onclick = () => {
         const px = +pivotX.value, py = +pivotY.value;
         const deg = +transferDeg.value || 0;
@@ -1910,16 +1930,25 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 
   // ================= CHECK PATTERN (WP-0.4) =================
   const CP_COLOR = { pass: "var(--ok)", warn: "var(--warn)", fail: "var(--danger)", deferred: "var(--ink-2)" };
-  function cpChip(checkKey, result, heuristic){
+  // `confidence`: null for per-piece checks (no pairing involved, no badge);
+  // 'verified' for a crossPiece pair matched by a real declared role
+  // (WP-25 — js/validate.js's pairByRole); 'heuristic' for one matched by
+  // name-guessing (js/validate.js's pairFrontBack, the pre-WP-25 fallback).
+  function cpChip(checkKey, result, confidence){
     const color = CP_COLOR[result.status] || "var(--ink-2)";
-    const title = [result.message, heuristic ? T("cp_heuristicNote") : ""].filter(Boolean).join(" — ");
+    const note = confidence === 'verified' ? T("cp_verifiedNote") : confidence === 'heuristic' ? T("cp_heuristicNote") : "";
+    const title = [result.message, note].filter(Boolean).join(" — ");
+    const badge = confidence === 'verified' ? ` · ${T("cp_verified")}` : confidence === 'heuristic' ? ` · ${T("cp_heuristic")}` : "";
     return `<span title="${title.replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid ${color};color:${color};font-size:11px;font-weight:700;white-space:nowrap">
-      ${T("cp_"+checkKey)}${heuristic?` · ${T("cp_heuristic")}`:""}: ${T("cp_"+result.status)}
+      ${T("cp_"+checkKey)}${badge}: ${T("cp_"+result.status)}
     </span>`;
   }
   function runCheckPattern(){
     const pieces=Canvas.getPieces(); if(!pieces.length){toast(T("empty2d"));return;}
-    const report = PatternValidator.run(pieces, { seamAllowanceCm: state.seamCm||1, offsetPoly: Canvas.offsetPoly });
+    // WP-24: bodyChestCm lets Ease compare a hinted piece's finished chest
+    // against the actual wearer body — without it Ease honestly reports
+    // "not applicable" for every piece rather than guessing a body.
+    const report = PatternValidator.run(pieces, { seamAllowanceCm: state.seamCm||1, offsetPoly: Canvas.offsetPoly, bodyChestCm: currentMeas().chest });
     const s = report.summary;
     let html = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       <span style="color:var(--ok);font-weight:700">${s.pass||0} ${T("cp_pass")}</span>
@@ -1933,7 +1962,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       html += `<div style="padding:8px 0;border-bottom:1px solid var(--line-2)">
         <div style="font-weight:700;margin-bottom:6px">${p.label}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,false)).join("")}
+          ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,null)).join("")}
         </div>
       </div>`;
     });
@@ -1941,18 +1970,15 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     if (report.crossPiece.length){
       html += `<h3 style="margin:14px 0 6px">${T("cp_crossPiece")}</h3>`;
       report.crossPiece.forEach((p)=>{
+        const confidence = p.verified ? 'verified' : 'heuristic';
         html += `<div style="padding:8px 0;border-bottom:1px solid var(--line-2)">
           <div style="font-weight:700;margin-bottom:6px">${p.label}</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,true)).join("")}
+            ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,confidence)).join("")}
           </div>
         </div>`;
       });
     }
-
-    html += `<div style="margin-top:14px;padding:10px;border-radius:8px;background:var(--panel-2);font-size:12.5px;color:var(--ink-2)">
-      <b>${T("cp_ease")}:</b> ${T("cp_deferred")} — ${T("cp_easeNote")}
-    </div>`;
 
     openModal(T("checkPattern"), html, true);
   }
@@ -3128,7 +3154,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       if(e.key==="Escape")closeModal("#cmdModal");
       return;
     }
-    if(e.key==="Escape"){ $$(".overlay.show").forEach(o=>o.classList.remove("show")); closeAnyMenu(); closeTextEditor(); }
+    if(e.key==="Escape"){ $$(".overlay.show").forEach(o=>o.classList.remove("show")); closeAnyMenu(); closeTextEditor(); Canvas.cancelPick(); }
     const typing = document.activeElement.tagName==="INPUT" || document.activeElement.tagName==="TEXTAREA" || document.activeElement.isContentEditable;
     // tool shortcuts
     const map={v:"select",p:"pen",l:"line",a:"arc",m:"measure",r:"rotate",s:"scale",t:"text"};
