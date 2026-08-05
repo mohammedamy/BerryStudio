@@ -6,13 +6,20 @@
    FULL CONFIDENCE (pure single-piece geometry, no guessing):
      closedOutline, selfIntersection, grainline, seamAllowance, foldSymmetry
 
-   HEURISTIC (need to know which piece pairs with which — no such data
-   exists anywhere in the 148-pattern library today; confirmed by a
-   repo-wide search for any seam/edge-pairing structure). Reuses the SAME
-   closed-world front/back name-matching idiom cloth-lab's
-   importFromApp.js:classify() already uses for the identical problem,
-   rather than inventing a second heuristic. Unpairable pieces are
-   flagged as such, never silently guessed:
+   VERIFIED-OR-HEURISTIC, per pair (WP-25): need to know which piece pairs
+   with which. js/data.js/js/ai.js/js/fancy-patterns.js attach a real
+   `role` to most pieces at construction time (WP-6) — the SAME vocabulary
+   cloth-lab/src/pattern/roles.js uses to build real 3D seams, not a name
+   guess. pairByRole() pairs on that declared relationship first
+   ("Verified" in Check Pattern's report). Whatever's left — pieces with
+   no declared role, or a role with no front/back counterpart declared
+   (hand-imported pieces; js/ai.js's buildTrousers/buildSkirt, which
+   deliberately have no placement role either — see their own comments) —
+   falls back to the SAME closed-world front/back name-matching idiom
+   cloth-lab's importFromApp.js:classifyLegacy() uses for the identical
+   fallback case ("Heuristic"). Unpairable pieces are flagged as such,
+   never silently guessed. The comparison math itself is identical either
+   way — only pairing confidence changes:
      seamLengthParity, notchAlignment
 
    REAL-OR-DEFERRED, PER PIECE (WP-24): ease needs to know which outline
@@ -202,6 +209,55 @@ function pairFrontBack(pieces) {
   return pairs;
 }
 
+// ---------- WP-25: real, declared-relationship pairing ----------
+// js/data.js, js/ai.js and js/fancy-patterns.js already attach a `role` to
+// most pieces at construction time (BerryStudio-Upgrade-Plan WP-6) — the
+// SAME vocabulary cloth-lab/src/pattern/roles.js already uses to build
+// real 3D seams, not a guess. Pairing on a piece's declared role (when
+// present) is a genuine authored relationship, not a name-matching guess
+// — pieceLabel-based pairFrontBack() above stays as the fallback for
+// pieces with no declared role (hand-imported/legacy pieces, or a
+// generator that deliberately left role undeclared — e.g. js/ai.js's
+// buildTrousers/buildSkirt, which have no placement heuristic in
+// cloth-lab either; see those functions' own comments).
+//
+// The parity/notch MATH below (checkSeamLengthParity/checkNotchAlignment)
+// is UNCHANGED by this — only which two pieces get compared, and how much
+// to trust that the comparison is even meaningful, changes. A role-paired
+// front/back is real regardless of whether the two pieces happen to share
+// a literal cut edge (e.g. a princess-seamed "Bodice Front Center"/"Bodice
+// Back Center" don't — each meets its own *Side piece at the princess
+// seam instead) — "Verified" here means "we know this is the declared
+// front/back counterpart of the same construction block," which is
+// exactly what front/back length-parity is checking for either way.
+const ROLE_PAIR = {
+  'bodice-front-center': 'bodice-back-center',
+  'bodice-front-side': 'bodice-back-side',
+  'front-panel': 'back-panel',
+  'hip-panel-front': 'hip-panel-back',
+  'skirt-front-gore': 'skirt-back-gore',
+};
+
+function pairByRole(pieces) {
+  const byRole = {};
+  for (const p of pieces) if (p.role) (byRole[p.role] = byRole[p.role] || []).push(p);
+  const pairs = [];
+  const used = new Set();
+  for (const [frontRole, backRole] of Object.entries(ROLE_PAIR)) {
+    const fronts = byRole[frontRole] || [], backs = byRole[backRole] || [];
+    // Only pair when there's exactly one of each role in this piece set —
+    // 2+ pieces sharing a role (e.g. a wrap design's two independent front
+    // panels) has no single unambiguous pairing; same "never guess"
+    // principle cloth-lab's importFromApp.js already applies.
+    if (fronts.length === 1 && backs.length === 1) {
+      pairs.push({ front: fronts[0], back: backs[0], verified: true });
+      used.add(fronts[0]); used.add(backs[0]);
+    }
+  }
+  const remaining = pieces.filter((p) => !used.has(p));
+  return { pairs, remaining };
+}
+
 const SEAM_LENGTH_TOL_MM = 3;
 const NOTCH_ARC_TOL_FRACTION = 0.05; // 5% of perimeter
 
@@ -319,9 +375,18 @@ export function run(pieces, ctx = {}) {
     },
   }));
 
-  const pairs = pairFrontBack(pieces || []);
+  // WP-25: pair by declared role first (real relationship — "Verified");
+  // whatever's left over (no role, or a role with no ROLE_PAIR entry)
+  // falls back to name-matching (a guess — "Heuristic"), same as before
+  // this WP. A piece already consumed by role-pairing is excluded from
+  // the name-matching pool so it can't also show up in a second, guessed
+  // pair.
+  const { pairs: rolePairs, remaining } = pairByRole(pieces || []);
+  const namePairs = pairFrontBack(remaining).map((pair) => ({ ...pair, verified: false }));
+  const pairs = [...rolePairs, ...namePairs];
   const crossPiece = pairs.map((pair) => ({
     label: `${pair.front ? pieceLabel(pair.front) : '(unmatched)'} / ${pair.back ? pieceLabel(pair.back) : '(unmatched)'}`,
+    verified: !!pair.verified,
     checks: {
       seamLengthParity: checkSeamLengthParity(pair),
       notchAlignment: checkNotchAlignment(pair),

@@ -9,6 +9,7 @@ import { View3D } from './three-view.js';
 import { AIGen } from './ai.js';
 import { Billboard } from './billboard.js';
 import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, exports nothing
+import './girls-leotards.js'; // side-effect only — adds the 100-pattern Girls' Gymnastics Leotards collection
 import { FancyGen } from './fancy-patterns.js';
 import { PatternValidator } from './validate.js';
 import { AIProviders, AI_PROVIDER_IDS, getProvider } from './ai-providers.js';
@@ -205,6 +206,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     suit:'<svg viewBox="0 0 24 24"><path d="M9 2L6 4 4 8l2 2v11a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10l2-2-2-4-3-2-3 2.6z" fill="#3c3f46"/><path d="M9 2l1.6 2.4L9.4 20H8V10L6 8l1-3z" fill="#f2f2f2"/><path d="M15 2l-1.6 2.4L14.6 20H16V10l2-2-1-3z" fill="#f2f2f2"/><path d="M11 4.6l1 2 1-2-1-1.6z" fill="#7c2432"/><path d="M11.4 6.2h1.2l-.4 6-.4 0z" fill="#7c2432"/></svg>',
     trousers:'<svg viewBox="0 0 24 24"><path d="M6 2h12l.6 8-1 2 .8 12h-4l-1-11-1 11H8l.8-12-1-2z" fill="#3c5f95"/><path d="M6 2h12l.3 3.6H5.7z" fill="#294570"/><path d="M12 4v6" stroke="#294570" stroke-width="1"/></svg>',
     skirt:'<svg viewBox="0 0 24 24"><path d="M9 3h6l1 4h-8z" fill="#3c5f95"/><path d="M8 7h8l3 13H5z" fill="#e8a33e"/><path d="M12 7v13" stroke="#c1811f" stroke-width=".8" stroke-dasharray="1.4 1.4"/></svg>',
+    leotard:'<svg viewBox="0 0 24 24"><path d="M9 2l3 2 3-2 2 4-2 2v6l2 8h-4l-1-7-1 7H7l2-8V8L7 6z" fill="#b23e78"/><path d="M9 2l3 2 3-2 .8 1.8L12 6.4 8.2 3.8z" fill="#f6d4e3"/><path d="M8.6 12.4h6.8" stroke="#7c2a54" stroke-width="1" stroke-linecap="round"/></svg>',
   };
 
   // ---------------- TOOLS ----------------
@@ -1868,11 +1870,17 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 
   // ================= CHECK PATTERN (WP-0.4) =================
   const CP_COLOR = { pass: "var(--ok)", warn: "var(--warn)", fail: "var(--danger)", deferred: "var(--ink-2)" };
-  function cpChip(checkKey, result, heuristic){
+  // `confidence`: null for per-piece checks (no pairing involved, no badge);
+  // 'verified' for a crossPiece pair matched by a real declared role
+  // (WP-25 — js/validate.js's pairByRole); 'heuristic' for one matched by
+  // name-guessing (js/validate.js's pairFrontBack, the pre-WP-25 fallback).
+  function cpChip(checkKey, result, confidence){
     const color = CP_COLOR[result.status] || "var(--ink-2)";
-    const title = [result.message, heuristic ? T("cp_heuristicNote") : ""].filter(Boolean).join(" — ");
+    const note = confidence === 'verified' ? T("cp_verifiedNote") : confidence === 'heuristic' ? T("cp_heuristicNote") : "";
+    const title = [result.message, note].filter(Boolean).join(" — ");
+    const badge = confidence === 'verified' ? ` · ${T("cp_verified")}` : confidence === 'heuristic' ? ` · ${T("cp_heuristic")}` : "";
     return `<span title="${title.replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid ${color};color:${color};font-size:11px;font-weight:700;white-space:nowrap">
-      ${T("cp_"+checkKey)}${heuristic?` · ${T("cp_heuristic")}`:""}: ${T("cp_"+result.status)}
+      ${T("cp_"+checkKey)}${badge}: ${T("cp_"+result.status)}
     </span>`;
   }
   function runCheckPattern(){
@@ -1894,7 +1902,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       html += `<div style="padding:8px 0;border-bottom:1px solid var(--line-2)">
         <div style="font-weight:700;margin-bottom:6px">${p.label}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,false)).join("")}
+          ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,null)).join("")}
         </div>
       </div>`;
     });
@@ -1902,10 +1910,11 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     if (report.crossPiece.length){
       html += `<h3 style="margin:14px 0 6px">${T("cp_crossPiece")}</h3>`;
       report.crossPiece.forEach((p)=>{
+        const confidence = p.verified ? 'verified' : 'heuristic';
         html += `<div style="padding:8px 0;border-bottom:1px solid var(--line-2)">
           <div style="font-weight:700;margin-bottom:6px">${p.label}</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,true)).join("")}
+            ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,confidence)).join("")}
           </div>
         </div>`;
       });
