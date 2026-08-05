@@ -59,7 +59,7 @@ in the app's own header.
 | **Construction tools** — real drafting Point/Line/Arc/Circle tools that snap to and stay live-linked to named points, "Create Pattern Piece" to promote a closed point loop into a real piece, custom parametric **Variables** (named formulas referencing other variables and body measurements, reusable in any point's X/Y), and a trace-over **background reference image** with two-point calibration | ✅ Working — points/lines/arcs re-resolve automatically when you grade/resize |
 | AI Pattern Generator — visible "thinking" stages, robust local image analysis (neckline/hem/flare/colour from a real photo, not just a clean product shot), a wider construction vocabulary (necklines including mock/stand neck, hem shapes, wrap/zip closures), a **romper/jumpsuit** garment type (fitted bodice + attached above-knee shorts joined at a waist seam, with armhole binding and a zip facing), and a "Detected" attributes panel (with source + confidence, click-to-override) so you can see what actually mattered — describing a garment always produces real, editable vector pattern pieces on the canvas, never an image to trace | ✅ Working (offline heuristic by default; bring your own AI provider in Settings — see below) |
 | **Bring Your Own AI** (Settings → AI Provider) — 8 text/vision adapters (Anthropic, OpenAI, Gemini, OpenAI-compatible, Ollama, LM Studio, llama.cpp/vLLM, your own proxy) with per-provider key/URL/model fields, Fetch Models, and Test Connection with real error text | ✅ Working — sessionStorage-only keys by default, optional encrypted persistent storage, strict CSP |
-| **Local model support** — Route A (local server via Ollama/LM Studio/llama.cpp/vLLM) is fully working; Route C (Hugging Face model ID, in-browser WebGPU/WASM) loads via a lazy Web Worker; a Capability Probe badges WebGPU readiness | ⚠️ Route A working; Route C structurally implemented, not live-tested with a real multi-hundred-MB model download this pass; Route B (local file picker) not wired up yet — see Honest notes |
+| **Local model support** — Route A (local server via Ollama/LM Studio/llama.cpp/vLLM) is fully working; Route B (pick a local `.onnx` file, cached in IndexedDB/OPFS across reloads) and Route C (Hugging Face model ID, in-browser WebGPU/WASM) both load via the same lazy Web Worker; a Capability Probe badges WebGPU readiness | ⚠️ Routes A and B working; Route C structurally implemented, not live-tested with a real multi-hundred-MB model download this pass — see Honest notes |
 | **Spec-first generation** — prompt → schema-validated `PatternSpecV1` JSON → the same deterministic `AIGen.build()`/Check Pattern pipeline every other path uses, with one validate-and-retry pass and an honest fallback to the offline heuristic on failure | ✅ Working |
 | **Vision fusion** — when an image is supplied to a configured provider, the vision-informed spec is authoritative for garment type/neckline/closure; the existing pixel-analysis heuristic stays authoritative for length/flare/hem/colour | ✅ Working |
 | **AI Fashion Billboard, BYO-key** (Settings → AI Provider → Image generation) — OpenAI images, Gemini image, a local Stable Diffusion (Automatic1111) backend, a local ComfyUI backend (hardcoded text-to-image workflow, auto-detected checkpoint), plus the original proxy contract, unchanged. **"Generate Pattern Pieces From This"** on the generated photo drafts real editable pieces onto the canvas from the garment's relative silhouette (same pipeline as the AI Pattern Generator's own image upload); **"Read Pattern Pieces From This Tech-Pack"** on the generated flat-sketch/tech-pack drawing instead traces the image's *actual printed measurements* into real pieces (`pieces[].outlineCm`, needs a vision-capable Text Generation provider) — the existing "Use as Background Trace" manual path is still available for either image | ✅ Working — proxy option is byte-for-byte compatible with existing `server/billboard-proxy/worker.js` deployments |
@@ -391,12 +391,25 @@ in the app's own header.
   pass did not download and run a genuine multi-hundred-megabyte model in
   the browser end-to-end (impractical to verify repeatedly in this
   environment) — treat it as structurally verified, not fully
-  field-tested. **Route B (pick a local `.onnx`/`.gguf` file) is honestly
-  not wired up** — GGUF isn't supported by the in-browser runtime at all,
-  and `.onnx` needs an IndexedDB/OPFS + `onnxruntime-web` `InferenceSession`
-  path that doesn't exist yet; picking either file type today returns a
-  clear "not supported, use a local server instead" message rather than a
-  silent failure.
+  field-tested (tracked as WP-22).
+  **Route B** (pick a local `.onnx` file directly — Upgrade Plan v2.0
+  WP-21) is real as of this pass: the file's bytes are cached
+  (IndexedDB, or OPFS above ~2GB) so a later reload can reuse them via an
+  explicit "Load cached model" click — a plain reload with nothing
+  restored honestly shows "no model loaded," never a stale success. The
+  same worker then runs it through `onnxruntime-web` (WebGPU, falling
+  back to WASM), lazily imported exactly like Route C's runtime. Because
+  a raw `.onnx` file's architecture is unknown ahead of time — unlike
+  Route C's text-generation pipeline — Route B has no schema-aware
+  completion call; its "Run test inference" button runs a real forward
+  pass against a synthetic all-zero tensor shaped to the model's own
+  declared input metadata, which proves the model actually loads and
+  executes on-device but is a capability probe, not a meaningful read of
+  real data — feeding it an actual photo with correct per-model
+  preprocessing is what WP-39's segmentation feature does concretely for
+  one specific, known model, rather than attempting it generically here
+  for an arbitrary user-supplied file. GGUF still isn't supported by any
+  in-browser runtime and still returns that honest message unchanged.
 - **Spec-first generation** (`js/ai-spec-pipeline.js`): a configured
   provider is asked for a `PatternSpecV1` object (schema/pattern-spec.v1.json),
   validated once, retried once with the validator's own error text on

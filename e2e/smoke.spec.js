@@ -743,3 +743,91 @@ test('bundled avatar picker loads a real GLB model into 3D Preview', async ({ pa
 
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
+
+// BerryStudio-Upgrade-Plan-v2.0 WP-21: Route B's UI renders and shows an
+// honest "no model loaded" state by default — never a stale success. A
+// real .onnx file pick/inference round-trip isn't exercised here (that
+// needs a real small model file and, for the WebGPU path, real GPU
+// hardware — same class of gap WP-22 documents for Route C); this proves
+// the wiring itself: the route toggle, the file picker, and the cache
+// row all render against the real js/workers/model-file-cache.js (real
+// IndexedDB in Chromium, not mocked).
+test('WP-21: Route B (local .onnx file) UI renders an honest no-model-loaded state', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+  page.on('console', (msg) => { if (msg.type() === 'error' && !/Failed to load resource.*404/.test(msg.text())) errors.push(msg.text()); });
+
+  await page.goto('/index.html');
+  await dismissOnboarding(page);
+
+  await page.locator('#settingsBtn').click();
+  await expect(page.locator('#settingsModal')).toHaveClass(/show/);
+  await page.getByText('Text generation', { exact: true }).click();
+  const providerSelect = page.locator('#settingsModal select').filter({ has: page.locator('option[value="browser-local"]') });
+  await providerSelect.selectOption('browser-local');
+
+  await page.getByRole('button', { name: 'Local .onnx file', exact: true }).click();
+  await expect(page.getByText('No model loaded', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Pick .onnx file…', exact: true })).toBeVisible();
+  await expect(page.locator('#settingsModal input[type="file"][accept=".onnx"]')).toHaveCount(1);
+  // No cached model on a fresh profile — the cache row says so honestly
+  // rather than rendering a stale Restore/Clear pair.
+  await expect(page.getByText('No cached model', { exact: false })).toBeVisible();
+
+  // Switching back to the Hugging Face route restores the plain model
+  // text field (Route C, unchanged by this WP).
+  await page.getByRole('button', { name: 'Hugging Face model ID', exact: true }).click();
+  await expect(page.locator('#settingsModal input[list^="dl-text-"]')).toBeVisible();
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});
+
+// The real end-to-end path WP-21 actually promises: pick a genuine .onnx
+// file, run it through the real onnxruntime-web CDN import (WASM in
+// headless Chromium — no GPU device there), get a real inference result,
+// then reload the page with nothing re-picked and confirm the model does
+// NOT silently reappear (js/workers/local-model-worker.js starts fresh
+// every reload; the honest state is "no model loaded" until an explicit
+// pick or "Load cached model" click) — only after that click does the
+// cached copy (real IndexedDB bytes, not re-read from disk) come back.
+// e2e/fixtures/tiny-classifier.onnx is a real, tiny (327-byte), valid ONNX
+// graph (GlobalAveragePool -> Flatten -> MatMul -> Softmax) authored for
+// this test — small enough to commit, real enough to actually load.
+test('WP-21: a real .onnx file loads, runs real inference, and honestly forgets itself on reload until restored', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+  page.on('console', (msg) => { if (msg.type() === 'error' && !/Failed to load resource.*404/.test(msg.text())) errors.push(msg.text()); });
+
+  await page.goto('/index.html');
+  await dismissOnboarding(page);
+
+  async function openRouteBPanel() {
+    await page.locator('#settingsBtn').click();
+    await expect(page.locator('#settingsModal')).toHaveClass(/show/);
+    await page.getByText('Text generation', { exact: true }).click();
+    const providerSelect = page.locator('#settingsModal select').filter({ has: page.locator('option[value="browser-local"]') });
+    await providerSelect.selectOption('browser-local');
+    await page.getByRole('button', { name: 'Local .onnx file', exact: true }).click();
+  }
+
+  await openRouteBPanel();
+  await page.locator('#settingsModal input[type="file"][accept=".onnx"]').setInputFiles('e2e/fixtures/tiny-classifier.onnx');
+  await expect(page.getByText('Model loaded: tiny-classifier.onnx', { exact: false })).toBeVisible({ timeout: 20000 });
+
+  await page.getByRole('button', { name: 'Run test inference', exact: true }).click();
+  // A real forward pass through onnxruntime-web: reports the real output
+  // tensor's dims (Softmax over 4 classes -> [1,4]) and dtype, not a stub.
+  await expect(page.locator('#settingsModal .help-note', { hasText: 'output [1×4] float32' })).toBeVisible({ timeout: 20000 });
+
+  // Reload — the worker restarts, so this must be honest, not sticky.
+  await page.reload();
+  await dismissOnboarding(page);
+  await openRouteBPanel();
+  await expect(page.getByText('No model loaded', { exact: false })).toBeVisible();
+  await expect(page.getByText('Cached: tiny-classifier.onnx', { exact: false })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Load cached model', exact: true }).click();
+  await expect(page.getByText('Model loaded: tiny-classifier.onnx', { exact: false })).toBeVisible({ timeout: 20000 });
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});

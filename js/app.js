@@ -12,7 +12,8 @@ import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, expor
 import './girls-leotards.js'; // side-effect only — adds the 100-pattern Girls' Gymnastics Leotards collection
 import { FancyGen } from './fancy-patterns.js';
 import { PatternValidator } from './validate.js';
-import { AIProviders, AI_PROVIDER_IDS, getProvider } from './ai-providers.js';
+import { AIProviders, AI_PROVIDER_IDS, getProvider, loadLocalModelFromFile, restoreLocalModelFromCache, runOnnxTestInference } from './ai-providers.js';
+import { getModelFileMeta, clearModelFile } from './workers/model-file-cache.js';
 import { KeyStore } from './ai-keystore.js';
 import { probeCapabilities } from './capability-probe.js';
 import { generateFromSpec, provenanceMapFromSpec } from './ai-spec-pipeline.js';
@@ -2727,6 +2728,13 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   // Local UI state only (which sub-nav pane is showing) — not persisted,
   // openSettings() rebuilds this panel from scratch every time it's opened.
   let aiSettingsTab = "text";
+  // WP-21 Route B: deliberately in-memory only, NEVER persisted to
+  // state/localStorage — a page reload must honestly show "no model
+  // loaded" (js/workers/local-model-worker.js starts fresh every reload
+  // too) even though the model's bytes are still sitting in IndexedDB/
+  // OPFS waiting for an explicit "Load cached model" click.
+  let onnxLoadedInfo = null; // { name, inputNames, outputNames } once loaded this session
+  let onnxLastResult = null; // last runOnnxTestInference() result, for display
 
   // Today's state.aiEndpoint/aiImageEndpoint (the old flat fields) become the
   // `proxy` adapter's persisted baseUrl the first time this renders — existing
@@ -2878,6 +2886,107 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     renderProviderPane(pane, aiSettingsTab==="image");
   }
 
+  // WP-21 Route B panel: pick a .onnx file, restore/clear whatever's
+  // cached, run a real (if synthetic-input) inference pass. Kept as its
+  // own function rather than folded into renderProviderPane — this UI
+  // shares nothing with the model/vision-model/fetch/test fields every
+  // other adapter renders (see isRouteBFile's early return there).
+  function renderOnnxFileRoute(pane, cfg){
+    pane.appendChild(el("div","help-note",T("onnxHint")));
+
+    const statusLine=el("div","help-note"); statusLine.dir="ltr"; statusLine.style.marginTop="10px";
+    function paintStatus(){
+      if(onnxLoadedInfo){
+        statusLine.style.color="var(--ok)";
+        statusLine.textContent=`✓ ${T("onnxModelLoaded")}: ${onnxLoadedInfo.name}`;
+      } else {
+        statusLine.style.color="var(--ink-2)";
+        statusLine.textContent=`○ ${T("onnxNoModelLoaded")}`;
+      }
+    }
+    paintStatus();
+
+    const pickRow=el("div"); pickRow.style.cssText="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;align-items:center";
+    const fileInput=el("input"); fileInput.type="file"; fileInput.accept=".onnx"; fileInput.style.display="none";
+    const pickBtn=el("button","big-btn ghost", T("onnxPickFile"));
+    pickBtn.type="button"; pickBtn.onclick=()=>fileInput.click();
+    fileInput.onchange=async()=>{
+      const f=fileInput.files && fileInput.files[0]; fileInput.value="";
+      if(!f) return;
+      const orig=pickBtn.textContent; pickBtn.disabled=true; pickBtn.textContent=T("onnxLoading");
+      try{
+        const bytes=await f.arrayBuffer();
+        const result=await loadLocalModelFromFile(f.name, f.type||"application/octet-stream", bytes);
+        onnxLoadedInfo={ name: result.name, inputNames: result.inputNames, outputNames: result.outputNames };
+        onnxLastResult=null;
+        toast("✓ "+T("onnxModelLoaded"));
+      }catch(e){ toast("✗ "+(e&&e.message||e)); }
+      finally{ pickBtn.disabled=false; pickBtn.textContent=orig; renderProviderPane(pane, false); }
+    };
+    pickRow.appendChild(pickBtn); pickRow.appendChild(fileInput);
+    pane.appendChild(pickRow);
+    pane.appendChild(statusLine);
+
+    // Cached-model row — metadata-only read (js/workers/model-file-cache.js
+    // never hands back bytes for this), so this is cheap on every render
+    // and never itself counts as "loading" a model.
+    const cacheRow=el("div"); cacheRow.style.cssText="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;align-items:center";
+    const cacheInfo=el("div","help-note"); cacheInfo.dir="ltr"; cacheInfo.textContent=T("loading");
+    cacheRow.appendChild(cacheInfo);
+    pane.appendChild(cacheRow);
+    getModelFileMeta().then(meta=>{
+      cacheInfo.textContent = meta ? `${T("onnxCachedLabel")}: ${meta.name} (${(meta.size/1e6).toFixed(1)}MB)` : T("onnxNoCached");
+      if(!meta) return;
+      const restoreBtn=el("button","big-btn ghost", T("onnxLoadCached"));
+      restoreBtn.type="button";
+      restoreBtn.onclick=async()=>{
+        const orig=restoreBtn.textContent; restoreBtn.disabled=true; restoreBtn.textContent=T("onnxLoading");
+        try{
+          const result=await restoreLocalModelFromCache();
+          onnxLoadedInfo={ name: result.name, inputNames: result.inputNames, outputNames: result.outputNames };
+          onnxLastResult=null;
+          toast("✓ "+T("onnxModelLoaded"));
+        }catch(e){ toast("✗ "+(e&&e.message||e)); }
+        finally{ restoreBtn.disabled=false; restoreBtn.textContent=orig; renderProviderPane(pane, false); }
+      };
+      const clearBtn=el("button","big-btn ghost", T("onnxClearCached"));
+      clearBtn.type="button";
+      clearBtn.onclick=async()=>{ await clearModelFile(); renderProviderPane(pane, false); };
+      cacheRow.appendChild(restoreBtn); cacheRow.appendChild(clearBtn);
+    });
+
+    // Test-inference section — only meaningful once a model is actually
+    // loaded this session (picked or restored above).
+    const testWrap=el("div"); testWrap.style.marginTop="10px";
+    pane.appendChild(testWrap);
+    function renderTestSection(){
+      testWrap.innerHTML="";
+      if(!onnxLoadedInfo) return;
+      testWrap.appendChild(el("div","help-note",T("onnxTestHint")));
+      const testBtn=el("button","big-btn ghost", T("onnxRunTest"));
+      testBtn.type="button"; testBtn.style.marginTop="8px";
+      const resultLine=el("div","help-note"); resultLine.dir="ltr"; resultLine.style.marginTop="8px";
+      if(onnxLastResult) resultLine.textContent=onnxLastResult;
+      testBtn.onclick=async()=>{
+        const orig=testBtn.textContent; testBtn.disabled=true; testBtn.textContent=T("onnxLoading");
+        try{
+          const r=await runOnnxTestInference();
+          const outSummary=r.outputs.map(o=>`${o.name} [${o.dims.join("×")}] ${o.type}`).join(", ");
+          resultLine.style.color="var(--ok)";
+          onnxLastResult = `✓ ${outSummary} (${r.latencyMs}ms)`;
+          resultLine.textContent=onnxLastResult;
+        }catch(e){
+          resultLine.style.color="var(--danger)";
+          onnxLastResult = "✗ "+(e&&e.message||e);
+          resultLine.textContent=onnxLastResult;
+        }
+        finally{ testBtn.disabled=false; testBtn.textContent=orig; }
+      };
+      testWrap.appendChild(testBtn); testWrap.appendChild(resultLine);
+    }
+    renderTestSection();
+  }
+
   function renderProviderPane(pane, isImage){
     pane.innerHTML="";
     // BerryStudio-Upgrade-Plan WP-4: image-generation adapters
@@ -2898,6 +3007,15 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     });
     sel.onchange=()=>{ state[stateKey]=sel.value; save(); renderProviderPane(pane, isImage); };
     selWrap.appendChild(sel); pane.appendChild(selWrap);
+
+    const adapter=providerSet[activeId];
+    const cfg=aiCfgFor(activeId, isImage);
+    // WP-21: Route B (local .onnx file) has its own dedicated UI
+    // (renderOnnxFileRoute below) and no {model, test, fetchModels}
+    // surface of its own — the generic model/vision fields and
+    // fetch/test buttons further down don't apply to it.
+    const isRouteBFile = !isImage && activeId==="browser-local" && cfg.route==="file";
+
     if(isImage && activeId==="local-image"){
       pane.appendChild(el("div","help-note",T("localImageHint")));
     }
@@ -2913,10 +3031,18 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         badge.style.color = color;
         badge.textContent = `${cap.tier==="green"?"●":cap.tier==="amber"?"◐":"○"} WebGPU: ${cap.webgpu?"yes":"no"} — ${cap.reason}`;
       });
+      // BerryStudio-Upgrade-Plan-v2.0 WP-21 — Route B: a real local .onnx
+      // file, alongside Route C's existing Hugging Face model ID (which
+      // still uses the generic "Text model" field rendered further down).
+      // `cfg.route` defaults to "hf" so every existing saved config keeps
+      // behaving exactly as before this WP.
+      const route = cfg.route === "file" ? "file" : "hf";
+      const routeSeg=el("div","seg",`<button class="${route==="hf"?"active":""}">${T("routeBToggleHF")}</button><button class="${route==="file"?"active":""}">${T("routeBToggleFile")}</button>`);
+      routeSeg.children[0].onclick=()=>{ cfg.route="hf"; save(); renderProviderPane(pane, isImage); };
+      routeSeg.children[1].onclick=()=>{ cfg.route="file"; save(); renderProviderPane(pane, isImage); };
+      pane.appendChild(routeSeg);
+      if(isRouteBFile) renderOnnxFileRoute(pane, cfg);
     }
-
-    const adapter=providerSet[activeId];
-    const cfg=aiCfgFor(activeId, isImage);
 
     (adapter.fields||[]).forEach(f=>{
       const fWrap=el("div","field");
@@ -2961,6 +3087,8 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       };
       pr.appendChild(sw); pane.appendChild(pr);
     }
+
+    if(isRouteBFile) return; // Route B's own UI (renderOnnxFileRoute) already rendered everything this pane needs
 
     // model slot — free-text input with a <datalist> populated by "Fetch
     // models" (text/vision providers only — image adapters have no
