@@ -10,6 +10,22 @@ export const Canvas = (() => {
   let view = { x: 60, y: 60, scale: 3.2 };     // px per cm
   let pieces = [];                              // current pattern pieces (cm space, positioned)
   let selected = -1;
+  // Group piece selection — populated by Shift+click (the select/move tool's
+  // own tooltip has always claimed "Shift-click for multi-select"; nothing
+  // ever actually implemented it) and by the Lasso tool. `selected` stays
+  // the single-piece source of truth for handle-based tools (rotate/scale/
+  // drag-anchor editing, which have no sane multi-piece meaning); it tracks
+  // the sole entry whenever multiSelected.length===1 and goes to -1 for 0 or
+  // 2+, so those tools simply have nothing to grab onto during a real group
+  // selection instead of silently acting on the wrong single piece.
+  let multiSelected = [];
+  let lassoPts = null;                // live freehand loop while the Lasso tool is dragging
+  let lassoAdditive = false;          // Shift was held when the current lasso drag started
+  // Curve Edge tool's live drag state: {pieceIdx, fromIdx, p0, p1, bulge,
+  // startX, startY, moved, existing} — `existing` is the piece's own
+  // p.curves entry for this edge if it was already curved (re-drag to
+  // reshape), else null (a fresh curve).
+  let curveEdit = null;
   let tool = "select";
   let opts = { grid: true, snap: true, seam: true, unitsCm: true, seamCm: 1, fillOpacity: 0.12 };
   let sketch = [];                              // user-drawn strokes {tool, pts:[[cm,cm]]}
@@ -57,12 +73,25 @@ export const Canvas = (() => {
   // promoteBuf itself is cleared immediately once the loop closes (see
   // below), well before the user actually finishes naming the piece.
   let pendingPromoteIds = null;
+  // Set instead of pendingPromoteIds when the pending outline came from
+  // clicking a closed SKETCH shape (Filled Shape/Pen/Freehand) with the
+  // Create Pattern Piece tool, rather than from clicking construction
+  // points in order — the index into `sketch` to remove once the piece is
+  // actually confirmed (kept alive past the rename prompt for the same
+  // reason pendingPromoteIds is).
+  let pendingPromoteSketchIdx = null;
   let onPromoteReq = () => {};         // app callback: (outlinePts) => opens the name prompt
   let onPointReq = () => {};           // app callback: ({point,cx,cy}) => opens the point rename/formula editor
   let variables = {};                  // name -> formula string
   let measureProvider = () => ({});    // app-injected: () => current measurement object
   let bg = null;                       // trace image {img, dataURL, x, y, scale, opacity, visible}
   let onCalibReq = () => {};           // app callback: (measuredDistCm) => prompts for the true distance
+  // app callback: (key) => toast(T(key)) — a semantic reason string, not
+  // display text (this module has no i18n of its own); used by the Curve
+  // Edge and Create Pattern Piece (sketch-promotion) tools below for the
+  // handful of "that specific click/drag isn't valid, here's why" cases a
+  // silent no-op would otherwise leave the user guessing about.
+  let onWarn = () => {};
   let hlPoint = null, hlCons = null;   // id of a point/construction-line highlighted from the Object Browser
   // Index into `sketch` of the selected free-drawn stroke (Line/Arc/Pen/
   // Freehand/Filled Shape) — these were previously invisible to Select:
@@ -128,7 +157,7 @@ export const Canvas = (() => {
     pushUndo();
     pieces = layoutPieces(rawPieces);
     pieces.forEach((p, i) => p.color = colors[i % colors.length]);
-    selected = -1; sketch = []; texts = []; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null;
+    selected = -1; multiSelected=[]; sketch = []; texts = []; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null;
     fit();
   }
   function getPieces(){ return pieces; }
@@ -136,8 +165,8 @@ export const Canvas = (() => {
   // ---- undo / redo ----
   function snapshot(){ return JSON.stringify({ pieces, sketch, texts, points, cons }); }
   function pushUndo(){ undo.push(snapshot()); if (undo.length>60) undo.shift(); redo.length=0; }
-  function doUndo(){ if(!undo.length) return; redo.push(snapshot()); const s=JSON.parse(undo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; promoteBuf=[]; pendingPromoteIds=null; render(); }
-  function doRedo(){ if(!redo.length) return; undo.push(snapshot()); const s=JSON.parse(redo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; promoteBuf=[]; pendingPromoteIds=null; render(); }
+  function doUndo(){ if(!undo.length) return; redo.push(snapshot()); const s=JSON.parse(undo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; promoteBuf=[]; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; render(); }
+  function doRedo(){ if(!redo.length) return; undo.push(snapshot()); const s=JSON.parse(redo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; promoteBuf=[]; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; render(); }
 
   // ---- seam allowance offset (outward polygon offset) ----
   // WP-14: the actual algorithm now lives in js/geometry.js (pure, unit
@@ -150,13 +179,19 @@ export const Canvas = (() => {
   // ---- geometry helpers ----
   const centroid = poly => { const n=poly.length; let x=0,y=0; poly.forEach(p=>{x+=p[0];y+=p[1];}); return [x/n,y/n]; };
   const bbox = poly => { const xs=poly.map(p=>p[0]),ys=poly.map(p=>p[1]); return {minX:Math.min(...xs),minY:Math.min(...ys),maxX:Math.max(...xs),maxY:Math.max(...ys)}; };
-  const snapGeo = p => JSON.parse(JSON.stringify({ outline:p.outline, darts:p.darts||[], notches:p.notches||[], grain:p.grain||[] }));
+  // curves included alongside outline/darts/notches/grain: same "must move
+  // WITH the piece" reasoning as movePiece()'s own fix above — a rotate or
+  // scale handle-drag is an even more visible desync than a plain
+  // translate would be (the curve's control points staying put while the
+  // rest of the piece rotates/scales around them).
+  const snapGeo = p => JSON.parse(JSON.stringify({ outline:p.outline, darts:p.darts||[], notches:p.notches||[], grain:p.grain||[], curves:p.curves||[] }));
   // apply a per-point transform to a whole piece, sourced from a frozen snapshot
   function applyFromSnap(p, snp, fn){
     p.outline = snp.outline.map(fn);
     p.darts   = snp.darts.map(d=>d.map(fn));
     p.notches = snp.notches.map(fn);
     p.grain   = snp.grain.map(fn);
+    if (snp.curves.length) p.curves = snp.curves.map(c => ({ ...c, c1: fn(c.c1), c2: fn(c.c2) }));
   }
   const rotAbout = (c,ang) => ([x,y]) => { const dx=x-c[0],dy=y-c[1],cs=Math.cos(ang),sn=Math.sin(ang); return [c[0]+dx*cs-dy*sn, c[1]+dx*sn+dy*cs]; };
   const sclAbout = (c,f)   => ([x,y]) => [c[0]+(x-c[0])*f, c[1]+(y-c[1])*f];
@@ -419,20 +454,39 @@ export const Canvas = (() => {
     });
     return best;
   }
-  // Insert a new outline vertex right after edgeIdx. Any edges[].fromIdx/
-  // toIdx referencing a later vertex (used by Walk the Seam / princess-seam
-  // placement — js/app.js, js/geometry.js) must shift up by one so they
-  // still point at the same physical vertices after the splice.
+  // Splices `newPts` into p.outline right after `afterIdx`, first removing
+  // `delCount` existing points there (0 for a pure insertion — Add Point's
+  // own case below; >0 when REPLACING a span, e.g. the Curve Edge tool
+  // replacing an edge's far endpoint with several bezier-sampled points).
+  // Every index-bearing structure that references an outline POSITION —
+  // edges[].fromIdx/toIdx (Walk the Seam / princess-seam placement —
+  // js/app.js, js/geometry.js), curves[].fromIdx/toIdx (WP-14 bezier
+  // metadata), chestEdgeIndices (js/validate.js's ease check) — is shifted
+  // so it still points at the same PHYSICAL vertex afterward, not whatever
+  // now happens to sit at its old numeric index. `curves` is excluded from
+  // its own entry's caller in effect (that entry is added separately by the
+  // caller with its own already-correct indices), but any OTHER existing
+  // curve on this same piece is just as real a case as edges[]/
+  // chestEdgeIndices and was silently missing before this helper existed.
+  function spliceOutline(p, afterIdx, delCount, newPts){
+    const shift = newPts.length - delCount;
+    p.outline.splice(afterIdx+1, delCount, ...newPts);
+    if (!shift) return;
+    const bump = idx => idx>afterIdx ? idx+shift : idx;
+    if (Array.isArray(p.edges)) p.edges.forEach(e=>{
+      if (e.fromIdx!=null) e.fromIdx=bump(e.fromIdx);
+      if (e.toIdx!=null) e.toIdx=bump(e.toIdx);
+    });
+    if (Array.isArray(p.curves)) p.curves.forEach(c=>{
+      c.fromIdx=bump(c.fromIdx); c.toIdx=bump(c.toIdx);
+    });
+    if (Array.isArray(p.chestEdgeIndices)) p.chestEdgeIndices=p.chestEdgeIndices.map(bump);
+  }
+  // Insert a new outline vertex right after edgeIdx.
   function insertOutlinePoint(pieceIdx, edgeIdx, pt){
     const p=pieces[pieceIdx]; if (!p) return false;
     pushUndo();
-    p.outline.splice(edgeIdx+1, 0, pt);
-    if (Array.isArray(p.edges)){
-      p.edges.forEach(e=>{
-        if (e.fromIdx!=null && e.fromIdx>edgeIdx) e.fromIdx++;
-        if (e.toIdx!=null && e.toIdx>edgeIdx) e.toIdx++;
-      });
-    }
+    spliceOutline(p, edgeIdx, 0, [pt]);
     selected=pieceIdx; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null;
     render(); return true;
   }
@@ -440,6 +494,15 @@ export const Canvas = (() => {
   function removeSketch(i){
     if (!sketch[i]) return false;
     pushUndo(); sketch.splice(i,1); if (selSketch===i) selSketch=null; render(); return true;
+  }
+  function getSketch(){ return sketch; }
+  // Mirrors addPoint/addPiece/addText's own "plain programmatic add" shape
+  // — the pen/free/polygon tools normally build a stroke through their own
+  // pointerdown/move/up sequence, but a stroke is just {tool, pts} once
+  // finished, so there's no reason a caller (or a test) that already has
+  // that shape needs to replay pointer events to get one onto the canvas.
+  function addSketchStroke(stroke){
+    pushUndo(); sketch.push(stroke); render(); return sketch.length-1;
   }
 
   // Delete whatever is currently selected on the canvas — a construction
@@ -454,6 +517,11 @@ export const Canvas = (() => {
     if (selText!=null){ const id=selText; selText=null; removeText(id); return true; }
     if (selNotch){ const {pieceIdx,idx}=selNotch; selNotch=null; return removeNotch(pieceIdx,idx); }
     if (selSketch!=null){ const i=selSketch; selSketch=null; return removeSketch(i); }
+    if (multiSelected.length){
+      pushUndo();
+      multiSelected.slice().sort((a,b)=>b-a).forEach(i=>{ if(pieces[i]) pieces.splice(i,1); });
+      multiSelected=[]; selected=-1; render(); return true;
+    }
     if (selected>=0) return removePiece(selected);
     return false;
   }
@@ -551,6 +619,7 @@ export const Canvas = (() => {
     drawRulers(W,H);
     pieces.forEach((p,i)=>drawPiece(p,i));
     if (selected>=0 && pieces[selected] && pieces[selected].visible && SHOW_HANDLES.has(tool)) drawHandles(pieces[selected]);
+    drawMultiSelection();
     drawConstruction();
     drawSketch();
     drawTexts();
@@ -558,8 +627,27 @@ export const Canvas = (() => {
     drawClickPreview();
     drawSnapMark();
     drawAddPointPreview();
+    drawLassoPreview();
+    drawCurveEditPreview();
   }
-
+  // Dashed accent outline around every group-selected piece (Shift+click or
+  // Lasso) — SHOW_HANDLES-style single-piece handles don't apply to a
+  // multi-piece group (there's no one anchor/rotate/scale center that makes
+  // sense), so this is deliberately just a highlight, not editable handles.
+  function drawMultiSelection(){
+    if (!multiSelected.length) return;
+    ctx.save(); ctx.strokeStyle = CSS("--ok") || "#2fb380"; ctx.lineWidth = 2.4; ctx.setLineDash([5,4]);
+    multiSelected.forEach(i=>{ const p=pieces[i]; if (p && p.visible){ path(p.outline); ctx.stroke(); } });
+    ctx.restore();
+  }
+  // Live rubber-band while the Lasso tool is being dragged.
+  function drawLassoPreview(){
+    if (!lassoPts || lassoPts.length<2) return;
+    ctx.save(); ctx.strokeStyle = CSS("--brand"); ctx.fillStyle = hexA(CSS("--brand"),0.08);
+    ctx.lineWidth = 1.6; ctx.setLineDash([4,3]);
+    path(lassoPts.map(pt=>pt), true);
+    ctx.fill(); ctx.stroke(); ctx.restore();
+  }
   // ---- trace-over background reference image ----
   function drawBackground(){
     if (!bg || !bg.visible || !bg.img) return;
@@ -1028,7 +1116,15 @@ export const Canvas = (() => {
       }
       if (tool==="promote"){
         const pid = hitPointScreen(e.offsetX, e.offsetY);
-        if (pid==null) return;
+        if (pid==null){
+          // No construction point there — try a closed SKETCH shape instead
+          // (Filled Shape/Pen/Freehand) so the SAME tool/button promotes
+          // either source of a closed outline, rather than needing two
+          // separate tools for what's conceptually one action.
+          const si = hitSketch(e.offsetX, e.offsetY);
+          if (si!=null) promoteSketchToPiece(si);
+          return;
+        }
         if (promoteBuf.length>=3 && pid===promoteBuf[0]){
           pendingPromoteOutline = promoteBuf.map(id=>{ const p=getPointById(id); return [p.x,p.y]; });
           pendingPromoteIds = promoteBuf.slice();
@@ -1069,6 +1165,23 @@ export const Canvas = (() => {
         if (hit){ insertOutlinePoint(hit.pieceIdx, hit.edgeIdx, hit.point); onPick(pieces[hit.pieceIdx], e.clientX, e.clientY); }
         render(); return;
       }
+      // Curve Edge: arm on pointerdown near an edge, drag to bow it (commits
+      // on release — see pointerup below), same "grab now, decide the real
+      // shape on release" shape as the handle-based rotate/scale edit.
+      if (tool==="curve"){
+        const hit=findEdgeInsertion(wx,wy);
+        if (!hit) return;
+        const p=pieces[hit.pieceIdx], n=p.outline.length, fromIdx=hit.edgeIdx, toIdx=fromIdx+1;
+        if (toIdx>=n){ onWarn('curveWraparound'); return; }
+        selected=hit.pieceIdx; onPick(p, e.clientX, e.clientY);
+        curveEdit = {
+          pieceIdx: hit.pieceIdx, fromIdx,
+          p0: p.outline[fromIdx].slice(), p1: p.outline[toIdx].slice(),
+          bulge: hit.point.slice(), startX: wx, startY: wy, moved: 0,
+          existing: (p.curves||[]).find(c=>c.fromIdx===fromIdx) || null,
+        };
+        render(); return;
+      }
 
       // text: click empty space to place, click existing text to edit
       if (tool==="text"){
@@ -1098,6 +1211,13 @@ export const Canvas = (() => {
         drawing.pts.push([snap(wx,e.shiftKey),snap(wy,e.shiftKey)]); render(); return;
       }
       if (tool==="free"||tool==="freehand"){ drawing={tool:"free",pts:[[wx,wy]]}; return; }
+      // Lasso: freehand-drag a loop, release to select every piece whose
+      // centroid lands inside it — an ephemeral selection aid, unlike
+      // pen/free/polygon's sketch strokes, so lassoPts is never pushed onto
+      // `sketch` and leaves nothing behind once the selection is made.
+      // Shift+drag ADDS to whatever's already group-selected instead of
+      // replacing it, the standard lasso convention.
+      if (tool==="lasso"){ lassoPts=[[wx,wy]]; lassoAdditive=e.shiftKey; return; }
 
       // (4) rotate / scale by dragging anywhere on a piece body
       if (tool==="rotate" || tool==="scale"){
@@ -1113,11 +1233,35 @@ export const Canvas = (() => {
         if (ti>=0){ pushUndo(); dragText={ i:ti, ox:wx, oy:wy }; selText=texts[ti].id; hlPoint=null; hlCons=null; selNotch=null; selected=-1; onPick(null); render(); return; }
       }
       const hit = hitPiece(wx,wy);
-      if (hit>=0){ selected=hit; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; onPick(pieces[hit], e.clientX, e.clientY);
-        if(tool==="select"||tool==="move"){ dragPiece={i:hit,ox:wx,oy:wy}; pushUndo(); } }
-      else {
+      // Shift+click toggles group membership instead of replacing the
+      // selection — the one thing tt_select's own tooltip has always
+      // promised ("Shift-click for multi-select") without it ever actually
+      // existing. A bare (non-shift) click on a piece already inside an
+      // existing group drags the WHOLE group together; on anything else it
+      // clears the group back down to a plain single selection, matching
+      // ordinary click-to-deselect-others conventions.
+      if ((tool==="select"||tool==="move") && e.shiftKey && hit>=0){
+        const at = multiSelected.indexOf(hit);
+        if (at>=0) multiSelected.splice(at,1); else multiSelected.push(hit);
+        selected = multiSelected.length===1 ? multiSelected[0] : -1;
+        hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null;
+        onPick(selected>=0 ? pieces[selected] : null, e.clientX, e.clientY);
+        render(); return;
+      }
+      if (hit>=0){
+        hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null;
+        if ((tool==="select"||tool==="move") && multiSelected.includes(hit) && multiSelected.length>1){
+          // dragging a member of an existing group moves the whole group —
+          // keep multiSelected/selected exactly as they are
+          onPick(null, e.clientX, e.clientY);
+          dragPiece={i:hit,ox:wx,oy:wy,group:multiSelected.slice()}; pushUndo();
+        } else {
+          multiSelected=[]; selected=hit; onPick(pieces[hit], e.clientX, e.clientY);
+          if(tool==="select"||tool==="move"){ dragPiece={i:hit,ox:wx,oy:wy}; pushUndo(); }
+        }
+      } else {
         selected=-1; onPick(null);
-        if (tool==="select"||tool==="move"){ hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; }
+        if (tool==="select"||tool==="move"){ multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; }
       }
       render();
     });
@@ -1139,7 +1283,12 @@ export const Canvas = (() => {
 
       if (dragText){ const t=texts[dragText.i]; t.x+=wx-dragText.ox; t.y+=wy-dragText.oy; dragText.ox=wx; dragText.oy=wy; render(); return; }
       if (dragPoint){ const p=getPointById(dragPoint.id); if(p){ p.x+=wx-dragPoint.ox; p.y+=wy-dragPoint.oy; p.xExpr=null; p.yExpr=null; } dragPoint.ox=wx; dragPoint.oy=wy; render(); return; }
-      if (dragPiece){ const dx=wx-dragPiece.ox, dy=wy-dragPiece.oy; movePiece(dragPiece.i,dx,dy); dragPiece.ox=wx; dragPiece.oy=wy; render(); return; }
+      if (dragPiece){
+        const dx=wx-dragPiece.ox, dy=wy-dragPiece.oy;
+        if (dragPiece.group) dragPiece.group.forEach(gi=>movePiece(gi,dx,dy));
+        else movePiece(dragPiece.i,dx,dy);
+        dragPiece.ox=wx; dragPiece.oy=wy; render(); return;
+      }
       if (drawing && drawing.tool==="line"){ drawing.pts[1]=[snap(wx,e.shiftKey),snap(wy,e.shiftKey)]; render(); return; }
       if (drawing && drawing.tool==="arc"){ if(drawing.phase===1) drawing.pts[1]=[snap(wx,e.shiftKey),snap(wy,e.shiftKey)]; else drawing.ctrl=[wx,wy]; render(); return; }
       if (drawing && drawing.tool==="conline"){ const s=snapConstruction(wx,wy,e.shiftKey); drawing.pts[1]=[s.x,s.y]; drawing.refs[1]=refFromSnap(s); render(); return; }
@@ -1151,9 +1300,15 @@ export const Canvas = (() => {
       if (drawing && drawing.tool==="circle"){ const s=snapConstruction(wx,wy,e.shiftKey); drawing.rim=[s.x,s.y]; render(); return; }
       if (tool==="point"){ snapConstruction(wx,wy,e.shiftKey); render(); return; }
       if (drawing && drawing.tool==="free"){ drawing.pts.push([wx,wy]); render(); return; }
+      if (tool==="lasso" && lassoPts){ lassoPts.push([wx,wy]); render(); return; }
       if (clickBuf.length && (tool==="knife"||tool==="grain"||tool==="calib")){ render(); return; }
       if (drawing && drawing.tool==="polygon"){ render(); return; }
       if (tool==="addpoint"){ addPointPreview=findEdgeInsertion(wx,wy); render(); return; }
+      if (curveEdit){
+        curveEdit.bulge=[wx,wy];
+        curveEdit.moved=Math.max(curveEdit.moved, Math.hypot(wx-curveEdit.startX, wy-curveEdit.startY));
+        render(); return;
+      }
 
       // hover cursor feedback over handles
       if (selected>=0 && pieces[selected] && SHOW_HANDLES.has(tool)){
@@ -1172,6 +1327,28 @@ export const Canvas = (() => {
         if (Math.hypot(b[0]-a[0], b[1]-a[1]) > 0.25){ pushUndo(); cons.push({id:consSeq++, kind:"line", a:drawing.refs[0], b:drawing.refs[1]}); }
         drawing=null; render();
       }
+      // Lasso commits on release: a piece counts as "inside" when its own
+      // centroid falls inside the drawn loop — simple, and matches how a
+      // lasso reads to the eye for the compact, mostly-convex garment
+      // pieces this app deals in (no need for a full polygon-intersection
+      // test to get an intuitively correct result). A loop too small to be
+      // a real drag (a near-stationary click) just clears the selection
+      // instead — the lasso tool's equivalent of the Select tool's
+      // click-empty-space-to-deselect.
+      if (tool==="lasso" && lassoPts){
+        const loop=lassoPts;
+        const xs=loop.map(p=>p[0]), ys=loop.map(p=>p[1]);
+        const bigEnough = loop.length>=3 && (Math.max(...xs)-Math.min(...xs) > 0.6 || Math.max(...ys)-Math.min(...ys) > 0.6);
+        if (bigEnough){
+          const enclosed=[];
+          pieces.forEach((p,i)=>{ if(p.visible && !p.locked){ const c=centroid(p.outline); if(inPoly(c[0],c[1],loop)) enclosed.push(i); } });
+          multiSelected = lassoAdditive ? Array.from(new Set([...multiSelected, ...enclosed])) : enclosed;
+        } else if (!lassoAdditive) multiSelected=[];
+        selected = multiSelected.length===1 ? multiSelected[0] : -1;
+        onPick(selected>=0 ? pieces[selected] : null);
+        lassoPts=null; render();
+      }
+      if (curveEdit) commitCurveEdit();
       pan=null; dragPiece=null; dragText=null; dragPoint=null;
     });
     cv.addEventListener("dblclick", (e)=>{
@@ -1184,10 +1361,17 @@ export const Canvas = (() => {
     });
   }
 
+  // WP-<n>: drag-move used to leave p.curves' c1/c2 control points behind at
+  // their pre-move position while the outline itself moved — nudgePiece()
+  // (keyboard arrows, below) already got this right; a dragged piece with
+  // any curved edge (from the new Curve Edge tool, or a princess-seam piece
+  // from js/fancy-patterns.js) would visibly desync its curve from its own
+  // outline the instant it was dragged. Mirrors nudgePiece()'s own shift.
   function movePiece(i,dx,dy){ const p=pieces[i];
     const mv=pt=>[pt[0]+dx,pt[1]+dy];
     p.outline=p.outline.map(mv); p.darts=(p.darts||[]).map(d=>d.map(mv));
     p.notches=(p.notches||[]).map(mv); p.grain=(p.grain||[]).map(mv);
+    if (p.curves) p.curves = p.curves.map(c => ({ ...c, c1: mv(c.c1), c2: mv(c.c2) }));
   }
   // Begin a handle edit; freeze the piece geometry so transforms are drift-free.
   function beginEdit(hh, wx, wy){
@@ -1249,13 +1433,22 @@ export const Canvas = (() => {
     tool=t; clickBuf=[]; edit=null; snapMark=null;
     if(t!=="addpoint") addPointPreview=null;
     if(t!=="measure")measurePts=[];
-    if(t!=="promote"){ promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; }
+    if(t!=="promote"){ promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null; }
     if(t!=="pen"&&drawing&&drawing.tool==="pen"){sketch.push(drawing);drawing=null;}
     if(t!=="polygon"&&drawing&&drawing.tool==="polygon"){ if(drawing.pts.length>=3)sketch.push(drawing); drawing=null; }
     if(drawing&&drawing.tool==="arc"&&t!=="arc"){ drawing=null; }   // drop an unfinished arc
     if(drawing&&drawing.tool==="conarc"&&t!=="conarc"){ drawing=null; }
     if(drawing&&drawing.tool==="conline"&&t!=="conline"){ drawing=null; }
     if(drawing&&drawing.tool==="circle"&&t!=="circle"){ drawing=null; }
+    if(t!=="lasso") lassoPts=null;
+    if(t!=="curve") curveEdit=null;   // drop an in-progress (uncommitted) curve drag
+    // Group selection only stays meaningful for the tools that can act on
+    // a group at all (select/move to drag it, lasso to add to it) — every
+    // other tool (rotate/scale/curve/promote/knife/...) has single-piece or
+    // non-piece semantics, so switching to one drops back to a plain
+    // single/no selection rather than leaving a stale, misleading group
+    // highlight up that tool can't actually do anything with.
+    if(t!=="select"&&t!=="move"&&t!=="lasso"&&multiSelected.length) multiSelected=[];
     cv.style.cursor = (t==="pan")?"grab":(t==="select"||t==="move")?"default":(t==="rotate")?"grab":(t==="text")?"text":"crosshair";
     render();
   }
@@ -1268,7 +1461,10 @@ export const Canvas = (() => {
   function setMaterial(i,matKey){ if(pieces[i]){ pieces[i].material=matKey||null; render(); } }
   function setTexture(i,dataURL){ if(pieces[i]){ pieces[i].textureDataURL=dataURL||null; render(); } }
   function getSelected(){ return selected; }
-  function selectPiece(i){ if(pieces[i] && !pieces[i].locked){ selected=i; render(); } }
+  // Indices of every piece currently in the group selection (Shift+click or
+  // Lasso) — empty array when there's none/only a plain single selection.
+  function getMultiSelection(){ return multiSelected.slice(); }
+  function selectPiece(i){ if(pieces[i] && !pieces[i].locked){ selected=i; multiSelected=[]; render(); } }
   function clearSketch(){ pushUndo(); sketch=[]; render(); }
   function onZoomChange(cb){ onZoom=cb; }
   // A real cubic bezier ('C') for any span p.curves (WP-14) declares,
@@ -1337,15 +1533,28 @@ export const Canvas = (() => {
   // keys() handler). Translates every coordinate-bearing field a piece can
   // have, not just outline — darts/notches/grain/curves would otherwise
   // visually detach from a moved outline.
-  function nudgePiece(i, dx, dy){
-    const p = pieces[i]; if(!p) return false;
-    pushUndo();
+  function nudgeOnePiece(p, dx, dy){
     const shift = ([x,y]) => [x+dx, y+dy];
     p.outline = p.outline.map(shift);
     if (p.darts) p.darts = p.darts.map(d => d.map(shift));
     if (p.notches) p.notches = p.notches.map(shift);
     if (p.grain) p.grain = p.grain.map(shift);
     if (p.curves) p.curves = p.curves.map(c => ({ ...c, c1: shift(c.c1), c2: shift(c.c2) }));
+  }
+  function nudgePiece(i, dx, dy){
+    const p = pieces[i]; if(!p) return false;
+    pushUndo();
+    nudgeOnePiece(p, dx, dy);
+    render();
+    return true;
+  }
+  // Group version of the above — a single Shift/arrow-key nudge on a
+  // multi-selection (js/app.js's keys() handler) moves every selected
+  // piece together as ONE undo step, not one per piece.
+  function nudgePieces(indices, dx, dy){
+    if (!indices || !indices.length) return false;
+    pushUndo();
+    indices.forEach(i=>{ if (pieces[i]) nudgeOnePiece(pieces[i], dx, dy); });
     render();
     return true;
   }
@@ -1525,12 +1734,136 @@ export const Canvas = (() => {
     return cons.find(c => c.kind==="arc" && c.ctrl &&
       ((c.a && c.a.pid===pidA && c.b && c.b.pid===pidB) || (c.a && c.a.pid===pidB && c.b && c.b.pid===pidA)));
   }
+  // Curve Edge tool: how far the drag has to actually bow the line before
+  // it counts as a real curve, in cm — below this it's treated as a CLICK
+  // (toggle an existing curve back to straight) rather than a drag.
+  const CURVE_CLICK_CM = 0.2;
+  const CURVE_MIN_BULGE_CM = 0.3;
+  // Perpendicular distance from point `pt` to the infinite line through a/b
+  // — used to tell how far the dragged bulge point actually bows the edge
+  // away from its own straight chord (distToSeg exists already but measures
+  // to the SEGMENT, which is ~0 for a bulge point that sits roughly between
+  // a and b in projection — exactly the case that needs measuring here).
+  function perpDist(pt, a, b){
+    const dx=b[0]-a[0], dy=b[1]-a[1], len=Math.hypot(dx,dy);
+    if (!len) return Math.hypot(pt[0]-a[0], pt[1]-a[1]);
+    return Math.abs((pt[0]-a[0])*dy - (pt[1]-a[1])*dx) / len;
+  }
+  // Reverts an already-curved edge back to its original two-point straight
+  // form — the exact inverse of the "commit" splice below, reusing the
+  // same spliceOutline() so every OTHER index-bearing structure on the
+  // piece (other curves, edges[], chestEdgeIndices) is kept correctly
+  // reindexed either way.
+  function revertCurveEdge(pieceIdx, fromIdx){
+    const p = pieces[pieceIdx];
+    const ci = (p.curves||[]).findIndex(c=>c.fromIdx===fromIdx);
+    if (ci<0) return false;
+    const c = p.curves[ci];
+    const farPt = p.outline[c.toIdx].slice();
+    pushUndo();
+    p.curves.splice(ci,1);
+    spliceOutline(p, c.fromIdx, c.toIdx-c.fromIdx, [farPt]);
+    selected = pieceIdx; render(); return true;
+  }
+  // The actual geometry operation behind the "curve" tool — pure and
+  // pointer-independent (takes plain arguments, no ephemeral drag state),
+  // exactly like nudgePiece/removePiece/finishPromotePiece are already
+  // public, direct piece-mutation APIs rather than only reachable through
+  // bind()'s own event handlers. `pieceIdx`/`fromIdx` identify the edge
+  // (outline[fromIdx] -> outline[fromIdx+1]); `bulge` is the point the
+  // curve should bow through. Re-curving an already-curved edge reverts it
+  // to straight FIRST (restoring the plain 2-point edge and correctly
+  // un-shifting every other index-bearing structure), then re-splices the
+  // new shape in — two real operations, not a patch of the old one, so
+  // there's exactly one way this data ever gets built.
+  function curveEdge(pieceIdx, fromIdx, bulge){
+    const p = pieces[pieceIdx]; if (!p) return false;
+    const n = p.outline.length;
+    if (fromIdx<0 || fromIdx>=n-1) return false;   // rejects the wraparound edge too
+    const existing = (p.curves||[]).find(c=>c.fromIdx===fromIdx);
+    const p0 = p.outline[fromIdx].slice();
+    const p1 = (existing ? p.outline[existing.toIdx] : p.outline[fromIdx+1]).slice();
+    pushUndo();
+    if (existing){
+      const ci = p.curves.findIndex(c=>c.fromIdx===fromIdx);
+      p.curves.splice(ci,1);
+      spliceOutline(p, existing.fromIdx, existing.toIdx-existing.fromIdx, [p1]);
+    }
+    const { c1, c2 } = quadToCubic(p0, bulge, p1);
+    const sampled = cubicBezierSample(p0, c1, c2, p1);
+    spliceOutline(p, fromIdx, 1, sampled);
+    if (!p.curves) p.curves = [];
+    p.curves.push({ fromIdx, toIdx: fromIdx+sampled.length, c1, c2 });
+    selected = pieceIdx; render();
+    return true;
+  }
+  // Commits (or cancels) the drag armed by the "curve" tool's pointerdown —
+  // called from pointerup. A tiny drag toggles an already-curved edge back
+  // to straight (symmetric with dragging one INTO a curve) or is a silent
+  // no-op on a plain straight edge; a real but too-shallow drag explains
+  // itself instead of silently doing nothing.
+  function commitCurveEdit(){
+    const { pieceIdx, fromIdx, p0, p1, bulge, moved, existing } = curveEdit;
+    curveEdit = null;
+    if (moved < CURVE_CLICK_CM){
+      if (existing) revertCurveEdge(pieceIdx, fromIdx); else render();
+      return;
+    }
+    if (perpDist(bulge, p0, p1) < CURVE_MIN_BULGE_CM){ onWarn('curveTooFlat'); render(); return; }
+    curveEdge(pieceIdx, fromIdx, bulge);
+  }
+  function drawCurveEditPreview(){
+    if (!curveEdit || !curveEdit.bulge) return;
+    const { p0, p1, bulge, moved, existing } = curveEdit;
+    if (moved < CURVE_CLICK_CM) return;
+    const a=toScreen(p0[0],p0[1]), b=toScreen(p1[0],p1[1]), bl=toScreen(bulge[0],bulge[1]);
+    ctx.save();
+    ctx.strokeStyle = perpDist(bulge,p0,p1) < CURVE_MIN_BULGE_CM ? CSS("--warn") : CSS("--brand");
+    ctx.lineWidth = 2.6; if (!existing) ctx.setLineDash([5,3]);
+    ctx.beginPath(); ctx.moveTo(a[0],a[1]);
+    ctx.quadraticCurveTo(2*bl[0]-(a[0]+b[0])/2, 2*bl[1]-(a[1]+b[1])/2, b[0], b[1]);
+    ctx.stroke();
+    ctx.restore();
+  }
   function onPromoteRequest(cb){ onPromoteReq = cb || (()=>{}); }
+  function onWarnRequest(cb){ onWarn = cb || (()=>{}); }
+  // A sketch stroke counts as "closed" the same way the Filled Shape tool's
+  // own closing gesture does (clicking back near the start point) — a
+  // Filled Shape is ALWAYS closed by construction (that's the whole point
+  // of the tool), while a Pen/Freehand stroke only qualifies if its own
+  // first and last points happen to land close together. Requires at
+  // least 3 points either way — 2 points is just a line, never a real
+  // closed figure.
+  const SKETCH_CLOSE_CM = 1;
+  function isSketchClosed(st){
+    if (!st || !st.pts || st.pts.length<3) return false;
+    if (st.tool==="polygon") return true;
+    const a=st.pts[0], b=st.pts[st.pts.length-1];
+    return Math.hypot(a[0]-b[0], a[1]-b[1]) <= SKETCH_CLOSE_CM;
+  }
+  // "make any closed figure a layer": the sketch-shape half of Create
+  // Pattern Piece — reuses the exact same pendingPromoteOutline/
+  // onPromoteReq/finishPromotePiece pathway a construction-point loop
+  // already goes through (openPromotePrompt in js/app.js neither knows nor
+  // cares which source produced the outline it's naming), just without a
+  // point-id list — a freehand/drawn shape has no construction arcs to
+  // look up curvature from, so finishPromotePiece's own defensive
+  // straight-edges fallback (ids==null) is exactly the right behaviour
+  // here, not a fallback at all.
+  function promoteSketchToPiece(idx){
+    const st = sketch[idx];
+    if (!isSketchClosed(st)){ onWarn('promoteNotClosed'); return false; }
+    pendingPromoteOutline = st.pts.slice();
+    pendingPromoteIds = null;
+    pendingPromoteSketchIdx = idx;
+    onPromoteReq(pendingPromoteOutline.slice());
+    return true;
+  }
   function finishPromotePiece(nameEn, nameAr){
     if(!pendingPromoteOutline || pendingPromoteOutline.length<3) return false;
     pushUndo();
-    const raw = pendingPromoteOutline, ids = pendingPromoteIds;
-    pendingPromoteOutline=null; pendingPromoteIds=null;
+    const raw = pendingPromoteOutline, ids = pendingPromoteIds, sketchIdx = pendingPromoteSketchIdx;
+    pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null;
     // Walk the promoted points in order, sampling a real curve wherever a
     // Construction Arc connects two ADJACENT ones instead of just carrying
     // the point through as a straight corner. The closing edge (last point
@@ -1555,23 +1888,37 @@ export const Canvas = (() => {
         }
       }
     } else {
-      // Defensive only — the one call site that sets pendingPromoteOutline
-      // always sets pendingPromoteIds alongside it, same length. Falls back
-      // to straight edges (this feature's exact prior behavior) rather than
-      // risk pairing an id sequence against the wrong outline points.
+      // Straight edges: either a sketch-shape promotion (sketchIdx!=null —
+      // ids is null there, always, deliberately; no construction arcs to
+      // look up for freehand-drawn points) or the defensive fallback for a
+      // construction-point promotion whose ids somehow don't line up with
+      // its outline.
       outline.push(...raw.slice(1));
     }
     const cx=avg(outline.map(p=>p[0])), yTop=Math.min(...outline.map(p=>p[1])), yBot=Math.max(...outline.map(p=>p[1]));
     pieces.push({
       name:{ en:nameEn||"New Piece", ar:nameAr||"قطعة جديدة" },
-      desc:{ en:"Created from construction geometry.", ar:"تم إنشاؤها من هندسة الإنشاء." },
+      desc: sketchIdx!=null
+        ? { en:"Created from a drawn shape.", ar:"تم إنشاؤها من شكل مرسوم." }
+        : { en:"Created from construction geometry.", ar:"تم إنشاؤها من هندسة الإنشاء." },
       outline, curves, darts:[], notches:[], grain:[[cx,yTop+2],[cx,yBot-2]],
       visible:true, locked:false,
       color:["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][pieces.length%6],
     });
+    // The source sketch stroke becomes the new piece — remove it so it
+    // doesn't linger as a duplicate visual overlay. Indices >sketchIdx in
+    // `sketch` itself never appear anywhere by position (nothing else
+    // references a sketch stroke by array index the way pieces' curves/
+    // edges do), so a plain splice needs no reindexing.
+    if (sketchIdx!=null && sketch[sketchIdx]){
+      sketch.splice(sketchIdx,1);
+      // keep any unrelated selected sketch stroke pointing at the same
+      // physical stroke after the splice shifts everything past it down by one
+      if (selSketch!=null){ if (selSketch===sketchIdx) selSketch=null; else if (selSketch>sketchIdx) selSketch--; }
+    }
     selected=pieces.length-1; render(); return true;
   }
-  function cancelPromote(){ pendingPromoteOutline=null; pendingPromoteIds=null; promoteBuf=[]; render(); }
+  function cancelPromote(){ pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null; promoteBuf=[]; render(); }
 
   // ---- trace-over background reference image ----
   function setBackgroundImage(dataURL){
@@ -1694,11 +2041,11 @@ export const Canvas = (() => {
     points = Array.isArray(pts) ? pts.map(p=>({ xExpr:null, yExpr:null, ...p, id: p.id || pointSeq++ })) : [];
     cons = Array.isArray(consArr) ? consArr.map(c=>({ ...c, id: c.id || consSeq++ })) : [];
     variables = {};
-    selected=-1; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; sketch=[]; promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; fit(); return true;
+    selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; sketch=[]; promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; fit(); return true;
   }
   function clearAll(){
     pushUndo(); pieces=[]; sketch=[]; texts=[]; points=[]; cons=[]; bg=null; variables={}; ghostSnap=null;
-    selected=-1; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; measurePts=[]; clickBuf=[]; promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null;
+    selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; measurePts=[]; clickBuf=[]; promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null;
     userAdjusted=false; render();
   }
 
@@ -1707,14 +2054,16 @@ export const Canvas = (() => {
 
   return { init, setTranslator, setPattern, getPieces, setTool, setOpt, getOpt, zoom, fit,
            doUndo, doRedo, getZoom, toggleVisible, toggleLock, setColor, setMaterial, setTexture, getSelected,
-           selectPiece, clearSketch, render, deleteSelection,
+           getMultiSelection, selectPiece, clearSketch, render, deleteSelection,
            copySelection, cutSelection, pasteClipboard, hasClipboard,
            addText, updateText, removeText, getTexts, onTextRequest,
-           addPiece, removePiece, renamePiece, setPieceProps, nudgePiece,
+           addPiece, removePiece, renamePiece, setPieceProps, nudgePiece, nudgePieces,
            onZoomChange, exportSVG, exportDXF, exportHPGL, exportRaster, exportPDF, loadPieces, clearAll, screenOf,
            // construction geometry
            addPoint, removePoint, getPointById, getPoints, setPointName, setPointXY, setPointFormula, onPointRequest,
-           getCons, removeCons, onPromoteRequest, finishPromotePiece, cancelPromote,
+           getCons, removeCons, onPromoteRequest, finishPromotePiece, cancelPromote, onWarnRequest,
+           insertOutlinePoint, promoteSketchToPiece, curveEdge, revertCurveEdge, isSketchClosed,
+           getSketch, addSketchStroke,
            setVariable, removeVariable, getVariables, setMeasureProvider, recomputeConstruction, evalExpr,
            setBackgroundImage, setBgOpacity, setBgVisible, removeBackground, hasBackground, getBgOpacity,
            moveBackground, onCalibrationRequest, applyCalibration,

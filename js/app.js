@@ -62,12 +62,21 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     // today's plain-text-prompt behaviour.
     aiGuided: { type:"dress", fit:"any", flare:"any", length:"any", neckline:"any", sleeve:"any", hem:"any", closure:"none", notes:"" },
     avatarGLB: { women: "", men: "", girls: "", boys: "" },
-    // BerryStudio-Upgrade-Plan WP-5: "iframe" (default, unchanged behavior)
-    // or "embedded" (cloth-lab's lib build mounted directly into this page,
-    // sharing React/three.js via the import map — see setView()'s clothlab
-    // branch and mountClothLabEmbedded() below). Defaults to "iframe" so
-    // nothing changes for existing users until they opt in via Settings.
-    clothLabEngine: "iframe",
+    // BerryStudio-Upgrade-Plan WP-5: "iframe" (cross-document, the original
+    // engine) or "embedded" (cloth-lab's lib build mounted directly into
+    // this page, sharing React/three.js via the import map — see
+    // setView()'s clothlab branch and mountClothLabEmbedded() below). As of
+    // WP-36 (v2.0), "embedded" is the default for new installs — newer and
+    // measurably faster (no cross-document postMessage bridge), gated on
+    // the dedicated e2e coverage below passing and no regression in the
+    // blank-canvas bug class the Honest notes describe fighting twice.
+    // `state = Object.assign({}, DEF, savedRaw)` means this only changes
+    // behavior for a `savedRaw` with no `clothLabEngine` key at all — an
+    // existing user's browser already has this key baked into its saved
+    // "pps" blob from any previous save() call, so their choice (explicit
+    // or not) is unconditionally preserved. "iframe" remains fully
+    // selectable and functional as a fallback via Settings.
+    clothLabEngine: "embedded",
     // WP-13: industrial per-point grading. Keyed by pattern id -> piece
     // key -> outline-index -> {dx,dy} (cm per size step). Purely additive
     // — a pattern with no authored rules here grades exactly as before.
@@ -204,6 +213,8 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     circleTool:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
     promote:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 9l4-4 8 1 4 6-2 9H7z" stroke-dasharray="2.5 2"/><path d="M8.5 12.5l2.2 2.2 4.8-4.8"/></svg>',
     calib:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h16M4 12v-3M20 12v-3M9 12v-3M15 12v-3"/></svg>',
+    lasso:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3C7 3 3 6.5 3 11c0 3 2.5 5 6 5 1.8 0 3-1 3-2.3S10.8 12 9.5 12" stroke-dasharray="2.4 2.2"/><circle cx="17" cy="15" r="3.4"/></svg>',
+    curve:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 18C4 10 20 14 20 6"/><path d="M4 18l4.5-4.5M20 6l-4.5 4.5" stroke-dasharray="1.6 1.6"/><circle cx="4" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.7" fill="currentColor" stroke="none"/></svg>',
   };
 
   // Library thumbnails: real, full-colour illustrations (not currentColor-themed
@@ -226,14 +237,14 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 
   // ---------------- TOOLS ----------------
   const TOOLS = [
-    { id:"select", i:"select" }, { id:"pen", i:"pen" }, { id:"line", i:"line" },
+    { id:"select", i:"select" }, { id:"lasso", i:"lasso" }, { id:"pen", i:"pen" }, { id:"line", i:"line" },
     { id:"arc", i:"arc" }, { id:"free", i:"free" }, { id:"polygon", i:"polyfill" }, { id:"symmetry", i:"symmetry" },
     { id:"knife", i:"knife" }, "sep",
     { id:"point", i:"point" }, { id:"conline", i:"conline" }, { id:"conarc", i:"conarc" },
     { id:"circle", i:"circleTool" }, { id:"promote", i:"promote" }, "sep",
     { id:"move", i:"move" }, { id:"rotate", i:"rotate" },
     { id:"scale", i:"scale" }, { id:"measure", i:"measure" }, { id:"text", i:"text" }, "sep",
-    { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"addpoint", i:"addpoint" }, { id:"grain", i:"grain" },
+    { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"addpoint", i:"addpoint" }, { id:"curve", i:"curve" }, { id:"grain", i:"grain" },
   ];
 
   // ================= RENDER SHELL =================
@@ -662,8 +673,9 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const pieces = Canvas.getPieces();
     if(!pieces.length){ c.appendChild(el("div","help-note",T("empty2d"))); return; }
     const sel = Canvas.getSelected();
+    const multiSel = Canvas.getMultiSelection();  // Shift+click / Lasso group — highlighted the same as a plain single selection
     pieces.forEach((p,i)=>{
-      const row = el("div","layer"+(p.locked?" locked":"")+(i===sel?" active":""));
+      const row = el("div","layer"+(p.locked?" locked":"")+((i===sel||multiSel.includes(i))?" active":""));
       // colour swatch — opens a native colour picker
       const sw = el("label","swatch"); sw.style.background=p.color; sw.title=T("pieceColor");
       const ci = el("input"); ci.type="color"; ci.value=rgbToHex(p.color);
@@ -2812,16 +2824,16 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       : /trouser|بنطل|pant|\bleg\b/.test(k) ? "trousers" : "bodice";
   }
   function isBackPiece(name){ return /\bback\b|خلفي|خلفية/.test((name||"").toLowerCase()); }
-  // A part's mesh used to just take the FIRST matching piece's color and
-  // silently drop every other one — a front+back bodice/skirt in two
-  // different colors (common: contrast lining, color-blocked panels) lost
-  // the back piece's color entirely, since the procedural body has one
-  // continuous front+back shell per part, not one mesh per real 2D piece.
-  // When a part genuinely has both a front piece and a differently-colored
-  // back piece, `colorBack` is set too — three-view.js paints the mesh's
-  // own front/back-facing vertices accordingly instead of one flat color.
-  // A part with only one piece (the overwhelmingly common case) gets
-  // exactly the same single `color` as before, unchanged.
+  // A part's mesh used to just take the FIRST matching piece's color/material and
+  // silently drop every other one — a front+back bodice/skirt with a different
+  // fabric or color (common: contrast lining, color-blocked panels) lost the back
+  // piece's styling entirely, since the procedural body has one continuous
+  // front+back shell per part, not one mesh per real 2D piece. WP-28 split each
+  // part's mesh into a real front sub-mesh and a real back sub-mesh in
+  // three-view.js, so this now hands over a full {color,material} pair for
+  // `back` (not just a color) whenever a distinct back piece exists. A part with
+  // only one piece (the overwhelmingly common case) still gets exactly the same
+  // single `front` descriptor as before and `back` stays null, unchanged.
   function partsFabric(){
     const buckets={};
     Canvas.getPieces().filter(p=>p.visible!==false).forEach(p=>{
@@ -2832,11 +2844,19 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const parts={};
     Object.entries(buckets).forEach(([part,{front,back}])=>{
       const primary = front[0] || back[0];
-      parts[part] = { color:colorToInt(primary.color), material:primary.material||state.fabric3d||"cotton",
+      const frontDesc = { color:colorToInt(primary.color), material:primary.material||state.fabric3d||"cotton",
         textureDataURL: primary.textureDataURL || state.fabricTexture3d || null };
-      if (front.length && back.length){
-        const backInt = colorToInt(back[0].color);
-        if (backInt !== parts[part].color) parts[part].colorBack = backInt;
+      parts[part] = { front: frontDesc };
+      if (back.length){
+        const backDesc = { color:colorToInt(back[0].color), material:back[0].material||state.fabric3d||"cotton",
+          textureDataURL: back[0].textureDataURL || state.fabricTexture3d || null };
+        // Only a genuinely distinct back piece is worth a separate sub-mesh
+        // material — one matching front exactly (color AND fabric AND texture) has
+        // nothing to render differently, so leave the back mesh mirroring
+        // front instead of manufacturing a no-op override.
+        const sameAsFront = front.length && backDesc.color===frontDesc.color && backDesc.material===frontDesc.material
+          && backDesc.textureDataURL===frontDesc.textureDataURL;
+        if (!sameAsFront) parts[part].back = backDesc;
       }
     });
     return parts;
@@ -3760,7 +3780,16 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       return;
     }
     if(e.key==="Escape"){ $$(".overlay.show").forEach(o=>o.classList.remove("show")); closeAnyMenu(); closeTextEditor(); Canvas.cancelPick(); }
-    const typing = document.activeElement.tagName==="INPUT" || document.activeElement.tagName==="TEXTAREA" || document.activeElement.isContentEditable;
+    // SELECT belongs here alongside INPUT/TEXTAREA: a focused <select>'s
+    // native behaviour for ArrowUp/ArrowDown/Delete etc. is to cycle its
+    // own options — without this, those keys never reached the browser at
+    // all here (2D view + a canvas piece selected, which is the common
+    // case while a select like the Grade Rules piece dropdown is in use):
+    // e.preventDefault() below fired first and nudged/deleted the SELECTED
+    // CANVAS PIECE instead, and the dropdown never visibly responded to
+    // the keyboard at all — the concrete bug behind "I can't select from
+    // the piece dropdown".
+    const typing = document.activeElement.tagName==="INPUT" || document.activeElement.tagName==="TEXTAREA" || document.activeElement.tagName==="SELECT" || document.activeElement.isContentEditable;
     // tool shortcuts
     const map={v:"select",p:"pen",l:"line",a:"arc",m:"measure",r:"rotate",s:"scale",t:"text"};
     if(!meta&&map[e.key]&&!typing)setTool(map[e.key]);
@@ -3779,12 +3808,14 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         const dir=e.key==="]"?1:-1;
         const next=sel<0 ? (dir>0?0:pieces.length-1) : (sel+dir+pieces.length)%pieces.length;
         Canvas.selectPiece(next); renderLayersPane();
-      } else if(sel>=0 && (e.key==="ArrowUp"||e.key==="ArrowDown"||e.key==="ArrowLeft"||e.key==="ArrowRight")){
+      } else if((sel>=0 || Canvas.getMultiSelection().length) && (e.key==="ArrowUp"||e.key==="ArrowDown"||e.key==="ArrowLeft"||e.key==="ArrowRight")){
         e.preventDefault();
         const step=e.shiftKey?0.1:1;
         const dx=e.key==="ArrowLeft"?-step:e.key==="ArrowRight"?step:0;
         const dy=e.key==="ArrowUp"?-step:e.key==="ArrowDown"?step:0;
-        Canvas.nudgePiece(sel,dx,dy); sync3DVisibility();
+        const group=Canvas.getMultiSelection();
+        if(group.length) Canvas.nudgePieces(group,dx,dy); else Canvas.nudgePiece(sel,dx,dy);
+        sync3DVisibility();
       } else if(e.key==="Delete"||e.key==="Backspace"){
         if (Canvas.deleteSelection()){
           e.preventDefault();
@@ -3915,6 +3946,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     Canvas.onPointRequest(openPointEditor);
     Canvas.onPromoteRequest(openPromotePrompt);
     Canvas.onCalibrationRequest(openCalibPrompt);
+    Canvas.onWarnRequest(key=>toast(T(key)));
     buildToolRail(); buildRail(); wire();
     applyTheme(); applyLang();
     updateUnitsPill(); updateStageChips();

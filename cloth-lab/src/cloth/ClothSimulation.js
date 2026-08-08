@@ -67,6 +67,45 @@ function packNeighborTextures(neighbors, maxNeighbors, texDim) {
   return { nbrA: makeTex(nbrA), nbrB: makeTex(nbrB), restA: makeTex(restA), restB: makeTex(restB) }
 }
 
+// WP-35: same packing scheme as packNeighborTextures (idx aligned to the
+// same k-th slot bend's own nbrA/B already use — see assemble.js's
+// packHinges), carrying edgeV0/edgeV1/restAngle instead of a rest distance.
+// Only ever called when the high-quality tier is actually being built (see
+// the constructor below) — the default tier never allocates these
+// textures at all.
+function packHingeTextures(bendHinge, maxNeighbors, texDim) {
+  const texCount = texDim * texDim
+  const edgeV0A = new Float32Array(texCount * 4).fill(-1)
+  const edgeV0B = new Float32Array(texCount * 4).fill(-1)
+  const edgeV1A = new Float32Array(texCount * 4).fill(-1)
+  const edgeV1B = new Float32Array(texCount * 4).fill(-1)
+  const restAngleA = new Float32Array(texCount * 4)
+  const restAngleB = new Float32Array(texCount * 4)
+  const particleCount = bendHinge.idx.length / maxNeighbors
+  for (let p = 0; p < particleCount; p++) {
+    for (let k = 0; k < maxNeighbors; k++) {
+      const slot = p * maxNeighbors + k
+      const v0Target = k < 4 ? edgeV0A : edgeV0B
+      const v1Target = k < 4 ? edgeV1A : edgeV1B
+      const raTarget = k < 4 ? restAngleA : restAngleB
+      const ch = k % 4
+      v0Target[p * 4 + ch] = bendHinge.edgeV0[slot]
+      v1Target[p * 4 + ch] = bendHinge.edgeV1[slot]
+      raTarget[p * 4 + ch] = bendHinge.restAngle[slot]
+    }
+  }
+  const makeTex = (arr) => {
+    const tex = new THREE.DataTexture(arr, texDim, texDim, THREE.RGBAFormat, THREE.FloatType)
+    tex.needsUpdate = true
+    return tex
+  }
+  return {
+    edgeV0A: makeTex(edgeV0A), edgeV0B: makeTex(edgeV0B),
+    edgeV1A: makeTex(edgeV1A), edgeV1B: makeTex(edgeV1B),
+    restAngleA: makeTex(restAngleA), restAngleB: makeTex(restAngleB),
+  }
+}
+
 // Looks up a flat particle index in a same-sized texture — every static and
 // ping-pong texture in this sim shares one texDim so this one mapping works
 // for all of them. Returns (weighted correction, 1.0) so the caller can
@@ -192,17 +231,103 @@ vec3 collideCapsule(vec3 p, vec3 prevP, vec3 a, vec3 b, float r0, float r1, floa
 }
 `
 
-// Self-collision: brute-force O(N^2) — deliberately NOT spatial hashing.
-// GPUComputationRenderer has no compute-shader/atomics access, so a real
-// GPU spatial hash needs either a full bitonic sort or scatter-with-atomics
-// pass, neither available in plain WebGL2 fragment shaders. At this
-// particle budget (~2000) brute-force is measured at ~0.03ms/substep for
-// the existing 16-neighbor structural+bend scan; an O(N^2) scan is ~120x
-// that (~3.6-7ms) — too much for every substep, but comfortably affordable
-// ONCE per rendered frame (see `uApplySelfCollision`, set true only on the
-// last of the 8 substeps in step() below). Revisit with real spatial
-// hashing only if particle count grows into the 10k+ range.
+// WP-35 high-quality tier: true dihedral-angle bend, replacing the default
+// tier's wing-to-wing DISTANCE constraint (see NEIGHBOR_CORRECTION_GLSL's
+// bend usage below) with the actual angle between the two triangles'
+// normals — verified first as plain JS in dihedralBend.js (see that file's
+// own header for why: reproducing a textbook PBD dihedral gradient formula
+// from memory carries real risk of a subtle sign/normalization bug, and a
+// GPU shader is a far harder place to debug one than a Vitest assertion).
+// This is a direct, mechanical translation of that verified module — same
+// variable names, same structure, so a discrepancy is easy to spot by
+// re-reading the two side by side. `stiffness` in [0,1] scales one Jacobi
+// substep's correction toward zero angular error, same convention as
+// dihedralBend.js's own `stiffness` parameter.
 //
+// `me` always plays the "p3" role and `neighbor` (this hinge's bend
+// partner) plays "p4" — matching assemble.js's packHinges, which always
+// computes `restAngle` calling the CURRENT particle p3 regardless of
+// whether it was originally the mesh's "c" or "d" opposite-corner — so
+// this one function correctly handles both sides of every hinge with no
+// role flag needed.
+//
+// Deliberate scope (matches dihedralBend.js): only `me` (the wing vertex)
+// moves here — the shared hinge edge (p1, p2) is left to the existing
+// structural constraint, not touched by this function.
+const DIHEDRAL_BEND_GLSL = `
+vec3 dihedralBendDelta(vec3 mePredicted, float neighborIdx, float edgeV0Idx, float edgeV1Idx, float restAngle, float stiffness) {
+  if (neighborIdx < -0.5) return vec3(0.0);
+  vec2 nuv = ( vec2( mod(neighborIdx, resolution.x), floor(neighborIdx / resolution.x) ) + 0.5 ) / resolution;
+  vec2 e0uv = ( vec2( mod(edgeV0Idx, resolution.x), floor(edgeV0Idx / resolution.x) ) + 0.5 ) / resolution;
+  vec2 e1uv = ( vec2( mod(edgeV1Idx, resolution.x), floor(edgeV1Idx / resolution.x) ) + 0.5 ) / resolution;
+  vec3 p1 = texture2D(texturePosition, e0uv).xyz;
+  vec3 p2 = texture2D(texturePosition, e1uv).xyz;
+  vec3 p3 = mePredicted;
+  vec3 p4 = texture2D(texturePosition, nuv).xyz;
+
+  vec3 edge = p2 - p1;
+  float edgeLen = length(edge);
+  if (edgeLen < 1e-6) return vec3(0.0); // degenerate hinge — matches dihedralAngle's own bail-out
+
+  // n2 uses the edge walked in the OPPOSITE direction (p1-p2) — see
+  // dihedralBend.js's dihedralAngle for why: it's what makes a flat,
+  // normally-wound pair of triangles read as angle ~0.
+  vec3 n1raw = cross(edge, p3 - p1);
+  vec3 n2raw = cross(p1 - p2, p4 - p1);
+  float n1len = length(n1raw);
+  float n2len = length(n2raw);
+  if (n1len < 1e-9 || n2len < 1e-9) return vec3(0.0);
+  vec3 n1 = n1raw / n1len;
+  vec3 n2 = n2raw / n2len;
+  vec3 e = edge / edgeLen;
+  float cosT = clamp(dot(n1, n2), -1.0, 1.0);
+  float sinT = dot(cross(n1, n2), e);
+  float angle = atan(sinT, cosT);
+
+  float error = angle - restAngle;
+  if (error > 3.14159265) error -= 6.28318531; // shortest angular path — see dihedralBend.js
+  if (error < -3.14159265) error += 6.28318531;
+  float delta = stiffness * error;
+
+  // Rodrigues' rotation of p3 around the (p1, e) axis by +delta — exact
+  // for any angle, matching dihedralBend.js's rotateAroundAxis.
+  vec3 v = p3 - p1;
+  float cosD = cos(delta);
+  float sinD = sin(delta);
+  vec3 vRot = v * cosD + cross(e, v) * sinD + e * (dot(e, v) * (1.0 - cosD));
+  vec3 p3New = p1 + vRot;
+  return p3New - p3;
+}
+`
+
+// Self-collision: brute-force O(N^2) by default — deliberately NOT full
+// spatial hashing. GPUComputationRenderer has no compute-shader/atomics
+// access, so a TEXTBOOK GPU spatial hash (a uniform-grid bucket list you
+// can actually iterate per-cell) needs either a full bitonic sort or a
+// scatter-with-atomics compaction pass to build those per-cell index
+// lists — neither available in plain WebGL2 fragment shaders. That's a
+// hard capability gap in this rendering approach, not a matter of more
+// implementation effort; closing it for real would mean adopting WebGPU
+// compute shaders or a from-scratch verified bitonic sort, both a
+// materially larger and riskier undertaking than an "opt-in tier" — see
+// README's Honest notes. At this particle budget (~2000) brute-force is
+// measured at ~0.03ms/substep for the existing 16-neighbor structural+bend
+// scan; an O(N^2) scan is ~120x that (~3.6-7ms) — too much for every
+// substep, but comfortably affordable ONCE per rendered frame (see
+// `uApplySelfCollision`, set true only on the last of the 8 substeps in
+// step() below).
+//
+// WP-35 looked for a cheaper-but-still-honest middle ground here (e.g.
+// bucketing each particle into a coarse grid cell and skipping far-apart
+// pairs before the expensive math) and deliberately didn't ship one: the
+// dominant cost of this loop is the two texture2D fetches per inner-loop
+// iteration (jRest, then jPos) needed just to find out where particle j
+// IS — a cell-based early-out can only skip the cheap sqrt/branch AFTER
+// that fetch already happened, so it doesn't touch the actual bottleneck.
+// A change that adds real code and risk for a not-actually-measurable win
+// is worse than shipping nothing here — see README's Honest notes: this
+// quality tier ships the dihedral bend constraint above; self-collision
+// stays exactly the brute-force scan it already was, opt-in tier or not.
 // Exclusion rule: compare REST-space distance, not mesh topology. Two
 // particles close in the UNDEFORMED rest pose are normal local fabric
 // (already handled by structural/bend) regardless of current distance;
@@ -239,11 +364,91 @@ vec3 selfCollisionCorrection(vec3 predicted, vec3 myRestPos, float myFlatIdx) {
 `
 }
 
+// WP-35 extra uniform declarations for the high-quality tier's true
+// dihedral bend — a separate string, only spliced into the shader source
+// when `highQuality` is true (see positionFragmentShader below), so the
+// default tier's compiled shader has zero new uniforms and is otherwise
+// byte-identical to before this WP.
+const DIHEDRAL_BEND_UNIFORMS_GLSL = `
+uniform sampler2D uBendEdgeV0A;
+uniform sampler2D uBendEdgeV0B;
+uniform sampler2D uBendEdgeV1A;
+uniform sampler2D uBendEdgeV1B;
+uniform sampler2D uBendRestAngleA;
+uniform sampler2D uBendRestAngleB;
+uniform float uDihedralStiff;
+`
+
+// The default tier's bend application — moved out of positionFragmentShader
+// verbatim (not rewritten) so a text diff against the pre-WP-35 version of
+// this file shows exactly zero change to what the default tier compiles.
+const DEFAULT_BEND_MAIN_GLSL = `
+  // Bend: the fold/hinge constraint between the two off-edge vertices of
+  // each pair of triangles sharing an edge.
+  vec4 bA = texture2D(uBendNbrA, uv);
+  vec4 bB = texture2D(uBendNbrB, uv);
+  vec4 brA = texture2D(uBendRestA, uv);
+  vec4 brB = texture2D(uBendRestB, uv);
+  vec4 bendAcc = vec4(0.0);
+  bendAcc += neighborCorrection(predicted, bA.x, brA.x, invMassSelf);
+  bendAcc += neighborCorrection(predicted, bA.y, brA.y, invMassSelf);
+  bendAcc += neighborCorrection(predicted, bA.z, brA.z, invMassSelf);
+  bendAcc += neighborCorrection(predicted, bA.w, brA.w, invMassSelf);
+  bendAcc += neighborCorrection(predicted, bB.x, brB.x, invMassSelf);
+  bendAcc += neighborCorrection(predicted, bB.y, brB.y, invMassSelf);
+  bendAcc += neighborCorrection(predicted, bB.z, brB.z, invMassSelf);
+  bendAcc += neighborCorrection(predicted, bB.w, brB.w, invMassSelf);
+  if (bendAcc.w > 0.5) predicted -= (bendAcc.xyz / bendAcc.w) * uBendStiff;
+`
+
+// WP-35 high-quality tier's bend application: the true dihedral-angle
+// constraint (DIHEDRAL_BEND_GLSL) REPLACES the default distance-based one
+// above — a "second bend mode," per this WP's own plan, not an additional
+// pass stacked on top of it (running both at once would fight each other:
+// the distance spring resists exactly the deformation the angle constraint
+// is trying to allow-or-correct on its own terms). Same slot layout as
+// bend (uBendNbrA/B for the neighbor index, reused here — see
+// assemble.js's packHinges, which keeps bendHinge's idx aligned with
+// bend's own), plus the three new hinge-only textures for the shared
+// edge's two endpoints and this hinge's rest angle.
+const DIHEDRAL_BEND_MAIN_GLSL = `
+  // Bend (WP-35 high-quality tier): true dihedral angle, not wing-to-wing
+  // distance — see DIHEDRAL_BEND_GLSL's own header for why only the wing
+  // vertices (never the shared edge) move here.
+  vec4 bA = texture2D(uBendNbrA, uv);
+  vec4 bB = texture2D(uBendNbrB, uv);
+  vec4 bev0A = texture2D(uBendEdgeV0A, uv);
+  vec4 bev0B = texture2D(uBendEdgeV0B, uv);
+  vec4 bev1A = texture2D(uBendEdgeV1A, uv);
+  vec4 bev1B = texture2D(uBendEdgeV1B, uv);
+  vec4 braA = texture2D(uBendRestAngleA, uv);
+  vec4 braB = texture2D(uBendRestAngleB, uv);
+  vec3 dihedralDelta = vec3(0.0);
+  float dihedralCount = 0.0;
+  ${['A.x', 'A.y', 'A.z', 'A.w', 'B.x', 'B.y', 'B.z', 'B.w'].map((ch) => `
+  if (b${ch} > -0.5) {
+    dihedralDelta += dihedralBendDelta(predicted, b${ch}, bev0${ch}, bev1${ch}, bra${ch}, uDihedralStiff);
+    dihedralCount += 1.0;
+  }`).join('')}
+  if (dihedralCount > 0.5) predicted += dihedralDelta / dihedralCount;
+`
+
 // NOTE: `texturePosition` / `texturePrevPosition` are NOT declared here —
 // GPUComputationRenderer.init() auto-prepends `uniform sampler2D <name>;`
 // for every variable listed in setVariableDependencies(); declaring them
 // again here would be a duplicate-declaration compile error.
-function positionFragmentShader(texDim) {
+//
+// `highQuality` (WP-35, default false): every existing caller passes
+// nothing, so `positionFragmentShader(texDim)` still returns the same
+// shader source it always has (give or take a couple of now-empty
+// template lines, harmless GLSL whitespace) — the extra uniforms/function
+// and the bend section's replacement below only exist in the string when
+// explicitly asked for, which is the strongest available guarantee that
+// "the existing default solver's behavior and performance are completely
+// unchanged" (this WP's own acceptance criterion) actually holds: the
+// compiled default-tier program contains none of this WP's new code at
+// all, not just "happens to produce the same result."
+function positionFragmentShader(texDim, highQuality = false) {
   return `
 uniform sampler2D uAreaShare;
 uniform sampler2D uRestPosition;
@@ -277,11 +482,12 @@ uniform float uSelfCollisionRadius;
 uniform float uSelfCollisionRestThreshold;
 uniform float uDragParticleIndex;
 uniform vec3 uDragTargetPosition;
-
+${highQuality ? DIHEDRAL_BEND_UNIFORMS_GLSL : ''}
 ${NEIGHBOR_CORRECTION_GLSL}
 ${STRAIN_LIMIT_GLSL}
 ${CAPSULE_COLLISION_GLSL}
 ${selfCollisionGlsl(texDim)}
+${highQuality ? DIHEDRAL_BEND_GLSL : ''}
 
 void main() {
   vec2 uv = gl_FragCoord.xy / resolution.xy;
@@ -342,22 +548,7 @@ void main() {
   strainAcc += strainLimitCorrection(predicted, sB.w, srB.w, invMassSelf, uMaxStrain);
   if (strainAcc.w > 0.5) predicted -= strainAcc.xyz / strainAcc.w;
 
-  // Bend: the fold/hinge constraint between the two off-edge vertices of
-  // each pair of triangles sharing an edge.
-  vec4 bA = texture2D(uBendNbrA, uv);
-  vec4 bB = texture2D(uBendNbrB, uv);
-  vec4 brA = texture2D(uBendRestA, uv);
-  vec4 brB = texture2D(uBendRestB, uv);
-  vec4 bendAcc = vec4(0.0);
-  bendAcc += neighborCorrection(predicted, bA.x, brA.x, invMassSelf);
-  bendAcc += neighborCorrection(predicted, bA.y, brA.y, invMassSelf);
-  bendAcc += neighborCorrection(predicted, bA.z, brA.z, invMassSelf);
-  bendAcc += neighborCorrection(predicted, bA.w, brA.w, invMassSelf);
-  bendAcc += neighborCorrection(predicted, bB.x, brB.x, invMassSelf);
-  bendAcc += neighborCorrection(predicted, bB.y, brB.y, invMassSelf);
-  bendAcc += neighborCorrection(predicted, bB.z, brB.z, invMassSelf);
-  bendAcc += neighborCorrection(predicted, bB.w, brB.w, invMassSelf);
-  if (bendAcc.w > 0.5) predicted -= (bendAcc.xyz / bendAcc.w) * uBendStiff;
+${highQuality ? DIHEDRAL_BEND_MAIN_GLSL : DEFAULT_BEND_MAIN_GLSL}
 
   // Body collision — after relaxation, before finalizing (relaxation can
   // pull a particle back into the body; doing this last guarantees the
@@ -420,13 +611,24 @@ function buildCollisionUniformValues(collisionRig) {
 // still catching a genuine tight self-fold (see selfCollisionGlsl above).
 const DEFAULT_SELF_COLLISION = { radius: 0.012, restThreshold: 0.035 }
 
+// WP-35: 'default' (unchanged) or 'high' — the true dihedral-angle bend
+// tier. Exported so callers (ClothMesh.jsx, Settings UI) share one literal
+// instead of hand-typing the string.
+export const QUALITY_TIER_DEFAULT = 'default'
+export const QUALITY_TIER_HIGH = 'high'
+
 export class ClothSimulation {
-  constructor(renderer, cloth, neighbors, fabric, { floorY = 0, collisionRig = [], selfCollision = DEFAULT_SELF_COLLISION, pinnedMask = null } = {}) {
+  constructor(renderer, cloth, neighbors, fabric, { floorY = 0, collisionRig = [], selfCollision = DEFAULT_SELF_COLLISION, pinnedMask = null, qualityTier = QUALITY_TIER_DEFAULT } = {}) {
     this.frameCount = 0
     this.simParticleCount = cloth.simParticleCount
     this.texDim = textureDimFor(cloth.simParticleCount)
     this.substeps = SUBSTEPS_START
     this.budget = new FrameBudgetController({ min: SUBSTEPS_MIN, max: SUBSTEPS_MAX, start: SUBSTEPS_START, targetMs: SUBSTEP_TARGET_MS })
+    // WP-35: only 'high' with real hinge data actually turns the tier on —
+    // a caller that asks for 'high' against neighbors from an older/other
+    // deriveNeighbors call (no bendHinge field) falls back to 'default'
+    // rather than compiling a shader that reads uninitialized uniforms.
+    this.qualityTier = (qualityTier === QUALITY_TIER_HIGH && neighbors.bendHinge) ? QUALITY_TIER_HIGH : QUALITY_TIER_DEFAULT
 
     const gpuCompute = new GPUComputationRenderer(this.texDim, this.texDim, renderer)
     this.gpuCompute = gpuCompute
@@ -439,7 +641,7 @@ export class ClothSimulation {
       prevTex.image.data[i * 4] = x; prevTex.image.data[i * 4 + 1] = y; prevTex.image.data[i * 4 + 2] = z; prevTex.image.data[i * 4 + 3] = 0
     }
 
-    const posVar = gpuCompute.addVariable('texturePosition', positionFragmentShader(this.texDim), posTex)
+    const posVar = gpuCompute.addVariable('texturePosition', positionFragmentShader(this.texDim, this.qualityTier === QUALITY_TIER_HIGH), posTex)
     const prevVar = gpuCompute.addVariable('texturePrevPosition', prevPositionFragmentShader(), prevTex)
     gpuCompute.setVariableDependencies(posVar, [posVar, prevVar])
     gpuCompute.setVariableDependencies(prevVar, [posVar])
@@ -499,6 +701,24 @@ export class ClothSimulation {
       uDragTargetPosition: { value: new THREE.Vector3() },
     })
 
+    // WP-35: the hinge textures (and uDihedralStiff) only ever get built
+    // and uploaded for the high-quality tier — the default tier's GPU
+    // memory footprint and upload cost are completely unaffected, matching
+    // the shader source itself (see positionFragmentShader's own comment).
+    if (this.qualityTier === QUALITY_TIER_HIGH) {
+      const hingeTex = packHingeTextures(neighbors.bendHinge, neighbors.maxNeighbors, this.texDim)
+      Object.assign(posVar.material.uniforms, {
+        uBendEdgeV0A: { value: hingeTex.edgeV0A }, uBendEdgeV0B: { value: hingeTex.edgeV0B },
+        uBendEdgeV1A: { value: hingeTex.edgeV1A }, uBendEdgeV1B: { value: hingeTex.edgeV1B },
+        uBendRestAngleA: { value: hingeTex.restAngleA }, uBendRestAngleB: { value: hingeTex.restAngleB },
+        // No fabricPresets.js field yet for this (WP-35 is a new, opt-in
+        // tier — see README) — reuses bendStiff's own value as a
+        // reasonable starting point rather than inventing a second tuned
+        // constant with no real-fabric data behind it yet.
+        uDihedralStiff: { value: fabric.dihedralStiff ?? fabric.bendStiff },
+      })
+    }
+
     const error = gpuCompute.init()
     if (error !== null) throw new Error(`ClothSimulation: GPUComputationRenderer init failed: ${error}`)
   }
@@ -511,6 +731,10 @@ export class ClothSimulation {
     u.uBendStiff.value = fabric.bendStiff
     u.uMaxStrain.value = fabric.maxStrain ?? DEFAULT_MAX_STRAIN
     u.uFriction.value = fabric.friction
+    // WP-35: only present at all when constructed with qualityTier 'high'
+    // (see the constructor) — a plain fabric switch on the default tier
+    // never touches a uniform that doesn't exist.
+    if (u.uDihedralStiff) u.uDihedralStiff.value = fabric.dihedralStiff ?? fabric.bendStiff
   }
 
   // Pins `particleIndex` to `targetPosition` every substep until cleared —

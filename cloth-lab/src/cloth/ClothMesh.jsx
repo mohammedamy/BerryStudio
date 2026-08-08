@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { TSHIRT_PIECES, TSHIRT_SEAMS } from '../pattern/tshirt'
 import { triangulateAll } from '../pattern/triangulate'
 import { assembleCloth, deriveNeighbors, deriveNormalRing } from './assemble'
-import { ClothSimulation, textureDimFor } from './ClothSimulation'
+import { ClothSimulation, textureDimFor, QUALITY_TIER_DEFAULT } from './ClothSimulation'
 import { FABRIC_PRESETS, DEFAULT_FABRIC } from './fabricPresets'
 import { deriveCollisionRig, deriveShoulderPinMask, deriveWaistbandPinMask } from '../body/collisionRig'
 import { getAssetBase } from '../assetBase'
@@ -54,7 +54,7 @@ function loadFabricTextures() {
 // about the steady-state render loop — grab-and-drag below does a ONE-TIME
 // readback per pointerdown, which is a rare, user-paced event, not a
 // per-frame cost).
-export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef }) {
+export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier = QUALITY_TIER_DEFAULT, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef }) {
   const gl = useThree((s) => s.gl)
   const camera = useThree((s) => s.camera)
 
@@ -220,14 +220,18 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, onDragState
     const shoulderMask = deriveShoulderPinMask(assembled.cloth.simRestPositions, assembled.cloth.simParticleCount, dims)
     const waistbandMask = deriveWaistbandPinMask(assembled.cloth.simRestPositions, assembled.cloth.simParticleCount, dims)
     const pinnedMask = shoulderMask.map((v, i) => (v || waistbandMask[i] ? 1 : 0))
-    const sim = new ClothSimulation(gl, assembled.cloth, assembled.neighbors, fabric, { collisionRig, pinnedMask })
+    const sim = new ClothSimulation(gl, assembled.cloth, assembled.neighbors, fabric, { collisionRig, pinnedMask, qualityTier })
     sim.preRelax()
     simRef.current = sim
     return () => {
       sim.dispose()
       simRef.current = null
     }
-  }, [gl, assembled, dims])
+    // WP-35: qualityTier changes the compiled shader and uploaded textures
+    // (see ClothSimulation's constructor) — unlike fabricId below, it can't
+    // be live-swapped, so it's a dependency here (full sim rebuild) rather
+    // than in the setFabric effect.
+  }, [gl, assembled, dims, qualityTier])
 
   useEffect(() => {
     simRef.current?.setFabric(FABRIC_PRESETS[fabricId] || FABRIC_PRESETS[DEFAULT_FABRIC])

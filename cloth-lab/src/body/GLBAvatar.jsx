@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGLTF, useAnimations } from '@react-three/drei'
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js'
-import { normalizeGLBHeight, applyPoseToGLB, detectVRM } from './reposeGLB'
+import { normalizeGLBHeight, applyPoseToGLB, detectVRM, resolveVRMBoneNames } from './reposeGLB'
 import { deriveMeshFitCollisionRig } from './meshFitCollisionRig'
 import { applyFFDLattice } from './ffdLattice'
 import { t } from '../i18n'
@@ -68,18 +68,18 @@ export default function GLBAvatar({ dims, lang = 'en', url, collisionRigRef, pos
     // file — see ffdLattice.js's own header comment for exactly which
     // regions and why (torso/hip/waist/shoulder/thigh; not bicep).
     applyFFDLattice(cloned, dims)
-    if (detectVRM(gltf)) {
-      // WP-8.4: VRM's humanoid.humanBones mapping is a real separate spec,
-      // not a name variant of the Mixamo/RPM rig this app already parses —
-      // don't even attempt applyPoseToGLB (it would silently fail to find
-      // any of the four expected bone names anyway, but that failure
-      // path's message doesn't explain WHY, which this one does). Pose
-      // selection (WP-8.5) has no effect on a VRM file for the same reason.
-      console.warn('GLBAvatar: ' + t('en', 'poseWarnVRM') + ' Full VRM humanoid-bone support is not implemented yet.')
-      meshWarningRef.current = 'poseWarnVRM'
-      if (collisionRigRef) collisionRigRef.current = null
-      return cloned
-    }
+    // WP-29: VRM's humanoid.humanBones is a real, separate bone-naming spec
+    // from the Mixamo/RPM convention applyPoseToGLB already knows — not a
+    // guess, a fixed documented vocabulary (resolveVRMBoneNames reads it
+    // straight from the file's own VRM/VRMC_vrm extension data). When it
+    // resolves a working arm rig, VRM files go through the exact same
+    // repose/collision-rig pipeline as any other recognized rig below.
+    // `isVRM` alone (bones NOT resolved — a custom/malformed VRM export)
+    // keeps the original honest "VRM detected, pose has no effect" warning
+    // instead of silently mis-posing or falling through to the generic
+    // "no rig found" message, which would misdescribe why.
+    const isVRM = detectVRM(gltf)
+    const vrmBoneNames = isVRM ? resolveVRMBoneNames(gltf) : null
     // WP-8.5: collision/placement (collisionRig.js, placement.js, and the
     // WP-8.3 mesh-fit rig below) all assume the original arms-down,
     // legs-straight "standing" convention regardless of which pose the
@@ -91,7 +91,18 @@ export default function GLBAvatar({ dims, lang = 'en', url, collisionRigRef, pos
     // reposeBoneToDirection re-measures each bone's CURRENT direction on
     // every call, so layering a second correction on top of the first
     // still lands exactly on the final target, not some blended result.
-    const { poseFixed: standingFixed } = applyPoseToGLB(cloned, 'standing')
+    const { poseFixed: standingFixed } = applyPoseToGLB(cloned, 'standing', vrmBoneNames)
+    if (!standingFixed && isVRM) {
+      // Unresolved even with VRM's own bone data — a custom/malformed VRM
+      // export. Bail the same way the pre-WP-29 VRM branch always did
+      // (skip the collision rig entirely, never guess): a bad partial
+      // pose read off geometry that wasn't actually reposed would be worse
+      // than the honest "no effect" warning.
+      console.warn('GLBAvatar: ' + t('en', 'poseWarnVRM') + ' (VRM humanBones present but did not resolve a full arm rig)')
+      meshWarningRef.current = 'poseWarnVRM'
+      if (collisionRigRef) collisionRigRef.current = null
+      return cloned
+    }
     if (!standingFixed) {
       console.warn('GLBAvatar: ' + t('en', 'poseWarnNoRig') + ' (looked for LeftArm/RightArm/LeftForeArm/RightForeArm)')
       meshWarningRef.current = 'poseWarnNoRig'
@@ -102,7 +113,7 @@ export default function GLBAvatar({ dims, lang = 'en', url, collisionRigRef, pos
     // geometry stays in bind pose, which is what raycasting actually sees).
     if (collisionRigRef) collisionRigRef.current = deriveMeshFitCollisionRig(cloned, dims)
     if (standingFixed && pose !== 'standing' && pose !== 'walk') {
-      const { legPoseFixed } = applyPoseToGLB(cloned, pose)
+      const { legPoseFixed } = applyPoseToGLB(cloned, pose, vrmBoneNames)
       if (pose === 'seated' && !legPoseFixed) {
         console.warn('GLBAvatar: ' + t('en', 'poseWarnSeatedLeg') + ' (looked for LeftUpLeg/RightUpLeg/LeftLeg/RightLeg/LeftFoot/RightFoot)')
         meshWarningRef.current = 'poseWarnSeatedLeg'
