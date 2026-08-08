@@ -6,6 +6,53 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-29: VRM humanoid-bone retargeting
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase C. `detectVRM()`
+(cloth-lab, WP-8.4) correctly identified VRM 0.x/1.0 files and showed an
+honest `poseWarnVRM` message rather than mis-posing — deliberate scope for
+that pass, not an oversight, but the real remaining gap: pose selection
+had no effect on any VRM file, which always displayed an arms-down bind
+pose regardless of the requested pose.
+
+### Added
+- `cloth-lab/src/body/reposeGLB.js`: `resolveVRMBoneNames(gltfResult)` —
+  reads a VRM file's own `humanoid.humanBones` data (VRM 1.0:
+  `extensions.VRMC_vrm.humanoid.humanBones`, an object keyed by the VRM
+  spec's bone-name vocabulary; VRM 0.x: `extensions.VRM.humanoid.humanBones`,
+  an array of `{bone, node}`) and resolves each declared bone to the glTF
+  node's actual `name` — i.e. exactly the string on the corresponding
+  `Object3D`, ready for `scene.getObjectByName()`. Returns `{}` (never
+  throws) for a non-VRM file or malformed/missing humanBones data.
+- `findBone()` and `applyPoseToGLB()` now take an optional `vrmBoneNames`
+  map, tried before the existing Mixamo/Ready Player Me name list for every
+  bone lookup (arms and, for the `seated` pose, legs) — a VRM file's real
+  bone names never collide with the Mixamo list, so one lookup safely
+  serves both rig conventions without the caller needing to know which one
+  a given scene uses.
+
+### Changed
+- `cloth-lab/src/body/GLBAvatar.jsx`: a VRM file whose `humanBones` data
+  resolves a full arm rig now goes through the exact same repose /
+  mesh-fit-collision-rig pipeline as any other recognized rig — pose
+  selection (standing/A-pose/T-pose/contrapposto/seated) works on it.
+  `poseWarnVRM` is shown only when VRM's own bone data does NOT resolve a
+  full arm rig (a custom/malformed VRM export) — never a silent mis-pose,
+  same honesty rule the plain "no recognized rig" case already followed.
+  Behavior for a non-VRM file (recognized rig or none) is unchanged.
+- `README.md`'s honest-notes entry for VRM avatars updated to describe the
+  new retargeting support and its one remaining honest fallback case.
+
+### Tests
+- `cloth-lab/src/body/reposeGLB.test.js`: unit tests for
+  `resolveVRMBoneNames()` covering VRM 1.0's object-keyed humanBones, VRM
+  0.x's array-of-`{bone,node}` humanBones, and missing/malformed data
+  (always `{}`, never a guess or a throw); an integration test building a
+  real T-pose THREE.js bone rig named with an arbitrary VRM-studio
+  convention (deliberately not overlapping any Mixamo name) and confirming
+  `applyPoseToGLB` only reposes it when `vrmBoneNames` is supplied — proving
+  the VRM path, not a name coincidence, is what resolves it.
+
 ## WP-28: Per-piece 3D material for the procedural avatar
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase C. The procedural 3D
