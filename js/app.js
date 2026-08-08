@@ -62,12 +62,21 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     // today's plain-text-prompt behaviour.
     aiGuided: { type:"dress", fit:"any", flare:"any", length:"any", neckline:"any", sleeve:"any", hem:"any", closure:"none", notes:"" },
     avatarGLB: { women: "", men: "", girls: "", boys: "" },
-    // BerryStudio-Upgrade-Plan WP-5: "iframe" (default, unchanged behavior)
-    // or "embedded" (cloth-lab's lib build mounted directly into this page,
-    // sharing React/three.js via the import map — see setView()'s clothlab
-    // branch and mountClothLabEmbedded() below). Defaults to "iframe" so
-    // nothing changes for existing users until they opt in via Settings.
-    clothLabEngine: "iframe",
+    // BerryStudio-Upgrade-Plan WP-5: "iframe" (cross-document, the original
+    // engine) or "embedded" (cloth-lab's lib build mounted directly into
+    // this page, sharing React/three.js via the import map — see
+    // setView()'s clothlab branch and mountClothLabEmbedded() below). As of
+    // WP-36 (v2.0), "embedded" is the default for new installs — newer and
+    // measurably faster (no cross-document postMessage bridge), gated on
+    // the dedicated e2e coverage below passing and no regression in the
+    // blank-canvas bug class the Honest notes describe fighting twice.
+    // `state = Object.assign({}, DEF, savedRaw)` means this only changes
+    // behavior for a `savedRaw` with no `clothLabEngine` key at all — an
+    // existing user's browser already has this key baked into its saved
+    // "pps" blob from any previous save() call, so their choice (explicit
+    // or not) is unconditionally preserved. "iframe" remains fully
+    // selectable and functional as a fallback via Settings.
+    clothLabEngine: "embedded",
     // WP-13: industrial per-point grading. Keyed by pattern id -> piece
     // key -> outline-index -> {dx,dy} (cm per size step). Purely additive
     // — a pattern with no authored rules here grades exactly as before.
