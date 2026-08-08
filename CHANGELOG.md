@@ -6,6 +6,136 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-38/39/40: Split View, custom fabric texture, Fit Chart
+
+Closes the three backlog items `BerryStudio-Tailornova-Feature-Study.md` §4
+left open after WP-37 — all three now shipped, verified live in-browser
+(checkerboard test swatch confirmed tiling correctly on both the 2D canvas
+and the live 3D avatar simultaneously; Fit Chart's tolerance edits confirmed
+flowing into the print sheet; Split View confirmed updating live with no tab
+switch), and the full 200-test suite re-run clean after each.
+
+### Added
+- **WP-40, Fit Chart** (`js/app.js`: `buildFitChartRows`/`openFitChartModal`/
+  `buildFitChartHTML`/`exportFitChart`) — a per-size measurement spec sheet
+  (Export pane, project menu, ⌘K) with a live-editable ± tolerance per
+  measurement point (`FIT_TOLERANCE_DEFAULT`, overridable per-key in
+  `state.fitTolerances`). Values are computed by the same `computeMeasurements`
+  grading engine as Auto Grade, for every size in `SIZES` (or every
+  `KIDS_AGES` entry in Kids mode) — never a second, parallel calculation.
+  One editable table honestly covers both of Tailornova's "Standard" and
+  "Custom" Fit Chart line items instead of two features sharing every line
+  of code.
+- **WP-39, custom fabric photo upload** — a real uploaded swatch photo,
+  tiled as an actual fill, not just a colour:
+  - `js/canvas.js`: `getTextureImage()` (a decode-once, cross-render Image
+    cache keyed by dataURL) and `drawPiece()` now fills with a real
+    `ctx.createPattern()` tiled at `TEXTURE_TILE_CM` (≈10cm/repeat, scaled
+    by the current zoom) when `piece.textureDataURL` is set, falling back to
+    the existing solid-colour fill while the image decodes. New
+    `Canvas.setTexture(i, dataURL)` API.
+  - `js/three-view.js`: `fabricMat()` loads a fresh `THREE.TextureLoader`
+    texture per call (deliberately NOT cached across calls — this file's own
+    `disposeMaterial()` disposes whatever texture sits on the OLD material's
+    `.map` on every swap, so a shared cache keyed by dataURL would get
+    disposed out from under any other material still referencing it; a
+    dataURL decode has no network round trip, so reloading per call is
+    cheap). `fabricState[part].textureDataURL` flows through both `build()`
+    and `setFabric()`'s existing `opts.parts`/`parts` handling.
+  - `js/app.js`: `applyFabricTexture()`/`removeFabricTexture()` mirror
+    `applyFabric()`'s selected-piece-vs-all-pieces scoping exactly;
+    `state.fabricTexture3d` is the "applied to everything" global
+    `partsFabric()` falls back to, mirroring `state.fabric3d`. Upload UI
+    (Layers pane, Fabric & Material section) reuses the exact
+    FileReader→dataURL pattern `openBgPanel()`'s background-image import
+    already established.
+  - A real bug caught by live verification, not by review: the first version
+    put `new THREE.TextureLoader()` at module scope in `three-view.js`, which
+    runs at parse time — before this file's own lazy `let THREE` (populated
+    later by a dynamic import) is ever assigned, throwing `Cannot read
+    properties of undefined (reading 'TextureLoader')` on every page load.
+    Fixed by making the loader instance lazy (`getFabricTexLoader()`),
+    matching why every other `THREE.*` construction in this file already
+    happens inside a function, never at module scope.
+- **WP-38, Split View** (`js/app.js`: `is3DActive`/`setSplitView`/
+  `applySplitViewClasses`, `css/styles.css`'s `.canvas-wrap.split` rules,
+  a new `#splitViewBtn` stage-toolbar chip) — a real, always-live 3D preview
+  panel beside the 2D canvas (58%/42% split, stacks vertically under 900px),
+  updating as the pattern is edited with no tab switch. Off by default,
+  mutually exclusive with the "3D Preview"/"3D Cloth Lab" tabs by design
+  (`setView(v)` turns Split View off for any `v!=="2d"`; `setSplitView(true)`
+  switches back to "2D Pattern" first) — so `.threed`/`.clothlab`'s CSS and
+  `.split`'s CSS never fight over the same canvas. Scoped to 2D + 3D Preview
+  only, not Cloth Lab (a separate, heavier R3F app — running it continuously
+  alongside 2D editing is a materially bigger performance commitment than
+  this WP is about, and `BerryStudio-Tailornova-Feature-Study.md` explicitly
+  flagged that as out of scope). Every call site that previously gated a
+  live 3D rebuild on `state.view==="3d"` (fabric sync, visibility sync,
+  pattern load/grade/generate, window resize — 12 sites total) now checks
+  `is3DActive()` instead, so Split View gets the same live updates the 3D
+  Preview tab always has, not a stale snapshot from whenever it was toggled
+  on. Split View never auto-restores across a page reload — same as
+  `state.view` itself, which also always boots back to "2D Pattern" rather
+  than replaying last session's tab.
+
+### Fixed (code review)
+- `openFitChartModal()`/`exportFitChart()` had an `if(!Canvas.getPieces().length)`
+  "empty2d" guard copy-pasted from the Sewing Instructions/BOM exports next to
+  them — but the Fit Chart never reads `Canvas.getPieces()` at all (its columns
+  are sizes, its rows are `computeMeasurements()` body measurements, entirely
+  independent of any loaded pattern). The guard blocked a legitimate use —
+  checking standard body measurements before drafting anything — for no
+  functional reason. Removed; verified live that the modal now opens correctly
+  on a brand-new, empty project.
+
+## WP-37: Sewing Instructions export + one-click hemline length presets
+
+Part of `BerryStudio-Tailornova-Feature-Study.md` — a feature audit of
+`tailornova.com` against BerryStudio's own shipped set. Most of Tailornova's
+marketed feature list was already covered (in several cases more deeply);
+these two were real, closeable gaps.
+
+### Added
+- `js/app.js`: `buildSewingSteps()`/`buildSewingInstructionsHTML()`/
+  `exportSewingInstructions()` — a real, ordered sewing-instructions sheet
+  derived from the loaded pattern's own declared piece `role`s, the same
+  trusted signal `buildBomItems()` already uses. Order: prep/interfacing →
+  darts → yoke → shoulder seams → collar → sleeves → pockets →
+  zip/placket → waistband → cuffs → buttons → lining → hem → press, each
+  step only appears when a piece with that role is actually present —
+  pieces with an unrecognised/no role contribute no step, matching the
+  codebase's existing "don't guess" convention rather than a generic fixed
+  paragraph. Wired into the Export pane, project menu, and ⌘K. Verified
+  live: a 3-piece dress produces a 5-step sequence, a 10-piece lined/
+  collared/pocketed coat produces a real 10-step sequence in correct
+  construction order, in both EN and AR.
+- `js/app.js`: Quick Draft's Length control for Dress/Skirt/Robe/Romper
+  (the kinds where "length" genuinely means hemline) grew from 3 buckets
+  (short/medium/long) to 8 one-click presets (mini/short/above-knee/
+  medium/midi/long/ankle/maxi) — each a real distinct factor in `LEN_MAP`
+  (a continuous multiplier `AIGen.build()` already honours for any key),
+  not a relabelled duplicate. Verified live: selecting Maxi actually
+  redrafts the dress to a floor-length hem (~175cm), not a cosmetic
+  change. Deliberately not applied to Top/Shirt/Trousers/Gown/Jacket/
+  Coat/Suit — those kinds' own length maps
+  (`js/fancy-patterns.js`'s `LEN_F`/`JLEN_F`/`CLEN_F`, or a cropped→full
+  trouser/top meaning) are real 3-bucket recipes with a silent fallback;
+  more presets there would collapse onto an existing bucket instead of a
+  genuinely distinct result.
+- `js/i18n.js`: full EN+AR strings for both features.
+- `css/styles.css`: `.seg` gained `flex-wrap: wrap` so an 8-button preset
+  row wraps onto two lines in the sidebar instead of overflowing.
+
+### Not done (see `BerryStudio-Tailornova-Feature-Study.md` §4)
+- WP-38: a persistent synced 3-panel workspace (flat sketch + 3D + pattern
+  always live side by side, Tailornova's actual signature layout) — a real
+  UI architecture change, not a copy-edit; BerryStudio's 3D Preview/Cloth
+  Lab remain separate view-mode tabs from 2D Pattern for now.
+- WP-39: custom fabric image upload as a real 2D fill + 3D texture map
+  (today's Fabric & Material is 8 presets + solid colour only).
+- WP-40: exportable Fit Charts (a per-size tolerance table, distinct from
+  the grading engine's own live numbers).
+
 ## WP-36: Make "Embedded" the default Cloth Lab engine
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase D. WP-5 shipped the

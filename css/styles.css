@@ -144,7 +144,7 @@ button { cursor: pointer; border: none; background: none; }
 }
 .pill:hover { border-color: var(--brand); transform: translateY(-1px); }
 .pill svg { width: 15px; height: 15px; }
-.seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-full); padding: 3px; gap: 2px; }
+.seg { display: inline-flex; flex-wrap: wrap; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-full); padding: 3px; gap: 2px; }
 .seg button { padding: 6px 11px; border-radius: var(--r-full); font-size: 12px; font-weight: 700; color: var(--ink-2); transition: all var(--fast) var(--ease); white-space: nowrap; }
 .seg button.active { background: var(--brand); color: var(--brand-ink); box-shadow: var(--shadow-1); }
 .icon-btn { width: 36px; height: 36px; border-radius: var(--r-md); display: grid; place-items: center; color: var(--ink-2); background: var(--panel-2); border: 1px solid var(--line); transition: all var(--fast) var(--ease); }
@@ -183,6 +183,18 @@ button { cursor: pointer; border: none; background: none; }
 .view3d-wrap.show { display: block; }
 .canvas-wrap.threed #patternCanvas { visibility: hidden; }
 #canvas3d { touch-action: none; }
+
+/* WP-38 (Tailornova feature study): Split View — 2D canvas + a real live 3D
+   panel side by side, instead of a third full-bleed tab. Mutually exclusive
+   with .threed/.clothlab in app.js's setView()/setSplitView(), so this never
+   has to fight either of those for layout. */
+.canvas-wrap.split { display: flex; }
+.canvas-wrap.split #patternCanvas { position: relative; inset: auto; width: 58%; height: 100%; flex: none; }
+.canvas-wrap.split .view3d-wrap { position: relative; inset: auto; width: 42%; height: 100%; flex: none; border-inline-start: 1px solid var(--line); }
+@media (max-width: 900px) {
+  .canvas-wrap.split { flex-direction: column; }
+  .canvas-wrap.split #patternCanvas, .canvas-wrap.split .view3d-wrap { width: 100%; height: 50%; border-inline-start: none; border-top: 1px solid var(--line); }
+}
 
 .clothlab-wrap { position: absolute; inset: 0; display: none; background: var(--canvas-bg); }
 .clothlab-wrap.show { display: block; }

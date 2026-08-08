@@ -302,21 +302,51 @@ export const View3D = (() => {
   // "whichever piece was set last wins" (WP-28). `back` is null whenever the
   // pattern has no distinct back piece for that part — the back sub-mesh (see
   // latheHalves() below) then just mirrors `front`, so a single-piece part still
-  // renders as one seamless whole exactly as before this change.
-  const defaultFabricSlot = () => ({ front: { color: 0x6d5efc, material: "cotton" }, back: null, opacity: 0.85 });
+  // renders as one seamless whole exactly as before this change. Each front/back
+  // sub-material also carries its own optional `textureDataURL` (WP-39, Tailornova
+  // feature study) — a real uploaded fabric-swatch photo, not just the 8 preset
+  // color/roughness recipes above; front and back can hold two different photos
+  // exactly the way they can hold two different colors.
+  const defaultFabricSlot = () => ({ front: { color: 0x6d5efc, material: "cotton", textureDataURL: null }, back: null, opacity: 0.85 });
   let fabricState = { bodice: defaultFabricSlot(), sleeve: defaultFabricSlot(), skirt: defaultFabricSlot(), trousers: defaultFabricSlot() };
+  // A fresh Texture is loaded per fabricMat() call rather than cached across
+  // calls — fabricMat() already builds a brand-new material every time it's
+  // called (never reused), and disposeMaterial() (top of this file) disposes
+  // whatever texture sits on the OLD material's `.map` on every swap; a shared
+  // cache keyed by dataURL would get disposed out from under any other material
+  // still referencing it. A data-URL decode has no network round trip, so
+  // reloading per call is cheap — this mirrors the "always own what you
+  // dispose" contract disposeMaterial() already enforces everywhere else.
+  // `THREE` isn't assigned until ensureDeps()'s dynamic import resolves (see
+  // `let THREE` up top) — a module-level `new THREE.TextureLoader()` here
+  // would run at parse time, before that assignment, and throw. Lazy getter,
+  // same reason every other THREE.* construction in this file happens inside
+  // a function, never at module scope.
+  let fabricTexLoader = null;
+  function getFabricTexLoader(){ return fabricTexLoader ||= new THREE.TextureLoader(); }
+  const FABRIC_TEXTURE_REPEAT = 6; // tile count so an uploaded swatch photo reads as a fabric print, not one giant smear across the whole part
   function fabricMat(part, side) {
     const st = fabricState[part] || fabricState.bodice;
     const slot = (side === "back" && st.back) ? st.back : st.front;
     const f = FABRIC[slot.material] || FABRIC.cotton;
     const op = Math.max(0.25, Math.min(1, st.opacity * f.om));
-    return new THREE.MeshPhysicalMaterial({
-      color: slot.color, roughness: f.rough, metalness: f.metal,
+    const mat = new THREE.MeshPhysicalMaterial({
+      // a texture map multiplies against `color` — white keeps the uploaded
+      // photo's own colour true instead of tinting it with the preset swatch colour
+      color: slot.textureDataURL ? 0xffffff : slot.color, roughness: f.rough, metalness: f.metal,
       sheen: f.sheen, sheenRoughness: 0.5, clearcoat: f.clear, clearcoatRoughness: 0.4,
       transparent: op < 0.99, opacity: op, side: THREE.DoubleSide,
       ...(f.transmission != null && { transmission: f.transmission, thickness: 0.001 }),
       ...(f.anisotropy != null && { anisotropy: f.anisotropy, anisotropyRotation: f.anisoRot ?? 0 }),
     });
+    if (slot.textureDataURL) {
+      const tex = getFabricTexLoader().load(slot.textureDataURL);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(FABRIC_TEXTURE_REPEAT, FABRIC_TEXTURE_REPEAT);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      mat.map = tex; // TextureLoader.load() populates the image asynchronously; the RAF loop (loop(), end of this file) renders every frame regardless, so the swatch simply appears once decoded
+    }
+    return mat;
   }
 
   // ---------- geometry helpers ----------
@@ -835,6 +865,7 @@ export const View3D = (() => {
         if (v.front) {
           if (v.front.color != null) fabricState[part].front.color = v.front.color;
           if (v.front.material) fabricState[part].front.material = v.front.material;
+          if (v.front.textureDataURL !== undefined) fabricState[part].front.textureDataURL = v.front.textureDataURL || null;
         }
         fabricState[part].back = v.back ? { ...fabricState[part].back, ...v.back } : null;
       });
@@ -898,6 +929,7 @@ export const View3D = (() => {
         if (v.front) {
           if (v.front.color != null) fabricState[part].front.color = v.front.color;
           if (v.front.material) fabricState[part].front.material = v.front.material;
+          if (v.front.textureDataURL !== undefined) fabricState[part].front.textureDataURL = v.front.textureDataURL || null;
         }
         fabricState[part].back = v.back ? { ...fabricState[part].back, ...v.back } : null;
       });
