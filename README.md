@@ -127,10 +127,16 @@ in the app's own header.
   export, matching how a real patternmaker's construction lines never leave
   the drafting table.
 - **Per-part 3D material** assigns a material to a 2D piece (Layers → piece properties →
-  Material), but the procedural 3D avatar only has 4 mesh groups — bodice, sleeve, skirt,
-  trousers — so two 2D pieces that map to the same part (e.g. Front Bodice and Back
-  Bodice) share one 3D material (whichever visible piece for that part was set last
-  wins). The 2D canvas itself still shows true per-piece colour and material.
+  Material). The procedural 3D avatar has 4 mesh groups — bodice, sleeve, skirt, trousers
+  — and as of WP-28 (v2.0), bodice/skirt/trousers are each built as two real front/back
+  sub-meshes split at the body's side seams, so a front piece and a genuinely distinct
+  back piece (e.g. Front Bodice and Back Bodice with different fabrics or colours) each
+  render with their own material simultaneously, instead of whichever was set last
+  winning. A part with only one 2D piece still renders as one seamless whole, unchanged.
+  Sleeve stays a single mesh (a capsule can't be angle-split the way a lathe can) and a
+  real garment sleeve is conventionally one piece anyway, so this is a deliberate,
+  documented exception, not a remaining gap. The 2D canvas itself still shows true
+  per-piece colour and material regardless.
 - **Create Marker** — as of WP-11, "Full nest" runs a real polygon-overlap
   bottom-left-fill + simulated-annealing search in a Web Worker (`js/nesting-core.js`),
   so pieces genuinely slide and interlock into each other's concave notches rather
@@ -202,10 +208,15 @@ in the app's own header.
   for Walk. Whichever pose is displayed, simulated cloth always collides
   against the standing arms-down body — a seated body's garment drape isn't
   re-simulated for the new pose.
-- **VRM avatar files** (a common photoreal-avatar format) are detected and
-  shown an honest "not supported yet" message rather than mis-positioned —
-  full VRM humanoid-bone retargeting is a separate spec from the Mixamo/
-  Ready Player Me bone-name convention this app parses, and wasn't built.
+- **VRM avatar files** (a common photoreal-avatar format) — as of WP-29
+  (v2.0), a real VRM 0.x/1.0 `humanoid.humanBones` resolver feeds the same
+  repose pipeline the Mixamo/Ready Player Me bone-name convention already
+  uses, so pose selection (standing/A-pose/T-pose/contrapposto/seated) works
+  on a VRM file the same way it does on any other recognized rig. The
+  "pose has no effect" message is shown only when a VRM file's own
+  `humanBones` data doesn't resolve a full arm rig (a custom or malformed
+  VRM export) — never a silent mis-pose, same honesty rule as the plain
+  "no recognized rig" case.
 - **USDZ export** (3D Cloth Lab → Export) produces a structurally valid file
   with no runtime errors, but hasn't been confirmed to open correctly in
   Apple Quick Look on real iOS hardware — no device was available to test
@@ -677,11 +688,25 @@ in the app's own header.
   perfect fit for 3D Preview (`js/three-view.js` just loads and scales to
   height, no skeleton needed) but means pose variants in 3D Cloth Lab
   (seated/walk/etc.) won't animate them; they'll display correctly, just
-  static, the same as any unposed model. A 9th candidate model was
-  deliberately left out: at 41MB it was 10x every other file's size,
-  bloating both the git repo and the download a visitor would pay just to
-  preview it — left for a future, properly-compressed re-export rather
-  than shipped as-is. Not precached by the service worker (same
+  static, the same as any unposed model. A 9th candidate model
+  (`Manniquin/woman.glb`, 41MB) was investigated and deliberately left out
+  (BerryStudio-Upgrade-Plan-v3 WP-32) — not just for its size. Direct
+  struct-level parsing of its GLB chunks plus running it through this
+  app's own `THREE.GLTFLoader` + `keepLargestComponent()` pipeline showed
+  1,451,001 real triangles exist, but `keepLargestComponent()` — tuned for
+  every other bundled avatar's minor debris, e.g. a small floating spike
+  on `girl3.glb` — discards ~89% of this specific mesh, keeping only one
+  arbitrary chunk (a leg) and scattering the rest as disconnected
+  fragments. It's a genuine source-asset defect (multiple legitimately-
+  separate large mesh islands, not one body + small debris), not a
+  compression problem — the same `@gltf-transform/cli` weld/simplify/
+  dedup/prune chain that compresses the other 8 avatars produced a clean
+  3.13MB output from it with no changes needed. Explicitly not shipped:
+  extending `keepLargestComponent()` to bridge legitimate multi-island
+  bodies would need a full regression pass against all 8 working avatars
+  first, and eight bundled avatars is already a reasonable gallery without
+  it — eight it stays for now, an explicit decision rather than a silently
+  open gap. Not precached by the service worker (same
   network-first-then-cache behaviour as any other same-origin asset) —
   only fetched when a user actually picks one.
 - **Bundled avatar gallery — grounding, garment, and a pre-existing model
@@ -718,20 +743,39 @@ in the app's own header.
     per-piece visibility/fabric wiring (`pieceVisMap`/`applyFabric`) then
     picks up and shows the garment that matches whatever pattern is
     actually loaded, unchanged.
-  - **Known limitation, not fixed this pass**: the garment shell's size
-    comes from your entered measurements, not from the loaded GLB mesh
-    itself, so fit is approximate. On a build stockier than that generic
-    assumption (`boy2.glb` in particular) the shell can end up mostly
-    *inside* the skin surface and only partially visible, rather than
-    fully clipped-through-naked as before, but still not a clean fit. A
-    per-mesh auto-fit was attempted and reverted: these AI-generated
-    avatars don't share one rest pose (arm position relative to the torso
-    varies model to model, confirmed by direct inspection), so no single
-    "safe" Y-band for measuring torso-only girth avoided sampling
-    outstretched-arm geometry on at least one bundled model — one attempt
-    scaled the garment to several times the body's size instead of
-    fixing it. Reverted in favor of the simpler, always-correctly-sized
-    (if occasionally under-fitting) generic version.
+  - **Known limitation**: the garment shell's size comes from your entered
+    measurements, not from the loaded GLB mesh itself, so fit is
+    approximate. A general, automated per-mesh auto-fit was attempted and
+    reverted: these AI-generated avatars don't share one rest pose (arm
+    position relative to the torso varies model to model, confirmed by
+    direct inspection), so no single "safe" Y-band for measuring
+    torso-only girth avoided sampling outstretched-arm geometry on at
+    least one bundled model — one attempt scaled the garment to several
+    times the body's size instead of fixing it. Reverted in favor of the
+    simpler, always-correctly-sized (if occasionally under-fitting)
+    generic version for the other 7 models.
+  - **`boy2.glb` specifically — fixed via measured, one-off override**
+    (BerryStudio-Upgrade-Plan-v3 WP-31). This model's shell was worse than
+    "occasionally under-fitting": it was fully swallowed by the skin
+    surface, not just partially. Direct glTF POSITION-accessor measurement
+    (a per-Y-band XZ-cluster scan, same "measure, don't guess" methodology
+    as the grounding fix above) found its actual crotch and underarm
+    landmarks sit at ~33%/~65% of its own mesh height — ~14-15 points
+    below the generic kid assumption of 47%/80%, most likely because this
+    specific reconstruction's head is proportionally larger than that
+    generic assumption accounts for. Correcting only the Y-position
+    (`AVATAR_LANDMARK_OVERRIDES.boy2` in `js/three-view.js`) was verified
+    in-browser to be *not* sufficient on its own — the shell still sat
+    inside the skin at the corrected height, because its measurement-
+    derived radius is also too small for this mesh's own scale. Fixing
+    both together (measured Y-position + a 2.3x radius scale, the same
+    factor an earlier radius-only attempt had already narrowed in on but
+    couldn't validate because it was scaling the shell at the wrong
+    height) lands a shell that sits outside the skin, verified by
+    screenshot. This is a one-off, measured correction for this specific
+    bundled file, keyed by filename — it doesn't generalize to a real
+    per-mesh auto-fit for future avatars, which remains the limitation
+    above.
 
 ---
 

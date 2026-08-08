@@ -51,18 +51,11 @@ const ARM_POSE_TARGET = {
   seated: { out: RESIDUAL_LEAN, down: 1.0 },
 }
 
-// WP-8.4: VRM detection only — full VRM support (humanoid.humanBones
-// retargeting) is a real separate spec with its own bone-mapping model,
-// not a small extension of the Mixamo/RPM name lookup above, and is out of
-// scope for this pass. Detecting it lets the caller show an honest "VRM
-// detected, not supported yet" message instead of a generic "no rig
-// found" one that would misdescribe why the repose didn't happen — a VRM
-// file's bones are real and named, just under a different convention this
-// app doesn't parse. `gltfResult` is whatever useGLTF(url) returns (the
-// full GLTFLoader result, not just `.scene`) — VRM 0.x declares itself via
-// the `VRM` extension, VRM 1.0 via `VRMC_vrm`; checking `extensionsUsed`
-// (always populated by GLTFLoader for every extension referenced in the
-// file, known or not) is more reliable than checking for a parsed
+// `gltfResult` is whatever useGLTF(url) returns (the full GLTFLoader
+// result, not just `.scene`) — VRM 0.x declares itself via the `VRM`
+// extension, VRM 1.0 via `VRMC_vrm`; checking `extensionsUsed` (always
+// populated by GLTFLoader for every extension referenced in the file,
+// known or not) is more reliable than checking for a parsed
 // `userData.gltfExtensions` entry, which only exists for extensions the
 // loader doesn't already handle itself.
 const VRM_EXTENSION_NAMES = ['VRM', 'VRMC_vrm']
@@ -73,7 +66,70 @@ export function detectVRM(gltfResult) {
   return VRM_EXTENSION_NAMES.some((name) => used.includes(name))
 }
 
-function findBone(scene, names) {
+// WP-29: VRM's humanoid.humanBones is a real, separate bone-naming spec
+// from the Mixamo/Ready Player Me convention ARM_BONE_NAMES/LEG_BONE_NAMES
+// above — a fixed, documented vocabulary (hips, upperChest, leftUpperArm,
+// rightLowerLeg, …: https://github.com/vrm-c/vrm-specification), not a
+// guess. Both VRM 0.x and VRM 1.0 use the SAME bone-name vocabulary; they
+// only differ in where the node index lives in the JSON:
+//   VRM 0.x   — extensions.VRM.humanoid.humanBones: [{ bone, node }, …]
+//   VRM 1.0   — extensions.VRMC_vrm.humanoid.humanBones: { [bone]: { node } }
+// Either way each entry points at a glTF node INDEX, not a name — this
+// resolves each VRM bone key to that node's actual `name`, i.e. exactly
+// the string GLTFLoader put on the corresponding Object3D, so the result
+// can feed the same `scene.getObjectByName()` lookup the Mixamo/RPM path
+// already uses (see findBone below). Returns {} (not null) when the file
+// claims a VRM extension but its humanoid/humanBones data is missing or
+// malformed — callers treat that the same as "no VRM bones resolved",
+// never as a crash.
+export function resolveVRMBoneNames(gltfResult) {
+  const json = gltfResult?.parser?.json
+  const nodes = json?.nodes
+  if (!Array.isArray(nodes)) return {}
+  const nameForNode = (nodeIndex) => {
+    const node = nodes[nodeIndex]
+    return node && typeof node.name === 'string' && node.name ? node.name : null
+  }
+  const out = {}
+  const v1 = json?.extensions?.VRMC_vrm?.humanoid?.humanBones
+  if (v1 && typeof v1 === 'object') {
+    for (const [bone, entry] of Object.entries(v1)) {
+      const name = entry && Number.isInteger(entry.node) ? nameForNode(entry.node) : null
+      if (name) out[bone] = name
+    }
+    if (Object.keys(out).length) return out
+  }
+  const v0 = json?.extensions?.VRM?.humanoid?.humanBones
+  if (Array.isArray(v0)) {
+    for (const entry of v0) {
+      const name = entry && Number.isInteger(entry.node) ? nameForNode(entry.node) : null
+      if (name && entry.bone) out[entry.bone] = name
+    }
+  }
+  return out
+}
+
+// Maps this file's internal arm/leg roles to VRM's canonical bone-name
+// vocabulary — shared by both VRM 0.x and 1.0, per the spec linked above.
+const VRM_BONE_KEYS = {
+  left: 'leftUpperArm', leftFore: 'leftLowerArm',
+  right: 'rightUpperArm', rightFore: 'rightLowerArm',
+  leftUp: 'leftUpperLeg', leftLow: 'leftLowerLeg', leftFoot: 'leftFoot',
+  rightUp: 'rightUpperLeg', rightLow: 'rightLowerLeg', rightFoot: 'rightFoot',
+}
+
+// `vrmBoneNames` (from resolveVRMBoneNames, or {} for a non-VRM file) is
+// tried FIRST — a VRM file's real bone names (often a studio's own
+// convention, e.g. "J_Bip_L_UpperArm") won't collide with the Mixamo/RPM
+// names in `names`, so trying both lists is safe for every file type and
+// means this one lookup serves both rigs without the caller needing to
+// know which convention a given scene uses.
+function findBone(scene, names, vrmKey, vrmBoneNames) {
+  const vrmName = vrmKey && vrmBoneNames ? vrmBoneNames[vrmKey] : null
+  if (vrmName) {
+    const bone = scene.getObjectByName(vrmName)
+    if (bone) return bone
+  }
   for (const name of names) {
     const bone = scene.getObjectByName(name)
     if (bone) return bone
@@ -183,12 +239,16 @@ function reposeSeatedLeg(upLegBone, lowLegBone, footBone, forwardDir) {
 // behavior. `contrapposto`'s asymmetry designates the right arm/leg (by
 // bone name, not world position) as the "relaxed" side — an arbitrary but
 // consistent choice, same as Avatar.jsx's procedural counterpart.
-export function applyPoseToGLB(scene, pose = 'standing') {
+// `vrmBoneNames` (WP-29, optional) — the result of resolveVRMBoneNames(),
+// tried before the Mixamo/RPM names for every bone lookup below; omit (or
+// pass {}) for a non-VRM file, which reproduces the exact pre-WP-29
+// behavior.
+export function applyPoseToGLB(scene, pose = 'standing', vrmBoneNames = null) {
   const target = ARM_POSE_TARGET[pose] || ARM_POSE_TARGET.standing
-  const leftArm = findBone(scene, ARM_BONE_NAMES.left)
-  const leftFore = findBone(scene, ARM_BONE_NAMES.leftFore)
-  const rightArm = findBone(scene, ARM_BONE_NAMES.right)
-  const rightFore = findBone(scene, ARM_BONE_NAMES.rightFore)
+  const leftArm = findBone(scene, ARM_BONE_NAMES.left, VRM_BONE_KEYS.left, vrmBoneNames)
+  const leftFore = findBone(scene, ARM_BONE_NAMES.leftFore, VRM_BONE_KEYS.leftFore, vrmBoneNames)
+  const rightArm = findBone(scene, ARM_BONE_NAMES.right, VRM_BONE_KEYS.right, vrmBoneNames)
+  const rightFore = findBone(scene, ARM_BONE_NAMES.rightFore, VRM_BONE_KEYS.rightFore, vrmBoneNames)
   if (!leftArm || !leftFore || !rightArm || !rightFore) return { poseFixed: false, legPoseFixed: false }
 
   const leftOk = reposeOneArm(leftArm, leftFore, target)
@@ -197,12 +257,12 @@ export function applyPoseToGLB(scene, pose = 'standing') {
 
   let legPoseFixed = false
   if (pose === 'seated') {
-    const rightHip = findBone(scene, LEG_BONE_NAMES.rightUp)
-    const leftHip = findBone(scene, LEG_BONE_NAMES.leftUp)
-    const leftLow = findBone(scene, LEG_BONE_NAMES.leftLow)
-    const leftFoot = findBone(scene, LEG_BONE_NAMES.leftFoot)
-    const rightLow = findBone(scene, LEG_BONE_NAMES.rightLow)
-    const rightFoot = findBone(scene, LEG_BONE_NAMES.rightFoot)
+    const rightHip = findBone(scene, LEG_BONE_NAMES.rightUp, VRM_BONE_KEYS.rightUp, vrmBoneNames)
+    const leftHip = findBone(scene, LEG_BONE_NAMES.leftUp, VRM_BONE_KEYS.leftUp, vrmBoneNames)
+    const leftLow = findBone(scene, LEG_BONE_NAMES.leftLow, VRM_BONE_KEYS.leftLow, vrmBoneNames)
+    const leftFoot = findBone(scene, LEG_BONE_NAMES.leftFoot, VRM_BONE_KEYS.leftFoot, vrmBoneNames)
+    const rightLow = findBone(scene, LEG_BONE_NAMES.rightLow, VRM_BONE_KEYS.rightLow, vrmBoneNames)
+    const rightFoot = findBone(scene, LEG_BONE_NAMES.rightFoot, VRM_BONE_KEYS.rightFoot, vrmBoneNames)
     if (rightHip && leftHip && leftLow && leftFoot && rightLow && rightFoot) {
       const hipL = new THREE.Vector3(); const hipR = new THREE.Vector3()
       leftHip.getWorldPosition(hipL); rightHip.getWorldPosition(hipR)
