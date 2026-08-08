@@ -6,6 +6,96 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-35: True dihedral bend constraint (opt-in "High" quality tier)
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase C. v1.0's honest notes were
+explicit that the cloth solver's distance-based hinge/fold spring (not true
+dihedral-angle) and brute-force O(N²) self-collision (not a GPU spatial
+hash) were deliberate, documented trade-offs, not oversights. This WP
+upgrades the bend constraint to a real opt-in "high quality" tier without
+touching the existing default path at all, and investigates (but does not
+ship) a GPU spatial hash — see "Not shipped" below for why.
+
+### Added
+- `cloth-lab/src/cloth/dihedralBend.js` — a plain-JS (no WebGL) reference
+  implementation of a true dihedral-angle bend constraint, written and
+  verified FIRST, before any GLSL: `dihedralAngle()` computes the actual
+  signed angle between two triangles sharing an edge (atan2-based, stable
+  through 0 and +-PI, not acos which blows up at both); `dihedralBendCorrection()`
+  rotates only the two "wing" vertices around the fixed hinge line
+  (Rodrigues' rotation) toward the hinge's rest angle — a deliberately
+  simpler alternative to reproducing a textbook PBD closed-form gradient
+  formula from memory, which carries real risk of a subtle, hard-to-verify
+  sign or normalization bug (a well-documented hazard in PBD bend
+  implementations). 13 property-based Vitest tests, including 40 random
+  fold/rest combinations all converging to <10% of their starting error
+  within 25 iterations, and an explicit "never moves off the hinge line"
+  invariant check. One real bug caught and fixed by this harness before it
+  ever reached GLSL: an inverted rotation sign that made corrections grow
+  the angular error instead of shrinking it — caught by the very first
+  convergence test run, not discovered later inside a GPU shader.
+- `cloth-lab/src/cloth/assemble.js`'s `deriveNeighbors()` now also returns
+  `bendHinge` — for each of the existing `bend` neighbor pairs, the shared
+  edge's two endpoints and the rest dihedral angle, computed once at mesh-
+  build time and packed at the SAME per-particle slot index `bend` itself
+  uses (so the GLSL port can read a neighbor's index from `bend`'s own
+  texture and its hinge data from this one at the same slot, no separate
+  index texture needed). One real slot-alignment bug caught and fixed
+  before shipping: an early version only advanced its output slot on a
+  successful (non-degenerate) hinge, which would silently shift every
+  later hinge down by one slot relative to `bend`'s own indices — caught
+  by a regression test built from a closed hexagonal fan mesh (every
+  outer vertex genuinely has 2 bend neighbors, unlike the single-hinge
+  quad fixtures, which can't distinguish "aligned" from "trivially
+  aligned because there's only one slot to get right").
+- `cloth-lab/src/cloth/ClothSimulation.js`: a `qualityTier` constructor
+  option (`'default'` | `'high'`, exported as `QUALITY_TIER_DEFAULT` /
+  `QUALITY_TIER_HIGH`). `'high'` compiles a shader variant carrying a
+  direct, mechanical GLSL translation of `dihedralBend.js` (same variable
+  names and structure, so a discrepancy between the two is easy to spot)
+  that REPLACES the default distance-based bend correction — a "second
+  bend mode," not an additional pass stacked on top of it, since running
+  both at once would fight each other. Verified stable directly against
+  the running GPU state (not just visually): stepped a real garment
+  simulation 1320 substeps (~22s simulated) on the high-quality tier via
+  `gl.readRenderTargetPixels()` on the solver's own position texture —
+  zero NaN/Infinity at every checkpoint, bounds converged and stayed flat
+  rather than drifting, and the resulting shape differs measurably from
+  the default tier's (proving the new constraint is genuinely engaging,
+  not silently falling through to a no-op).
+- `cloth-lab/src/ui/FabricPanel.jsx`: a "Simulation quality" toggle
+  (Default / High) next to the existing fabric picker, threaded through
+  `App.jsx` → `Scene.jsx` → `ClothMesh.jsx`. Unlike fabric switching
+  (a live uniform swap), changing quality tier rebuilds the simulation —
+  it changes the compiled shader and uploaded textures, not just a
+  float value.
+
+### Changed
+- `README.md`'s honest-notes entry for the cloth solver's bend/self-
+  collision trade-offs updated to describe the new opt-in tier and why
+  self-collision specifically doesn't get an equivalent upgrade (below).
+
+### Not shipped: GPU spatial hash for self-collision
+`GPUComputationRenderer` (this solver's plain-WebGL2 GPGPU approach, no
+compute shaders) has no atomics or scatter-write access, so a real
+uniform-grid spatial hash — the kind you can actually iterate per-cell —
+needs either a scatter-with-atomics compaction pass or a full bitonic sort
+to build the per-cell particle index lists, neither available here. A
+cheaper middle ground (bucket each particle into a coarse grid cell,
+skip far-apart pairs before the expensive math) was implemented as a
+prototype and deliberately not kept: profiling the existing brute-force
+loop showed its dominant cost is the two texture2D fetches per inner
+iteration needed just to find out where the other particle IS — a
+cell-based early-out can only skip the cheap sqrt/branch AFTER that fetch
+already happened, so it doesn't touch the actual bottleneck. Shipping code
+that adds real complexity and risk for a not-actually-measurable win would
+be worse than shipping nothing; self-collision stays exactly the
+brute-force O(N²) scan it already was, in both quality tiers. Closing this
+for real would mean adopting WebGPU compute shaders or a from-scratch,
+independently verified bitonic sort — a materially larger undertaking than
+an opt-in tier, flagged here as a real follow-up rather than silently
+dropped a second time.
+
 ## WP-29: VRM humanoid-bone retargeting
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase C. `detectVRM()`
