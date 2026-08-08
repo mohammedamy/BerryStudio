@@ -127,10 +127,16 @@ in the app's own header.
   export, matching how a real patternmaker's construction lines never leave
   the drafting table.
 - **Per-part 3D material** assigns a material to a 2D piece (Layers → piece properties →
-  Material), but the procedural 3D avatar only has 4 mesh groups — bodice, sleeve, skirt,
-  trousers — so two 2D pieces that map to the same part (e.g. Front Bodice and Back
-  Bodice) share one 3D material (whichever visible piece for that part was set last
-  wins). The 2D canvas itself still shows true per-piece colour and material.
+  Material). The procedural 3D avatar has 4 mesh groups — bodice, sleeve, skirt, trousers
+  — and as of WP-28 (v2.0), bodice/skirt/trousers are each built as two real front/back
+  sub-meshes split at the body's side seams, so a front piece and a genuinely distinct
+  back piece (e.g. Front Bodice and Back Bodice with different fabrics or colours) each
+  render with their own material simultaneously, instead of whichever was set last
+  winning. A part with only one 2D piece still renders as one seamless whole, unchanged.
+  Sleeve stays a single mesh (a capsule can't be angle-split the way a lathe can) and a
+  real garment sleeve is conventionally one piece anyway, so this is a deliberate,
+  documented exception, not a remaining gap. The 2D canvas itself still shows true
+  per-piece colour and material regardless.
 - **Create Marker** — as of WP-11, "Full nest" runs a real polygon-overlap
   bottom-left-fill + simulated-annealing search in a Web Worker (`js/nesting-core.js`),
   so pieces genuinely slide and interlock into each other's concave notches rather

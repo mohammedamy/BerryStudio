@@ -2547,16 +2547,16 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       : /trouser|بنطل|pant|\bleg\b/.test(k) ? "trousers" : "bodice";
   }
   function isBackPiece(name){ return /\bback\b|خلفي|خلفية/.test((name||"").toLowerCase()); }
-  // A part's mesh used to just take the FIRST matching piece's color and
-  // silently drop every other one — a front+back bodice/skirt in two
-  // different colors (common: contrast lining, color-blocked panels) lost
-  // the back piece's color entirely, since the procedural body has one
-  // continuous front+back shell per part, not one mesh per real 2D piece.
-  // When a part genuinely has both a front piece and a differently-colored
-  // back piece, `colorBack` is set too — three-view.js paints the mesh's
-  // own front/back-facing vertices accordingly instead of one flat color.
-  // A part with only one piece (the overwhelmingly common case) gets
-  // exactly the same single `color` as before, unchanged.
+  // A part's mesh used to just take the FIRST matching piece's color/material and
+  // silently drop every other one — a front+back bodice/skirt with a different
+  // fabric or color (common: contrast lining, color-blocked panels) lost the back
+  // piece's styling entirely, since the procedural body has one continuous
+  // front+back shell per part, not one mesh per real 2D piece. WP-28 split each
+  // part's mesh into a real front sub-mesh and a real back sub-mesh in
+  // three-view.js, so this now hands over a full {color,material} pair for
+  // `back` (not just a color) whenever a distinct back piece exists. A part with
+  // only one piece (the overwhelmingly common case) still gets exactly the same
+  // single `front` descriptor as before and `back` stays null, unchanged.
   function partsFabric(){
     const buckets={};
     Canvas.getPieces().filter(p=>p.visible!==false).forEach(p=>{
@@ -2567,10 +2567,16 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const parts={};
     Object.entries(buckets).forEach(([part,{front,back}])=>{
       const primary = front[0] || back[0];
-      parts[part] = { color:colorToInt(primary.color), material:primary.material||state.fabric3d||"cotton" };
-      if (front.length && back.length){
-        const backInt = colorToInt(back[0].color);
-        if (backInt !== parts[part].color) parts[part].colorBack = backInt;
+      const frontDesc = { color:colorToInt(primary.color), material:primary.material||state.fabric3d||"cotton" };
+      parts[part] = { front: frontDesc };
+      if (back.length){
+        const backDesc = { color:colorToInt(back[0].color), material:back[0].material||state.fabric3d||"cotton" };
+        // Only a genuinely distinct back piece is worth a separate sub-mesh
+        // material — one matching front exactly (color AND fabric) has
+        // nothing to render differently, so leave the back mesh mirroring
+        // front instead of manufacturing a no-op override.
+        const sameAsFront = front.length && backDesc.color===frontDesc.color && backDesc.material===frontDesc.material;
+        if (!sameAsFront) parts[part].back = backDesc;
       }
     });
     return parts;
