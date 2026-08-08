@@ -3462,7 +3462,16 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       return;
     }
     if(e.key==="Escape"){ $$(".overlay.show").forEach(o=>o.classList.remove("show")); closeAnyMenu(); closeTextEditor(); Canvas.cancelPick(); }
-    const typing = document.activeElement.tagName==="INPUT" || document.activeElement.tagName==="TEXTAREA" || document.activeElement.isContentEditable;
+    // SELECT belongs here alongside INPUT/TEXTAREA: a focused <select>'s
+    // native behaviour for ArrowUp/ArrowDown/Delete etc. is to cycle its
+    // own options — without this, those keys never reached the browser at
+    // all here (2D view + a canvas piece selected, which is the common
+    // case while a select like the Grade Rules piece dropdown is in use):
+    // e.preventDefault() below fired first and nudged/deleted the SELECTED
+    // CANVAS PIECE instead, and the dropdown never visibly responded to
+    // the keyboard at all — the concrete bug behind "I can't select from
+    // the piece dropdown".
+    const typing = document.activeElement.tagName==="INPUT" || document.activeElement.tagName==="TEXTAREA" || document.activeElement.tagName==="SELECT" || document.activeElement.isContentEditable;
     // tool shortcuts
     const map={v:"select",p:"pen",l:"line",a:"arc",m:"measure",r:"rotate",s:"scale",t:"text"};
     if(!meta&&map[e.key]&&!typing)setTool(map[e.key]);
