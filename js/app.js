@@ -52,6 +52,15 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     // apply to whichever technique is selected. "none" on either keeps
     // AIGen.build()'s output byte-identical to before this option existed.
     builderOpts: { length:"medium", flare:"regular", fit:"regular", sleeve:"short", waistTech:"none", waistIntensity:"light", sleeveTech:"none", sleeveIntensity:"light" }, builderCustom: {},
+    // Guided Prompt Builder (AI pane): structured fields that assemble into
+    // a precise, unambiguous free-text prompt instead of asking the user to
+    // write one from scratch — the concrete fix for "the AI prompt is too
+    // vague to draft anything specific from". "any" means "let the AI/local
+    // heuristic decide" (the field is simply omitted from the built
+    // sentence) — everything defaults to "any" except garment type, which
+    // needs some starting value; a user who touches nothing gets exactly
+    // today's plain-text-prompt behaviour.
+    aiGuided: { type:"dress", fit:"any", flare:"any", length:"any", neckline:"any", sleeve:"any", hem:"any", closure:"none", notes:"" },
     avatarGLB: { women: "", men: "", girls: "", boys: "" },
     // BerryStudio-Upgrade-Plan WP-5: "iframe" (default, unchanged behavior)
     // or "embedded" (cloth-lab's lib build mounted directly into this page,
@@ -195,6 +204,8 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     circleTool:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
     promote:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 9l4-4 8 1 4 6-2 9H7z" stroke-dasharray="2.5 2"/><path d="M8.5 12.5l2.2 2.2 4.8-4.8"/></svg>',
     calib:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h16M4 12v-3M20 12v-3M9 12v-3M15 12v-3"/></svg>',
+    lasso:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3C7 3 3 6.5 3 11c0 3 2.5 5 6 5 1.8 0 3-1 3-2.3S10.8 12 9.5 12" stroke-dasharray="2.4 2.2"/><circle cx="17" cy="15" r="3.4"/></svg>',
+    curve:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 18C4 10 20 14 20 6"/><path d="M4 18l4.5-4.5M20 6l-4.5 4.5" stroke-dasharray="1.6 1.6"/><circle cx="4" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.7" fill="currentColor" stroke="none"/></svg>',
   };
 
   // Library thumbnails: real, full-colour illustrations (not currentColor-themed
@@ -217,14 +228,14 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 
   // ---------------- TOOLS ----------------
   const TOOLS = [
-    { id:"select", i:"select" }, { id:"pen", i:"pen" }, { id:"line", i:"line" },
+    { id:"select", i:"select" }, { id:"lasso", i:"lasso" }, { id:"pen", i:"pen" }, { id:"line", i:"line" },
     { id:"arc", i:"arc" }, { id:"free", i:"free" }, { id:"polygon", i:"polyfill" }, { id:"symmetry", i:"symmetry" },
     { id:"knife", i:"knife" }, "sep",
     { id:"point", i:"point" }, { id:"conline", i:"conline" }, { id:"conarc", i:"conarc" },
     { id:"circle", i:"circleTool" }, { id:"promote", i:"promote" }, "sep",
     { id:"move", i:"move" }, { id:"rotate", i:"rotate" },
     { id:"scale", i:"scale" }, { id:"measure", i:"measure" }, { id:"text", i:"text" }, "sep",
-    { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"addpoint", i:"addpoint" }, { id:"grain", i:"grain" },
+    { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"addpoint", i:"addpoint" }, { id:"curve", i:"curve" }, { id:"grain", i:"grain" },
   ];
 
   // ================= RENDER SHELL =================
@@ -634,8 +645,9 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const pieces = Canvas.getPieces();
     if(!pieces.length){ c.appendChild(el("div","help-note",T("empty2d"))); return; }
     const sel = Canvas.getSelected();
+    const multiSel = Canvas.getMultiSelection();  // Shift+click / Lasso group — highlighted the same as a plain single selection
     pieces.forEach((p,i)=>{
-      const row = el("div","layer"+(p.locked?" locked":"")+(i===sel?" active":""));
+      const row = el("div","layer"+(p.locked?" locked":"")+((i===sel||multiSel.includes(i))?" active":""));
       // colour swatch — opens a native colour picker
       const sw = el("label","swatch"); sw.style.background=p.color; sw.title=T("pieceColor");
       const ci = el("input"); ci.type="color"; ci.value=rgbToHex(p.color);
@@ -713,6 +725,102 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     c.appendChild(b);
   }
 
+  // ---- Guided Prompt Builder (AI pane) ----
+  // The free-text prompt box above is exactly as reliable as what the user
+  // happens to type into it — a one-word prompt ("dress") gives both the
+  // local regex heuristic (js/ai.js's deriveStyle()) and an LLM provider
+  // (js/ai-spec-pipeline.js) almost nothing to work with, which is the root
+  // of "the generated pattern is generic". This builder assembles a precise
+  // sentence from structured choices instead, using the EXACT canonical
+  // English phrases deriveStyle()'s own regexes already match (and the
+  // schema/pattern-spec.v1.json enum values the LLM path expects) — so a
+  // guided build is reliably specific for BOTH generation paths, not just
+  // whichever one happens to be configured. The assembled sentence is
+  // always built in this canonical English vocabulary regardless of the
+  // active UI language (state.lang): it's what feeds the local regex
+  // fallback (English tokens are its most complete coverage — see
+  // deriveStyle()'s own regexes) as well as the LLM, which reads English or
+  // Arabic prompts equally well either way. Only the FORM LABELS the user
+  // sees are localized (T()/i18n), not the text this produces.
+  const AI_GUIDED_WORDS = {
+    fit:      { fitted:"fitted", regular:"regular fit", relaxed:"relaxed" },
+    flare:    { slim:"pencil silhouette", regular:"regular silhouette", full:"a-line silhouette" },
+    length:   { short:"mini length", medium:"regular length", long:"maxi length" },
+    neckline: { v:"v-neck", round:"round neck", boat:"boat neck", offshoulder:"off-shoulder neckline", halter:"halter neckline", collar:"collar", mock:"mock neck" },
+    sleeve:   { sleeveless:"sleeveless", short:"short sleeves", threeQuarter:"three-quarter sleeves", long:"long sleeves" },
+    hem:      { straight:"straight hem", curved:"curved hem", highlow:"high-low hem", asymmetric:"asymmetric hem" },
+    closure:  { wrap:"wrap closure", zip:"zip closure", button:"button closure", tie:"tie closure" },
+  };
+  function buildGuidedPrompt(o){
+    const type = o.type || "dress";
+    const fitW = AI_GUIDED_WORDS.fit[o.fit], flareW = AI_GUIDED_WORDS.flare[o.flare];
+    const lead = ["a", fitW, flareW, type].filter(Boolean).join(" ");
+    const bits = [lead, AI_GUIDED_WORDS.length[o.length], AI_GUIDED_WORDS.neckline[o.neckline],
+      AI_GUIDED_WORDS.sleeve[o.sleeve], AI_GUIDED_WORDS.hem[o.hem], AI_GUIDED_WORDS.closure[o.closure]].filter(Boolean);
+    let sentence = bits.join(", ") + ".";
+    if(o.notes && o.notes.trim()) sentence += " " + o.notes.trim();
+    return sentence;
+  }
+  // Segmented-button row, same visual language as renderBuilderPane()'s own
+  // segRow — `opts` includes "any"/"none" as an explicit "let the AI/local
+  // heuristic decide" choice (skips the clause entirely in buildGuidedPrompt).
+  function guidedSegRow(container, label, key, opts, labelFn){
+    const wrap=el("div","set-row"); wrap.style.marginTop="10px"; wrap.style.flexWrap="wrap"; wrap.style.alignItems="flex-start";
+    wrap.innerHTML=`<span class="sl">${label}</span>`;
+    // Quick Draft Builder's own .seg rows never carry more than 3 short
+    // options — fine as a single nowrap line. Several of these guided rows
+    // (neckline in particular, 8 options) don't fit that assumption, so
+    // this wraps onto multiple lines instead of silently overflowing/
+    // clipping past the sidebar's edge (the global .seg CSS is untouched,
+    // this is scoped to just these rows).
+    const seg=el("div","seg"); seg.style.flexWrap="wrap"; seg.style.rowGap="4px";
+    opts.forEach(o=>{
+      const b=el("button", state.aiGuided[key]===o?"active":"", labelFn(o));
+      b.onclick=()=>{ state.aiGuided[key]=o; save(); renderAIPane(); };
+      seg.appendChild(b);
+    });
+    wrap.appendChild(seg); container.appendChild(wrap);
+  }
+  function renderGuidedPromptBuilder(ta){
+    const box=el("div","field"); box.style.marginTop="4px";
+    box.appendChild(el("div","section-title",IC.ruler+T("aiGuidedTitle")));
+    box.appendChild(el("div","help-note",T("aiGuidedDesc")));
+
+    const g = state.aiGuided;
+
+    const typeGrid=el("div","opt-grid"); typeGrid.style.margin="8px 0 4px";
+    AIGEN_KINDS.forEach(k=>{
+      const o=el("div","opt"+(g.type===k?" active":""), T("kind_"+k));
+      o.onclick=()=>{ g.type=k; save(); renderAIPane(); };
+      typeGrid.appendChild(o);
+    });
+    box.appendChild(typeGrid);
+
+    guidedSegRow(box, T("builderFit"), "fit", ["any","fitted","regular","relaxed"], o=>o==="any"?T("opt_any"):T("opt_"+o));
+    guidedSegRow(box, T("builderFlare"), "flare", ["any","slim","regular","full"], o=>o==="any"?T("opt_any"):T("opt_"+o));
+    guidedSegRow(box, T("builderLength"), "length", ["any","short","medium","long"], o=>o==="any"?T("opt_any"):T("opt_"+o));
+    guidedSegRow(box, T("aiGuidedNeckline"), "neckline",
+      ["any","v","round","boat","offshoulder","halter","collar","mock"],
+      o=>o==="any"?T("opt_any"):T("opt_neck"+o[0].toUpperCase()+o.slice(1)));
+    guidedSegRow(box, T("builderSleeve"), "sleeve", ["any","sleeveless","short","threeQuarter","long"],
+      o=>o==="any"?T("opt_any"):o==="threeQuarter"?T("opt_threeQuarter"):T("opt_"+o));
+    guidedSegRow(box, T("aiGuidedHem"), "hem", ["any","straight","curved","highlow","asymmetric"],
+      o=>o==="any"?T("opt_any"):T("opt_hem"+o[0].toUpperCase()+o.slice(1)));
+    guidedSegRow(box, T("aiGuidedClosure"), "closure", ["none","wrap","zip","button","tie"],
+      o=>o==="none"?T("opt_none"):T("opt_closure"+o[0].toUpperCase()+o.slice(1)));
+
+    const notesF=el("div","field"); notesF.style.marginTop="10px";
+    notesF.innerHTML=`<label>${T("aiGuidedNotes")}</label>`;
+    const notesIn=el("input","input"); notesIn.value=g.notes||""; notesIn.placeholder=T("aiGuidedNotesPh");
+    notesIn.oninput=()=>{ g.notes=notesIn.value; save(); };
+    notesF.appendChild(notesIn); box.appendChild(notesF);
+
+    const buildBtn=el("button","big-btn ghost",IC.check+T("aiGuidedBuild")); buildBtn.style.marginTop="12px";
+    buildBtn.onclick=()=>{ ta.value=buildGuidedPrompt(g); toast(T("aiGuidedBuilt")); };
+    box.appendChild(buildBtn);
+    return box;
+  }
+
   // AI PANE
   const AI_STAGES = ["analyzing","silhouette","drafting"];
   function renderAIPane() {
@@ -748,7 +856,9 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const statusBox=el("div","ai-status"); statusBox.id="aiStatus";
     const attrsBox=el("div","ai-attrs"); attrsBox.id="aiAttrs"; attrsBox.style.display="none";
 
-    c.appendChild(preview); c.appendChild(f); c.appendChild(file); c.appendChild(up); c.appendChild(gen);
+    const guided = renderGuidedPromptBuilder(ta);
+
+    c.appendChild(preview); c.appendChild(guided); c.appendChild(f); c.appendChild(file); c.appendChild(up); c.appendChild(gen);
     c.appendChild(statusBox); c.appendChild(attrsBox);
 
     // ---- AI Fashion Billboard: dress a model in real garment photos, then
@@ -1082,6 +1192,27 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
             };
           } else {
             res = specResult;
+            // A schema-valid spec that left construction.neckline unset
+            // reaches here with style.neckline===null (js/ai-spec-pipeline.js's
+            // specToStyle() leaves it nullable on purpose, for the fuseStyle()
+            // branch above — a filled-in guess there would look like a real
+            // vision read). This direct/non-fused path is exactly the case
+            // that note describes as safe to fill: nothing else here is going
+            // to supply a neckline, and AIGen.build()'s necklinePts() quietly
+            // drafts a plain round neckline for every unset case otherwise —
+            // the same "every generation looks identical" complaint this pass
+            // exists to fix. Seeded on the prompt so identical input still
+            // reproduces an identical result.
+            if(res.style && res.source==="spec" && !res.style.neckline){
+              const style = { ...res.style, neckline: AIGen.pick(`${prompt}|${state.category}|neck`,
+                res.style.type==="shirt" ? ["collar","round","v"] : ["v","round","boat","offshoulder","halter"]) };
+              const built = AIGen.build(style, currentMeas());
+              res = {
+                ...res, ...built, style,
+                attributes: AIGen.attributes(style, state.lang, provenanceMapFromSpec(res.spec)),
+                validation: PatternValidator.run(built.pieces, {}),
+              };
+            }
           }
           setStage("done");
         } else toast(T(classifyAIFallbackReason(specResult.fallbackReason)));
@@ -1114,9 +1245,18 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   // Fashion Billboard "Generate Pattern Pieces From This" — same pipeline
   // as the AI Pattern Generator's own image-upload path, sourced from the
   // generated billboard photo instead of a user-uploaded inspiration image.
+  // Used to call generatePatternFrom() with an EMPTY text prompt (image
+  // only) — a real reliability bug, not a deliberate "let the image speak
+  // for itself" design: a bare, contextless image gives a vision-capable
+  // provider nothing to anchor a specific read on beyond the general system
+  // prompt, and some OpenAI-compatible backends reject an empty user
+  // message outright. A concrete instruction steers it toward mode 1 (photo
+  // silhouette, not tech-pack tracing) and toward reading real construction
+  // details instead of a generic runway guess.
   async function runPatternPieces(btn){
     if(!bbBillboard) return;
-    await generatePatternFrom("", bbBillboard, btn, "billboardPiecesReady");
+    const prompt = "The attached image is a photorealistic photo of a professional fashion model wearing the exact garment(s) the user dressed them in with the AI Fashion Billboard tool above — read it as a real worn-garment photo (mode 1), not a technical tech-pack drawing. Identify this garment's actual construction as precisely as the photo allows: garment type, neckline, sleeve length and width, overall silhouette (fitted vs. flared), hem shape, and closure — a confident, specific read, not a generic default.";
+    await generatePatternFrom(prompt, bbBillboard, btn, "billboardPiecesReady");
   }
   // "Read Pattern Pieces From This Tech-Pack" — sourced from bbPattern (the
   // AI-drawn technical flat-sketch with individual piece diagrams and printed
@@ -2407,16 +2547,16 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       : /trouser|بنطل|pant|\bleg\b/.test(k) ? "trousers" : "bodice";
   }
   function isBackPiece(name){ return /\bback\b|خلفي|خلفية/.test((name||"").toLowerCase()); }
-  // A part's mesh used to just take the FIRST matching piece's color and
-  // silently drop every other one — a front+back bodice/skirt in two
-  // different colors (common: contrast lining, color-blocked panels) lost
-  // the back piece's color entirely, since the procedural body has one
-  // continuous front+back shell per part, not one mesh per real 2D piece.
-  // When a part genuinely has both a front piece and a differently-colored
-  // back piece, `colorBack` is set too — three-view.js paints the mesh's
-  // own front/back-facing vertices accordingly instead of one flat color.
-  // A part with only one piece (the overwhelmingly common case) gets
-  // exactly the same single `color` as before, unchanged.
+  // A part's mesh used to just take the FIRST matching piece's color/material and
+  // silently drop every other one — a front+back bodice/skirt with a different
+  // fabric or color (common: contrast lining, color-blocked panels) lost the back
+  // piece's styling entirely, since the procedural body has one continuous
+  // front+back shell per part, not one mesh per real 2D piece. WP-28 split each
+  // part's mesh into a real front sub-mesh and a real back sub-mesh in
+  // three-view.js, so this now hands over a full {color,material} pair for
+  // `back` (not just a color) whenever a distinct back piece exists. A part with
+  // only one piece (the overwhelmingly common case) still gets exactly the same
+  // single `front` descriptor as before and `back` stays null, unchanged.
   function partsFabric(){
     const buckets={};
     Canvas.getPieces().filter(p=>p.visible!==false).forEach(p=>{
@@ -2427,10 +2567,16 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const parts={};
     Object.entries(buckets).forEach(([part,{front,back}])=>{
       const primary = front[0] || back[0];
-      parts[part] = { color:colorToInt(primary.color), material:primary.material||state.fabric3d||"cotton" };
-      if (front.length && back.length){
-        const backInt = colorToInt(back[0].color);
-        if (backInt !== parts[part].color) parts[part].colorBack = backInt;
+      const frontDesc = { color:colorToInt(primary.color), material:primary.material||state.fabric3d||"cotton" };
+      parts[part] = { front: frontDesc };
+      if (back.length){
+        const backDesc = { color:colorToInt(back[0].color), material:back[0].material||state.fabric3d||"cotton" };
+        // Only a genuinely distinct back piece is worth a separate sub-mesh
+        // material — one matching front exactly (color AND fabric) has
+        // nothing to render differently, so leave the back mesh mirroring
+        // front instead of manufacturing a no-op override.
+        const sameAsFront = front.length && backDesc.color===frontDesc.color && backDesc.material===frontDesc.material;
+        if (!sameAsFront) parts[part].back = backDesc;
       }
     });
     return parts;
@@ -3325,7 +3471,16 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       return;
     }
     if(e.key==="Escape"){ $$(".overlay.show").forEach(o=>o.classList.remove("show")); closeAnyMenu(); closeTextEditor(); Canvas.cancelPick(); }
-    const typing = document.activeElement.tagName==="INPUT" || document.activeElement.tagName==="TEXTAREA" || document.activeElement.isContentEditable;
+    // SELECT belongs here alongside INPUT/TEXTAREA: a focused <select>'s
+    // native behaviour for ArrowUp/ArrowDown/Delete etc. is to cycle its
+    // own options — without this, those keys never reached the browser at
+    // all here (2D view + a canvas piece selected, which is the common
+    // case while a select like the Grade Rules piece dropdown is in use):
+    // e.preventDefault() below fired first and nudged/deleted the SELECTED
+    // CANVAS PIECE instead, and the dropdown never visibly responded to
+    // the keyboard at all — the concrete bug behind "I can't select from
+    // the piece dropdown".
+    const typing = document.activeElement.tagName==="INPUT" || document.activeElement.tagName==="TEXTAREA" || document.activeElement.tagName==="SELECT" || document.activeElement.isContentEditable;
     // tool shortcuts
     const map={v:"select",p:"pen",l:"line",a:"arc",m:"measure",r:"rotate",s:"scale",t:"text"};
     if(!meta&&map[e.key]&&!typing)setTool(map[e.key]);
@@ -3344,12 +3499,14 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         const dir=e.key==="]"?1:-1;
         const next=sel<0 ? (dir>0?0:pieces.length-1) : (sel+dir+pieces.length)%pieces.length;
         Canvas.selectPiece(next); renderLayersPane();
-      } else if(sel>=0 && (e.key==="ArrowUp"||e.key==="ArrowDown"||e.key==="ArrowLeft"||e.key==="ArrowRight")){
+      } else if((sel>=0 || Canvas.getMultiSelection().length) && (e.key==="ArrowUp"||e.key==="ArrowDown"||e.key==="ArrowLeft"||e.key==="ArrowRight")){
         e.preventDefault();
         const step=e.shiftKey?0.1:1;
         const dx=e.key==="ArrowLeft"?-step:e.key==="ArrowRight"?step:0;
         const dy=e.key==="ArrowUp"?-step:e.key==="ArrowDown"?step:0;
-        Canvas.nudgePiece(sel,dx,dy); sync3DVisibility();
+        const group=Canvas.getMultiSelection();
+        if(group.length) Canvas.nudgePieces(group,dx,dy); else Canvas.nudgePiece(sel,dx,dy);
+        sync3DVisibility();
       } else if(e.key==="Delete"||e.key==="Backspace"){
         if (Canvas.deleteSelection()){
           e.preventDefault();
@@ -3472,6 +3629,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     Canvas.onPointRequest(openPointEditor);
     Canvas.onPromoteRequest(openPromotePrompt);
     Canvas.onCalibrationRequest(openCalibPrompt);
+    Canvas.onWarnRequest(key=>toast(T(key)));
     buildToolRail(); buildRail(); wire();
     applyTheme(); applyLang();
     updateUnitsPill(); updateStageChips();
