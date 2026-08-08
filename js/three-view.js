@@ -298,19 +298,47 @@ export const View3D = (() => {
   // One fabric slot per garment part — the procedural body only has 4 named mesh
   // groups (bodice/sleeve/skirt/trousers), so material assignment is per-part, not
   // per-arbitrary-2D-piece (the 2D canvas itself still supports true per-piece material).
-  const defaultFabricSlot = () => ({ color: 0x6d5efc, material: "cotton", opacity: 0.85 });
+  const defaultFabricSlot = () => ({ color: 0x6d5efc, material: "cotton", opacity: 0.85, textureDataURL: null });
   let fabricState = { bodice: defaultFabricSlot(), sleeve: defaultFabricSlot(), skirt: defaultFabricSlot(), trousers: defaultFabricSlot() };
+  // WP-39 (Tailornova feature study): a real uploaded fabric-swatch photo,
+  // not just the 8 preset color/roughness recipes above. A fresh Texture is
+  // loaded per fabricMat() call rather than cached across calls — fabricMat()
+  // already builds a brand-new material every time it's called (never
+  // reused), and disposeMaterial() (top of this file) disposes whatever
+  // texture sits on the OLD material's `.map` on every swap; a shared cache
+  // keyed by dataURL would get disposed out from under any other material
+  // still referencing it. A data-URL decode has no network round trip, so
+  // reloading per call is cheap — this mirrors the "always own what you
+  // dispose" contract disposeMaterial() already enforces everywhere else.
+  // `THREE` isn't assigned until ensureDeps()'s dynamic import resolves (see
+  // `let THREE` up top) — a module-level `new THREE.TextureLoader()` here
+  // would run at parse time, before that assignment, and throw. Lazy getter,
+  // same reason every other THREE.* construction in this file happens inside
+  // a function, never at module scope.
+  let fabricTexLoader = null;
+  function getFabricTexLoader(){ return fabricTexLoader ||= new THREE.TextureLoader(); }
+  const FABRIC_TEXTURE_REPEAT = 6; // tile count so an uploaded swatch photo reads as a fabric print, not one giant smear across the whole part
   function fabricMat(part) {
     const st = fabricState[part] || fabricState.bodice;
     const f = FABRIC[st.material] || FABRIC.cotton;
     const op = Math.max(0.25, Math.min(1, st.opacity * f.om));
-    return new THREE.MeshPhysicalMaterial({
-      color: st.color, roughness: f.rough, metalness: f.metal,
+    const mat = new THREE.MeshPhysicalMaterial({
+      // a texture map multiplies against `color` — white keeps the uploaded
+      // photo's own colour true instead of tinting it with the preset swatch colour
+      color: st.textureDataURL ? 0xffffff : st.color, roughness: f.rough, metalness: f.metal,
       sheen: f.sheen, sheenRoughness: 0.5, clearcoat: f.clear, clearcoatRoughness: 0.4,
       transparent: op < 0.99, opacity: op, side: THREE.DoubleSide,
       ...(f.transmission != null && { transmission: f.transmission, thickness: 0.001 }),
       ...(f.anisotropy != null && { anisotropy: f.anisotropy, anisotropyRotation: f.anisoRot ?? 0 }),
     });
+    if (st.textureDataURL) {
+      const tex = getFabricTexLoader().load(st.textureDataURL);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(FABRIC_TEXTURE_REPEAT, FABRIC_TEXTURE_REPEAT);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      mat.map = tex; // TextureLoader.load() populates the image asynchronously; the RAF loop (loop(), end of this file) renders every frame regardless, so the swatch simply appears once decoded
+    }
+    return mat;
   }
   // A part's mesh is one continuous front+back lathe shell — no separate
   // front/back mesh to give a different material to. When the 2D pattern
@@ -775,6 +803,7 @@ export const View3D = (() => {
         if (v.color != null) fabricState[part].color = v.color;
         fabricState[part].colorBack = v.colorBack != null ? v.colorBack : null;
         if (v.material) fabricState[part].material = v.material;
+        if (v.textureDataURL !== undefined) fabricState[part].textureDataURL = v.textureDataURL || null;
       });
     } else {
       Object.values(fabricState).forEach(st => {
@@ -833,6 +862,7 @@ export const View3D = (() => {
         if (v.color != null) fabricState[part].color = v.color;
         fabricState[part].colorBack = v.colorBack != null ? v.colorBack : null;
         if (v.material) fabricState[part].material = v.material;
+        if (v.textureDataURL !== undefined) fabricState[part].textureDataURL = v.textureDataURL || null;
       });
     } else if (color != null || material) {
       Object.values(fabricState).forEach(st => {

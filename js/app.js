@@ -507,6 +507,25 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     sync3DFabric();
     renderLayersPane();
   }
+  // WP-39 (Tailornova feature study): a real uploaded fabric-swatch photo —
+  // same selected-piece-vs-all-pieces scoping applyFabric() already uses.
+  // `state.fabricTexture3d` is the "applied to everything" global the 3D
+  // view's partsFabric() falls back to, mirroring state.fabric3d exactly.
+  function applyFabricTexture(dataURL){
+    const pieces=Canvas.getPieces(); if(!pieces.length){ toast(T("empty2d")); return; }
+    const sel=Canvas.getSelected();
+    if(sel>=0){ Canvas.setTexture(sel,dataURL); }
+    else{ pieces.forEach((_,i)=>Canvas.setTexture(i,dataURL)); state.fabricTexture3d=dataURL; save(); }
+    sync3DFabric();
+    renderLayersPane();
+  }
+  function removeFabricTexture(){
+    const pieces=Canvas.getPieces(); const sel=Canvas.getSelected();
+    if(sel>=0){ Canvas.setTexture(sel,null); }
+    else{ pieces.forEach((_,i)=>Canvas.setTexture(i,null)); state.fabricTexture3d=null; save(); }
+    sync3DFabric();
+    renderLayersPane();
+  }
   // Per-layer properties popover: rename (EN/AR), colour, own opacity, delete.
   function openLayerProps(i, anchor){
     closeAnyMenu();
@@ -676,6 +695,38 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     FABRICS.forEach(f=>{ const m=el("button","mat"+(state.fabric3d===f.key?" active":""),`<span>${T("fab_"+f.key)}</span>`);
       m.style.background=f.color; m.onclick=()=>applyFabric(f.color, f.key); grid.appendChild(m); });
     c.appendChild(grid);
+
+    // WP-39 (Tailornova feature study): upload a real fabric-swatch photo —
+    // fills the piece as an actual tiled texture in both the 2D canvas and
+    // the 3D preview/Cloth Lab, not just a flat preset colour.
+    const texField = el("div","field"); texField.style.marginTop="12px";
+    const currentTex = sel>=0 ? pieces[sel].textureDataURL : state.fabricTexture3d;
+    texField.innerHTML = `<label>${T("fabricTexture")}</label>`;
+    const texRow = el("div","row"); texRow.style.cssText="display:flex;gap:8px;margin-top:6px";
+    const texBtn = el("button","big-btn ghost",T("fabricTextureUpload")); texBtn.style.cssText="flex:1;width:auto;padding:8px 12px";
+    texRow.appendChild(texBtn);
+    if (currentTex){
+      const texRemove = el("button","big-btn ghost",IC.trash||"×"); texRemove.style.cssText="width:auto;padding:8px 12px;color:var(--danger)";
+      texRemove.title = T("fabricTextureRemove"); texRemove.onclick = removeFabricTexture;
+      texRow.appendChild(texRemove);
+    }
+    texField.appendChild(texRow);
+    if (currentTex){
+      const preview = el("div"); preview.style.cssText=`margin-top:8px;width:100%;height:60px;border-radius:8px;border:1px solid var(--line);background-image:url(${currentTex});background-size:cover;background-position:center`;
+      texField.appendChild(preview);
+    }
+    c.appendChild(texField);
+    c.appendChild(el("div","help-note",T("fabricTextureD"))).style.marginTop="6px";
+    const texFile = el("input"); texFile.type="file"; texFile.accept="image/*"; texFile.style.display="none";
+    texFile.onchange = () => {
+      const f = texFile.files && texFile.files[0]; if(!f) return;
+      const r = new FileReader();
+      r.onload = () => applyFabricTexture(r.result);
+      r.readAsDataURL(f);
+      texFile.value="";
+    };
+    c.appendChild(texFile);
+    texBtn.onclick = () => texFile.click();
 
     // Fabric transparency
     const tr=el("div","field"); tr.style.marginTop="14px";
@@ -1080,7 +1131,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     state.loaded = null;
     Canvas.setPattern(newRes.pieces, newRes.colors);
     hideEmpty(); renderLayersPane();
-    if(state.view==="3d") build3D(newRes.colorInt);
+    if(is3DActive()) build3D(newRes.colorInt);
     renderAIAttrs(newRes);
     toast(T("generated"));
   }
@@ -1228,7 +1279,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       state.loaded = null;
       Canvas.setPattern(res.pieces, res.colors);
       hideEmpty(); renderLayersPane();
-      if(state.view==="3d") build3D(res.colorInt);
+      if(is3DActive()) build3D(res.colorInt);
       renderAIAttrs(res);                         // show what was actually detected, right where the "thinking" ran
       toast(T(doneToastKey));
     } catch(e){ toast(T("importFail")); }
@@ -1298,7 +1349,21 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     robe:{length:1,flare:1,fit:1,sleeve:1,sleeveCap:1},
     gown:{length:1,sleeve:1}, jacket:{length:1}, coat:{length:1}, suit:{},
   };
-  const LEN_MAP = {short:0.65, medium:1.0, long:1.35};
+  const LEN_MAP = {mini:0.35, short:0.65, aboveKnee:0.82, medium:1.0, midi:1.18, long:1.35, ankle:1.55, maxi:1.78};
+  // Tailornova feature study (WP-37): "Lengthen Patterns with One Click" —
+  // up to 10 preset lengths, single click, real result. LEN_MAP above is a
+  // continuous factor (any key here already redrafts for real, no fallback
+  // bucket), so the wider preset row below is genuinely 8 distinct lengths,
+  // not 3 buckets with extra labels. Only offered for the AIGen kinds whose
+  // "length" really means garment hemline (mini→maxi reads naturally); the
+  // FancyGen kinds (gown/jacket/coat/suit) and trousers/top/shirt keep their
+  // original 3-option control — their own length maps (js/fancy-patterns.js's
+  // LEN_F/JLEN_F/CLEN_F, or trouser/top length meaning cropped→full, not a
+  // hemline) are real 3-bucket recipes, so adding more presets there would
+  // silently collapse onto one of the existing 3 results instead of a truly
+  // distinct one.
+  const HEMLINE_LENGTH_KINDS = ["dress","skirt","robe","romper"];
+  const HEMLINE_LENGTH_OPTS = ["mini","short","aboveKnee","medium","midi","long","ankle","maxi"];
   const FLARE_MAP = {slim:0.9, regular:1.15, full:1.5};
   const FIT_MAP = {fitted:0.85, regular:1.0, relaxed:1.15};
   const SLEEVE_MAP = {sleeveless:0, short:0.45, long:1.3};
@@ -1354,7 +1419,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       opts.forEach(o=>{ const b=el("button", state.builderOpts[key]===o?"active":"", T("opt_"+o)); b.onclick=()=>{ state.builderOpts[key]=o; save(); renderBuilderPane(); }; seg.appendChild(b); });
       wrap.appendChild(seg); c.appendChild(wrap);
     };
-    if (st.length) segRow(T("builderLength"), "length", ["short","medium","long"]);
+    if (st.length) segRow(T("builderLength"), "length", HEMLINE_LENGTH_KINDS.includes(kind) ? HEMLINE_LENGTH_OPTS : ["short","medium","long"]);
     if (st.flare) segRow(T("builderFlare"), "flare", ["slim","regular","full"]);
     if (st.fit) segRow(T("builderFit"), "fit", ["fitted","regular","relaxed"]);
     if (st.sleeve) segRow(T("builderSleeve"), "sleeve", ["sleeveless","short","long"]);
@@ -1413,7 +1478,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     state.loaded = null;
     Canvas.setPattern(pieces, PALETTE);
     hideEmpty(); renderLayersPane();
-    if (state.view==="3d") build3D();
+    if (is3DActive()) build3D();
     toast(T("generated")+" · "+T("kind_"+kind));
     save();
   }
@@ -1481,6 +1546,10 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const ps=el("button","big-btn ghost",IC.printer+T("patternSummary")); ps.style.marginTop="8px"; ps.onclick=()=>exportSummary(); c.appendChild(ps);
     c.appendChild(el("div","help-note",T("patternSummaryD"))).style.marginTop="6px";
     const bo=el("button","big-btn ghost",T("bom")); bo.style.marginTop="10px"; bo.onclick=()=>exportBom(); c.appendChild(bo);
+    const si=el("button","big-btn ghost",T("sewInstrTitle")); si.style.marginTop="8px"; si.onclick=()=>exportSewingInstructions(); c.appendChild(si);
+    c.appendChild(el("div","help-note",T("sewInstrD"))).style.marginTop="6px";
+    const fc=el("button","big-btn ghost",T("fitChartTitle")); fc.style.marginTop="8px"; fc.onclick=()=>openFitChartModal(); c.appendChild(fc);
+    c.appendChild(el("div","help-note",T("fitChartD"))).style.marginTop="6px";
     const cp=el("button","big-btn ghost",T("checkPattern")); cp.style.marginTop="8px"; cp.onclick=()=>runCheckPattern(); c.appendChild(cp);
     const ws=el("button","big-btn ghost",T("walkSeam")); ws.style.marginTop="8px"; ws.onclick=()=>openWalkSeamModal(); c.appendChild(ws);
   }
@@ -1617,7 +1686,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   function newProject(){
     Canvas.clearAll(); state.loaded=null; aiImage=null;
     showEmpty(); renderLayersPane(); renderAIPane();
-    if(state.view==="3d") build3D();
+    if(is3DActive()) build3D();
     save(); toast(T("newDone"));
   }
   function projectPayload(){
@@ -1630,7 +1699,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     if(!Canvas.loadPieces(pieces, data.texts, data.points, data.cons)) return false;
     state.loaded=null; hideEmpty(); renderLayersPane();
     Object.entries(data.variables||{}).forEach(([name,formula])=>{ try{ Canvas.setVariable(name, formula); }catch(e){} });
-    if(state.view==="3d") build3D(); save();
+    if(is3DActive()) build3D(); save();
     return true;
   }
   function importProject(){
@@ -1702,6 +1771,8 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     { icon:IC.pdf,     label:T("savePDF"),       run:()=>exportAs("PDF") },
     { icon:IC.folder,  label:T("saveProject"),   run:()=>exportAs("JSON") },
     { icon:IC.printer, label:T("patternSummary"),run:exportSummary },
+    { icon:IC.printer, label:T("sewInstrTitle"), run:exportSewingInstructions },
+    { icon:IC.printer, label:T("fitChartTitle"), run:openFitChartModal },
     { icon:IC.cube,    label:T("createMarker"),  run:openMarkerModal },
     { icon:IC.magnet,  label:T("snapshotMenu"),  run:openSnapshotPanel },
     ...(state.cloudSync ? [
@@ -2504,6 +2575,203 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     toast(T("exported")+" · "+T("bom"));
   }
 
+  // Sewing Instructions (Tailornova feature study, WP-37): a real ordered
+  // construction sequence derived from the same declared piece roles
+  // buildBomItems() already trusts, not a generic paragraph — a plain skirt
+  // gets a short honest sequence, a lined jacket gets a real multi-stage one.
+  // Any piece with an unrecognised/no role (role:"other", freehand shapes)
+  // simply contributes no step of its own — it's still cut and sewn, it just
+  // doesn't get a dedicated instruction, which is the honest behaviour here.
+  function buildSewingSteps(pieces){
+    const seamCm = Canvas.getOpt("seamCm");
+    const m = currentMeas();
+    const byRole = {};
+    pieces.forEach(p=>{ if(p.role) (byRole[p.role]=byRole[p.role]||[]).push(p); });
+    const has = (...roles) => roles.some(r=>(byRole[r]||[]).length>0);
+    const names = (...roles) => roles.flatMap(r=>byRole[r]||[]).map(p=>L(p.name)).join(", ");
+    const isZipPlacket = p => p.role==="placket-facing" && /zip/i.test((p.name&&p.name.en)||"");
+    const buttonFrontPiece = p => p.role==="lapel-facing" && !isZipPlacket(p);
+    const zipPresent = pieces.some(isZipPlacket);
+    const buttonFrontPresent = pieces.some(buttonFrontPiece);
+    const interfacingPieces = pieces.filter(p=>["collar","collar-stand","cuff","waistband","lapel-facing","placket-facing"].includes(p.role));
+    const dartCount = pieces.reduce((n,p)=>n+((p.darts||[]).length),0);
+    const hasFrontBack = has("bodice-front-center","front-panel") && has("bodice-back-center","back-panel");
+    const sleeveRoles = ["sleeve","cap-sleeve","puff-sleeve","butterfly-sleeve","cape-sleeve","sleeve-upper"];
+
+    const steps=[];
+    steps.push(interfacingPieces.length
+      ? T("sewInstrPrep").replace("{n}",pieces.length).replace("{list}",interfacingPieces.map(p=>L(p.name)).join(", "))
+      : T("sewInstrPrepNoInterfacing").replace("{n}",pieces.length));
+    if(dartCount) steps.push(T("sewInstrDarts").replace("{n}",dartCount));
+    if(has("yoke")) steps.push(T("sewInstrYoke").replace("{pieces}",names("yoke")));
+    if(hasFrontBack) steps.push(T("sewInstrShoulder").replace("{front}",names("bodice-front-center","front-panel")).replace("{back}",names("bodice-back-center","back-panel")));
+    if(has("collar","collar-stand","undercollar","collar-band")) steps.push(T("sewInstrCollar"));
+    if(has(...sleeveRoles)) steps.push(T("sewInstrSleeve"));
+    else if(hasFrontBack) steps.push(T("sewInstrSide"));
+    if(has("pocket")) steps.push(T("sewInstrPocket").replace("{n}",byRole.pocket.length));
+    if(zipPresent) steps.push(T("sewInstrPlacket").replace("{type}",T("bomZipper")));
+    if(has("waistband")) steps.push(T("sewInstrWaistband").replace("{closure}",T("bomClosureWaistband")));
+    if(has("cuff","rib-cuff")) steps.push(T("sewInstrCuff").replace("{closure}",T("bomButtonsCuff")));
+    if(buttonFrontPresent) steps.push(T("sewInstrButtons").replace("{n}",Math.max(2,Math.round(m.backLen/12))));
+    if(has("lining") || pieces.some(p=>p.role==="lapel-facing"||p.role==="placket-facing")) steps.push(T("sewInstrLining"));
+    steps.push(T("sewInstrHem").replace("{n}",seamCm));
+    steps.push(T("sewInstrPress"));
+    return steps;
+  }
+  function buildSewingInstructionsHTML(){
+    const pieces=Canvas.getPieces();
+    const nameObj = state.loaded ? PATTERNS[state.loaded].name : { en:T("customPattern"), ar:T("customPattern") };
+    const sizeLbl = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids).label) : state.size;
+    const rtl = state.lang==="ar";
+    const stepsHTML = buildSewingSteps(pieces).map((s,i)=>`<li><span class="si-num">${i+1}</span><span>${s}</span></li>`).join("");
+    return `<!doctype html><html lang="${state.lang}" dir="${rtl?"rtl":"ltr"}"><head><meta charset="utf-8">
+<title>BerryStudio — ${nameObj.en} · ${T("sewInstrTitle")}</title>
+<style>
+  @page{margin:14mm}
+  *{box-sizing:border-box}
+  body{font-family:${rtl?"'Cairo','Segoe UI'":"'Segoe UI'"},Tahoma,Arial,sans-serif;color:#1a1a1a;margin:0;padding:22px;background:#fff}
+  h1{font-size:21px;margin:0 0 3px}
+  h1 span{color:#8a8a8a;font-weight:600;font-size:16px}
+  .sub{font-size:13px;color:#666;margin:0 0 18px}
+  ol{list-style:none;padding:0;margin:0;counter-reset:none}
+  li{display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid #eee;font-size:13.5px;line-height:1.6}
+  .si-num{flex:none;width:26px;height:26px;border-radius:50%;background:#6d5efc;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700}
+  .note{margin-top:18px;border:1px dashed #c9a94a;background:#fff8e6;padding:11px 15px;border-radius:9px;font-size:12.5px;color:#7a5c00;line-height:1.6}
+  .pbar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px}
+  .pbar button{font-family:inherit;font-size:13px;font-weight:700;padding:9px 16px;border-radius:8px;border:1px solid #ccc;background:#f5f5f5;cursor:pointer}
+  .pbar button.primary{background:#6d5efc;color:#fff;border-color:#6d5efc}
+  @media print{.pbar{display:none}}
+</style></head>
+<body>
+  <div class="pbar"><button onclick="window.close()">${T("close")}</button><button class="primary" onclick="window.print()">${T("printNow")}</button></div>
+  <h1>${nameObj.en} <span>/ ${nameObj.ar}</span></h1>
+  <p class="sub">BerryStudio · ${T("sewInstrTitle")} · ${T("gradedTo")}: ${sizeLbl} · ${T("std_"+state.standard)}</p>
+  <ol>${stepsHTML}</ol>
+  <div class="note">${T("sewInstrNote")}</div>
+</body></html>`;
+  }
+  function exportSewingInstructions(){
+    const pieces=Canvas.getPieces(); if(!pieces.length){ toast(T("empty2d")); return; }
+    const w=window.open("","_blank");
+    if(!w){ toast(T("sewInstrTitle")+": allow pop-ups"); return; }
+    w.document.write(buildSewingInstructionsHTML()); w.document.close();
+    toast(T("exported")+" · "+T("sewInstrTitle"));
+  }
+
+  // Fit Chart (Tailornova feature study, WP-40): a real per-size tolerance
+  // spec sheet — the artifact a factory/contractor actually needs, distinct
+  // from the live grading numbers the Size pane already shows. One editable
+  // table serves both of Tailornova's "Standard" and "Custom" Fit Chart line
+  // items honestly: FIT_TOLERANCE_DEFAULT is the standard starting point,
+  // and it's a live override in the same table, not two separate features
+  // pretending to be independent when they'd share every line of code.
+  // Values reuse the real grading engine (computeMeasurements) for every
+  // size/age in the run — never a second, parallel calculation that could
+  // drift from what Auto Grade itself produces.
+  const FIT_TOLERANCE_DEFAULT = { chest:0.5, waist:0.5, hips:0.5, shoulder:0.3, backLen:0.5, sleeve:0.5, neck:0.3, bicep:0.3, inseam:0.5, thigh:0.5, height:1.0 };
+  function fitTolerance(k){ return (state.fitTolerances && state.fitTolerances[k] != null) ? state.fitTolerances[k] : FIT_TOLERANCE_DEFAULT[k]; }
+  function setFitTolerance(k, v){ (state.fitTolerances ||= {})[k] = v; save(); }
+  function buildFitChartRows(){
+    const columns = state.kids
+      ? KIDS_AGES.map(a=>({ id:a.id, label:L(a.label) }))
+      : SIZES.map(s=>({ id:s, label:s }));
+    const valuesByCol = {};
+    columns.forEach(col=>{
+      valuesByCol[col.id] = computeMeasurements({
+        category: state.category, standard: state.standard, custom: null,
+        size: state.kids ? null : col.id, kids: state.kids ? col.id : null,
+      });
+    });
+    const rows = MEAS_KEYS.map(k => ({
+      key: k, label: T("m_"+k), tolerance: fitTolerance(k),
+      values: columns.map(col => valuesByCol[col.id][k]),
+    }));
+    return { columns, rows };
+  }
+  // Code review fix: unlike Sewing Instructions/BOM, the Fit Chart never reads
+  // Canvas.getPieces() at all — its columns are sizes (SIZES/KIDS_AGES) and its
+  // rows are computeMeasurements() body measurements, entirely independent of
+  // whatever pattern (if any) is loaded. The original "empty2d" guard here was
+  // copy-pasted from those other exports without checking whether this feature
+  // actually needs a loaded pattern — it doesn't, so gating on one just blocked
+  // a legitimate use (checking standard body measurements before drafting).
+  function openFitChartModal(){
+    openModal(T("fitChartTitle"), "", true);
+    const body = $("#genericModal .modal-body"); body.innerHTML="";
+    body.appendChild(el("div","help-note",T("fitChartD")));
+    const resetBtn = el("button","big-btn ghost",T("fitChartReset")); resetBtn.style.cssText="margin-top:10px;width:auto;padding:8px 16px";
+    body.appendChild(resetBtn);
+    const wrap = el("div"); wrap.style.cssText="overflow-x:auto;margin-top:14px";
+    body.appendChild(wrap);
+    const renderTable = () => {
+      const { columns, rows } = buildFitChartRows();
+      const table = el("table"); table.style.cssText="width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap";
+      table.innerHTML = `<tr>
+        <th style="text-align:start;padding:6px 8px;border-bottom:1px solid var(--line)">${T("tab_measure")}</th>
+        <th style="padding:6px 8px;border-bottom:1px solid var(--line)">${T("fitChartToleranceCol")}</th>
+        ${columns.map(c=>`<th style="padding:6px 8px;border-bottom:1px solid var(--line)">${c.label}</th>`).join("")}
+      </tr>` + rows.map(r=>`<tr>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2)">${r.label}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--line-2)"><input class="input fc-tol" data-k="${r.key}" type="number" step="0.1" min="0" value="${r.tolerance}" style="width:60px;text-align:center"></td>
+        ${r.values.map(v=>`<td style="padding:6px 8px;border-bottom:1px solid var(--line-2);text-align:center">${v}</td>`).join("")}
+      </tr>`).join("");
+      wrap.innerHTML=""; wrap.appendChild(table);
+      table.querySelectorAll(".fc-tol").forEach(inp=>{
+        inp.onchange = () => { setFitTolerance(inp.dataset.k, +inp.value||0); };
+      });
+    };
+    resetBtn.onclick = () => { state.fitTolerances = {}; save(); renderTable(); toast(T("fitChartReset")); };
+    renderTable();
+    const exBtn = el("button","big-btn",IC.printer+T("fitChartExport")); exBtn.style.marginTop="16px";
+    exBtn.onclick = () => exportFitChart();
+    body.appendChild(exBtn);
+  }
+  function buildFitChartHTML(){
+    const nameObj = state.loaded ? PATTERNS[state.loaded].name : { en:T("customPattern"), ar:T("customPattern") };
+    const rtl = state.lang==="ar";
+    const { columns, rows } = buildFitChartRows();
+    const rowsHTML = rows.map(r=>`<tr>
+      <td style="text-align:${rtl?"end":"start"}">${r.label}</td>
+      <td>±${r.tolerance}</td>
+      ${r.values.map(v=>`<td>${v}</td>`).join("")}
+    </tr>`).join("");
+    return `<!doctype html><html lang="${state.lang}" dir="${rtl?"rtl":"ltr"}"><head><meta charset="utf-8">
+<title>BerryStudio — ${nameObj.en} · ${T("fitChartTitle")}</title>
+<style>
+  @page{margin:12mm;size:landscape}
+  *{box-sizing:border-box}
+  body{font-family:${rtl?"'Cairo','Segoe UI'":"'Segoe UI'"},Tahoma,Arial,sans-serif;color:#1a1a1a;margin:0;padding:22px;background:#fff}
+  h1{font-size:21px;margin:0 0 3px}
+  h1 span{color:#8a8a8a;font-weight:600;font-size:16px}
+  .sub{font-size:13px;color:#666;margin:0 0 18px}
+  table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+  th,td{border:1px solid #ddd;padding:6px 9px;text-align:center}
+  th{background:#f1eeff;font-weight:700}
+  td:first-child,th:first-child{text-align:${rtl?"end":"start"}}
+  .note{margin-top:18px;border:1px dashed #c9a94a;background:#fff8e6;padding:11px 15px;border-radius:9px;font-size:12.5px;color:#7a5c00;line-height:1.6}
+  .pbar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px}
+  .pbar button{font-family:inherit;font-size:13px;font-weight:700;padding:9px 16px;border-radius:8px;border:1px solid #ccc;background:#f5f5f5;cursor:pointer}
+  .pbar button.primary{background:#6d5efc;color:#fff;border-color:#6d5efc}
+  @media print{.pbar{display:none}}
+</style></head>
+<body>
+  <div class="pbar"><button onclick="window.close()">${T("close")}</button><button class="primary" onclick="window.print()">${T("printNow")}</button></div>
+  <h1>${nameObj.en} <span>/ ${nameObj.ar}</span></h1>
+  <p class="sub">BerryStudio · ${T("fitChartTitle")} · ${T("std_"+state.standard)}</p>
+  <table><tr>
+    <th>${T("tab_measure")}</th><th>${T("fitChartToleranceCol")}</th>
+    ${columns.map(c=>`<th>${c.label}</th>`).join("")}
+  </tr>${rowsHTML}</table>
+  <div class="note">${T("fitChartNote")}</div>
+</body></html>`;
+  }
+  function exportFitChart(){
+    const w=window.open("","_blank");
+    if(!w){ toast(T("fitChartTitle")+": allow pop-ups"); return; }
+    w.document.write(buildFitChartHTML()); w.document.close();
+    toast(T("exported")+" · "+T("fitChartTitle"));
+  }
+
   // ================= PATTERNS =================
   function currentMeas(){ return computeMeasurements({category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom}); }
   function loadPattern(id){
@@ -2514,13 +2782,13 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     Canvas.setPattern(resolveGradedPieces(p, opts, computeMeasurements, state.gradeRules[id]), PALETTE);
     afterLoad(L(p.name));
   }
-  function afterLoad(name){ hideEmpty(); renderLayersPane(); renderSizePane(); toast(T("patternLoaded")+" · "+name); if(state.view==="3d") build3D(); save(); }
+  function afterLoad(name){ hideEmpty(); renderLayersPane(); renderSizePane(); toast(T("patternLoaded")+" · "+name); if(is3DActive()) build3D(); save(); }
   function grade(){
     if(state.loaded){
       const p=PATTERNS[state.loaded];
       const opts={category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom};
       const pieces=resolveGradedPieces(p, opts, computeMeasurements, state.gradeRules[state.loaded]);
-      Canvas.setPattern(pieces, PALETTE); renderLayersPane(); if(state.view==="3d") build3D();
+      Canvas.setPattern(pieces, PALETTE); renderLayersPane(); if(is3DActive()) build3D();
     }
     Canvas.recomputeConstruction();   // re-resolve any formula-driven construction points to the new measurements
     updateGradeLbl(); updateStageChips(); renderSizePane(); save();
@@ -2564,7 +2832,8 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const parts={};
     Object.entries(buckets).forEach(([part,{front,back}])=>{
       const primary = front[0] || back[0];
-      parts[part] = { color:colorToInt(primary.color), material:primary.material||state.fabric3d||"cotton" };
+      parts[part] = { color:colorToInt(primary.color), material:primary.material||state.fabric3d||"cotton",
+        textureDataURL: primary.textureDataURL || state.fabricTexture3d || null };
       if (front.length && back.length){
         const backInt = colorToInt(back[0].color);
         if (backInt !== parts[part].color) parts[part].colorBack = backInt;
@@ -2582,19 +2851,46 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     });
   }
   // live 3D updates (no full rebuild)
-  function sync3DFabric(){ if(state.view!=="3d") return;
+  // WP-38 (Tailornova feature study): Split View — a real, always-live 3D
+  // panel beside the 2D canvas, not a third full-bleed tab you switch away
+  // from. Deliberately scoped to 2D + 3D Preview only, not Cloth Lab (a
+  // separate, heavier R3F app — running it continuously alongside 2D editing
+  // is a materially bigger performance/architecture commitment than this WP
+  // is about); Cloth Lab keeps its own full-bleed tab, unchanged. Off by
+  // default (a Settings toggle, opt-in) so nothing changes for anyone who
+  // doesn't turn it on — same convention the Cloth Lab engine picker already
+  // established. Mutually exclusive with the "3D Preview"/"Cloth Lab" tabs:
+  // switching to either turns Split View off (setView below), and turning
+  // Split View on switches back to the "2D Pattern" tab first — so `.threed`
+  // and `.split`'s own CSS layout are never both trying to own the same
+  // canvas at once.
+  function is3DActive(){ return state.view==="3d" || state.splitView; }
+  function sync3DFabric(){ if(!is3DActive()) return;
     View3D.setFabric({ parts: partsFabric(), opacity: fabricOpacity3D() }); }
-  function sync3DVisibility(){ if(state.view!=="3d") return; View3D.setPieceVisibility(pieceVisMap()); }
+  function sync3DVisibility(){ if(!is3DActive()) return; View3D.setPieceVisibility(pieceVisMap()); }
   function cssHex(k){ const t=document.createElement("canvas").getContext("2d");t.fillStyle=getComputedStyle(document.body).getPropertyValue(k).trim();return parseInt(t.fillStyle.slice(1),16);}
+  function applySplitViewClasses(){
+    document.querySelector(".canvas-wrap").classList.toggle("split", !!state.splitView);
+    $("#view3d").classList.toggle("show", state.view==="3d" || !!state.splitView);
+    const btn=$("#splitViewBtn"); if(btn){ btn.classList.toggle("active", !!state.splitView); btn.setAttribute("aria-pressed", String(!!state.splitView)); }
+  }
+  function setSplitView(on){
+    if(on) setView("2d");
+    state.splitView = on;
+    applySplitViewClasses();
+    if(on){ View3D.resize(); build3D(); }
+    save();
+  }
   function setView(v){
     state.view=v;
-    $("#view3d").classList.toggle("show", v==="3d");
+    if(v!=="2d") state.splitView=false;
+    applySplitViewClasses();
     $("#viewClothLab").classList.toggle("show", v==="clothlab");
     $("#viewClothLab").classList.toggle("engine-embedded", state.clothLabEngine==="embedded");
     document.querySelector(".canvas-wrap").classList.toggle("threed", v==="3d");
     document.querySelector(".canvas-wrap").classList.toggle("clothlab", v==="clothlab");
     $$("#viewToggle button").forEach(b=>{ const on=b.dataset.v===v; b.classList.toggle("active",on); b.setAttribute("aria-pressed",on); });
-    if(v==="3d"){ View3D.resize(); build3D(); }
+    if(v==="3d" || state.splitView){ View3D.resize(); build3D(); }
     else if(v==="clothlab"){ loadClothLab(); syncClothLab(); }
     else Canvas.render();
     save();
@@ -2760,7 +3056,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     document.body.setAttribute("data-mode",state.mode);
     document.body.setAttribute("data-contrast",state.highContrast?"high":"normal");
     $("#modeBtn").innerHTML = state.mode==="light"?IC.moon:IC.sun;
-    Canvas.render(); if(state.view==="3d") build3D();
+    Canvas.render(); if(is3DActive()) build3D();
   }
   function applyLang(){
     const d=I18N[state.lang].dir;
@@ -2965,7 +3261,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       state.avatarGLB = state.avatarGLB || {};
       state.avatarGLB[cat] = url || ""; save();
       View3D.setAvatarURL(cat, url || null);
-      if (state.view === "3d" && state.category === cat) build3D();
+      if (is3DActive() && state.category === cat) build3D();
       toast("✓ " + T(cat));
     };
 
@@ -3382,6 +3678,8 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     {t:T("exportDXF"),i:IC.download,run:()=>exportAs("DXF")},
     {t:T("printProject"),i:IC.printer,run:printPattern},
     {t:T("patternSummary"),i:IC.printer,run:exportSummary},
+    {t:T("sewInstrTitle"),i:IC.printer,run:exportSewingInstructions},
+    {t:T("fitChartTitle"),i:IC.printer,run:openFitChartModal},
     {t:T("checkPattern"),i:IC.spark,run:()=>runCheckPattern()},
     {t:T("undoLbl"),i:IC.undo,run:()=>{Canvas.doUndo();renderLayersPane();sync3DVisibility();}},
     {t:T("redoLbl"),i:IC.redo,run:()=>{Canvas.doRedo();renderLayersPane();sync3DVisibility();}},
@@ -3544,6 +3842,14 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     $("#objBrowserBtn").onclick=()=>toggleObjectBrowser(); tip($("#objBrowserBtn"),T("objBrowser"),T("tt_objBrowser"));
     $("#snapshotBtn").onclick=()=>openSnapshotPanel(); tip($("#snapshotBtn"),T("snapshotMenu"),T("tt_snapshot"));
     $("#snapshotBtn").classList.toggle("active",Canvas.hasSnapshot());
+    $("#splitViewBtn").onclick=()=>setSplitView(!state.splitView); tip($("#splitViewBtn"),T("splitView"),T("tt_splitView"));
+    // Split View never auto-restores across a reload — same as state.view
+    // itself, which also always boots back to "2D Pattern" rather than
+    // replaying whatever tab was open last session. Restoring it here would
+    // show the split layout with an unbuilt, empty 3D canvas until the user
+    // re-toggled it anyway, so a clean "off" is the honest starting state.
+    state.splitView = false;
+    applySplitViewClasses();
     // zoom
     $("#zin").onclick=()=>Canvas.zoom(1.2); tip($("#zin"),"+",T("tt_zoomin"));
     $("#zout").onclick=()=>Canvas.zoom(0.83); tip($("#zout"),"−",T("tt_zoomout"));
@@ -3562,7 +3868,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     $("#spinToggle").onchange=e=>View3D.setSpin(e.target.checked);
     $("#walkToggle").onchange=e=>View3D.setWalk(e.target.checked);
     document.addEventListener("keydown",keys);
-    window.addEventListener("resize",()=>{if(state.view==="3d")View3D.resize();});
+    window.addEventListener("resize",()=>{if(is3DActive())View3D.resize();});
     // 3D Cloth Lab bridge: cloth-lab posts {type:"clothlab:ready"} once its
     // own listener is mounted (avoids a race where we'd post before it can
     // hear us) — confirm the sender really is our iframe, then send it the

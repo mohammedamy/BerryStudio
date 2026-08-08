@@ -752,6 +752,26 @@ export const Canvas = (() => {
 
   function path(poly, close=true){ ctx.beginPath(); poly.forEach((p,i)=>{ const [x,y]=toScreen(p[0],p[1]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);}); if(close)ctx.closePath(); }
 
+  // WP-39 (Tailornova feature study): an uploaded fabric-swatch Image, decoded
+  // once and cached by its own dataURL — Image objects (unlike three-view.js's
+  // GPU textures) have no dispose-ownership contract to worry about, so a
+  // plain cross-render cache is safe here. Returns null until decode finishes
+  // (an onload re-render then picks it up); drawPiece()'s solid-colour
+  // fallback covers that one gap frame.
+  const textureImgCache = new Map();
+  const TEXTURE_TILE_CM = 10; // one full repeat of an uploaded photo ≈ 10cm of fabric
+  function getTextureImage(dataURL) {
+    let entry = textureImgCache.get(dataURL);
+    if (!entry) {
+      const img = new Image();
+      entry = { img, ready: false };
+      img.onload = () => { entry.ready = true; render(); };
+      img.src = dataURL;
+      textureImgCache.set(dataURL, entry);
+    }
+    return entry.ready ? entry.img : null;
+  }
+
   function drawPiece(p, i) {
     if (!p.visible) return;
     const sel = i===selected;
@@ -765,8 +785,22 @@ export const Canvas = (() => {
     // fill (cutting area) — fabric colour + adjustable transparency
     // (a piece may carry its own opacity override from Layer properties)
     const baseOp = p.opacity != null ? p.opacity : opts.fillOpacity;
+    const fillAlpha = sel ? Math.min(0.85, baseOp*1.9) : baseOp;
     path(p.outline);
-    ctx.fillStyle = hexA(col, sel ? Math.min(0.85, baseOp*1.9) : baseOp); ctx.fill();
+    // WP-39 (Tailornova feature study): an uploaded fabric-swatch photo fills
+    // the piece as a real tiled pattern instead of a solid colour, once its
+    // Image has decoded (getTextureImage() returns null on the first ask and
+    // triggers a render() when ready — the solid-colour fallback below covers
+    // that one frame so the piece is never invisible while it loads).
+    const texImg = p.textureDataURL ? getTextureImage(p.textureDataURL) : null;
+    if (texImg) {
+      const pat = ctx.createPattern(texImg, "repeat");
+      const s = view.scale * TEXTURE_TILE_CM / texImg.naturalWidth;
+      if (pat.setTransform) pat.setTransform(new DOMMatrix([s,0,0,s,0,0]));
+      ctx.fillStyle = pat; ctx.globalAlpha = fillAlpha; ctx.fill(); ctx.globalAlpha = 1;
+    } else {
+      ctx.fillStyle = hexA(col, fillAlpha); ctx.fill();
+    }
     // cutting line
     ctx.lineWidth = sel?3:2; ctx.strokeStyle = col;
     if (p.locked) ctx.setLineDash([2,3]);
@@ -1232,6 +1266,7 @@ export const Canvas = (() => {
   function toggleLock(i){ pieces[i].locked=!pieces[i].locked; if(pieces[i].locked && selected===i) selected=-1; render(); }
   function setColor(i,color){ if(pieces[i]){ pieces[i].color=color; render(); } }
   function setMaterial(i,matKey){ if(pieces[i]){ pieces[i].material=matKey||null; render(); } }
+  function setTexture(i,dataURL){ if(pieces[i]){ pieces[i].textureDataURL=dataURL||null; render(); } }
   function getSelected(){ return selected; }
   function selectPiece(i){ if(pieces[i] && !pieces[i].locked){ selected=i; render(); } }
   function clearSketch(){ pushUndo(); sketch=[]; render(); }
@@ -1671,7 +1706,7 @@ export const Canvas = (() => {
   function screenOf(x,y){ return toScreen(x,y); }
 
   return { init, setTranslator, setPattern, getPieces, setTool, setOpt, getOpt, zoom, fit,
-           doUndo, doRedo, getZoom, toggleVisible, toggleLock, setColor, setMaterial, getSelected,
+           doUndo, doRedo, getZoom, toggleVisible, toggleLock, setColor, setMaterial, setTexture, getSelected,
            selectPiece, clearSketch, render, deleteSelection,
            copySelection, cutSelection, pasteClipboard, hasClipboard,
            addText, updateText, removeText, getTexts, onTextRequest,
