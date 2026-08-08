@@ -357,17 +357,59 @@ export const View3D = (() => {
   }
   function sphere(r, mat) { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), mat); m.castShadow = true; return m; }
 
+  // Per-bundled-avatar landmark overrides — keyed by the GLB's filename
+  // stem (see BUNDLED_AVATARS in js/app.js), not by category, since these
+  // correct one specific mesh's own proportions, not every avatar sharing
+  // its category. computeBodyDims()'s generic shoulderY/hipY fractions
+  // assume ordinary human proportions; some single-image AI-reconstructed
+  // avatars don't match them closely enough for the garment shell to land
+  // outside the skin surface (BerryStudio-Upgrade-Plan-v3 WP-31).
+  //
+  // boy2.glb specifically: direct glTF POSITION-accessor measurement (a
+  // per-Y-band XZ-cluster scan on the cleaned mesh — see the "direct
+  // measurement, not guesswork" methodology already used for
+  // stripPedestal()/keepLargestComponent() above) found its actual
+  // crotch/leg-split at ~0.33 of total mesh height and its actual
+  // underarm/shoulder line at ~0.65 — both ~14-15 points below the
+  // generic kid assumption of 0.47/0.80. The consistent, near-uniform
+  // offset points to one root cause: this mesh's head is proportionally
+  // larger than the generic kid headH (0.16H) assumes, which compresses
+  // every landmark below it as a fraction of total height.
+  //
+  // Y-position alone (shoulderYFrac/hipYFrac) was NOT sufficient on its
+  // own, contrary to the initial hypothesis — verified directly in-browser
+  // (garmentGroup temporarily forced visible/hidden to isolate it from the
+  // body mesh) by holding radiusScale at 1 with the corrected fractions:
+  // the shell still rendered fully inside the skin. boy2's chest/waist/hip
+  // radii, derived the same way as every other avatar from the entered
+  // body measurements, are simply too small for this specific mesh's own
+  // scale. The earlier radius-only attempt (v2/v3 WP-31 §3 Attempt 2) had
+  // tried 1.32x-3.0x and found "no stable middle ground" — but that search
+  // was done against the WRONG (default) Y position, so it was scaling a
+  // shell that was sitting mostly up around the neck, not the torso, and
+  // could never have looked right at any radius. With the Y position fixed
+  // first, radiusScale 2.3 (re-testing the same range the old attempt
+  // already flagged as promising) lands a correctly-shaped, outside-the-
+  // skin shell — verified by screenshot, back view, WP-31 acceptance met.
+  const AVATAR_LANDMARK_OVERRIDES = {
+    boy2: { shoulderYFrac: 0.65, hipYFrac: 0.33, radiusScale: 2.3 },
+  };
+
   // Measurement-only body proportions — independent of which mesh (procedural
   // or a loaded GLB) they get applied to, so loadGLB() can reuse it to size
   // and place a garment on a custom avatar the same way buildProcedural() does.
-  function computeBodyDims(category, m) {
+  // `landmarks` is an optional { shoulderYFrac, hipYFrac, radiusScale? }
+  // override (see AVATAR_LANDMARK_OVERRIDES above) — omitted for
+  // buildProcedural() and every GLB avatar that doesn't need one, so their
+  // behavior is unchanged.
+  function computeBodyDims(category, m, landmarks) {
     const female = category === "women" || category === "girls";
     const kid = category === "girls" || category === "boys";
     const H = cm(m.height);
     const headH = H * (kid ? 0.16 : 0.128);
     const neckTopY = H - headH;
-    const shoulderY = H * (kid ? 0.80 : 0.82);
-    const hipY = H * (kid ? 0.47 : 0.52);
+    const shoulderY = H * (landmarks ? landmarks.shoulderYFrac : (kid ? 0.80 : 0.82));
+    const hipY = H * (landmarks ? landmarks.hipYFrac : (kid ? 0.47 : 0.52));
 
     let chestR = R(m.chest), waistR = R(m.waist), hipR = R(m.hips);
     let shoulderHalf = cm(m.shoulder) / 2;
@@ -375,6 +417,7 @@ export const View3D = (() => {
     if (female) { waistR *= 0.86; hipR *= 1.03; }
     else { waistR *= 0.97; shoulderHalf *= 1.07; chestR *= 1.03; }
     if (kid) { waistR = (waistR + chestR) / 2 * 0.96; hipR *= 0.97; shoulderHalf *= 0.98; }
+    if (landmarks && landmarks.radiusScale) { chestR *= landmarks.radiusScale; waistR *= landmarks.radiusScale; hipR *= landmarks.radiusScale; shoulderHalf *= landmarks.radiusScale; }
 
     const span = shoulderY - hipY;
     const armLen = H * (kid ? 0.40 : 0.44);
@@ -732,6 +775,12 @@ export const View3D = (() => {
   async function loadGLB(category, m, onProgress) {
     if (!GLTFLoader) throw new Error("no loader");
     const url = avatarURLs[category];
+    // Bundled avatars follow the "avatars/<id>.glb" convention (see
+    // BUNDLED_AVATARS in js/app.js) — the filename stem doubles as the id
+    // AVATAR_LANDMARK_OVERRIDES is keyed by. Custom/uploaded URLs (a
+    // user's own file, or a blob: URL) simply won't match any override,
+    // same as every other bundled avatar that doesn't need one.
+    const avatarId = (url.match(/([^/]+)\.glb(?:[?#].*)?$/i) || [])[1];
     const gltf = await loadGLTFWithRetry(url, onProgress);
     disposeObject3D(bodyGroup); disposeObject3D(garmentGroup);
     // clone(true) copies the scenegraph/transform hierarchy but shares leaf
@@ -759,14 +808,18 @@ export const View3D = (() => {
     // mesh, so its fit is approximate — on a build stockier than that generic
     // assumption the shell can sit partly inside the skin surface rather than
     // hugging it exactly (see the Honest note in README/CHANGELOG). A
-    // per-mesh auto-fit was tried and reverted: these AI-generated avatars
-    // don't share one rest pose (some hold arms out near shoulder height,
-    // others lower, closer to the waist — confirmed by direct vertex
-    // inspection), so any fixed "safe" Y-band for measuring torso-only girth
-    // ends up sampling outstretched-arm geometry on at least one bundled
-    // model, which blew the garment size up several times over. Approximate
-    // but stable beats precise but occasionally wildly wrong.
-    buildGarment(category, m, computeBodyDims(category, m));
+    // general, automated per-mesh auto-fit was tried and reverted: these
+    // AI-generated avatars don't share one rest pose (some hold arms out
+    // near shoulder height, others lower, closer to the waist — confirmed
+    // by direct vertex inspection), so any fixed "safe" Y-band for
+    // measuring torso-only girth ends up sampling outstretched-arm geometry
+    // on at least one bundled model, which blew the garment size up several
+    // times over. Approximate but stable beats precise but occasionally
+    // wildly wrong — that's still true for the 7 avatars with no entry in
+    // AVATAR_LANDMARK_OVERRIDES above; boy2 got a one-off measured
+    // correction instead because its default fit wasn't "approximate", it
+    // was fully swallowed (see that table's own comment).
+    buildGarment(category, m, computeBodyDims(category, m, AVATAR_LANDMARK_OVERRIDES[avatarId]));
     controls.target.set(0, H * 0.5, 0); frameCamera(H);
   }
 

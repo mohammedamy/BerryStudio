@@ -47,6 +47,57 @@ piece's colour/fabric.
 - `README.md`'s honest-notes entry for per-part 3D material updated to
   describe the new front/back sub-mesh split and the sleeve exception.
 
+## WP-31: `boy2.glb` garment shell — fixed via measured landmark override
+
+Part of `BerryStudio-Upgrade-Plan-v3.md` §3. `boy2.glb`'s garment shell was
+fully swallowed by the skin surface in 3D Preview — not the generic
+"occasionally under-fitting" limitation every bundled avatar has, a
+complete visual failure for this one model. `BerryStudio-Upgrade-Plan-v2.md`
+and an earlier pass at `-v3.md` had each investigated this and found no fix:
+a per-Y-band width scan for a "safe" torso-only measurement failed because
+boy2's arm silhouette dominates every height sampled; hand-calibrating the
+garment radius alone (1.32x/2.0x/3.0x) jumped from invisible straight to
+oversized with no stable middle ground.
+
+### Fixed
+- `js/three-view.js`: `computeBodyDims()` now accepts an optional
+  `landmarks` override (`{shoulderYFrac, hipYFrac, radiusScale}`), applied
+  via a new `AVATAR_LANDMARK_OVERRIDES` table keyed by the bundled avatar's
+  filename stem (resolved from its URL in `loadGLB()`) — scoped to one
+  specific mesh, not every avatar in its category. `boy2`'s actual
+  crotch/underarm landmarks were measured directly from the cleaned mesh
+  (a per-Y-band XZ-cluster scan on the real glTF POSITION accessor data,
+  after replicating `stripPedestal()`/`keepLargestComponent()`) at ~33%/~65%
+  of its own height — ~14-15 points below the generic kid assumption of
+  47%/80%, most likely because this reconstruction's head is proportionally
+  larger than that assumption accounts for. Y-position alone was verified
+  in-browser to be insufficient (the shell still sat inside the skin at the
+  corrected height); combining it with a 2.3x radius scale — the same
+  factor the earlier radius-only attempt had already narrowed toward, but
+  couldn't validate because it was scaling the shell at the wrong height —
+  produces a shell that sits outside the skin surface, verified by
+  screenshot. The other 7 bundled avatars are unaffected by construction
+  (the override only matches `avatarId === "boy2"`); spot-checked `boy.glb`
+  directly to confirm its pre-existing (unrelated, unfixed) behavior is
+  unchanged.
+
+## WP-32: 9th avatar candidate — investigated, explicitly not shipped
+
+Part of `BerryStudio-Upgrade-Plan-v3.md` §4. The only 41MB candidate found
+in the repo (`Manniquin/woman.glb`) has genuinely disconnected mesh islands
+at the byte level, confirmed by a raw struct-level GLB parse (buffer/
+accessor data fully consistent, no truncation) and by running it through
+this app's real loading pipeline: 1,451,001 real triangles exist, but
+`keepLargestComponent()` — tuned for every other bundled avatar's minor
+debris — discards ~89% of it, keeping one arbitrary chunk. A genuine
+source-asset defect, not a compression problem: the same
+`@gltf-transform/cli` chain that compresses the other 8 avatars produced a
+clean 3.13MB output from it with no changes needed. Not shipped — extending
+`keepLargestComponent()` to bridge legitimate multi-island bodies needs a
+full regression pass against all 8 working avatars first, and eight bundled
+avatars is a reasonable gallery without a 9th. Explicitly decided not to do
+this, rather than leaving it silently open.
+
 ## WP-23: ComfyUI local image-gen adapter
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase B. `js/image-providers.js`
