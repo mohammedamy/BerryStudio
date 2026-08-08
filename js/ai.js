@@ -253,6 +253,12 @@ export const AIGen = (() => {
     if(/maxi|floor|full[- ]?length|ankle|long|طويل/.test(tLen)) s.lengthF=1.35;
     else if(/midi/.test(tLen)) s.lengthF=1.1;
     else if(/mini|crop|cropped|short|قصير/.test(tLen)) s.lengthF=0.7;
+    // "regular/medium/knee length" — an explicit request for the category's
+    // own standard length, not "unspecified". Previously fell through to the
+    // hasImg/seeded-pick branches below like a blank prompt would, so typing
+    // this literal, common phrase couldn't actually pin the length; the
+    // Guided Prompt Builder's "Medium" length option relies on this too.
+    else if(/regular length|medium length|knee[- ]length|طول عادي|طول متوسط/.test(tLen)) s.lengthF=1;
     else if(hasImg && metrics.heightFrac!=null){
       const hf=metrics.heightFrac;
       s.lengthF *= hf>0.85 ? 1.3 : hf>0.65 ? 1.05 : hf<0.42 ? 0.62 : hf<0.55 ? 0.8 : 1;
@@ -263,12 +269,20 @@ export const AIGen = (() => {
     // flare
     if(/a[- ]?line|flare|flared|circle|skater|swing|كلوش|واسع/.test(t)) s.flareF=1.5;
     else if(/pencil|straight|bodycon|column|قلم|مستقيم/.test(t)) s.flareF=0.9;
+    // "regular silhouette" — explicit neutral, distinct from the pencil/
+    // a-line bucket regexes above and from "unspecified" below. Gives the
+    // Guided Prompt Builder's "Full" middle option a deterministic result
+    // instead of falling to seeded pick like an unspecified prompt would.
+    else if(/regular silhouette|قصة عادية/.test(t)) s.flareF=1;
     else if(hasImg) s.flareF *= metrics.flare>1.3 ? 1.4 : metrics.flare<0.95 ? 0.85 : 1;
     else s.flareF = pick(seed+"flare",[0.9,1.0,1.25,1.5]);
 
     // fit / waist suppression
     if(/fitted|bodycon|slim|tailored|ضيق|مخصر/.test(t)) s.fitF=0.82;
     else if(/loose|oversized|relaxed|boxy|فضفاض|واسع/.test(t)) s.fitF=1.16;
+    // "regular fit" — same idea as "regular silhouette" above: an explicit
+    // neutral choice, not a stand-in for "the prompt didn't say".
+    else if(/regular fit|قصة معتادة/.test(t)) s.fitF=1;
     else if(hasImg && metrics.waistRatio < 0.85) s.fitF = 0.85;
     else if(!hasImg) s.fitF = pick(seed+"fit",[0.88,1.0,1.12]);
 
@@ -1087,7 +1101,11 @@ export const AIGen = (() => {
              source:"local", usedImage: !!(metrics && metrics.ok), imageSupplied: !!imageDataURL };
   }
 
-  return { analyzeImage, deriveStyle, build, buildFromMeasuredPieces, summary, attributes, generate, sampleMatte };
+  // hashStr/pick exported so js/ai-spec-pipeline.js and js/app.js's Guided
+  // Prompt Builder can reuse the SAME seeded-variety convention this file
+  // already relies on (same input -> same output, different input -> real
+  // variety) instead of a second, drifting reimplementation.
+  return { analyzeImage, deriveStyle, build, buildFromMeasuredPieces, summary, attributes, generate, sampleMatte, hashStr, pick };
 })();
 // TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.
 if (typeof window !== 'undefined') window.AIGen = AIGen;

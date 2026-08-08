@@ -10,6 +10,7 @@ import Scene from './scene/Scene'
 import { DEFAULT_MEASUREMENTS } from './state/measurements'
 import { computeBodyDims } from './body/computeBodyDims'
 import { DEFAULT_FABRIC } from './cloth/fabricPresets'
+import { QUALITY_TIER_DEFAULT } from './cloth/ClothSimulation'
 import { buildSkirtRaw, DEFAULT_SKIRT_STYLE } from './pattern/library/skirt'
 import { useSeamEditor } from './seam/useSeamEditor'
 import SeamEditorPanel from './seam/SeamEditorPanel'
@@ -47,6 +48,13 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   )
   const [debugView, setDebugView] = useState(bodyOnly ? 'off' : 'cloth')
   const [fabricId, setFabricId] = useState((pattern && pattern.fabricId) || DEFAULT_FABRIC)
+  // WP-35: 'default' (unchanged) or 'high' (true dihedral-angle bend) — a
+  // real sim rebuild when toggled, not a live uniform swap like fabricId
+  // (see ClothMesh.jsx's own comment on why it's a separate effect
+  // dependency). Always starts at the default regardless of `pattern` —
+  // this is a local rendering-quality preference, not part of a garment's
+  // own saved data the way fabricId is.
+  const [qualityTier, setQualityTier] = useState(QUALITY_TIER_DEFAULT)
   const [skinToneId, setSkinToneId] = useState(DEFAULT_SKIN_TONE)
   const [poseId, setPoseId] = useState(DEFAULT_POSE)
   // Surfaced from deep inside GLBAvatar (see its own header comment) —
@@ -170,6 +178,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
         dims={dims} measurements={measurements}
         onMeasurementsChange={(next) => setMeasurementsByCategory((prev) => ({ ...prev, [category]: next }))}
         fabricId={fabricId} onFabricChange={setFabricId}
+        qualityTier={qualityTier} onQualityTierChange={setQualityTier}
         skinToneId={skinToneId} onSkinToneChange={setSkinToneId}
         poseId={poseId} onPoseChange={setPoseId}
         poseWarning={poseWarning} onPoseWarning={setPoseWarning}
@@ -187,7 +196,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
 // Seams view — split out from App so the whole thing can be remounted
 // (via App's key={garmentVersion}) as a unit whenever a new garment import
 // needs a fresh seam-editor rather than picking up on top of a stale one.
-function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, debugView, garment, imported, skirtRawPieces, avatarGLBUrl, onReset, onSimulate }) {
+function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, qualityTier, onQualityTierChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, debugView, garment, imported, skirtRawPieces, avatarGLBUrl, onReset, onSimulate }) {
   const rawPieces = imported ? imported.rawPieces : skirtRawPieces
   const roles = imported ? imported.roles : SKIRT_ROLES
   const seedEdges = imported ? imported.edgeInstructions : undefined
@@ -223,7 +232,7 @@ function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, f
           </div>
         )}
         <MeasurementPanel lang={lang} measurements={measurements} onChange={onMeasurementsChange} />
-        {!bodyOnly && <FabricPanel lang={lang} fabricId={fabricId} onChange={onFabricChange} />}
+        {!bodyOnly && <FabricPanel lang={lang} fabricId={fabricId} onChange={onFabricChange} qualityTier={qualityTier} onQualityTierChange={onQualityTierChange} />}
         <AvatarPanel lang={lang} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />
         <ExportPanel lang={lang} exportRef={exportRef} />
         {!bodyOnly && debugView === 'seams' && <SeamEditorPanel lang={lang} editor={seamEditor} onSimulate={onSimulate} />}
@@ -253,7 +262,7 @@ function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, f
           </div>
         )}
         <Canvas shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
-          <Scene dims={dims} lang={lang} debugView={debugView} fabricId={fabricId} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} />
+          <Scene dims={dims} lang={lang} debugView={debugView} fabricId={fabricId} qualityTier={qualityTier} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} />
         </Canvas>
         {debugView === 'cloth' && isSolverHUDEnabled() && <SolverHUD statsRef={statsRef} />}
       </main>

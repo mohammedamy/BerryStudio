@@ -45,6 +45,235 @@ plan.
   reload) persists `clothLabEngine: "embedded"` on first save, matching
   the new default.
 
+## WP-35: True dihedral bend constraint (opt-in "High" quality tier)
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase C. v1.0's honest notes were
+explicit that the cloth solver's distance-based hinge/fold spring (not true
+dihedral-angle) and brute-force O(N²) self-collision (not a GPU spatial
+hash) were deliberate, documented trade-offs, not oversights. This WP
+upgrades the bend constraint to a real opt-in "high quality" tier without
+touching the existing default path at all, and investigates (but does not
+ship) a GPU spatial hash — see "Not shipped" below for why.
+
+### Added
+- `cloth-lab/src/cloth/dihedralBend.js` — a plain-JS (no WebGL) reference
+  implementation of a true dihedral-angle bend constraint, written and
+  verified FIRST, before any GLSL: `dihedralAngle()` computes the actual
+  signed angle between two triangles sharing an edge (atan2-based, stable
+  through 0 and +-PI, not acos which blows up at both); `dihedralBendCorrection()`
+  rotates only the two "wing" vertices around the fixed hinge line
+  (Rodrigues' rotation) toward the hinge's rest angle — a deliberately
+  simpler alternative to reproducing a textbook PBD closed-form gradient
+  formula from memory, which carries real risk of a subtle, hard-to-verify
+  sign or normalization bug (a well-documented hazard in PBD bend
+  implementations). 13 property-based Vitest tests, including 40 random
+  fold/rest combinations all converging to <10% of their starting error
+  within 25 iterations, and an explicit "never moves off the hinge line"
+  invariant check. One real bug caught and fixed by this harness before it
+  ever reached GLSL: an inverted rotation sign that made corrections grow
+  the angular error instead of shrinking it — caught by the very first
+  convergence test run, not discovered later inside a GPU shader.
+- `cloth-lab/src/cloth/assemble.js`'s `deriveNeighbors()` now also returns
+  `bendHinge` — for each of the existing `bend` neighbor pairs, the shared
+  edge's two endpoints and the rest dihedral angle, computed once at mesh-
+  build time and packed at the SAME per-particle slot index `bend` itself
+  uses (so the GLSL port can read a neighbor's index from `bend`'s own
+  texture and its hinge data from this one at the same slot, no separate
+  index texture needed). One real slot-alignment bug caught and fixed
+  before shipping: an early version only advanced its output slot on a
+  successful (non-degenerate) hinge, which would silently shift every
+  later hinge down by one slot relative to `bend`'s own indices — caught
+  by a regression test built from a closed hexagonal fan mesh (every
+  outer vertex genuinely has 2 bend neighbors, unlike the single-hinge
+  quad fixtures, which can't distinguish "aligned" from "trivially
+  aligned because there's only one slot to get right").
+- `cloth-lab/src/cloth/ClothSimulation.js`: a `qualityTier` constructor
+  option (`'default'` | `'high'`, exported as `QUALITY_TIER_DEFAULT` /
+  `QUALITY_TIER_HIGH`). `'high'` compiles a shader variant carrying a
+  direct, mechanical GLSL translation of `dihedralBend.js` (same variable
+  names and structure, so a discrepancy between the two is easy to spot)
+  that REPLACES the default distance-based bend correction — a "second
+  bend mode," not an additional pass stacked on top of it, since running
+  both at once would fight each other. Verified stable directly against
+  the running GPU state (not just visually): stepped a real garment
+  simulation 1320 substeps (~22s simulated) on the high-quality tier via
+  `gl.readRenderTargetPixels()` on the solver's own position texture —
+  zero NaN/Infinity at every checkpoint, bounds converged and stayed flat
+  rather than drifting, and the resulting shape differs measurably from
+  the default tier's (proving the new constraint is genuinely engaging,
+  not silently falling through to a no-op).
+- `cloth-lab/src/ui/FabricPanel.jsx`: a "Simulation quality" toggle
+  (Default / High) next to the existing fabric picker, threaded through
+  `App.jsx` → `Scene.jsx` → `ClothMesh.jsx`. Unlike fabric switching
+  (a live uniform swap), changing quality tier rebuilds the simulation —
+  it changes the compiled shader and uploaded textures, not just a
+  float value.
+
+### Changed
+- `README.md`'s honest-notes entry for the cloth solver's bend/self-
+  collision trade-offs updated to describe the new opt-in tier and why
+  self-collision specifically doesn't get an equivalent upgrade (below).
+
+### Not shipped: GPU spatial hash for self-collision
+`GPUComputationRenderer` (this solver's plain-WebGL2 GPGPU approach, no
+compute shaders) has no atomics or scatter-write access, so a real
+uniform-grid spatial hash — the kind you can actually iterate per-cell —
+needs either a scatter-with-atomics compaction pass or a full bitonic sort
+to build the per-cell particle index lists, neither available here. A
+cheaper middle ground (bucket each particle into a coarse grid cell,
+skip far-apart pairs before the expensive math) was implemented as a
+prototype and deliberately not kept: profiling the existing brute-force
+loop showed its dominant cost is the two texture2D fetches per inner
+iteration needed just to find out where the other particle IS — a
+cell-based early-out can only skip the cheap sqrt/branch AFTER that fetch
+already happened, so it doesn't touch the actual bottleneck. Shipping code
+that adds real complexity and risk for a not-actually-measurable win would
+be worse than shipping nothing; self-collision stays exactly the
+brute-force O(N²) scan it already was, in both quality tiers. Closing this
+for real would mean adopting WebGPU compute shaders or a from-scratch,
+independently verified bitonic sort — a materially larger undertaking than
+an opt-in tier, flagged here as a real follow-up rather than silently
+dropped a second time.
+
+## WP-29: VRM humanoid-bone retargeting
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase C. `detectVRM()`
+(cloth-lab, WP-8.4) correctly identified VRM 0.x/1.0 files and showed an
+honest `poseWarnVRM` message rather than mis-posing — deliberate scope for
+that pass, not an oversight, but the real remaining gap: pose selection
+had no effect on any VRM file, which always displayed an arms-down bind
+pose regardless of the requested pose.
+
+### Added
+- `cloth-lab/src/body/reposeGLB.js`: `resolveVRMBoneNames(gltfResult)` —
+  reads a VRM file's own `humanoid.humanBones` data (VRM 1.0:
+  `extensions.VRMC_vrm.humanoid.humanBones`, an object keyed by the VRM
+  spec's bone-name vocabulary; VRM 0.x: `extensions.VRM.humanoid.humanBones`,
+  an array of `{bone, node}`) and resolves each declared bone to the glTF
+  node's actual `name` — i.e. exactly the string on the corresponding
+  `Object3D`, ready for `scene.getObjectByName()`. Returns `{}` (never
+  throws) for a non-VRM file or malformed/missing humanBones data.
+- `findBone()` and `applyPoseToGLB()` now take an optional `vrmBoneNames`
+  map, tried before the existing Mixamo/Ready Player Me name list for every
+  bone lookup (arms and, for the `seated` pose, legs) — a VRM file's real
+  bone names never collide with the Mixamo list, so one lookup safely
+  serves both rig conventions without the caller needing to know which one
+  a given scene uses.
+
+### Changed
+- `cloth-lab/src/body/GLBAvatar.jsx`: a VRM file whose `humanBones` data
+  resolves a full arm rig now goes through the exact same repose /
+  mesh-fit-collision-rig pipeline as any other recognized rig — pose
+  selection (standing/A-pose/T-pose/contrapposto/seated) works on it.
+  `poseWarnVRM` is shown only when VRM's own bone data does NOT resolve a
+  full arm rig (a custom/malformed VRM export) — never a silent mis-pose,
+  same honesty rule the plain "no recognized rig" case already followed.
+  Behavior for a non-VRM file (recognized rig or none) is unchanged.
+- `README.md`'s honest-notes entry for VRM avatars updated to describe the
+  new retargeting support and its one remaining honest fallback case.
+
+### Tests
+- `cloth-lab/src/body/reposeGLB.test.js`: unit tests for
+  `resolveVRMBoneNames()` covering VRM 1.0's object-keyed humanBones, VRM
+  0.x's array-of-`{bone,node}` humanBones, and missing/malformed data
+  (always `{}`, never a guess or a throw); an integration test building a
+  real T-pose THREE.js bone rig named with an arbitrary VRM-studio
+  convention (deliberately not overlapping any Mixamo name) and confirming
+  `applyPoseToGLB` only reposes it when `vrmBoneNames` is supplied — proving
+  the VRM path, not a name coincidence, is what resolves it.
+
+## WP-28: Per-piece 3D material for the procedural avatar
+
+Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase C. The procedural 3D
+avatar's garment shell only has 4 mesh groups (bodice/sleeve/skirt/
+trousers), so two 2D pieces mapping to the same part — e.g. Front Bodice
+and Back Bodice — collapsed to one shared 3D material: whichever visible
+piece for that part was assigned last won, silently dropping the other
+piece's colour/fabric.
+
+### Added
+- `js/three-view.js`: a `latheHalves()` helper that builds a garment part
+  as two independent `LatheGeometry` half-revolutions (front `phiStart:
+  -PI/2`, back `phiStart: PI/2`, each `phiLength: PI`) instead of one full
+  revolution — front (Z>=0) and back (Z<0) per three.js's own vertex
+  formula (`x=r·sin(phi), z=r·cos(phi)`). The two halves share every vertex
+  along the phi=±PI/2 side seams with a full-revolution lathe of the same
+  profile, so they meet with no gap when materials match, and show a real
+  seam only where front/back fabrics genuinely differ. Applied to bodice,
+  skirt, and both trousers meshes (seat + legs); sleeve stays a single
+  capsule mesh (can't be angle-split, and is conventionally one piece in
+  real patternmaking anyway) — a documented exception, not a gap.
+- `fabricState`'s per-part slot is now `{front:{color,material},
+  back:{color,material}|null, opacity}` instead of a single flat
+  `{color,material}` (+ the old vertex-color-hack `colorBack`); `back` is
+  null whenever there's no distinct back piece, so the back sub-mesh just
+  mirrors front and a single-piece part still renders as one seamless
+  whole exactly as before this change.
+
+### Changed
+- `js/app.js`'s `partsFabric()` now emits a full `{color,material}`
+  descriptor for a part's back pieces (previously just a fallback
+  `colorBack` int, dropping the back piece's fabric type entirely), and
+  only includes it when the back piece is genuinely distinct from front
+  (matching color AND material means nothing to render differently).
+- Removed `applyFrontBackColor()` (the old per-vertex color-paint
+  workaround) — real per-mesh materials replace it, so front/back can now
+  differ by fabric type, roughness, opacity-per-fabric, etc., not just
+  base color.
+- `README.md`'s honest-notes entry for per-part 3D material updated to
+  describe the new front/back sub-mesh split and the sleeve exception.
+
+## WP-31: `boy2.glb` garment shell — fixed via measured landmark override
+
+Part of `BerryStudio-Upgrade-Plan-v3.md` §3. `boy2.glb`'s garment shell was
+fully swallowed by the skin surface in 3D Preview — not the generic
+"occasionally under-fitting" limitation every bundled avatar has, a
+complete visual failure for this one model. `BerryStudio-Upgrade-Plan-v2.md`
+and an earlier pass at `-v3.md` had each investigated this and found no fix:
+a per-Y-band width scan for a "safe" torso-only measurement failed because
+boy2's arm silhouette dominates every height sampled; hand-calibrating the
+garment radius alone (1.32x/2.0x/3.0x) jumped from invisible straight to
+oversized with no stable middle ground.
+
+### Fixed
+- `js/three-view.js`: `computeBodyDims()` now accepts an optional
+  `landmarks` override (`{shoulderYFrac, hipYFrac, radiusScale}`), applied
+  via a new `AVATAR_LANDMARK_OVERRIDES` table keyed by the bundled avatar's
+  filename stem (resolved from its URL in `loadGLB()`) — scoped to one
+  specific mesh, not every avatar in its category. `boy2`'s actual
+  crotch/underarm landmarks were measured directly from the cleaned mesh
+  (a per-Y-band XZ-cluster scan on the real glTF POSITION accessor data,
+  after replicating `stripPedestal()`/`keepLargestComponent()`) at ~33%/~65%
+  of its own height — ~14-15 points below the generic kid assumption of
+  47%/80%, most likely because this reconstruction's head is proportionally
+  larger than that assumption accounts for. Y-position alone was verified
+  in-browser to be insufficient (the shell still sat inside the skin at the
+  corrected height); combining it with a 2.3x radius scale — the same
+  factor the earlier radius-only attempt had already narrowed toward, but
+  couldn't validate because it was scaling the shell at the wrong height —
+  produces a shell that sits outside the skin surface, verified by
+  screenshot. The other 7 bundled avatars are unaffected by construction
+  (the override only matches `avatarId === "boy2"`); spot-checked `boy.glb`
+  directly to confirm its pre-existing (unrelated, unfixed) behavior is
+  unchanged.
+
+## WP-32: 9th avatar candidate — investigated, explicitly not shipped
+
+Part of `BerryStudio-Upgrade-Plan-v3.md` §4. The only 41MB candidate found
+in the repo (`Manniquin/woman.glb`) has genuinely disconnected mesh islands
+at the byte level, confirmed by a raw struct-level GLB parse (buffer/
+accessor data fully consistent, no truncation) and by running it through
+this app's real loading pipeline: 1,451,001 real triangles exist, but
+`keepLargestComponent()` — tuned for every other bundled avatar's minor
+debris — discards ~89% of it, keeping one arbitrary chunk. A genuine
+source-asset defect, not a compression problem: the same
+`@gltf-transform/cli` chain that compresses the other 8 avatars produced a
+clean 3.13MB output from it with no changes needed. Not shipped — extending
+`keepLargestComponent()` to bridge legitimate multi-island bodies needs a
+full regression pass against all 8 working avatars first, and eight bundled
+avatars is a reasonable gallery without a 9th. Explicitly decided not to do
+this, rather than leaving it silently open.
+
 ## WP-23: ComfyUI local image-gen adapter
 
 Part of `BerryStudio-Upgrade-Plan-v2.md`'s Phase B. `js/image-providers.js`

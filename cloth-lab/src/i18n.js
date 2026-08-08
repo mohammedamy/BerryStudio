@@ -31,6 +31,12 @@ export const STRINGS = {
     pose_contrapposto: 'Contrapposto', pose_seated: 'Seated', pose_walk: 'Walk',
     // FabricPanel
     fabric: 'Fabric',
+    // WP-35: opt-in high-quality tier — true dihedral-angle bend
+    // (default tier's behavior/performance are completely unchanged).
+    simQuality: 'Simulation quality',
+    simQualityDefault: 'Default',
+    simQualityHigh: 'High (dihedral bend)',
+    simQualityHighHint: 'Real angle-based fold constraint instead of an approximate distance spring — sharper, more accurate drape on dense garments. Costs more per frame; rebuilds the simulation when toggled.',
     // MeasurementPanel — reuses the root app's own m_* measurement labels below
     bodyMeasurements: 'Body Measurements (cm)',
     m_chest: 'Chest / Bust', m_waist: 'Waist', m_hips: 'Hips', m_shoulder: 'Shoulder width',
@@ -82,6 +88,10 @@ export const STRINGS = {
     pose_standing: 'واقفة', pose_apose: 'وضعية A', pose_tpose: 'وضعية T',
     pose_contrapposto: 'وضعية مائلة', pose_seated: 'جالسة', pose_walk: 'المشي',
     fabric: 'القماش',
+    simQuality: 'جودة المحاكاة',
+    simQualityDefault: 'افتراضي',
+    simQualityHigh: 'عالية (ثني بزاوية حقيقية)',
+    simQualityHighHint: 'قيد ثني قائم على الزاوية الفعلية بدلاً من نابض مسافة تقريبي — طيّات أدق وأكثر واقعية للملابس الكثيفة. تكلفة أعلى لكل إطار؛ يعيد بناء المحاكاة عند التبديل.',
     bodyMeasurements: 'قياسات الجسم (سم)',
     m_chest: 'الصدر', m_waist: 'الوسط', m_hips: 'الأرداف', m_shoulder: 'عرض الكتف',
     m_backLen: 'طول الظهر', m_sleeve: 'طول الكم', m_neck: 'الرقبة', m_bicep: 'محيط الذراع',

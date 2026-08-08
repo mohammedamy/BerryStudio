@@ -1,4 +1,5 @@
 import { placePiece } from '../pattern/placement.js'
+import { dihedralAngle } from './dihedralBend.js'
 
 // Fixed cm-per-repeat divisor for fabric-texture UVs (see renderUV below) —
 // a real-world scale, not each piece's own bounding box, so a weave tiles at
@@ -228,12 +229,24 @@ export function deriveNeighbors(cloth, maxNeighbors = 8) {
   }
 
   const bendSets = Array.from({ length: simParticleCount }, () => new Set())
-  for (const opps of edgeOpposite.values()) {
+  // WP-35: alongside the existing wing-to-wing distance pairs (bendSets,
+  // feeding the default distance-based bend spring, unchanged below), also
+  // record which SHARED EDGE (v0,v1) produced each pair — the true
+  // dihedral-angle bend constraint (dihedralBend.js) needs both edge
+  // endpoints, not just the opposite corner, to measure the actual angle
+  // between the two triangles. Keyed by the "c" side of each pair so
+  // packHinges below can look it up per (particle, neighbor) slot exactly
+  // the way packNeighbors already does for idx/rest.
+  const hingeEdgeFor = new Map() // "c_d" -> [v0, v1]
+  for (const [key, opps] of edgeOpposite.entries()) {
     if (opps.length < 2) continue // boundary edge — only one triangle, no fold to resist
     const [c, d] = opps
     if (c === d) continue
     bendSets[c].add(d)
     bendSets[d].add(c)
+    const [v0, v1] = key.split('_').map(Number)
+    hingeEdgeFor.set(`${c}_${d}`, [v0, v1])
+    hingeEdgeFor.set(`${d}_${c}`, [v0, v1])
   }
 
   const dist = (a, b) => Math.hypot(
@@ -255,7 +268,55 @@ export function deriveNeighbors(cloth, maxNeighbors = 8) {
     return { idx, rest }
   }
 
-  return { structural: packNeighbors(structuralSets), bend: packNeighbors(bendSets), maxNeighbors }
+  // WP-35: same particle/slot layout packNeighbors(bendSets) uses — SAME
+  // sort, SAME slice, SAME slot index k per neighbor — so the GLSL shader
+  // can read "my k-th bend neighbor"'s index from bend's own nbrA/B texture
+  // and its hinge data (edge endpoints + rest angle) from this one at that
+  // EXACT same slot, with no separate idx texture of its own needed. This
+  // must never skip-and-reindex: an earlier version incremented its output
+  // slot only on success, which would silently shift every hinge after the
+  // first degenerate one down by one slot relative to bend's own idx —
+  // pairing particle N's edge/angle data with particle N+1's neighbor
+  // index. A degenerate hinge (dihedralAngle returns null — e.g. a
+  // zero-length edge from bad topology) instead writes idx=-1 at its OWN
+  // slot k, same "not present" sentinel packNeighbors already uses,
+  // leaving every later slot's alignment untouched. The plain `bend` list
+  // above is built independently and never filtered this way, so the
+  // default distance-based path is completely unaffected by a degeneracy
+  // only the new tier cares about.
+  function packHinges(sets) {
+    const idx = new Int32Array(simParticleCount * maxNeighbors).fill(-1)
+    const edgeV0 = new Int32Array(simParticleCount * maxNeighbors).fill(-1)
+    const edgeV1 = new Int32Array(simParticleCount * maxNeighbors).fill(-1)
+    const restAngle = new Float32Array(simParticleCount * maxNeighbors)
+    for (let p = 0; p < simParticleCount; p++) {
+      const neighbors = [...sets[p]].map((n) => [n, dist(p, n)]).sort((a, b) => a[1] - b[1]).slice(0, maxNeighbors)
+      neighbors.forEach(([n], k) => {
+        const slot = p * maxNeighbors + k
+        const edge = hingeEdgeFor.get(`${p}_${n}`)
+        if (!edge) return // should not happen — bendSets is derived from the same edgeOpposite map
+        const [v0, v1] = edge
+        const p1 = [simRestPositions[v0 * 3], simRestPositions[v0 * 3 + 1], simRestPositions[v0 * 3 + 2]]
+        const p2 = [simRestPositions[v1 * 3], simRestPositions[v1 * 3 + 1], simRestPositions[v1 * 3 + 2]]
+        const p3 = [simRestPositions[p * 3], simRestPositions[p * 3 + 1], simRestPositions[p * 3 + 2]]
+        const p4 = [simRestPositions[n * 3], simRestPositions[n * 3 + 1], simRestPositions[n * 3 + 2]]
+        const angle = dihedralAngle(p1, p2, p3, p4)
+        if (angle === null) return // degenerate at rest — leave idx=-1 at THIS slot, don't invent an angle
+        idx[slot] = n
+        edgeV0[slot] = v0
+        edgeV1[slot] = v1
+        restAngle[slot] = angle
+      })
+    }
+    return { idx, edgeV0, edgeV1, restAngle }
+  }
+
+  return {
+    structural: packNeighbors(structuralSets),
+    bend: packNeighbors(bendSets),
+    bendHinge: packHinges(bendSets),
+    maxNeighbors,
+  }
 }
 
 // Per-sim-particle "neighbor ring" for live smooth-normal shading (see
