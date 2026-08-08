@@ -204,6 +204,8 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     circleTool:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
     promote:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 9l4-4 8 1 4 6-2 9H7z" stroke-dasharray="2.5 2"/><path d="M8.5 12.5l2.2 2.2 4.8-4.8"/></svg>',
     calib:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h16M4 12v-3M20 12v-3M9 12v-3M15 12v-3"/></svg>',
+    lasso:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3C7 3 3 6.5 3 11c0 3 2.5 5 6 5 1.8 0 3-1 3-2.3S10.8 12 9.5 12" stroke-dasharray="2.4 2.2"/><circle cx="17" cy="15" r="3.4"/></svg>',
+    curve:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 18C4 10 20 14 20 6"/><path d="M4 18l4.5-4.5M20 6l-4.5 4.5" stroke-dasharray="1.6 1.6"/><circle cx="4" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.7" fill="currentColor" stroke="none"/></svg>',
   };
 
   // Library thumbnails: real, full-colour illustrations (not currentColor-themed
@@ -226,14 +228,14 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 
   // ---------------- TOOLS ----------------
   const TOOLS = [
-    { id:"select", i:"select" }, { id:"pen", i:"pen" }, { id:"line", i:"line" },
+    { id:"select", i:"select" }, { id:"lasso", i:"lasso" }, { id:"pen", i:"pen" }, { id:"line", i:"line" },
     { id:"arc", i:"arc" }, { id:"free", i:"free" }, { id:"polygon", i:"polyfill" }, { id:"symmetry", i:"symmetry" },
     { id:"knife", i:"knife" }, "sep",
     { id:"point", i:"point" }, { id:"conline", i:"conline" }, { id:"conarc", i:"conarc" },
     { id:"circle", i:"circleTool" }, { id:"promote", i:"promote" }, "sep",
     { id:"move", i:"move" }, { id:"rotate", i:"rotate" },
     { id:"scale", i:"scale" }, { id:"measure", i:"measure" }, { id:"text", i:"text" }, "sep",
-    { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"addpoint", i:"addpoint" }, { id:"grain", i:"grain" },
+    { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"addpoint", i:"addpoint" }, { id:"curve", i:"curve" }, { id:"grain", i:"grain" },
   ];
 
   // ================= RENDER SHELL =================
@@ -643,8 +645,9 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const pieces = Canvas.getPieces();
     if(!pieces.length){ c.appendChild(el("div","help-note",T("empty2d"))); return; }
     const sel = Canvas.getSelected();
+    const multiSel = Canvas.getMultiSelection();  // Shift+click / Lasso group — highlighted the same as a plain single selection
     pieces.forEach((p,i)=>{
-      const row = el("div","layer"+(p.locked?" locked":"")+(i===sel?" active":""));
+      const row = el("div","layer"+(p.locked?" locked":"")+((i===sel||multiSel.includes(i))?" active":""));
       // colour swatch — opens a native colour picker
       const sw = el("label","swatch"); sw.style.background=p.color; sw.title=T("pieceColor");
       const ci = el("input"); ci.type="color"; ci.value=rgbToHex(p.color);
@@ -3490,12 +3493,14 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         const dir=e.key==="]"?1:-1;
         const next=sel<0 ? (dir>0?0:pieces.length-1) : (sel+dir+pieces.length)%pieces.length;
         Canvas.selectPiece(next); renderLayersPane();
-      } else if(sel>=0 && (e.key==="ArrowUp"||e.key==="ArrowDown"||e.key==="ArrowLeft"||e.key==="ArrowRight")){
+      } else if((sel>=0 || Canvas.getMultiSelection().length) && (e.key==="ArrowUp"||e.key==="ArrowDown"||e.key==="ArrowLeft"||e.key==="ArrowRight")){
         e.preventDefault();
         const step=e.shiftKey?0.1:1;
         const dx=e.key==="ArrowLeft"?-step:e.key==="ArrowRight"?step:0;
         const dy=e.key==="ArrowUp"?-step:e.key==="ArrowDown"?step:0;
-        Canvas.nudgePiece(sel,dx,dy); sync3DVisibility();
+        const group=Canvas.getMultiSelection();
+        if(group.length) Canvas.nudgePieces(group,dx,dy); else Canvas.nudgePiece(sel,dx,dy);
+        sync3DVisibility();
       } else if(e.key==="Delete"||e.key==="Backspace"){
         if (Canvas.deleteSelection()){
           e.preventDefault();
@@ -3618,6 +3623,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     Canvas.onPointRequest(openPointEditor);
     Canvas.onPromoteRequest(openPromotePrompt);
     Canvas.onCalibrationRequest(openCalibPrompt);
+    Canvas.onWarnRequest(key=>toast(T(key)));
     buildToolRail(); buildRail(); wire();
     applyTheme(); applyLang();
     updateUnitsPill(); updateStageChips();
