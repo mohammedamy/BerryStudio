@@ -6,6 +6,49 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-45: Shift-constrain the Line/Construction Line tools to 0/45/90/…°
+
+### Added
+- `js/canvas.js`: `snapAngle45(x0, y0, x1, y1)` — given a line's start point
+  and its raw (unconstrained) end point, returns the point at the SAME
+  distance from the start but at whichever 45°-multiple angle
+  (0/45/90/135/180/225/270/315°) is closest to the raw angle — covers
+  perfectly vertical, horizontal, and diagonal lines with one rule. Wired
+  into the Line and Construction Line tools' pointermove handlers: holding
+  Shift while dragging now constrains the angle, matching the same
+  convention virtually every other design tool uses for a shift-held line
+  drag. For these two tools specifically this *changes* what Shift does —
+  previously it bypassed the 1cm grid snap (letting a point land at any
+  fractional coordinate); every other drawing tool (Arc, Pen, Polygon,
+  Construction Arc, Construction Circle, the Point tool) keeps that old
+  meaning unchanged. The global Snap toolbar toggle is still there for
+  turning off grid-snap generally, independent of this.
+- Exported `snapAngle45` from `Canvas`'s public API (same precedent as the
+  existing `screenOf` export — "handy for hit-tests/tests," per that
+  function's own comment) and added 6 real unit tests in
+  `test/canvas.test.js` against the exact shipped function (not a
+  reimplementation): near-horizontal, near-vertical, ~39°→exact 45°, an
+  already-exact angle left unchanged, a zero-length no-op, and all four
+  quadrants.
+
+### Verified
+Driving a real Shift-held drag through this project's browser-automation
+tooling turned out to be a genuine dead end two different ways — modifier
+keys don't propagate through a simulated drag's intermediate pointermove
+events, and a from-scratch synthetic `PointerEvent` fails at
+`setPointerCapture()` (browsers require a real OS pointer session, which a
+synthetic event doesn't have) before the handler even reaches this code.
+Worked around by patching `offsetX`/`offsetY` to compute correctly for
+synthetic events and stubbing `setPointerCapture()` as a no-op — both
+test-only, neither ships — then firing a real
+pointerdown/pointermove(shiftKey:true)/pointerup sequence through the
+actual, unmodified event listeners in `js/canvas.js`. Confirmed: a
+horizontal-ish drag commits at exactly the same endpoint the isolated
+`snapAngle45` unit test predicts; vertical and 45° cases also land exact;
+the Construction Line tool constrains the same way; and — the regression
+check that matters most — an identical drag *without* Shift still grid-
+snaps exactly as before, unchanged.
+
 ## WP-44: Select-and-delete a single outline point; corner points reliably grabbable
 
 A user reported two related 2D-canvas editing gaps: no way to select one

@@ -669,6 +669,19 @@ in the app's own header.
   picking whichever the click is actually closer to when both are still in
   range — verified live: a corner vertex now drags independently of its
   neighbours, and the resize handle at its new spot still scales correctly.
+- **Shift-constrain the Line/Construction Line tools (WP-45)** — hold Shift
+  while dragging either tool to snap the angle to the nearest 45° increment
+  (perfectly vertical, horizontal, or diagonal), keeping the real cursor
+  distance. For these two tools specifically Shift's meaning changes from
+  its old role of bypassing the 1cm grid snap — every other drawing tool
+  (Arc, Pen, Polygon, Construction Arc/Circle, Point) keeps that unchanged;
+  the global Snap toggle still turns off grid-snap generally. Verified via
+  a real pointerdown/pointermove/pointerup sequence through the actual
+  event listeners (simulating a held-Shift drag through this project's own
+  browser tooling turned out not to be possible directly — see the WP-45
+  CHANGELOG entry for the workaround) — confirms exact endpoints for
+  horizontal/vertical/45° cases, and that a plain (no-Shift) drag still
+  grid-snaps exactly as before.
 - **Rotate ("swing") selection box no longer drifts outside the piece** —
   a user report described "the dotted line sometimes appears outside the
   layer" while rotating a piece. Root cause: the dashed selection box was

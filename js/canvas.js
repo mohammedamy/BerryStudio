@@ -129,6 +129,24 @@ export const Canvas = (() => {
   // `free` (held Shift during a drag/click) bypasses the 1cm grid round —
   // lets a point land at any fractional coordinate even with Snap enabled.
   const snap = (v, free) => (opts.snap && !free) ? Math.round(v) : v;
+  // Shift-constrain a line's live endpoint to the nearest 45° increment
+  // from its own start point (0/45/90/135/180/225/270/315°) — covers
+  // perfectly vertical, horizontal, and 45°-diagonal lines with one rule,
+  // keeping the raw cursor DISTANCE from the start point exactly as-is
+  // (only the angle snaps), the same convention every other design tool's
+  // shift-constrain uses. Used by the Line and Construction Line tools —
+  // for those two specifically, Shift's meaning changes from "bypass grid
+  // snap" (its role for every other drawing tool — arc/pen/polygon/
+  // construction arc & circle) to "constrain the angle", since that's the
+  // actual ask; the global Snap toolbar toggle is still there for turning
+  // off grid-snap generally, unrelated to this.
+  function snapAngle45(x0, y0, x1, y1) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const dist = Math.hypot(dx, dy);
+    if (!dist) return [x1, y1];
+    const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+    return [x0 + Math.cos(angle) * dist, y0 + Math.sin(angle) * dist];
+  }
 
   // ---- layout pieces automatically, wrapping into tidy rows ----
   function layoutPieces(rawPieces) {
@@ -1355,9 +1373,20 @@ export const Canvas = (() => {
         else movePiece(dragPiece.i,dx,dy);
         dragPiece.ox=wx; dragPiece.oy=wy; render(); return;
       }
-      if (drawing && drawing.tool==="line"){ drawing.pts[1]=[snap(wx,e.shiftKey),snap(wy,e.shiftKey)]; render(); return; }
+      if (drawing && drawing.tool==="line"){
+        drawing.pts[1] = e.shiftKey ? snapAngle45(drawing.pts[0][0], drawing.pts[0][1], wx, wy) : [snap(wx,false), snap(wy,false)];
+        render(); return;
+      }
       if (drawing && drawing.tool==="arc"){ if(drawing.phase===1) drawing.pts[1]=[snap(wx,e.shiftKey),snap(wy,e.shiftKey)]; else drawing.ctrl=[wx,wy]; render(); return; }
-      if (drawing && drawing.tool==="conline"){ const s=snapConstruction(wx,wy,e.shiftKey); drawing.pts[1]=[s.x,s.y]; drawing.refs[1]=refFromSnap(s); render(); return; }
+      if (drawing && drawing.tool==="conline"){
+        if (e.shiftKey){
+          const [sx,sy] = snapAngle45(drawing.pts[0][0], drawing.pts[0][1], wx, wy);
+          drawing.pts[1]=[sx,sy]; drawing.refs[1]={x:sx,y:sy};
+        } else {
+          const s=snapConstruction(wx,wy,false); drawing.pts[1]=[s.x,s.y]; drawing.refs[1]=refFromSnap(s);
+        }
+        render(); return;
+      }
       if (drawing && drawing.tool==="conarc"){
         if(drawing.phase===1){ const s=snapConstruction(wx,wy,e.shiftKey); drawing.pts[1]=[s.x,s.y]; drawing.refs[1]=refFromSnap(s); }
         else { drawing.ctrl=[wx,wy]; const pid=nearestPointId(wx,wy,10,e.shiftKey); snapMark = pid!=null ? [getPointById(pid).x,getPointById(pid).y] : null; }
@@ -2124,7 +2153,7 @@ export const Canvas = (() => {
            copySelection, cutSelection, pasteClipboard, hasClipboard,
            addText, updateText, removeText, getTexts, onTextRequest,
            addPiece, removePiece, renamePiece, setPieceProps, nudgePiece, nudgePieces,
-           onZoomChange, exportSVG, exportDXF, exportHPGL, exportRaster, exportPDF, loadPieces, clearAll, screenOf,
+           onZoomChange, exportSVG, exportDXF, exportHPGL, exportRaster, exportPDF, loadPieces, clearAll, screenOf, snapAngle45,
            // construction geometry
            addPoint, removePoint, getPointById, getPoints, setPointName, setPointXY, setPointFormula, onPointRequest,
            getCons, removeCons, onPromoteRequest, finishPromotePiece, cancelPromote, onWarnRequest,
