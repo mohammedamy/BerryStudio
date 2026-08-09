@@ -10,6 +10,7 @@ import { AIGen } from './ai.js';
 import { Billboard } from './billboard.js';
 import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, exports nothing
 import './girls-leotards.js'; // side-effect only — adds the 100-pattern Girls' Gymnastics Leotards collection
+import './underwear-library.js'; // side-effect only — adds the 44-pattern Underwear & Bra collection
 import { FancyGen } from './fancy-patterns.js';
 import { PatternValidator } from './validate.js';
 import { AIProviders, AI_PROVIDER_IDS, getProvider, loadLocalModelFromFile, restoreLocalModelFromCache, runOnnxTestInference, loadSegmentationModel, runSegmentationOn } from './ai-providers.js';
@@ -233,6 +234,8 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     trousers:'<svg viewBox="0 0 24 24"><path d="M6 2h12l.6 8-1 2 .8 12h-4l-1-11-1 11H8l.8-12-1-2z" fill="#3c5f95"/><path d="M6 2h12l.3 3.6H5.7z" fill="#294570"/><path d="M12 4v6" stroke="#294570" stroke-width="1"/></svg>',
     skirt:'<svg viewBox="0 0 24 24"><path d="M9 3h6l1 4h-8z" fill="#3c5f95"/><path d="M8 7h8l3 13H5z" fill="#e8a33e"/><path d="M12 7v13" stroke="#c1811f" stroke-width=".8" stroke-dasharray="1.4 1.4"/></svg>',
     leotard:'<svg viewBox="0 0 24 24"><path d="M9 2l3 2 3-2 2 4-2 2v6l2 8h-4l-1-7-1 7H7l2-8V8L7 6z" fill="#b23e78"/><path d="M9 2l3 2 3-2 .8 1.8L12 6.4 8.2 3.8z" fill="#f6d4e3"/><path d="M8.6 12.4h6.8" stroke="#7c2a54" stroke-width="1" stroke-linecap="round"/></svg>',
+    underwear:'<svg viewBox="0 0 24 24"><path d="M4 5h16l-1 6-2.5 2 1 8h-5l-1-6.5L10 21H5l1-8-2.5-2z" fill="#c47a9e"/><path d="M4 5h16l.4 2.6H3.6z" fill="#8a4f6b"/></svg>',
+    bra:'<svg viewBox="0 0 24 24"><path d="M4.5 6.5c.8-2 3.6-2.3 4.8-.2 1 1.8 1.2 5.2 1.2 8.2H5.4c-1.1-3-2.5-6-.9-8z" fill="#c47a9e"/><path d="M19.5 6.5c-.8-2-3.6-2.3-4.8-.2-1 1.8-1.2 5.2-1.2 8.2h5.1c1.1-3 2.5-6 .9-8z" fill="#c47a9e"/><path d="M9.5 4.6L6 3M14.5 4.6L18 3" stroke="#8a4f6b" stroke-width="1" fill="none" stroke-linecap="round"/><path d="M10.5 14.5h3" stroke="#8a4f6b" stroke-width="1" stroke-linecap="round"/></svg>',
   };
 
   // ---------------- TOOLS ----------------
@@ -2530,6 +2533,11 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const buttonFrontPresent = pieces.some(buttonFrontPiece);
     const liningNeeded = pieces.some(p=>p.role==="lapel-facing"||p.role==="placket-facing");
     const interfacingNeeded = pieces.some(p=>["collar","cuff","waistband","lapel-facing","placket-facing"].includes(p.role));
+    // Underwear & Bra Library (js/underwear-library.js): elastic and a
+    // hook-and-eye back closure are real materials those patterns need that
+    // nothing else in the BOM already covers.
+    const elasticNeeded = pieces.some(p=>["gusset","elastic-band","cup","band","strap"].includes(p.role));
+    const hookEyeNeeded = pieces.some(p=>p.role==="band");
 
     const items = [];
     items.push({ item:T("bomMainFabric"), qty:`${yards} m`, note:`@ ${width}cm — ${T("bomFabricDefault")}` });
@@ -2539,6 +2547,8 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     if(cuffCount) items.push({ item:T("bomButtonsCuff"), qty:String(cuffCount), note:T("bomButtonsCuffNote") });
     if(waistbandCount) items.push({ item:T("bomClosureWaistband"), qty:String(waistbandCount), note:T("bomClosureWaistbandNote") });
     if(buttonFrontPresent) items.push({ item:T("bomButtonsFront"), qty:String(Math.max(2,Math.round(m.backLen/12))), note:T("bomButtonsFrontNote") });
+    if(elasticNeeded) items.push({ item:T("bomElastic"), qty:"1.5 m", note:T("bomElasticNote") });
+    if(hookEyeNeeded) items.push({ item:T("bomHookEye"), qty:"1", note:T("bomHookEyeNote") });
     items.push({ item:T("bomThread"), qty:"1", note:T("bomThreadNote") });
     items.push({ item:T("bomLabels"), qty:"1", note:T("bomLabelsNote") });
     return items;
@@ -2609,23 +2619,43 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const dartCount = pieces.reduce((n,p)=>n+((p.darts||[]).length),0);
     const hasFrontBack = has("bodice-front-center","front-panel") && has("bodice-back-center","back-panel");
     const sleeveRoles = ["sleeve","cap-sleeve","puff-sleeve","butterfly-sleeve","cape-sleeve","sleeve-upper"];
+    // Underwear & Bra Library (js/underwear-library.js): none of these five
+    // roles existed before that file — real, dedicated instructions for
+    // them rather than letting them fall through to role:"other"'s silent
+    // no-step behaviour, or (worse) mis-firing an existing check that
+    // assumes the wrong construction. "brief-front"/"brief-back" are
+    // deliberately NOT "front-panel"/"back-panel" for exactly that reason —
+    // see that file's own header comment.
+    const hasBriefBody = has("brief-front") && has("brief-back");
 
     const steps=[];
     steps.push(interfacingPieces.length
       ? T("sewInstrPrep").replace("{n}",pieces.length).replace("{list}",interfacingPieces.map(p=>L(p.name)).join(", "))
       : T("sewInstrPrepNoInterfacing").replace("{n}",pieces.length));
     if(dartCount) steps.push(T("sewInstrDarts").replace("{n}",dartCount));
+    if(has("gusset")) steps.push(T("sewInstrGusset"));
+    if(has("cup")) steps.push(T("sewInstrCups"));
     if(has("yoke")) steps.push(T("sewInstrYoke").replace("{pieces}",names("yoke")));
     if(hasFrontBack) steps.push(T("sewInstrShoulder").replace("{front}",names("bodice-front-center","front-panel")).replace("{back}",names("bodice-back-center","back-panel")));
+    if(hasBriefBody) steps.push(T("sewInstrBriefSide"));
     if(has("collar","collar-stand","undercollar","collar-band")) steps.push(T("sewInstrCollar"));
     if(has(...sleeveRoles)) steps.push(T("sewInstrSleeve"));
     else if(hasFrontBack) steps.push(T("sewInstrSide"));
+    if(has("band")) steps.push(T("sewInstrBand"));
     if(has("pocket")) steps.push(T("sewInstrPocket").replace("{n}",byRole.pocket.length));
     if(zipPresent) steps.push(T("sewInstrPlacket").replace("{type}",T("bomZipper")));
     if(has("waistband")) steps.push(T("sewInstrWaistband").replace("{closure}",T("bomClosureWaistband")));
+    if(has("elastic-band")) steps.push(T("sewInstrElastic").replace("{n}",byRole["elastic-band"].length));
     if(has("cuff","rib-cuff")) steps.push(T("sewInstrCuff").replace("{closure}",T("bomButtonsCuff")));
+    if(has("strap")) steps.push(T("sewInstrStraps"));
     if(buttonFrontPresent) steps.push(T("sewInstrButtons").replace("{n}",Math.max(2,Math.round(m.backLen/12))));
-    if(has("lining") || pieces.some(p=>p.role==="lapel-facing"||p.role==="placket-facing")) steps.push(T("sewInstrLining"));
+    // A lining paired with a gusset (Underwear & Bra Library) is already
+    // fully covered by the gusset step above ("sew the lining to the
+    // gusset...") — the generic lining instruction talks about a facing/hem
+    // edge, which doesn't describe a doubled gusset layer, so skip it in
+    // that specific case rather than emitting an instruction that doesn't
+    // match the piece it's nominally about.
+    if((has("lining") && !has("gusset")) || pieces.some(p=>p.role==="lapel-facing"||p.role==="placket-facing")) steps.push(T("sewInstrLining"));
     steps.push(T("sewInstrHem").replace("{n}",seamCm));
     steps.push(T("sewInstrPress"));
     return steps;
