@@ -38,6 +38,7 @@ export const Canvas = (() => {
   let snapMark = null;                // point currently snapped to (for the snap ring)
   let selText = null;                 // id of the selected text annotation (click-to-select, Backspace-able)
   let selNotch = null;                // {pieceIdx, idx} of the selected notch (click-to-select, Backspace-able)
+  let selVertex = null;               // index into pieces[selected].outline of the selected OUTLINE point (click-to-select via its handle, Backspace-able) — only meaningful while that same piece is `selected`, so unlike selNotch this isn't a {pieceIdx,idx} pair
   let addPointPreview = null;         // {pieceIdx, edgeIdx, point} — live preview while hovering with the Add Point tool
   const SHOW_HANDLES = new Set(["select","move","rotate","scale","pen"]);
   let userAdjusted = false;          // true once the user zooms/pans manually
@@ -157,7 +158,7 @@ export const Canvas = (() => {
     pushUndo();
     pieces = layoutPieces(rawPieces);
     pieces.forEach((p, i) => p.color = colors[i % colors.length]);
-    selected = -1; multiSelected=[]; sketch = []; texts = []; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null;
+    selected = -1; multiSelected=[]; sketch = []; texts = []; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null;
     fit();
   }
   function getPieces(){ return pieces; }
@@ -165,8 +166,8 @@ export const Canvas = (() => {
   // ---- undo / redo ----
   function snapshot(){ return JSON.stringify({ pieces, sketch, texts, points, cons }); }
   function pushUndo(){ undo.push(snapshot()); if (undo.length>60) undo.shift(); redo.length=0; }
-  function doUndo(){ if(!undo.length) return; redo.push(snapshot()); const s=JSON.parse(undo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; promoteBuf=[]; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; render(); }
-  function doRedo(){ if(!redo.length) return; undo.push(snapshot()); const s=JSON.parse(redo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; promoteBuf=[]; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; render(); }
+  function doUndo(){ if(!undo.length) return; redo.push(snapshot()); const s=JSON.parse(undo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; promoteBuf=[]; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; render(); }
+  function doRedo(){ if(!redo.length) return; undo.push(snapshot()); const s=JSON.parse(redo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; promoteBuf=[]; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; render(); }
 
   // ---- seam allowance offset (outward polygon offset) ----
   // WP-14: the actual algorithm now lives in js/geometry.js (pure, unit
@@ -261,31 +262,63 @@ export const Canvas = (() => {
   }
 
   // ---- selection handles (screen-space geometry) ----
+  const CORNER_HANDLE_OFFSET = 7; // px — see handleGeo()'s own comment on rectCorners below
   function handleGeo(p){
     const hull=convexHull(p.outline);
-    const corners=minAreaRect(hull.length>=3?hull:p.outline).map(pt=>toScreen(pt[0],pt[1]));
+    const rectCorners=minAreaRect(hull.length>=3?hull:p.outline).map(pt=>toScreen(pt[0],pt[1]));
     // "top" edge = whichever of the 4 sides currently has the smallest
     // average screen Y, so the rotate handle stays near the piece's actual
     // visual top regardless of which way the oriented rect is facing.
+    // Computed from the TRUE rect corners (not the outward-offset `corners`
+    // below) — the rotate knob's own placement is unrelated to this fix and
+    // shouldn't shift because of it.
     let topEdge=0, topY=Infinity;
-    for (let i=0;i<4;i++){ const j=(i+1)%4; const avgY=(corners[i][1]+corners[j][1])/2; if (avgY<topY){ topY=avgY; topEdge=i; } }
+    for (let i=0;i<4;i++){ const j=(i+1)%4; const avgY=(rectCorners[i][1]+rectCorners[j][1])/2; if (avgY<topY){ topY=avgY; topEdge=i; } }
     const j=(topEdge+1)%4;
-    const topMid=[(corners[topEdge][0]+corners[j][0])/2, (corners[topEdge][1]+corners[j][1])/2];
+    const topMid=[(rectCorners[topEdge][0]+rectCorners[j][0])/2, (rectCorners[topEdge][1]+rectCorners[j][1])/2];
     // rotate knob sits perpendicular to that edge, on the side away from the box center
-    const ex=corners[j][0]-corners[topEdge][0], ey=corners[j][1]-corners[topEdge][1];
+    const ex=rectCorners[j][0]-rectCorners[topEdge][0], ey=rectCorners[j][1]-rectCorners[topEdge][1];
     const elen=Math.hypot(ex,ey)||1;
-    const cx=(corners[0][0]+corners[2][0])/2, cy=(corners[0][1]+corners[2][1])/2;
+    const cx=(rectCorners[0][0]+rectCorners[2][0])/2, cy=(rectCorners[0][1]+rectCorners[2][1])/2;
     let nx=-ey/elen, ny=ex/elen;
     if ((topMid[0]-cx)*nx + (topMid[1]-cy)*ny < 0){ nx=-nx; ny=-ny; }
     const rotate=[topMid[0]+nx*26, topMid[1]+ny*26];
+    // Scale-corner handles are drawn/hit a few px OUTSIDE the piece's own
+    // bounding-rect corner, not exactly on top of it. Many real pattern
+    // pieces are themselves roughly rectangular (waistbands, straight
+    // panels…), so an actual OUTLINE VERTEX often sits at almost the
+    // identical screen position as this resize handle — without this
+    // offset the resize handle always won (checked first in handleHit()),
+    // so that corner vertex could never be grabbed on its own to reshape
+    // or delete it. Offsetting each corner outward along its own diagonal
+    // from the rect center by a fixed pixel amount keeps it a proper
+    // (very slightly larger) rectangle — see handleHit() for the other
+    // half of this fix.
+    const corners = rectCorners.map(([x,y])=>{
+      const dx=x-cx, dy=y-cy, len=Math.hypot(dx,dy)||1;
+      return [x + dx/len*CORNER_HANDLE_OFFSET, y + dy/len*CORNER_HANDLE_OFFSET];
+    });
     const anchors=p.outline.map(pt=>toScreen(pt[0],pt[1]));
     return { corners, rotate, topMid, anchors };
   }
   function handleHit(p, sx, sy){
-    const g=handleGeo(p), near=(a,t)=>Math.hypot(a[0]-sx,a[1]-sy)<=t;
-    if (near(g.rotate,11)) return {type:"rotate"};
-    for (let i=0;i<4;i++) if (near(g.corners[i],10)) return {type:"scale",corner:i};
-    for (let i=0;i<g.anchors.length;i++) if (near(g.anchors[i],9)) return {type:"point",idx:i};
+    const g=handleGeo(p), dist=(a)=>Math.hypot(a[0]-sx,a[1]-sy);
+    if (dist(g.rotate)<=11) return {type:"rotate"};
+    // Corner scale-handles and outline-vertex anchors can still legitimately
+    // land within both tolerances of each other (the offset above helps but
+    // doesn't fully separate them at every zoom level) — whichever the
+    // click is actually CLOSER to wins, rather than the scale handle
+    // unconditionally winning a first-match order the way this used to
+    // work. That's the actual fix: a corner outline point becomes reliably
+    // reachable to grab/move/delete on its own instead of the resize handle
+    // permanently shadowing it.
+    let bestCorner=-1, bestCornerD=10;
+    for (let i=0;i<4;i++){ const d=dist(g.corners[i]); if (d<=10 && d<bestCornerD){ bestCornerD=d; bestCorner=i; } }
+    let bestAnchor=-1, bestAnchorD=9;
+    for (let i=0;i<g.anchors.length;i++){ const d=dist(g.anchors[i]); if (d<=9 && d<bestAnchorD){ bestAnchorD=d; bestAnchor=i; } }
+    if (bestCorner>=0 && bestAnchor>=0) return bestAnchorD<=bestCornerD ? {type:"point",idx:bestAnchor} : {type:"scale",corner:bestCorner};
+    if (bestAnchor>=0) return {type:"point",idx:bestAnchor};
+    if (bestCorner>=0) return {type:"scale",corner:bestCorner};
     return null;
   }
 
@@ -487,7 +520,23 @@ export const Canvas = (() => {
     const p=pieces[pieceIdx]; if (!p) return false;
     pushUndo();
     spliceOutline(p, edgeIdx, 0, [pt]);
-    selected=pieceIdx; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null;
+    selected=pieceIdx; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null;
+    render(); return true;
+  }
+  // Removes a single outline vertex — the Add Point tool's missing
+  // counterpart. Refuses below 3 points (checkClosedOutline's own hard
+  // floor, js/validate.js — a 2-point "outline" isn't a polygon at all) so
+  // this can never leave a piece in a state Check Pattern would already
+  // flag as broken. Reuses spliceOutline()'s own index-bookkeeping (curves/
+  // edges/chestEdgeIndices all shift to keep pointing at the same physical
+  // vertices) rather than a plain `outline.splice()`, for the identical
+  // reason insertOutlinePoint() above does.
+  function removeOutlinePoint(pieceIdx, idx){
+    const p=pieces[pieceIdx]; if (!p || !p.outline[idx]) return false;
+    if (p.outline.length<=3){ onWarn('outlineTooFewPoints'); return false; }
+    pushUndo();
+    spliceOutline(p, idx-1, 1, []);
+    selVertex=null;
     render(); return true;
   }
 
@@ -506,16 +555,19 @@ export const Canvas = (() => {
   }
 
   // Delete whatever is currently selected on the canvas — a construction
-  // point, a construction line/arc/circle, a text annotation, a notch, a
-  // free-drawn sketch stroke (Line/Arc/Pen/Freehand/Filled Shape), or
-  // (falling back to the pre-existing behavior) a whole pattern piece.
-  // Checked in this order because it's the same precedence click-to-select
-  // uses: the smallest/most-precise targets first, piece last.
+  // point, a construction line/arc/circle, a text annotation, a notch, an
+  // OUTLINE VERTEX (a specific point on a piece's own edge, clicked via its
+  // handle — see handleHit()'s "point" type), a free-drawn sketch stroke
+  // (Line/Arc/Pen/Freehand/Filled Shape), or (falling back to the
+  // pre-existing behavior) a whole pattern piece. Checked in this order
+  // because it's the same precedence click-to-select uses: the smallest/
+  // most-precise targets first, piece last.
   function deleteSelection(){
     if (hlPoint!=null){ const id=hlPoint; hlPoint=null; removePoint(id); return true; }
     if (hlCons!=null){ const id=hlCons; hlCons=null; removeCons(id); return true; }
     if (selText!=null){ const id=selText; selText=null; removeText(id); return true; }
-    if (selNotch){ const {pieceIdx,idx}=selNotch; selNotch=null; return removeNotch(pieceIdx,idx); }
+    if (selNotch){ const {pieceIdx,idx}=selNotch; selNotch=null; selVertex=null; return removeNotch(pieceIdx,idx); }
+    if (selVertex!=null && selected>=0 && pieces[selected]){ const idx=selVertex; selVertex=null; return removeOutlinePoint(selected,idx); }
     if (selSketch!=null){ const i=selSketch; selSketch=null; return removeSketch(i); }
     if (multiSelected.length){
       pushUndo();
@@ -570,29 +622,29 @@ export const Canvas = (() => {
       // to the SAME spot as its source on the next recompute, silently
       // erasing the offset (and the whole point of pasting a duplicate).
       points.push({ ...data, id, x: data.x+OFFSET, y: data.y+OFFSET, xExpr:null, yExpr:null });
-      hlPoint=id; hlCons=null; selText=null; selNotch=null; selSketch=null; selected=-1;
+      hlPoint=id; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; selected=-1;
     } else if (kind==="cons"){
       // Only literal {x,y} endpoints shift — a {pid} reference stays pinned
       // to the same construction point (that's what "referential" means).
       const shiftRef = r => (!r || r.pid!=null) ? r : { x:r.x+OFFSET, y:r.y+OFFSET };
       data.id = consSeq++; data.a = shiftRef(data.a); data.b = shiftRef(data.b); data.ctrl = shiftRef(data.ctrl);
       cons.push(data);
-      hlCons=data.id; hlPoint=null; selText=null; selNotch=null; selSketch=null; selected=-1;
+      hlCons=data.id; hlPoint=null; selText=null; selNotch=null; selVertex=null; selSketch=null; selected=-1;
     } else if (kind==="text"){
       const id = textSeq++;
       texts.push({ ...data, id, x: data.x+OFFSET, y: data.y+OFFSET });
-      selText=id; hlPoint=null; hlCons=null; selNotch=null; selSketch=null; selected=-1;
+      selText=id; hlPoint=null; hlCons=null; selNotch=null; selVertex=null; selSketch=null; selected=-1;
     } else if (kind==="notch"){
       const p = pieces[data.pieceIdx];
       p.notches = p.notches || [];
       p.notches.push([data.notch[0]+OFFSET, data.notch[1]+OFFSET]);
-      selNotch = { pieceIdx: data.pieceIdx, idx: p.notches.length-1 }; hlPoint=null; hlCons=null; selText=null; selSketch=null; selected=-1;
+      selNotch = { pieceIdx: data.pieceIdx, idx: p.notches.length-1 }; hlPoint=null; hlCons=null; selText=null; selSketch=null; selVertex=null; selected=-1;
     } else if (kind==="sketch"){
       const shift = ([x,y]) => [x+OFFSET, y+OFFSET];
       data.pts = (data.pts||[]).map(shift);
       if (data.ctrl) data.ctrl = shift(data.ctrl);
       sketch.push(data);
-      selSketch = sketch.length-1; hlPoint=null; hlCons=null; selText=null; selNotch=null; selected=-1;
+      selSketch = sketch.length-1; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selected=-1;
     } else if (kind==="piece"){
       const shift = ([x,y]) => [x+OFFSET, y+OFFSET];
       data.name = { en:(data.name&&data.name.en||"Piece")+" copy", ar:(data.name&&data.name.ar||"قطعة")+" (نسخة)" };
@@ -602,7 +654,7 @@ export const Canvas = (() => {
       data.grain = (data.grain||[]).map(shift);
       if (Array.isArray(data.curves)) data.curves = data.curves.map(c => ({ ...c, c1: shift(c.c1), c2: shift(c.c2) }));
       pieces.push(data);
-      selected = pieces.length-1; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null;
+      selected = pieces.length-1; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null;
     } else return false;
     render();
     return true;
@@ -773,8 +825,15 @@ export const Canvas = (() => {
     knob(g.rotate, 6, brand, panel, true);
     // corner scale handles
     g.corners.forEach(c=>knob(c, 5, brand, panel, false));
-    // editable anchor points (control points)
-    g.anchors.forEach(a=>knob(a, 4, accent, panel, true));
+    // editable anchor points (control points) — the currently selected one
+    // (selVertex, if this is the selected piece — clicked via its own
+    // handle, Delete-able) drawn larger and in the "ok" colour so it's
+    // visually obvious which single point Delete would remove.
+    const ok=CSS("--ok");
+    g.anchors.forEach((a,i)=>{
+      const isSel = selVertex===i && pieces[selected]===p;
+      knob(a, isSel?6:4, isSel?ok:accent, panel, true);
+    });
   }
   function knob(pt, r, stroke, fill, round){
     ctx.lineWidth=1.5; ctx.strokeStyle=stroke; ctx.fillStyle=fill;
@@ -1066,11 +1125,11 @@ export const Canvas = (() => {
       // Select/Move, smallest/most-precise targets first.
       if (tool==="select" || tool==="move"){
         const pid = hitPointScreen(e.offsetX, e.offsetY);
-        if (pid!=null){ pushUndo(); dragPoint={id:pid, ox:wx, oy:wy}; hlPoint=pid; hlCons=null; selText=null; selNotch=null; selSketch=null; selected=-1; onPick(null); render(); return; }
+        if (pid!=null){ pushUndo(); dragPoint={id:pid, ox:wx, oy:wy}; hlPoint=pid; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; selected=-1; onPick(null); render(); return; }
         const cid = hitCons(e.offsetX, e.offsetY);
-        if (cid!=null){ hlCons=cid; hlPoint=null; selText=null; selNotch=null; selSketch=null; selected=-1; onPick(null); render(); return; }
+        if (cid!=null){ hlCons=cid; hlPoint=null; selText=null; selNotch=null; selVertex=null; selSketch=null; selected=-1; onPick(null); render(); return; }
         const nh = hitNotch(e.offsetX, e.offsetY);
-        if (nh){ selNotch=nh; hlPoint=null; hlCons=null; selText=null; selSketch=null; selected=-1; onPick(null); render(); return; }
+        if (nh){ selNotch=nh; hlPoint=null; hlCons=null; selText=null; selSketch=null; selVertex=null; selected=-1; onPick(null); render(); return; }
         // Sketch strokes (Line/Arc/Pen/Freehand/Filled Shape) — click-to-
         // select and Delete/Cut/Copy only, no drag-to-move yet (unlike
         // points/text/pieces above and below) — a real gap, but out of
@@ -1078,7 +1137,7 @@ export const Canvas = (() => {
         // all short of Undo or nuking every sketch stroke via "Clear
         // Sketch"), which this fixes.
         const sh = hitSketch(e.offsetX, e.offsetY);
-        if (sh!=null){ selSketch=sh; hlPoint=null; hlCons=null; selText=null; selNotch=null; selected=-1; onPick(null); render(); return; }
+        if (sh!=null){ selSketch=sh; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selected=-1; onPick(null); render(); return; }
       }
 
       // construction tools: point / line / arc / circle / promote-to-piece / calibrate
@@ -1143,7 +1202,14 @@ export const Canvas = (() => {
       // (1) grab a selection handle (rotate / scale corner / anchor point)
       if (selected>=0 && pieces[selected] && !pieces[selected].locked && SHOW_HANDLES.has(tool)){
         const hh=handleHit(pieces[selected], e.offsetX, e.offsetY);
-        if (hh){ beginEdit(hh, wx, wy); return; }
+        if (hh){
+          // Grabbing a specific outline point selects it (persists after
+          // release, Backspace/Delete-able — see deleteSelection()); any
+          // OTHER handle (rotate/scale) deselects whichever point used to
+          // be selected, same as clicking elsewhere would.
+          selVertex = hh.type==="point" ? hh.idx : null;
+          beginEdit(hh, wx, wy); return;
+        }
       }
 
       // (2) two-click tools: knife (split) & grainline
@@ -1230,7 +1296,7 @@ export const Canvas = (() => {
       // (5) select / move — text labels are draggable too
       if (tool==="select" || tool==="move"){
         const ti = hitText(e.offsetX, e.offsetY);
-        if (ti>=0){ pushUndo(); dragText={ i:ti, ox:wx, oy:wy }; selText=texts[ti].id; hlPoint=null; hlCons=null; selNotch=null; selected=-1; onPick(null); render(); return; }
+        if (ti>=0){ pushUndo(); dragText={ i:ti, ox:wx, oy:wy }; selText=texts[ti].id; hlPoint=null; hlCons=null; selNotch=null; selVertex=null; selected=-1; onPick(null); render(); return; }
       }
       const hit = hitPiece(wx,wy);
       // Shift+click toggles group membership instead of replacing the
@@ -1244,12 +1310,12 @@ export const Canvas = (() => {
         const at = multiSelected.indexOf(hit);
         if (at>=0) multiSelected.splice(at,1); else multiSelected.push(hit);
         selected = multiSelected.length===1 ? multiSelected[0] : -1;
-        hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null;
+        hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null;
         onPick(selected>=0 ? pieces[selected] : null, e.clientX, e.clientY);
         render(); return;
       }
       if (hit>=0){
-        hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null;
+        hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null;
         if ((tool==="select"||tool==="move") && multiSelected.includes(hit) && multiSelected.length>1){
           // dragging a member of an existing group moves the whole group —
           // keep multiSelected/selected exactly as they are
@@ -1261,7 +1327,7 @@ export const Canvas = (() => {
         }
       } else {
         selected=-1; onPick(null);
-        if (tool==="select"||tool==="move"){ multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; }
+        if (tool==="select"||tool==="move"){ multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; }
       }
       render();
     });
@@ -2041,11 +2107,11 @@ export const Canvas = (() => {
     points = Array.isArray(pts) ? pts.map(p=>({ xExpr:null, yExpr:null, ...p, id: p.id || pointSeq++ })) : [];
     cons = Array.isArray(consArr) ? consArr.map(c=>({ ...c, id: c.id || consSeq++ })) : [];
     variables = {};
-    selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; sketch=[]; promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; fit(); return true;
+    selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; sketch=[]; promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; fit(); return true;
   }
   function clearAll(){
     pushUndo(); pieces=[]; sketch=[]; texts=[]; points=[]; cons=[]; bg=null; variables={}; ghostSnap=null;
-    selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selSketch=null; measurePts=[]; clickBuf=[]; promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null;
+    selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; measurePts=[]; clickBuf=[]; promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null;
     userAdjusted=false; render();
   }
 
@@ -2062,7 +2128,7 @@ export const Canvas = (() => {
            // construction geometry
            addPoint, removePoint, getPointById, getPoints, setPointName, setPointXY, setPointFormula, onPointRequest,
            getCons, removeCons, onPromoteRequest, finishPromotePiece, cancelPromote, onWarnRequest,
-           insertOutlinePoint, promoteSketchToPiece, curveEdge, revertCurveEdge, isSketchClosed,
+           insertOutlinePoint, removeOutlinePoint, promoteSketchToPiece, curveEdge, revertCurveEdge, isSketchClosed,
            getSketch, addSketchStroke,
            setVariable, removeVariable, getVariables, setMeasureProvider, recomputeConstruction, evalExpr,
            setBackgroundImage, setBgOpacity, setBgVisible, removeBackground, hasBackground, getBgOpacity,

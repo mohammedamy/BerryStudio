@@ -655,6 +655,20 @@ in the app's own header.
   piece carries `edges[]` seam metadata (Walk the Seam / princess-seam
   placement), the new point's insertion index shifts every later
   `fromIdx`/`toIdx` up by one so seam data doesn't silently desync.
+- **Select and delete a single outline point (WP-44)** — click a piece's
+  own point handle (with Select active and the piece already selected) to
+  select just that one vertex, shown larger and highlighted; Delete/
+  Backspace removes only that point (refuses below 3 points, same floor
+  Check Pattern's closed-outline check already enforces), same precedence
+  a construction point/notch/text annotation already had. Corner points
+  specifically were reported hard to grab at all — root cause was the
+  piece's resize handle sitting at almost the exact same screen spot as
+  its own corner vertex (most pieces are roughly rectangular) and always
+  winning the click. Fixed by drawing/hit-testing the resize handle a small
+  margin outside the piece's bounding corner instead of on top of it, plus
+  picking whichever the click is actually closer to when both are still in
+  range — verified live: a corner vertex now drags independently of its
+  neighbours, and the resize handle at its new spot still scales correctly.
 - **Rotate ("swing") selection box no longer drifts outside the piece** —
   a user report described "the dotted line sometimes appears outside the
   layer" while rotating a piece. Root cause: the dashed selection box was

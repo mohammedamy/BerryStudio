@@ -110,6 +110,64 @@ test("insertOutlinePoint on a non-existent piece is a safe no-op", () => {
   assert.equal(Canvas.insertOutlinePoint(0, 0, [1, 1]), false);
 });
 
+// ---- outline vertex deletion (select-a-point-and-delete-it) ----
+test("removeOutlinePoint removes the right vertex and shifts edges[]/curves[]/chestEdgeIndices past it", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "T", ar: "ت" });
+  Canvas.setPieceProps(i, {
+    edges: [{ fromIdx: 0, toIdx: 3 }, { fromIdx: 2, toIdx: 3 }],
+    curves: [{ fromIdx: 2, toIdx: 3, c1: [1, 1], c2: [2, 2] }],
+    chestEdgeIndices: [1, 3],
+  });
+  const before = JSON.parse(JSON.stringify(Canvas.getPieces()[i].outline));
+  assert.equal(Canvas.removeOutlinePoint(i, 1), true);
+  const p = Canvas.getPieces()[i];
+  assert.equal(p.outline.length, 3);
+  // outline[1] is gone; outline[0] untouched, what was outline[2]/[3] shift down to [1]/[2]
+  assert.deepEqual(p.outline[0], before[0]);
+  assert.deepEqual(p.outline[1], before[2]);
+  assert.deepEqual(p.outline[2], before[3]);
+  // indices >1 (the removed index) shift down by one; the untouched edge (toIdx:3->2) still
+  // points at the same physical vertex it always did
+  assert.deepEqual(p.edges, [{ fromIdx: 0, toIdx: 2 }, { fromIdx: 1, toIdx: 2 }]);
+  assert.deepEqual(p.curves, [{ fromIdx: 1, toIdx: 2, c1: [1, 1], c2: [2, 2] }]);
+  // chestEdgeIndices' 1 (the vertex physically right after the one just
+  // removed) shifts down to 0 same as everything else past the removal —
+  // spliceOutline()'s bump() has no special case for "was adjacent to the
+  // removed index", only "was after it".
+  assert.deepEqual(p.chestEdgeIndices, [0, 2]);
+});
+test("removeOutlinePoint at index 0 removes the first vertex correctly", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "T0", ar: "ت٠" });
+  const before = JSON.parse(JSON.stringify(Canvas.getPieces()[i].outline));
+  assert.equal(Canvas.removeOutlinePoint(i, 0), true);
+  const p = Canvas.getPieces()[i];
+  assert.equal(p.outline.length, 3);
+  assert.deepEqual(p.outline, before.slice(1));
+});
+test("removeOutlinePoint refuses to drop a piece below 3 points", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "Tri", ar: "مثلث" });
+  Canvas.removeOutlinePoint(i, 0); // 4 -> 3, allowed
+  assert.equal(Canvas.getPieces()[i].outline.length, 3);
+  assert.equal(Canvas.removeOutlinePoint(i, 0), false); // 3 -> 2, refused
+  assert.equal(Canvas.getPieces()[i].outline.length, 3);
+});
+test("removeOutlinePoint is undoable", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "U", ar: "ت" });
+  const before = JSON.parse(JSON.stringify(Canvas.getPieces()[i].outline));
+  Canvas.removeOutlinePoint(i, 1);
+  assert.equal(Canvas.getPieces()[i].outline.length, 3);
+  Canvas.doUndo();
+  assert.deepEqual(Canvas.getPieces()[i].outline, before);
+});
+test("removeOutlinePoint on a non-existent piece is a safe no-op", () => {
+  Canvas.clearAll();
+  assert.equal(Canvas.removeOutlinePoint(0, 0), false);
+});
+
 // ---- Curve Edge tool ----
 test("curveEdge bows a straight edge into a real bezier and records exact-endpoint sample points", () => {
   Canvas.clearAll();

@@ -3829,8 +3829,10 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     // toolbar/panel controls). Delete/Backspace now goes through
     // Canvas.deleteSelection() (below), which acts on whatever is
     // currently selected on the canvas — a piece, a construction point,
-    // a construction line/arc/circle, a text annotation, or a notch —
-    // not just whole pieces.
+    // a construction line/arc/circle, a text annotation, a notch, or a
+    // single OUTLINE VERTEX (click a piece's own edge/corner point handle
+    // to select just that point, without dragging it) — not just whole
+    // pieces.
     if(!meta && !typing && state.view==="2d" && !$$(".overlay.show").length){
       const pieces=Canvas.getPieces(), sel=Canvas.getSelected();
       if((e.key==="["||e.key==="]") && pieces.length){

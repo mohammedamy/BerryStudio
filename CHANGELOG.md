@@ -6,6 +6,59 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-44: Select-and-delete a single outline point; corner points reliably grabbable
+
+A user reported two related 2D-canvas editing gaps: no way to select one
+point on a piece's edge and delete just that point, and corner points in
+particular being hard to grab and move.
+
+### Added
+- `js/canvas.js`: `removeOutlinePoint(pieceIdx, idx)` — the missing
+  counterpart to the existing `insertOutlinePoint()` (Add Point tool).
+  Reuses that same function's `spliceOutline()` index-bookkeeping (curves/
+  edges/chestEdgeIndices all shift to keep pointing at the same physical
+  vertices), and refuses to drop a piece below 3 points — `js/validate.js`'s
+  own `closedOutline` floor, so this can never leave a piece in a state
+  Check Pattern would already flag as broken.
+- `selVertex` — a new persistent selection slot (mirrors the existing
+  `selNotch` exactly: click-to-select via a piece's own outline-point
+  handle, Backspace/Delete-able via `deleteSelection()`, cleared at every
+  point the other selection types already reset themselves). Clicking a
+  vertex handle now selects that specific point — visibly, drawn larger and
+  in the "ok" colour — not just an implicit drag target that forgets itself
+  the moment the mouse comes up.
+
+### Fixed — corner outline points were effectively unreachable
+`handleHit()` checked the piece's 4 resize (scale) corner handles *before*
+its outline-vertex anchors, with the two often landing at nearly identical
+screen positions — most real pattern pieces are themselves roughly
+rectangular, so an actual corner VERTEX usually sits right where the
+resize handle also lives. The resize handle always won, so that corner
+vertex could never be grabbed on its own to reshape or delete — exactly
+the "hard to select a corner point" report. Fixed two ways together:
+1. `handleGeo()` now draws/hits the 4 scale-corner handles a fixed 7px
+   *outside* the piece's own bounding-rect corner (along each corner's own
+   outward diagonal from the rect center) rather than exactly on top of
+   it — the same small-margin-outside-the-shape look real design tools
+   use for transform handles, not just a hit-test hack.
+2. `handleHit()` now picks whichever of a corner handle or a vertex anchor
+   the click is actually *closer* to, when both are within tolerance,
+   instead of the corner unconditionally winning a first-match order.
+
+### Verified
+Live in-browser, via real drag/click/keyboard interaction (not just code
+review): a corner vertex can now be grabbed and dragged independently
+(only that one point's coordinates change, the other 3 stay exactly put);
+the same vertex stays selected after release and Delete/Backspace removes
+just it, leaving the piece otherwise intact; attempting to delete a 4th
+point off an already-3-point triangle is correctly refused with no change;
+the resize/scale handle at its new offset position still performs a real
+proportional scale from the piece's center, unaffected. 5 new unit tests
+in `test/canvas.test.js` cover `removeOutlinePoint`'s index-bookkeeping
+(mirroring the existing `insertOutlinePoint` test), the index-0 boundary
+case, the 3-point floor, undo, and the non-existent-piece no-op. Full
+suite: 205 tests green.
+
 ## WP-43: Underwear & Bra Library — 44 new patterns
 
 44 new patterns: 24 briefs/trunks (6 each — Women, Men, Girls, Boys) + 20
