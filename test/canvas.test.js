@@ -168,6 +168,114 @@ test("removeOutlinePoint on a non-existent piece is a safe no-op", () => {
   assert.equal(Canvas.removeOutlinePoint(0, 0), false);
 });
 
+// ---- WP-46: closing edges ----
+test("toggleClosingEdge turns an edge on then off, and isClosingEdge reflects it", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "CE", ar: "ح" });
+  const p = () => Canvas.getPieces()[i];
+  assert.equal(Canvas.isClosingEdge(p(), 1), false);
+  assert.equal(Canvas.toggleClosingEdge(i, 1), true);
+  assert.equal(Canvas.isClosingEdge(p(), 1), true);
+  assert.equal(Canvas.toggleClosingEdge(i, 1), true);
+  assert.equal(Canvas.isClosingEdge(p(), 1), false);
+});
+test("toggleClosingEdge rejects an out-of-range edge index or a non-existent piece", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "CE2", ar: "ح٢" });
+  assert.equal(Canvas.toggleClosingEdge(i, 99), false);
+  assert.equal(Canvas.toggleClosingEdge(i, -1), false);
+  assert.equal(Canvas.toggleClosingEdge(5, 0), false);
+});
+test("toggleClosingEdge is undoable", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "CE3", ar: "ح٣" });
+  Canvas.toggleClosingEdge(i, 0);
+  assert.equal(Canvas.isClosingEdge(Canvas.getPieces()[i], 0), true);
+  Canvas.doUndo();
+  assert.equal(Canvas.isClosingEdge(Canvas.getPieces()[i], 0), false);
+});
+test("insertOutlinePoint splits a closing edge into two closing edges", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "Split", ar: "تقسيم" });
+  Canvas.toggleClosingEdge(i, 1); // outline[1] -> outline[2]
+  assert.equal(Canvas.insertOutlinePoint(i, 1, [99, 99]), true);
+  const p = Canvas.getPieces()[i];
+  assert.equal(p.outline.length, 5);
+  assert.deepEqual(p.closingEdges.slice().sort((a, b) => a - b), [1, 2]);
+});
+test("removeOutlinePoint drops closing-edge flags on both edges touching the deleted vertex, shifting the rest", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "Rm", ar: "حذف" });
+  Canvas.toggleClosingEdge(i, 0); // outline[0]->outline[1] — touches the deleted vertex, dropped
+  Canvas.toggleClosingEdge(i, 1); // outline[1]->outline[2] — touches the deleted vertex, dropped
+  Canvas.toggleClosingEdge(i, 2); // outline[2]->outline[3] — untouched, shifts down to 1
+  assert.equal(Canvas.removeOutlinePoint(i, 1), true);
+  assert.deepEqual(Canvas.getPieces()[i].closingEdges, [1]);
+});
+
+// ---- WP-46: named (matched) outline points ----
+test("setOutlinePointName sets a name; an empty/whitespace name clears it", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "Nm", ar: "اسم" });
+  assert.equal(Canvas.setOutlinePointName(i, 2, "A"), true);
+  assert.equal(Canvas.getOutlinePointName(i, 2), "A");
+  assert.equal(Canvas.setOutlinePointName(i, 2, "  "), true);
+  assert.equal(Canvas.getOutlinePointName(i, 2), undefined);
+});
+test("setOutlinePointName on a non-existent point or piece is a safe no-op", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "Nm2", ar: "اسم٢" });
+  assert.equal(Canvas.setOutlinePointName(i, 99, "A"), false);
+  assert.equal(Canvas.setOutlinePointName(5, 0, "A"), false);
+});
+test("insertOutlinePoint shifts pointNames past the insertion point", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "NmShift", ar: "ن" });
+  Canvas.setOutlinePointName(i, 2, "A");
+  assert.equal(Canvas.insertOutlinePoint(i, 0, [50, 50]), true); // new vertex lands at index 1
+  assert.equal(Canvas.getOutlinePointName(i, 3), "A"); // shifted from 2 to 3
+  assert.equal(Canvas.getOutlinePointName(i, 2), undefined);
+});
+test("removeOutlinePoint drops the deleted vertex's own name and shifts the rest down", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "NmRm", ar: "نذ" });
+  Canvas.setOutlinePointName(i, 1, "A");
+  Canvas.setOutlinePointName(i, 3, "B");
+  assert.equal(Canvas.removeOutlinePoint(i, 1), true);
+  assert.equal(Canvas.getOutlinePointName(i, 1), undefined);
+  assert.equal(Canvas.getOutlinePointName(i, 2), "B");
+});
+test("getMatchedPointGroups groups same-named points across pieces and excludes unmatched singles", () => {
+  Canvas.clearAll();
+  const a = Canvas.addPiece({ en: "PieceA", ar: "أ" });
+  const b = Canvas.addPiece({ en: "PieceB", ar: "ب" });
+  Canvas.setOutlinePointName(a, 0, "M");
+  Canvas.setOutlinePointName(b, 2, "M");
+  Canvas.setOutlinePointName(a, 1, "Solo");
+  const groups = Canvas.getMatchedPointGroups();
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].name, "M");
+  const pieceIdxs = groups[0].points.map(pt => pt.pieceIdx).sort((x, y) => x - y);
+  assert.deepEqual(pieceIdxs, [a, b].sort((x, y) => x - y));
+});
+
+// ---- WP-46: numeric corner-point coordinates ----
+test("setOutlinePointXY sets exact coordinates and is undoable", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "XY", ar: "س ص" });
+  assert.equal(Canvas.setOutlinePointXY(i, 0, 12.5, -3), true);
+  assert.deepEqual(Canvas.getPieces()[i].outline[0], [12.5, -3]);
+  Canvas.doUndo();
+  assert.deepEqual(Canvas.getPieces()[i].outline[0], [8, 8]); // addPiece's default first-piece origin
+});
+test("setOutlinePointXY rejects non-finite coordinates and a non-existent point/piece", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "XY2", ar: "س ص٢" });
+  assert.equal(Canvas.setOutlinePointXY(i, 0, NaN, 1), false);
+  assert.equal(Canvas.setOutlinePointXY(i, 99, 1, 1), false);
+  assert.equal(Canvas.setOutlinePointXY(5, 0, 1, 1), false);
+});
+
 // ---- Curve Edge tool ----
 test("curveEdge bows a straight edge into a real bezier and records exact-endpoint sample points", () => {
   Canvas.clearAll();
