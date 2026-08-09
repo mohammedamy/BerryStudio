@@ -58,7 +58,7 @@ in the app's own header.
 | **Pattern Summary export** — one-page bilingual print sheet: size table, a labelled dimensioned diagram per piece, and a construction note (Export pane, Project menu, ⌘K) | ✅ Working |
 | **Sewing Instructions export** (Tailornova feature study, WP-37) — a real, ordered construction sequence derived from the loaded pattern's own declared piece roles, the same trusted signal the Bill of Materials already uses: prep/interfacing → darts → yoke → shoulder seams → collar → sleeves → pockets → zip/placket → waistband → cuffs → buttons → lining → hem → press, each step only appearing when the pattern actually declares that role (Export pane, Project menu, ⌘K) | ✅ Working — pieces with no recognised role contribute no step rather than a guess |
 | **Fit Chart export** (Tailornova feature study, WP-40, Export pane) — a per-size measurement spec sheet with a live-editable ± tolerance per measurement point, computed by the same grading engine as Auto Grade for every size in the current standard (or every age, in Kids mode) — one real, editable table honestly covering both of Tailornova's "Standard" and "Custom" Fit Chart line items instead of two features sharing every line of code | ✅ Working |
-| **Pattern Library — 164 pre-designed patterns, 41 per category** (Women/Men/Girls/Boys), category filter chips + search + "My Patterns", with distinct full-colour illustrated thumbnails per garment type (dress/gown/robe/top/shirt/skirt/trousers/jacket/coat/suit) instead of a generic silhouette | ✅ Working — every entry is a real, gradable multi-piece garment |
+| **Pattern Library — 308 pre-designed patterns** (57 Women / 47 Men / 157 Girls / 47 Boys — Girls' total includes a 100-pattern Gymnastics Leotards collection; Women's and Girls' totals each include their share of a 44-pattern Underwear & Bra collection, WP-43, §"Honest notes" below), category filter chips + search + "My Patterns", with distinct full-colour illustrated thumbnails per garment type (dress/gown/robe/top/shirt/skirt/trousers/jacket/coat/suit/underwear/bra) instead of a generic silhouette | ✅ Working — every entry is a real, gradable multi-piece garment |
 | **Fancy Collection — 64 elaborate designs, 16 per category**: gowns, tailored jackets/coats/suits, jumpsuits, sherwanis, kanduras and parkas — each with 10+ real pattern pieces (princess seams, godets, capes, tiers, two-piece sleeves, lapels, hoods, peplums) and genuinely curved seams | ✅ Working — curves are bezier-sampled into the pattern outline, not straight polygon corners |
 | **Construction tools** — real drafting Point/Line/Arc/Circle tools that snap to and stay live-linked to named points, "Create Pattern Piece" to promote a closed point loop into a real piece, custom parametric **Variables** (named formulas referencing other variables and body measurements, reusable in any point's X/Y), and a trace-over **background reference image** with two-point calibration | ✅ Working — points/lines/arcs re-resolve automatically when you grade/resize |
 | AI Pattern Generator — visible "thinking" stages, robust local image analysis (neckline/hem/flare/colour from a real photo, not just a clean product shot), a wider construction vocabulary (necklines including mock/stand neck, hem shapes, wrap/zip closures), a **romper/jumpsuit** garment type (fitted bodice + attached above-knee shorts joined at a waist seam, with armhole binding and a zip facing), and a "Detected" attributes panel (with source + confidence, click-to-override) so you can see what actually mattered — describing a garment always produces real, editable vector pattern pieces on the canvas, never an image to trace | ✅ Working (offline heuristic by default; bring your own AI provider in Settings — see below) |
@@ -94,6 +94,28 @@ in the app's own header.
   as the hand-crafted `PATTERNS` in `js/data.js`), not couture drafting-book formulas —
   treat these as realistic *design* references to grade and export, not
   seam-allowance-exact sewing patterns ready for a cutting table.
+- **Underwear & Bra Library** (`js/underwear-library.js`, WP-43) — 44
+  patterns: 24 briefs/trunks (6 each: Women/Men/Girls/Boys) + 20 bras (10
+  each: Women/Girls). Same standard as the Fancy Collection above — real
+  bezier-curved seams (waist edge, leg opening, crotch curve, cup boundary,
+  band top edge), not straight polygon corners, and every style is a real,
+  distinct construction (e.g. a Trunk's leg panel genuinely extends further
+  down the thigh to a hemmed edge; a Sport Bra is a front/back racerback
+  panel construction, not a cup-based design wearing a different name).
+  Deliberately excludes any thong-style cut in every category, and every
+  bra is soft-cup/wireless construction throughout — the only sensible
+  default for the Girls category, kept identical for Women so both share
+  one builder rather than maintaining two. Introduced five new piece
+  roles (`gusset`, `cup`, `band`, `strap`, `elastic-band`) with real,
+  dedicated Sewing Instructions and Bill-of-Materials steps (crotch
+  gusset assembly, cup-to-bridge joining, band/side seams, elastic
+  application, strap attachment; elastic yardage and a hook-and-eye
+  closure line item) — not left to fall through as `role:"other"`'s
+  silent no-step behaviour. Verified: all 44 patterns pass Check Pattern
+  (closed outline, no self-intersection) across every size XXS–6XL and
+  every Kids age, live in-browser piece rendering, and real Sewing
+  Instructions/BOM output inspected directly, not just assumed from the
+  code.
 - **AI generator** (`js/ai.js`) segments the uploaded photo with a
   border-adaptive threshold + largest-contiguous-run-per-row scan (robust to
   background clutter, not just clean product shots on white), then reads

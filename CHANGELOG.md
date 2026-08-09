@@ -6,6 +6,64 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-43: Underwear & Bra Library — 44 new patterns
+
+44 new patterns: 24 briefs/trunks (6 each — Women, Men, Girls, Boys) + 20
+bras (10 each — Women, Girls), taking the library from 264 to 308
+patterns. Requested with "precise, nice curves and instructions according
+to world-class model."
+
+### Added
+- `js/underwear-library.js` — two shared parametric builders
+  (`briefPieces()`, `braPieces()`, plus `sportBraPieces()` for the
+  structurally distinct Sport Bra/Sport Bralette) driving all 44 catalog
+  entries via real style parameters (rise, leg cut, coverage, leg-length
+  extension for trunks; cup depth, band width, strap style, triangle/
+  plunge/wide shape modifiers for bras), not 44 hand-copied piece lists.
+  Every curved seam — waist edge, leg opening, crotch curve, cup boundary,
+  band top edge — is a real quadratic bezier sampled into the outline
+  (`qBez()`/`withCurves()`, a local copy of `js/fancy-patterns.js`'s own
+  convention), including a genuinely curved oval crotch gusset (4 bezier
+  segments) in place of the straight-edged diamond `js/ai.js`'s existing
+  leotard gusset uses. No thong-style cut in any category; every bra is
+  soft-cup/wireless construction (no underwire piece) — the only sensible
+  default for the Girls category, kept identical for Women so one builder
+  serves both instead of two parallel ones.
+- `js/app.js`, `js/i18n.js`: five new piece roles (`gusset`, `cup`, `band`,
+  `strap`, `elastic-band`) wired into `buildSewingSteps()` and
+  `buildBomItems()` with real, dedicated construction steps and BOM lines
+  (gusset/lining assembly, cup-to-bridge joining, brief/band side seams,
+  elastic application naming the actual edge count, strap attachment;
+  elastic yardage, hook-and-eye closure) — not left to fall through as
+  `role:"other"`'s silent no-step behaviour. Deliberately used new
+  `brief-front`/`brief-back` roles rather than reusing `front-panel`/
+  `back-panel`: those trigger the existing generic "join at the shoulder
+  seams" instruction, which is wrong for a brief (it joins at the side
+  seams, and the crotch gusset — not a shoulder seam — is what actually
+  goes between front and back). Also guarded the existing generic lining
+  instruction (`has("lining")`) to skip when the only lining present is a
+  gusset lining already covered by the new gusset step, rather than
+  emitting a second, inapplicable "attach at the facing/hem edge" step
+  for the same piece.
+- `js/app.js`: two new `LIB_ICONS` entries (`underwear`, `bra`) so library
+  cards get a real thumbnail instead of falling back to the generic
+  shirt/dress icon.
+
+### Verified
+- All 44 patterns × every size (XXS–6XL) × every Kids age (Girls/Boys) —
+  638 combinations — pass `closedOutline` and `selfIntersection` with zero
+  failures (checked directly via `js/validate.js`'s `run()`, not assumed).
+- Full test suite (200 tests) green; `test/validate-library.test.js`'s
+  library-wide sweep (now 308 patterns) and its ≥148-verified-crossPiece-
+  pairs regression guard both still pass unmodified.
+- Live in-browser: a brief and a bra pattern each loaded onto the 2D
+  canvas and visually confirmed — smooth curved panels, a clean oval
+  gusset, a genuinely leaf-shaped cup, a distinct Sport Bra front/
+  racerback-panel construction, and a Trunk's extended hemmed leg — plus
+  real Sewing Instructions and Bill of Materials output captured and read
+  back (not just triggered), confirming the new role branches fire the
+  intended, non-redundant steps.
+
 ## WP-38/39/40: Split View, custom fabric texture, Fit Chart
 
 Closes the three backlog items `BerryStudio-Tailornova-Feature-Study.md` §4
