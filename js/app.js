@@ -2184,7 +2184,12 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 
   // ================= HELP =================
   function openHelp(){
-    const tools = ["select","pen","line","arc","free","symmetry","knife","move","rotate","scale","measure","text","seam","notch","grain"];
+    // Drawn straight from the real toolbar's own TOOLS list (above) rather
+    // than a separately hand-maintained id list — every tool that actually
+    // exists in the rail shows up here automatically, present tense, with
+    // no separate "did the help table get updated too" step whenever a
+    // tool is added or removed.
+    const tools = TOOLS.filter(t=>t!=="sep").map(t=>t.id);
     let html = `<h3 style="margin-bottom:8px">${T("helpQuick")}</h3><ol style="padding-inline-start:20px;font-size:13px;line-height:1.7;color:var(--ink-2)">`;
     html += `<li>${T("helpQ1")}</li><li>${T("helpQ2")}</li><li>${T("helpQ3")}</li></ol>`;
     html += `<h3 style="margin:18px 0 8px">${T("helpTools")}</h3><table style="width:100%;border-collapse:collapse;font-size:12.5px">`;
@@ -2192,7 +2197,8 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     html += `</table><h3 style="margin:18px 0 8px">${T("helpShortcuts")}</h3><table style="width:100%;border-collapse:collapse;font-size:12.5px">`;
     [["V P L A M R S T", T("sc_tools")], ["Ctrl+Z / Ctrl+Shift+Z", T("sc_undo")], ["Ctrl+K", T("sc_cmd")], ["Esc", T("sc_esc")],
      ["[ / ]", T("sc_cycle")], ["Arrow keys", T("sc_nudge")], ["Shift+Arrow", T("sc_nudgeFine")], ["Delete / Backspace", T("sc_delete")],
-     ["Shift+Drag", T("sc_freeDrag")]]
+     ["Shift+Drag", T("sc_freeDrag")], ["Shift+Drag (Line / Construction Line)", T("sc_angleSnap")],
+     ["Ctrl/⌘+C / X / V", T("sc_copyPaste")]]
       .forEach(([k,d])=>{ html += `<tr><td style="padding:6px 8px;border-bottom:1px solid var(--line-2)"><code style="background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-weight:700">${k}</code></td><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--ink-2)">${d}</td></tr>`; });
     html += "</table>";
     openModal(T("helpTitle"), html, true);

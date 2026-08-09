@@ -6,6 +6,71 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-47: Rewrite the in-app Help modal and the docs site's tool/shortcut reference
+
+A correctness pass over both of BerryStudio's "how do I use this" surfaces —
+the in-app **Help & Shortcuts** modal (the **?** button / ⌘K) and the
+standalone `docs/` site — both of which had drifted well behind the app
+after WP-43 through WP-46: several real toolbar tools were entirely
+undocumented, one tool's description described a *different* tool, keyboard
+shortcut text no longer matched what Shift actually does, and the docs
+site's own pattern-library counts were stale by more than 2×.
+
+### Fixed — in-app Help modal (`js/app.js`, `js/i18n.js`)
+- `openHelp()`'s tool table was a hand-maintained list of 15 ids that had
+  fallen 9 tools behind the real toolbar (`TOOLS`, the same array
+  `buildToolRail()` renders from) — missing Lasso, Filled Shape, Point,
+  Construction Line, Construction Arc, Circle, Create Pattern Piece, Add
+  Point, and Curve Edge entirely. Now derived directly from `TOOLS` itself
+  (`TOOLS.filter(t=>t!=="sep").map(t=>t.id)`), so it can't drift out of
+  sync again — every real toolbar tool appears, and only real toolbar
+  tools appear.
+- `sc_freeDrag`'s shortcut description still claimed Shift+Drag
+  universally bypasses the grid snap — true for most tools, but WP-45
+  changed what Shift means for the Line and Construction Line tools
+  specifically (angle-constrain, not grid-bypass). Reworded with an
+  explicit carve-out, plus a new `sc_angleSnap` row describing the actual
+  behavior for those two tools.
+- `sc_delete` didn't mention a single outline vertex (WP-44) as a
+  deletable selection — added, plus how to select just one point.
+- Added `sc_copyPaste` — Ctrl/⌘+C/X/V for whatever's selected on the
+  canvas had no shortcut-table entry at all despite being real, shipped
+  functionality.
+- `helpQ3` (Quick start step 3) now mentions Check Pattern and the Sewing
+  Guide, not just 3D Preview and export.
+- All of the above in both English and Arabic.
+
+### Fixed — docs site (`docs/index.html`, `docs/tools.html`, `docs/shortcuts.html`, `docs/faq.html`)
+- **Pattern counts**: "124 pre-designed patterns" / "24-design Fancy
+  Collection" (both stale) corrected to the real current figures — 308
+  patterns (57 Women / 47 Men / 157 Girls / 47 Boys, including a
+  100-pattern Gymnastics Leotards collection and a 44-pattern Underwear &
+  Bra collection) and a 64-design Fancy Collection — in `index.html` and
+  `faq.html`.
+- **`tools.html`**: added Lasso, Add Point, and Curve Edge to the tool
+  table (previously absent); fixed the **Line** row, which described
+  *Construction Line's* behavior (a live-linked line between two points)
+  under the wrong tool — Line is actually the freehand sketch-line tool,
+  now correctly distinguished from Construction Line with a cross-link
+  between the two, and both now mention WP-45's Shift-angle-constrain.
+  Added a new "Editing an outline point-by-point" section documenting
+  WP-44 (select-and-delete a single outline vertex, easier corner
+  grabbing) and WP-46 (the Edit Outline Points & Edges panel — numeric
+  coordinates, named/matched points, closing edges) in full, none of
+  which had any documentation before this pass. Added Sewing
+  Instructions, Fit Chart, and Bill of Materials to the Export &
+  validation table — three real, already-shipped export features that
+  weren't listed at all.
+- **`shortcuts.html`**: brought back into sync with the in-app table above
+  (it explicitly claims to mirror it) — same Shift+Drag carve-out,
+  angle-snap row, copy/paste row, and outline-vertex mention in Delete.
+- All of the above in both English and Arabic.
+
+### Unchanged
+`docs/3d-troubleshooting.html` and the rest of `docs/faq.html` were
+reviewed and found still accurate — no 3D-system or general-FAQ content
+was affected by WP-43 through WP-46.
+
 ## WP-46: Closing edges, named/matched outline points, and numeric corner coordinates
 
 A user asked for three related pattern-outline abilities: mark any edge as

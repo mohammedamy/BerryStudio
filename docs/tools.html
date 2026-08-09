@@ -27,11 +27,12 @@
       <table class="docs-table">
         <tr><th>Tool</th><th>What it does</th></tr>
         <tr><td><strong>Select</strong></td><td>Click pieces to select, drag to move. Shift-click for multi-select.</td></tr>
+        <tr><td><strong>Lasso</strong></td><td>Drag a freehand loop around several pieces to select them all at once — Shift-drag to add to the current selection. Drag any one of them to move the whole group together; Delete removes the whole group.</td></tr>
         <tr><td><strong>Pen (Bézier)</strong></td><td>Draw precise Bézier curves. Click for corner points, drag for smooth handles.</td></tr>
-        <tr><td><strong>Line</strong></td><td>Draw perfectly straight construction lines between two points.</td></tr>
-        <tr><td><strong>Arc</strong></td><td>Draw curved seams like armholes and necklines (curved, 3-click).</td></tr>
+        <tr><td><strong>Line</strong></td><td>Drag to draw a straight sketch line — a plain freehand mark, not linked to any point. For a line that stays attached to points as you move them, use the associative <strong>Construction Line</strong> tool below instead. Hold Shift while dragging to constrain the angle to vertical, horizontal, or 45°.</td></tr>
+        <tr><td><strong>Arc</strong></td><td>Click start → end → bulge to draw a curved sketch mark — freehand, not linked to points. For a curved arc that can become a real pattern-piece edge, draw a Construction Arc between two points instead, then use Create Pattern Piece.</td></tr>
         <tr><td><strong>Freehand</strong></td><td>Sketch freely with the mouse — for loose creative drafting.</td></tr>
-        <tr><td><strong>Filled Shape</strong></td><td>Draw a closed polygon directly.</td></tr>
+        <tr><td><strong>Filled Shape</strong></td><td>Click to add points for a closed, filled shape (e.g. a pocket or trim). Click near the start point, or double-click, to close it.</td></tr>
         <tr><td><strong>Symmetry</strong></td><td>Mirror everything across a centre axis — for bodices and other fold-symmetric pieces.</td></tr>
         <tr><td><strong>Knife</strong></td><td>Slit or split a pattern piece to add darts or style lines.</td></tr>
         <tr><td><strong>Move</strong></td><td>Nudge selected geometry with pixel precision.</td></tr>
@@ -40,12 +41,22 @@
         <tr><td><strong>Measure</strong></td><td>Measure any distance on the pattern, in cm or inches.</td></tr>
         <tr><td><strong>Seam Allowance</strong></td><td>Add an automatic seam allowance around the cutting edge — uniform, or per-edge with miter/round/bevel corner joins (WP-14).</td></tr>
         <tr><td><strong>Notch</strong></td><td>Place alignment notches so pieces match when sewing.</td></tr>
+        <tr><td><strong>Add Point</strong></td><td>Click any piece's outline edge to insert a new point there, splitting that edge in two.</td></tr>
+        <tr><td><strong>Curve Edge</strong></td><td>Drag along any piece's edge to bow it into a real curved seam. Drag an already-curved edge again to reshape it, or click it (no drag) to revert it back to straight. Doesn't work on a piece's closing edge (the segment back to its first point).</td></tr>
         <tr><td><strong>Grainline</strong></td><td>Set the grainline so fabric is cut in the right direction.</td></tr>
         <tr><td><strong>Text</strong></td><td>Click the canvas to place a formatted label; click existing text to edit it. Drag with Select to move.</td></tr>
       </table>
 
+      <h2>Editing an outline point-by-point</h2>
+      <p>Beyond the drafting tools above, any piece's outline can be reshaped point-by-point directly:</p>
+      <ul>
+        <li><strong>Select a single point</strong> — with the Select tool and the piece already selected, click one of its own point handles (not the piece's resize corners) to select just that vertex, shown larger and highlighted. <strong>Delete/Backspace</strong> removes only that point (refused below 3 points, so a piece can never collapse into a non-polygon). Corner points specifically are offset a few pixels outward from the piece's resize handle, so the two no longer fight for the same click.</li>
+        <li><strong>Set a point's exact coordinates, or name it</strong> — open <strong>Edit Outline Points &amp; Edges</strong> from a piece's properties (Layers pane → the <code>⋯</code> button on a piece), which lists every outline point with editable X/Y (cm) and an optional name. Give two points — on the same piece or two different pieces — the identical name, and BerryStudio treats them as a match: the printed <strong>Sewing Instructions</strong> guide (Project menu) generates a real step telling you to bring those two named points together and seam them, the same way a notch does but for a specific point rather than a whole edge.</li>
+        <li><strong>Mark an edge as a closing edge</strong> — in the same Edit Outline Points &amp; Edges panel, any edge can be flagged as a closing edge: left open, unsewn, for the garment's own closure (a zip, button placket, or hook-and-eye) instead of being seamed shut like every other edge. It's drawn on the 2D canvas as a thick amber dashed line so it's visually obvious, and the Sewing Guide explicitly calls out which edge(s) to leave open, with a short legend explaining the convention.</li>
+      </ul>
+
       <h2>Associative construction tools</h2>
-      <p>A real, live-linked CAD layer beneath the vector tools: <strong>Point</strong>, <strong>Line</strong>, <strong>Arc</strong>, and <strong>Circle</strong> reference each other by ID, not frozen coordinates — dragging a point (or giving it a formula that references a Variable or a body measurement) updates everything built on it, including after grading. <strong>Variables</strong> are named formulas reusable in any point's X/Y. A <strong>background trace image</strong> with two-point calibration lets you draft over a reference photo at the correct real-world scale. <strong>Create Pattern Piece</strong> promotes a closed loop of points into a real, exportable piece — a one-time snapshot, not a live link: editing the original points afterwards no longer reshapes the promoted piece.</p>
+      <p>A real, live-linked CAD layer beneath the vector tools: <strong>Point</strong>, <strong>Construction Line</strong>, <strong>Construction Arc</strong>, and <strong>Circle</strong> reference each other by ID, not frozen coordinates — dragging a point (or giving it a formula that references a Variable or a body measurement) updates everything built on it, including after grading. Hold Shift while dragging a Construction Line (or its endpoint) to constrain the angle to vertical, horizontal, or 45° — the same convention the plain Line tool uses. <strong>Variables</strong> are named formulas reusable in any point's X/Y. A <strong>background trace image</strong> with two-point calibration lets you draft over a reference photo at the correct real-world scale. <strong>Create Pattern Piece</strong> promotes a closed loop of points into a real, exportable piece — a one-time snapshot, not a live link: editing the original points afterwards no longer reshapes the promoted piece.</p>
 
       <h2>Grading &amp; nesting</h2>
       <table class="docs-table">
@@ -71,6 +82,9 @@
         <tr><td><strong>Export</strong></td><td>SVG, DXF (real AAMA/ASTM D6673 layers), HPGL (genuine plotter cut-lines), PNG/JPEG (selectable DPI), PDF (single-page or tiled home-printing with registration marks and an assembly map), AI (PDF + <code>%AI</code> header).</td></tr>
         <tr><td><strong>Pattern Summary</strong></td><td>A one-page bilingual print sheet: size table, a dimensioned diagram per piece, and construction notes.</td></tr>
         <tr><td><strong>Tech Pack</strong></td><td>Piece list with EN/AR names and the full custom-measurement set for the current grade.</td></tr>
+        <tr><td><strong>Sewing Instructions</strong></td><td>A real, ordered construction sequence generated from the loaded pattern's own declared piece roles — prep/interfacing → darts → yoke → shoulder seams → collar → sleeves → pockets → zip/placket → waistband → cuffs → buttons → lining → hem → press — plus, if the pattern uses them, a step per matched named point and per closing edge (see "Editing an outline point-by-point" above), with a short legend explaining both. A step only appears when the pattern actually has that construction.</td></tr>
+        <tr><td><strong>Fit Chart</strong> (WP-40)</td><td>A per-size measurement spec sheet with a live-editable ± tolerance per point, computed by the same grading engine as Auto Grade for every size in the current standard (or every age, in Kids mode).</td></tr>
+        <tr><td><strong>Bill of Materials</strong></td><td>An itemized materials list (fabric, lining, interfacing, zip, buttons, thread, labels) derived from the pattern's real declared piece roles, plus a cutting list and a fabric consumption + cost estimate (USD/SAR/EGP).</td></tr>
       </table>
 
       <h2>Other panels</h2>
@@ -85,11 +99,12 @@
       <table class="docs-table">
         <tr><th>الأداة</th><th>ماذا تفعل</th></tr>
         <tr><td><strong>تحديد</strong></td><td>اضغط على القطعة لتحديدها، واسحب لتحريكها. Shift للتحديد المتعدد.</td></tr>
+        <tr><td><strong>تحديد حر (لاسو)</strong></td><td>اسحب حلقة حرة حول عدة قطع لتحديدها كلها دفعة واحدة — Shift+سحب للإضافة للتحديد الحالي. اسحب أي واحدة منها لتحريك المجموعة كلها معًا؛ Delete يحذف المجموعة كلها.</td></tr>
         <tr><td><strong>قلم (منحنى بيزيه)</strong></td><td>ارسم منحنيات بيزيه دقيقة. اضغط لنقطة زاوية، واسحب لمنحنى ناعم.</td></tr>
-        <tr><td><strong>خط مستقيم</strong></td><td>ارسم خطوط إنشاء مستقيمة تمامًا بين نقطتين.</td></tr>
-        <tr><td><strong>قوس</strong></td><td>ارسم الخياطات المنحنية مثل فتحة الإبط وفتحة الرقبة (منحني، بثلاث نقرات).</td></tr>
+        <tr><td><strong>خط مستقيم</strong></td><td>اسحب لرسم خط تخطيطي مستقيم — علامة حرة بسيطة غير مرتبطة بأي نقطة. لخط يبقى مرتبطًا بالنقاط عند تحريكها، استخدم أداة <strong>خط الإنشاء</strong> الترابطية أدناه بدلاً منه. اضغط مع الاستمرار على Shift أثناء السحب لتقييد الزاوية إلى رأسية أو أفقية أو ٤٥ درجة.</td></tr>
+        <tr><td><strong>قوس</strong></td><td>اضغط البداية ثم النهاية ثم الانتفاخ لرسم قوس تخطيطي حر — غير مرتبط بنقاط. لقوس منحني يمكن أن يصبح حافة حقيقية في قطعة الباترون، ارسم "قوس إنشاء" بين نقطتين، ثم استخدم "إنشاء قطعة باترون".</td></tr>
         <tr><td><strong>رسم حر</strong></td><td>ارسم بحرية بالماوس — للتصميم الإبداعي الحر.</td></tr>
-        <tr><td><strong>شكل مملوء</strong></td><td>ارسم مضلعًا مغلقًا مباشرة.</td></tr>
+        <tr><td><strong>شكل مملوء</strong></td><td>اضغط لإضافة نقاط لتكوين شكل مغلق ومملوء (مثل جيب أو زخرفة). اضغط قرب نقطة البداية، أو انقر مرتين، لإغلاقه.</td></tr>
         <tr><td><strong>تماثل</strong></td><td>اعكس كل شيء حول محور مركزي — مناسب لقطع الصدر والقطع المتماثلة عند الطيّة.</td></tr>
         <tr><td><strong>قص/تقسيم</strong></td><td>افتح أو قسّم القطعة لإضافة بنس أو خطوط تصميم.</td></tr>
         <tr><td><strong>تحريك</strong></td><td>حرّك العناصر المحددة بدقة عالية.</td></tr>
@@ -98,12 +113,22 @@
         <tr><td><strong>قياس</strong></td><td>قِس أي مسافة على الباترون بالسنتيمتر أو البوصة.</td></tr>
         <tr><td><strong>سماح الحياكة</strong></td><td>أضف سماح حياكة تلقائي حول خط القص — موحّد، أو لكل حافة على حدة بزوايا التقاء دائرية/مشطوفة (WP-14).</td></tr>
         <tr><td><strong>علامة تطابق</strong></td><td>ضع علامات تطابق لتتقابل القطع أثناء الخياطة.</td></tr>
+        <tr><td><strong>إضافة نقطة</strong></td><td>اضغط على حافة أي قطعة لإضافة نقطة جديدة عليها، لتقسيم تلك الحافة إلى قسمين.</td></tr>
+        <tr><td><strong>تحويل حافة لمنحنى</strong></td><td>اسحب على طول أي حافة لقطعة لتحويلها إلى خط تماس منحني حقيقي. اسحب حافة منحنية بالفعل مجددًا لإعادة تشكيلها، أو اضغط عليها (بدون سحب) لإعادتها لخط مستقيم. لا تعمل على حافة إغلاق القطعة (الجزء العائد لنقطتها الأولى).</td></tr>
         <tr><td><strong>خط اتجاه القماش</strong></td><td>حدد اتجاه القماش ليتم القص في الاتجاه الصحيح.</td></tr>
         <tr><td><strong>نص</strong></td><td>اضغط على اللوحة لإضافة نص منسّق؛ اضغط على نص موجود لتعديله. اسحبه بأداة التحديد لتحريكه.</td></tr>
       </table>
 
+      <h2>تعديل الحدود الخارجية نقطة بنقطة</h2>
+      <p>إضافة لأدوات الرسم أعلاه، يمكن إعادة تشكيل حدود أي قطعة نقطة بنقطة مباشرة:</p>
+      <ul>
+        <li><strong>تحديد نقطة واحدة</strong> — بأداة التحديد والقطعة محددة بالفعل، اضغط على أحد مقابض نقاطها (وليس زوايا تكبير القطعة) لتحديد تلك النقطة فقط، وتظهر أكبر ومميّزة. <strong>Delete/Backspace</strong> يحذف تلك النقطة فقط (يُرفض تحت 3 نقاط، حتى لا تنهار القطعة إلى شكل غير مضلّع). نقاط الزوايا تحديدًا مُبعَدة ببضعة بكسلات إلى الخارج عن مقبض تكبير القطعة، حتى لا يتنافسا على نفس الضغطة.</li>
+        <li><strong>تحديد إحداثيات نقطة بدقة، أو تسميتها</strong> — افتح <strong>تعديل نقاط وحواف الحد الخارجي</strong> من خصائص القطعة (لوحة الطبقات ← زر <code>⋯</code> على القطعة)، وتعرض كل نقطة في الحدود الخارجية مع X/Y (سم) قابلين للتعديل واسم اختياري. أعطِ نقطتين — على نفس القطعة أو على قطعتين مختلفتين — نفس الاسم، ويتعامل معهما BerryStudio كتطابق: يُنشئ <strong>دليل تعليمات الحياكة</strong> المطبوع (قائمة المشروع) خطوة حقيقية تطلب توصيل هاتين النقطتين المسمّاتين وخياطتهما، بنفس طريقة علامة التطابق لكن لنقطة محددة بدلاً من حافة كاملة.</li>
+        <li><strong>تعليم حافة كحافة إغلاق</strong> — في نفس لوحة تعديل نقاط وحواف الحد الخارجي، يمكن تعليم أي حافة كحافة إغلاق: تُترك مفتوحة، دون حياكة، لإغلاق الملابس نفسه (سحاب، حاشية أزرار، أو كبك) بدلاً من خياطتها مثل بقية الحواف. تُرسم على اللوحة ثنائية الأبعاد كخط متقطع سميك كهرماني اللون ليكون واضحًا بصريًا، ويُشير دليل تعليمات الحياكة صراحةً إلى أي حافة (حواف) يجب تركها مفتوحة، مع شرح موجز لهذا الاصطلاح.</li>
+      </ul>
+
       <h2>أدوات الإنشاء الترابطية</h2>
-      <p>طبقة CAD حقيقية ومرتبطة تحت أدوات المتجهات: <strong>نقطة</strong> و<strong>خط</strong> و<strong>قوس</strong> و<strong>دائرة</strong> تشير إلى بعضها بمعرّفات وليس بإحداثيات ثابتة — سحب نقطة (أو ربطها بمعادلة تشير إلى متغيّر أو قياس جسم) يحدّث كل ما بُني عليها، بما في ذلك بعد التدريج. <strong>المتغيّرات</strong> هي معادلات مسمّاة قابلة لإعادة الاستخدام في إحداثيات X/Y لأي نقطة. تتيح <strong>صورة مرجعية خلفية</strong> مع معايرة بنقطتين الرسم فوق صورة مرجعية بالمقياس الحقيقي الصحيح. <strong>إنشاء قطعة باترون</strong> يرقّي حلقة نقاط مغلقة إلى قطعة حقيقية قابلة للتصدير — لقطة لمرة واحدة، وليست رابطًا حيًّا: تعديل النقاط الأصلية لاحقًا لا يغيّر شكل القطعة المُرقّاة.</p>
+      <p>طبقة CAD حقيقية ومرتبطة تحت أدوات المتجهات: <strong>نقطة</strong> و<strong>خط إنشاء</strong> و<strong>قوس إنشاء</strong> و<strong>دائرة</strong> تشير إلى بعضها بمعرّفات وليس بإحداثيات ثابتة — سحب نقطة (أو ربطها بمعادلة تشير إلى متغيّر أو قياس جسم) يحدّث كل ما بُني عليها، بما في ذلك بعد التدريج. اضغط مع الاستمرار على Shift أثناء سحب خط إنشاء (أو أحد طرفيه) لتقييد الزاوية إلى رأسية أو أفقية أو ٤٥ درجة — نفس اصطلاح أداة الخط العادية. <strong>المتغيّرات</strong> هي معادلات مسمّاة قابلة لإعادة الاستخدام في إحداثيات X/Y لأي نقطة. تتيح <strong>صورة مرجعية خلفية</strong> مع معايرة بنقطتين الرسم فوق صورة مرجعية بالمقياس الحقيقي الصحيح. <strong>إنشاء قطعة باترون</strong> يرقّي حلقة نقاط مغلقة إلى قطعة حقيقية قابلة للتصدير — لقطة لمرة واحدة، وليست رابطًا حيًّا: تعديل النقاط الأصلية لاحقًا لا يغيّر شكل القطعة المُرقّاة.</p>
 
       <h2>التدريج والتعشيق</h2>
       <table class="docs-table">
@@ -129,6 +154,9 @@
         <tr><td><strong>التصدير</strong></td><td>SVG، وDXF (طبقات AAMA/ASTM D6673 حقيقية)، وHPGL (خطوط قص حقيقية للراسمة)، وPNG/JPEG (دقة قابلة للاختيار)، وPDF (صفحة واحدة أو مُقسّم للطباعة المنزلية بعلامات تسجيل وخريطة تجميع)، وAI (PDF مع ترويسة <code>%AI</code>).</td></tr>
         <tr><td><strong>ملخص الباترون</strong></td><td>ورقة طباعة ثنائية اللغة من صفحة واحدة: جدول مقاسات، ورسم مُقاس لكل قطعة، وملاحظات إنشاء.</td></tr>
         <tr><td><strong>حزمة تقنية (Tech Pack)</strong></td><td>قائمة القطع بأسمائها بالإنجليزية والعربية، وكامل مجموعة القياسات المخصّصة للتدريج الحالي.</td></tr>
+        <tr><td><strong>تعليمات الحياكة</strong></td><td>تسلسل إنشاء حقيقي ومرتّب يُولَّد من الأدوار المُعلَنة لقطع الباترون المحمّلة — تحضير/بطانة تقوية ← بنسات ← وصلة كتف ← خياطات الكتف ← ياقة ← أكمام ← جيوب ← سحاب/فتحة ← حزام خصر ← أساور ← أزرار ← بطانة ← حاشية ← كي — إضافة إلى خطوة لكل نقطة متطابقة مسمّاة وكل حافة إغلاق إن استخدمهما الباترون (راجع "تعديل الحدود الخارجية نقطة بنقطة" أعلاه)، مع شرح موجز لكليهما. تظهر الخطوة فقط إذا كان الباترون يحتوي فعليًا على ذلك الإنشاء.</td></tr>
+        <tr><td><strong>جدول التدريج (Fit Chart)</strong> (WP-40)</td><td>ورقة مواصفات قياس لكل مقاس مع هامش تفاوت ± قابل للتعديل مباشرة لكل نقطة، محسوبة بنفس محرك التدريج الذي يستخدمه التدريج التلقائي لكل مقاس في المعيار الحالي (أو كل عمر، في وضع الأطفال).</td></tr>
+        <tr><td><strong>قائمة المواد (BOM)</strong></td><td>قائمة مواد مفصّلة (قماش، بطانة، تقوية، سحاب، أزرار، خيط، ملصقات) مُستخرجة من أدوار القطع المُعلَنة فعليًا في الباترون، إضافة إلى قائمة قص وتقدير استهلاك قماش وتكلفة (بالدولار/الريال/الجنيه).</td></tr>
       </table>
 
       <h2>لوحات أخرى</h2>

@@ -696,6 +696,21 @@ in the app's own header.
   that actually use one of the two. Verified live: setting/toggling
   through the actual modal correctly mutates the piece, redraws on canvas,
   and shows up in the generated guide text.
+- **Help modal and docs site rewritten for accuracy (WP-47)** — both had
+  drifted behind the app: the in-app Help table was a hand-maintained tool
+  list missing 9 real toolbar tools (now generated straight from the same
+  `TOOLS` array the toolbar itself renders from, so it can't drift again);
+  its Shift+Drag shortcut description still claimed the old pre-WP-45
+  universal behaviour; `docs/tools.html`'s "Line" row actually described
+  Construction Line's behaviour; and the docs site's own pattern-library
+  counts ("124 patterns", "24-design Fancy Collection") were stale by more
+  than 2× against the real current 308/64. Fixed all of the above, added
+  full documentation for WP-44's outline-point editing and WP-46's Edit
+  Outline Points & Edges panel (neither had any before), and added three
+  real, already-shipped export features (Sewing Instructions, Fit Chart,
+  Bill of Materials) that were entirely missing from the docs' export
+  table. `docs/faq.html`'s pattern counts fixed to match; `docs/3d-
+  troubleshooting.html` reviewed and found unaffected.
 - **Rotate ("swing") selection box no longer drifts outside the piece** —
   a user report described "the dotted line sometimes appears outside the
   layer" while rotating a piece. Root cause: the dashed selection box was

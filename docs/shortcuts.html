@@ -43,8 +43,10 @@
         <tr><td><span class="docs-kbd">[</span> / <span class="docs-kbd">]</span></td><td>Cycle the selected piece backward / forward — not Tab, so Tab keeps moving focus between toolbar and panel controls as usual</td></tr>
         <tr><td><span class="docs-kbd">Arrow keys</span></td><td>Nudge the selected piece by 1&nbsp;cm</td></tr>
         <tr><td><span class="docs-kbd">Shift+Arrow</span></td><td>Nudge the selected piece by 0.1&nbsp;cm (fine adjustment)</td></tr>
-        <tr><td><span class="docs-kbd">Shift+Drag</span></td><td>Bypass the 1&nbsp;cm grid snap while dragging a point/handle — land on any fractional coordinate instead of the nearest whole centimetre</td></tr>
-        <tr><td><span class="docs-kbd">Delete</span> / <span class="docs-kbd">Backspace</span></td><td>Delete whatever is currently selected on the canvas — a piece, a construction point, a construction line/arc/circle, a text annotation, or a notch</td></tr>
+        <tr><td><span class="docs-kbd">Shift+Drag</span></td><td>Bypass the 1&nbsp;cm grid snap while dragging a point/handle — land on any fractional coordinate instead of the nearest whole centimetre. For the <strong>Line</strong> and <strong>Construction Line</strong> tools specifically, Shift+Drag does the row below instead.</td></tr>
+        <tr><td><span class="docs-kbd">Shift+Drag</span> (Line / Construction Line)</td><td>Constrain the drag angle to vertical, horizontal, or 45° increments, keeping the real cursor distance</td></tr>
+        <tr><td><span class="docs-kbd">Delete</span> / <span class="docs-kbd">Backspace</span></td><td>Delete whatever is currently selected on the canvas — a piece, a construction point, a construction line/arc/circle, a text annotation, a notch, or a single outline vertex (click a piece's own point handle to select just that point)</td></tr>
+        <tr><td><span class="docs-kbd">Ctrl/⌘+C</span> / <span class="docs-kbd">X</span> / <span class="docs-kbd">V</span></td><td>Copy / Cut / Paste whatever is currently selected on the canvas</td></tr>
       </table>
 
       <h2>Global</h2>
@@ -56,7 +58,7 @@
         <tr><td><span class="docs-kbd">Esc</span></td><td>Close the topmost modal, menu, or text editor</td></tr>
       </table>
 
-      <div class="docs-callout">Click a construction point, line/arc/circle, text annotation, or notch to select it (its own highlight ring/box appears) — Backspace/Delete removes whichever thing is currently selected. "[" / "]" and arrow-key nudging still operate on whole pieces only.</div>
+      <div class="docs-callout">Click a construction point, line/arc/circle, text annotation, notch, or a piece's own outline-point handle to select it (its own highlight ring/box appears) — Backspace/Delete removes whichever thing is currently selected. "[" / "]" and arrow-key nudging still operate on whole pieces only. A piece's outline points can also be set to exact X/Y coordinates or named (rather than dragged) from its <strong>Edit Outline Points &amp; Edges</strong> panel — see the <a href="tools.html">tool reference</a>.</div>
     </div>
 
     <div data-lang="ar">
@@ -83,8 +85,10 @@
         <tr><td><span class="docs-kbd">[</span> / <span class="docs-kbd">]</span></td><td>تدوير التحديد بين القطع للخلف / للأمام — وليس Tab، حتى يستمر Tab في نقل التركيز بين أدوات الشريط واللوحات كالمعتاد</td></tr>
         <tr><td><span class="docs-kbd">مفاتيح الأسهم</span></td><td>تحريك القطعة المحددة بمقدار 1 سم</td></tr>
         <tr><td><span class="docs-kbd">Shift+سهم</span></td><td>تحريك دقيق بمقدار 0.1 سم</td></tr>
-        <tr><td><span class="docs-kbd">Shift+سحب</span></td><td>تجاوز التقييد بشبكة 1 سم أثناء سحب نقطة/مقبض — للوصول إلى أي إحداثي كسري بدلاً من أقرب سنتيمتر كامل</td></tr>
-        <tr><td><span class="docs-kbd">Delete</span> / <span class="docs-kbd">Backspace</span></td><td>حذف العنصر المحدد حاليًا على اللوحة — قطعة، نقطة إنشاء، خط/قوس/دائرة إنشاء، نص، أو علامة تطابق</td></tr>
+        <tr><td><span class="docs-kbd">Shift+سحب</span></td><td>تجاوز التقييد بشبكة 1 سم أثناء سحب نقطة/مقبض — للوصول إلى أي إحداثي كسري بدلاً من أقرب سنتيمتر كامل. لأداتَي <strong>الخط</strong> و<strong>خط الإنشاء</strong> تحديدًا، يقوم Shift+سحب بما في السطر التالي بدلاً من ذلك.</td></tr>
+        <tr><td><span class="docs-kbd">Shift+سحب</span> (الخط / خط الإنشاء)</td><td>تقييد زاوية السحب إلى رأسية أو أفقية أو زوايا مضاعفات ٤٥°، مع الحفاظ على مسافة المؤشر الفعلية</td></tr>
+        <tr><td><span class="docs-kbd">Delete</span> / <span class="docs-kbd">Backspace</span></td><td>حذف العنصر المحدد حاليًا على اللوحة — قطعة، نقطة إنشاء، خط/قوس/دائرة إنشاء، نص، علامة تطابق، أو نقطة واحدة على حافة القطعة (اضغط على مقبض نقطة تابعة لقطعة لتحديد تلك النقطة فقط)</td></tr>
+        <tr><td><span class="docs-kbd">Ctrl/⌘+C</span> / <span class="docs-kbd">X</span> / <span class="docs-kbd">V</span></td><td>نسخ / قص / لصق العنصر المحدد حاليًا على اللوحة</td></tr>
       </table>
 
       <h2>عام</h2>
@@ -96,7 +100,7 @@
         <tr><td><span class="docs-kbd">Esc</span></td><td>إغلاق أعلى نافذة منبثقة أو قائمة أو محرر نص</td></tr>
       </table>
 
-      <div class="docs-callout">اضغط على نقطة إنشاء، أو خط/قوس/دائرة إنشاء، أو نص، أو علامة تطابق لتحديدها (تظهر حلقة/إطار تمييز خاص بها) — Backspace/Delete يحذف العنصر المحدد حاليًا. أما "[" / "]" وتحريك الأسهم فلا يزالان يعملان على القطع الكاملة فقط.</div>
+      <div class="docs-callout">اضغط على نقطة إنشاء، أو خط/قوس/دائرة إنشاء، أو نص، أو علامة تطابق، أو مقبض نقطة تابعة لقطعة لتحديدها (تظهر حلقة/إطار تمييز خاص بها) — Backspace/Delete يحذف العنصر المحدد حاليًا. أما "[" / "]" وتحريك الأسهم فلا يزالان يعملان على القطع الكاملة فقط. يمكن أيضًا تحديد إحداثيات X/Y الدقيقة لنقاط القطعة أو تسميتها (بدلاً من سحبها) من لوحة <strong>تعديل نقاط وحواف الحد الخارجي</strong> — راجع <a href="tools.html">دليل الأدوات</a>.</div>
     </div>
   </main>
 </div>
