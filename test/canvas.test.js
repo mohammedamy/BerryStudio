@@ -283,3 +283,39 @@ test("isSketchClosed rejects a 2-point stroke (just a line) even if its endpoint
   Canvas.clearAll();
   assert.equal(Canvas.isSketchClosed({ tool: "line", pts: [[0, 0], [0, 0]] }), false);
 });
+
+// ---- Shift-constrain a drawn line to the nearest 0/45/90/…/315° ----
+// (Line and Construction Line tools, js/canvas.js pointermove handler.)
+// This exercises the exact shipped snapAngle45(), not a re-implementation —
+// interactively driving a real Shift-held drag isn't reliably simulatable
+// in this project's browser-automation tooling (modifier keys don't
+// propagate through synthesized intermediate pointermove events), so this
+// unit coverage is deliberately the primary regression guard for the
+// algorithm itself; the wiring into the two pointermove branches was
+// verified by direct code inspection instead — see WP-45's CHANGELOG entry.
+test("snapAngle45 snaps a near-horizontal line to exactly horizontal, keeping the real distance", () => {
+  const [x, y] = Canvas.snapAngle45(10, 10, 25, 13);
+  assert.equal(y, 10);
+  assert.equal(Math.round(Math.hypot(x - 10, y - 10) * 1000) / 1000, Math.round(Math.hypot(15, 3) * 1000) / 1000);
+});
+test("snapAngle45 snaps a near-vertical line to exactly vertical", () => {
+  const [x, y] = Canvas.snapAngle45(10, 10, 12, 30);
+  assert.equal(Math.round(x * 1e9) / 1e9, 10); // Math.cos(Math.PI/2) isn't exactly 0 in floating point
+  assert.ok(y > 10);
+});
+test("snapAngle45 snaps a ~39° line to an exact 45° diagonal (dx === dy)", () => {
+  const [x, y] = Canvas.snapAngle45(10, 10, 21, 19);
+  assert.equal(Math.round((x - 10) * 1000), Math.round((y - 10) * 1000));
+});
+test("snapAngle45 leaves an already-exact angle unchanged", () => {
+  assert.deepEqual(Canvas.snapAngle45(10, 10, 40, 10), [40, 10]);
+});
+test("snapAngle45 on a zero-length drag is a safe no-op (no NaN)", () => {
+  assert.deepEqual(Canvas.snapAngle45(10, 10, 10, 10), [10, 10]);
+});
+test("snapAngle45 covers all four quadrants (up-left, up-right, down-left, down-right)", () => {
+  const r = (pt) => pt.map(n => Math.round(n * 1e6) / 1e6); // floating-point noise from cos/sin at exact angles
+  assert.deepEqual(r(Canvas.snapAngle45(0, 0, -10, 10)), [-10, 10]);   // 135°, already exact
+  assert.deepEqual(r(Canvas.snapAngle45(0, 0, 10, -10)), [10, -10]);   // -45°/315°, already exact
+  assert.deepEqual(r(Canvas.snapAngle45(0, 0, -10, -10)), [-10, -10]); // 225°, already exact
+});
