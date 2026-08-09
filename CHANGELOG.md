@@ -6,6 +6,58 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-46: Closing edges, named/matched outline points, and numeric corner coordinates
+
+A user asked for three related pattern-outline abilities: mark any edge as
+a "closing edge" (left open, unsewn, for the garment's zip/button
+placket/hook-and-eye), give any outline point a name so that two points
+sharing a name — anywhere in the pattern — are recognized as a match to be
+seamed together, and set any point's exact X/Y coordinates numerically.
+All three are per-piece annotations on the outline itself, editable from
+one new modal, and all three feed the Sewing Guide with real, generated
+instructions plus a plain-language legend explaining the convention.
+
+### Added
+- `js/canvas.js`: `p.closingEdges` (array of edge indices) and
+  `p.pointNames` ({idx: name}) — new optional per-piece fields alongside
+  the existing `outline`. `toggleClosingEdge(pieceIdx, edgeIdx)` /
+  `isClosingEdge(piece, edgeIdx)`, `setOutlinePointName(pieceIdx, idx, name)`
+  / `getOutlinePointName(pieceIdx, idx)`, `setOutlinePointXY(pieceIdx, idx, x, y)`,
+  and `getMatchedPointGroups()` (all named points across every piece,
+  grouped by name, 2+ members only — the exact grouping the Sewing Guide
+  reports). `spliceOutline()` now shifts `closingEdges`/`pointNames` past
+  an insert/delete exactly like it already did for `edges[]`/`curves[]`/
+  `chestEdgeIndices`; splitting a closing edge with Add Point keeps both
+  halves marked closing, and deleting a vertex drops the (now-ambiguous)
+  flags on its two touching edges along with that vertex's own name rather
+  than guessing.
+- `drawPiece()`: a closing edge redraws on top of the cutting line as a
+  thicker amber dashed segment; a named point gets a small accent-colored
+  text tag beside it — both visible directly on the 2D canvas, not just in
+  a side panel.
+- `js/app.js`: **Edit Outline Points & Edges** modal (Layer Props ▸ new
+  button, same shape as the existing Dart editor) — every outline point's
+  X/Y and name in one editable row each (with delete, respecting the same
+  3-point floor as `removeOutlinePoint`), and every edge's closing-edge
+  checkbox with its live length in cm.
+- `buildSewingSteps()`: a `"Match point “{name}” ({pieceA} ↔ {pieceB})…"`
+  step per matched-point group and a `"…leave the edge(s) marked with an
+  amber dashed line UNSEWN…"` step per piece with closing edges — both
+  read straight off the live pieces, not a garment role. The printed/
+  exported Sewing Guide also gains a legend note (shown only when the
+  pattern actually uses one of the two features) spelling out exactly what
+  the amber dashed line and the point-name tags mean.
+- `loadPieces()` (Import Project / cloud-sync load) now spreads the
+  source piece's own fields before applying its normalized defaults,
+  so `closingEdges`/`pointNames` — and, as a side effect, other
+  already-existing fields (`role`, `cutOnFold`, `edges`, `curves`,
+  `bilateral`, …) that were silently dropped on that specific round-trip
+  before — now survive Export → Import intact.
+- 20 new unit tests in `test/canvas.test.js`: toggle/undo/bounds-checking
+  for closing edges, insert/remove index-bookkeeping for both new fields
+  (mirroring the existing `edges[]`/`curves[]`/`chestEdgeIndices` tests),
+  name set/clear, matched-group grouping, and coordinate set/reject/undo.
+
 ## WP-45: Shift-constrain the Line/Construction Line tools to 0/45/90/…°
 
 ### Added

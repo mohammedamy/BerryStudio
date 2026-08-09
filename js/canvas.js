@@ -512,13 +512,17 @@ export const Canvas = (() => {
   // Every index-bearing structure that references an outline POSITION —
   // edges[].fromIdx/toIdx (Walk the Seam / princess-seam placement —
   // js/app.js, js/geometry.js), curves[].fromIdx/toIdx (WP-14 bezier
-  // metadata), chestEdgeIndices (js/validate.js's ease check) — is shifted
-  // so it still points at the same PHYSICAL vertex afterward, not whatever
-  // now happens to sit at its old numeric index. `curves` is excluded from
-  // its own entry's caller in effect (that entry is added separately by the
-  // caller with its own already-correct indices), but any OTHER existing
-  // curve on this same piece is just as real a case as edges[]/
-  // chestEdgeIndices and was silently missing before this helper existed.
+  // metadata), chestEdgeIndices (js/validate.js's ease check), closingEdges
+  // (WP-46 — user-marked "leave open for the closure" edges) and
+  // pointNames (WP-46 — user-given names on outline vertices; two vertices
+  // sharing a name are the Sewing Guide's cue that they should be matched
+  // and seamed together) — is shifted so it still points at the same
+  // PHYSICAL vertex afterward, not whatever now happens to sit at its old
+  // numeric index. `curves` is excluded from its own entry's caller in
+  // effect (that entry is added separately by the caller with its own
+  // already-correct indices), but any OTHER existing curve on this same
+  // piece is just as real a case as edges[]/chestEdgeIndices and was
+  // silently missing before this helper existed.
   function spliceOutline(p, afterIdx, delCount, newPts){
     const shift = newPts.length - delCount;
     p.outline.splice(afterIdx+1, delCount, ...newPts);
@@ -532,12 +536,23 @@ export const Canvas = (() => {
       c.fromIdx=bump(c.fromIdx); c.toIdx=bump(c.toIdx);
     });
     if (Array.isArray(p.chestEdgeIndices)) p.chestEdgeIndices=p.chestEdgeIndices.map(bump);
+    if (Array.isArray(p.closingEdges)) p.closingEdges=p.closingEdges.map(bump);
+    if (p.pointNames){
+      const next={};
+      Object.entries(p.pointNames).forEach(([k,v])=>{ next[bump(Number(k))]=v; });
+      p.pointNames=next;
+    }
   }
   // Insert a new outline vertex right after edgeIdx.
   function insertOutlinePoint(pieceIdx, edgeIdx, pt){
     const p=pieces[pieceIdx]; if (!p) return false;
     pushUndo();
+    // Splitting a closing edge in two keeps BOTH halves marked closing —
+    // the physical opening the original edge represented doesn't shrink
+    // just because a point was dropped onto it partway along.
+    const wasClosing = Array.isArray(p.closingEdges) && p.closingEdges.includes(edgeIdx);
     spliceOutline(p, edgeIdx, 0, [pt]);
+    if (wasClosing && !p.closingEdges.includes(edgeIdx+1)) p.closingEdges.push(edgeIdx+1);
     selected=pieceIdx; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null;
     render(); return true;
   }
@@ -553,9 +568,72 @@ export const Canvas = (() => {
     const p=pieces[pieceIdx]; if (!p || !p.outline[idx]) return false;
     if (p.outline.length<=3){ onWarn('outlineTooFewPoints'); return false; }
     pushUndo();
+    // The two edges touching the vertex being deleted collapse into one —
+    // neither old "closing" flag unambiguously describes the merged edge,
+    // so drop both rather than guess. Same for the deleted vertex's own
+    // name: it no longer exists, so any name it carried goes with it.
+    const n=p.outline.length, prevEdge=(idx-1+n)%n;
+    if (Array.isArray(p.closingEdges)) p.closingEdges=p.closingEdges.filter(e=>e!==prevEdge && e!==idx);
+    if (p.pointNames) delete p.pointNames[idx];
     spliceOutline(p, idx-1, 1, []);
     selVertex=null;
     render(); return true;
+  }
+  // Toggle whether the edge running from outline vertex `edgeIdx` to the
+  // next one is a CLOSING EDGE — an edge deliberately left open (not sewn)
+  // for the garment's closure (a zip, button placket, hook-and-eye…)
+  // instead of being seamed shut like every other edge. Purely a flag on
+  // the piece; rendering (drawPiece) and the Sewing Guide both read it.
+  function toggleClosingEdge(pieceIdx, edgeIdx){
+    const p=pieces[pieceIdx]; if (!p || edgeIdx==null || edgeIdx<0 || edgeIdx>=p.outline.length) return false;
+    pushUndo();
+    p.closingEdges = p.closingEdges || [];
+    const at = p.closingEdges.indexOf(edgeIdx);
+    if (at>=0) p.closingEdges.splice(at,1); else p.closingEdges.push(edgeIdx);
+    render(); return true;
+  }
+  function isClosingEdge(p, edgeIdx){ return !!(p && Array.isArray(p.closingEdges) && p.closingEdges.includes(edgeIdx)); }
+  // Name (or rename/clear) a single outline vertex. Two vertices — on the
+  // same piece or different pieces — sharing a non-empty name are the
+  // Sewing Guide's cue that those two points should be matched up and
+  // seamed together (e.g. a princess-seam break point, or where a gusset
+  // meets a side panel). An empty/whitespace name clears it.
+  function setOutlinePointName(pieceIdx, idx, name){
+    const p=pieces[pieceIdx]; if (!p || !p.outline[idx]) return false;
+    pushUndo();
+    const v=(name||"").trim();
+    p.pointNames = p.pointNames || {};
+    if (v) p.pointNames[idx]=v; else delete p.pointNames[idx];
+    render(); return true;
+  }
+  function getOutlinePointName(pieceIdx, idx){ const p=pieces[pieceIdx]; return (p && p.pointNames) ? p.pointNames[idx] : undefined; }
+  // Set an outline vertex's exact coordinates (cm) — the numeric
+  // counterpart to dragging a corner handle, for when a precise value
+  // matters more than an eyeballed drag.
+  function setOutlinePointXY(pieceIdx, idx, x, y){
+    const p=pieces[pieceIdx]; if (!p || !p.outline[idx]) return false;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+    pushUndo();
+    p.outline[idx] = [x, y];
+    render(); return true;
+  }
+  // All (name, [{pieceIdx,idx,pieceName,x,y}, …]) groups with 2+ named
+  // vertices sharing that name — the actual "should be seamed together"
+  // pairs/groups the Sewing Guide (js/app.js buildSewingSteps) reports.
+  // Pure read; kept here (rather than recomputed ad hoc in app.js) so the
+  // exact same grouping logic backs both the live canvas labels and the
+  // printed guide.
+  function getMatchedPointGroups(){
+    const byName = new Map();
+    pieces.forEach((p,pi)=>{
+      if (!p.pointNames) return;
+      Object.entries(p.pointNames).forEach(([idxStr,name])=>{
+        const idx=Number(idxStr); const pt=p.outline[idx]; if (!pt) return;
+        if (!byName.has(name)) byName.set(name, []);
+        byName.get(name).push({ pieceIdx:pi, idx, pieceName:p.name, x:pt[0], y:pt[1] });
+      });
+    });
+    return [...byName.entries()].filter(([,pts])=>pts.length>1).map(([name,pts])=>({name,points:pts}));
   }
 
   function removeSketch(i){
@@ -971,6 +1049,21 @@ export const Canvas = (() => {
     if (p.locked) ctx.setLineDash([2,3]);
     ctx.stroke(); ctx.setLineDash([]);
 
+    // closing edges (WP-46) — redrawn on top of the cutting line in a
+    // distinct dashed accent so an edge deliberately left open for the
+    // garment's closure (zip/buttons/hook-and-eye) reads differently from
+    // every other seam at a glance. See js/canvas.js toggleClosingEdge().
+    if (p.closingEdges && p.closingEdges.length){
+      const n=p.outline.length;
+      ctx.save(); ctx.strokeStyle=CSS("--warn"); ctx.lineWidth=(sel?3:2)+1.5; ctx.setLineDash([2,4]); ctx.lineCap="round";
+      p.closingEdges.forEach(ei=>{
+        if (ei<0 || ei>=n) return;
+        const a=toScreen(p.outline[ei][0], p.outline[ei][1]), b=toScreen(p.outline[(ei+1)%n][0], p.outline[(ei+1)%n][1]);
+        ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke();
+      });
+      ctx.restore(); ctx.setLineDash([]);
+    }
+
     // darts
     ctx.lineWidth=1.4; ctx.strokeStyle=col;
     (p.darts||[]).forEach(d=>{ ctx.beginPath(); const [a,b,c]=d.map(pt=>toScreen(pt[0],pt[1])); ctx.moveTo(b[0],b[1]); ctx.lineTo(a[0],a[1]); ctx.lineTo(c[0],c[1]); ctx.stroke(); });
@@ -984,6 +1077,19 @@ export const Canvas = (() => {
         ctx.beginPath(); ctx.arc(x,y,8,0,Math.PI*2); ctx.stroke(); ctx.restore();
       }
     });
+
+    // named outline points (WP-46) — a small tag beside the vertex; two
+    // vertices sharing a name (same piece or different pieces) are what
+    // the Sewing Guide (js/app.js buildSewingSteps) reads as "match and
+    // seam these together". See setOutlinePointName()/getMatchedPointGroups().
+    if (p.pointNames){
+      ctx.font="600 10px Inter, sans-serif"; ctx.textAlign="start"; ctx.fillStyle=CSS("--accent");
+      Object.entries(p.pointNames).forEach(([idxStr,name])=>{
+        const idx=Number(idxStr), pt=p.outline[idx]; if (!pt) return;
+        const [x,y]=toScreen(pt[0],pt[1]);
+        ctx.fillText(name, x+7, y-7);
+      });
+    }
 
     // grainline arrow
     if (p.grain && p.grain.length===2){
@@ -2126,6 +2232,12 @@ export const Canvas = (() => {
     if(!Array.isArray(arr) || !arr.length) return false;
     pushUndo();
     pieces = arr.map((p,i)=>({
+      // Spread the source piece first so anything beyond this normalized
+      // set — role, cutOnFold, edges/curves, bilateral, and (WP-46)
+      // closingEdges/pointNames — round-trips through Export/Import
+      // Project and cloud sync instead of being silently dropped; the
+      // explicit fields below then apply their own defaults on top.
+      ...p,
       name:p.name, desc:p.desc||{en:"",ar:""},
       outline:p.outline||[], darts:p.darts||[], notches:p.notches||[], grain:p.grain||[],
       visible:p.visible!==false, locked:!!p.locked, opacity:p.opacity,
@@ -2158,6 +2270,7 @@ export const Canvas = (() => {
            addPoint, removePoint, getPointById, getPoints, setPointName, setPointXY, setPointFormula, onPointRequest,
            getCons, removeCons, onPromoteRequest, finishPromotePiece, cancelPromote, onWarnRequest,
            insertOutlinePoint, removeOutlinePoint, promoteSketchToPiece, curveEdge, revertCurveEdge, isSketchClosed,
+           toggleClosingEdge, isClosingEdge, setOutlinePointName, getOutlinePointName, setOutlinePointXY, getMatchedPointGroups,
            getSketch, addSketchStroke,
            setVariable, removeVariable, getVariables, setMeasureProvider, recomputeConstruction, evalExpr,
            setBackgroundImage, setBgOpacity, setBgVisible, removeBackground, hasBackground, getBgOpacity,

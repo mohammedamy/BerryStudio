@@ -682,6 +682,20 @@ in the app's own header.
   CHANGELOG entry for the workaround) — confirms exact endpoints for
   horizontal/vertical/45° cases, and that a plain (no-Shift) drag still
   grid-snaps exactly as before.
+- **Closing edges, named/matched points, and numeric corner coordinates
+  (WP-46)** — from a new "Edit Outline Points & Edges" modal (Layer Props),
+  mark any outline edge as a closing edge (rendered as a thick amber dashed
+  line on the piece — left open/unsewn for the garment's zip, button
+  placket, or hook-and-eye), give any outline point a name (rendered as a
+  small tag beside it — two points anywhere in the pattern sharing a name
+  are a match to be seamed together), or set any point's exact X/Y in cm.
+  All three feed the printed/exported Sewing Guide with real generated
+  steps ("Match point 'X' (Piece A ↔ Piece B) and seam them together…",
+  "…leave the edge(s) marked with an amber dashed line UNSEWN…") plus a
+  plain-language legend explaining the convention — shown only on patterns
+  that actually use one of the two. Verified live: setting/toggling
+  through the actual modal correctly mutates the piece, redraws on canvas,
+  and shows up in the generated guide text.
 - **Rotate ("swing") selection box no longer drifts outside the piece** —
   a user report described "the dotted line sometimes appears outside the
   layer" while rotating a piece. Root cause: the dashed selection box was

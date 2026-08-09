@@ -559,6 +559,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
       <div class="field"><label>${T("opacityLbl")} · <b class="lp-opv">${curOp}%</b></label><input class="range lp-op" type="range" min="4" max="90" value="${curOp}"></div>
       <div class="menu-sep"></div>
       ${(p.darts && p.darts.length) ? `<button class="menu-item lp-darts">${IC.layers}<span>${T("editDarts")}</span></button>` : ""}
+      <button class="menu-item lp-outline">${IC.layers}<span>${T("editOutline")}</span></button>
       <button class="menu-item lp-del" style="color:var(--danger)">${IC.trash}<span>${T("removeLayer")}</span></button>`;
     document.body.appendChild(m);
     const r = anchor.getBoundingClientRect(), mr = m.getBoundingClientRect();
@@ -574,7 +575,64 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     q(".lp-op").oninput = () => { const v=+q(".lp-op").value; q(".lp-opv").textContent=v+"%"; Canvas.setPieceProps(i,{opacity:v/100}); };
     q(".lp-del").onclick = () => { Canvas.removePiece(i); closeAnyMenu(); sync3DVisibility(); renderLayersPane(); toast("✓ "+T("removeLayer")); };
     if(q(".lp-darts")) q(".lp-darts").onclick = () => { closeAnyMenu(); openDartEditorModal(i); };
+    q(".lp-outline").onclick = () => { closeAnyMenu(); openOutlineEditorModal(i); };
     setTimeout(()=>document.addEventListener("pointerdown",onDocDown),0);
+  }
+
+  // WP-46: per-piece outline editor — set any point's exact X/Y or give it
+  // a name (two points sharing a name, anywhere in the pattern, are the
+  // Sewing Guide's cue to match and seam them together), and mark any edge
+  // as a closing edge (left open/unsewn for the garment's zip/button
+  // placket/hook-and-eye). Same modal shape as openDartEditorModal above —
+  // reopens itself after each Apply so the fields always reflect the
+  // just-committed piece state.
+  function openOutlineEditorModal(pieceIdx){
+    const p = Canvas.getPieces()[pieceIdx]; if(!p || !p.outline || !p.outline.length) return;
+    openModal(T("editOutline"), "", true);
+    const body = $("#genericModal .modal-body"); body.innerHTML="";
+    body.appendChild(el("div","help-note",T("editOutlineHint")));
+
+    const n = p.outline.length;
+    const reopen = () => openOutlineEditorModal(pieceIdx);
+
+    body.appendChild(el("div","section-title",T("outlinePointsSection")));
+    p.outline.forEach((pt,idx)=>{
+      const sec = el("div","field"); sec.style.marginTop="10px";
+      sec.innerHTML = `<label>${T("outlinePointLabel").replace("{n}",idx+1)}</label>`;
+      body.appendChild(sec);
+      const row = el("div","row"); row.style.cssText="display:flex;gap:8px;align-items:center;flex-wrap:wrap";
+      const xInp = el("input","input"); xInp.type="number"; xInp.step="0.1"; xInp.value=pt[0].toFixed(1); xInp.style.cssText="flex:1;min-width:70px";
+      const yInp = el("input","input"); yInp.type="number"; yInp.step="0.1"; yInp.value=pt[1].toFixed(1); yInp.style.cssText="flex:1;min-width:70px";
+      const nameInp = el("input","input"); nameInp.placeholder=T("outlinePointName"); nameInp.value=Canvas.getOutlinePointName(pieceIdx,idx)||""; nameInp.style.cssText="flex:1.4;min-width:100px";
+      const applyBtn = el("button","big-btn ghost",T("outlinePointApply")); applyBtn.style.flex="0 0 auto"; applyBtn.type="button";
+      const delBtn = el("button","big-btn ghost",IC.trash); delBtn.style.cssText="flex:0 0 auto;color:var(--danger)"; delBtn.type="button"; delBtn.title=T("objDelete");
+      row.appendChild(xInp); row.appendChild(yInp); row.appendChild(nameInp); row.appendChild(applyBtn);
+      if (n>3) row.appendChild(delBtn); // same 3-point floor as canvas Delete (removeOutlinePoint)
+      body.appendChild(row);
+      applyBtn.onclick = () => {
+        const x=+xInp.value, y=+yInp.value;
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        Canvas.setOutlinePointXY(pieceIdx, idx, x, y);
+        Canvas.setOutlinePointName(pieceIdx, idx, nameInp.value);
+        toast(T("outlinePointUpdated")); reopen();
+      };
+      delBtn.onclick = () => { Canvas.removeOutlinePoint(pieceIdx, idx); toast(T("outlinePointDeleted")); reopen(); };
+    });
+
+    body.appendChild(el("div","section-title",T("outlineEdgesSection"))).style.marginTop="18px";
+    for (let i=0;i<n;i++){
+      const a=p.outline[i], b=p.outline[(i+1)%n];
+      const len = Math.hypot(b[0]-a[0], b[1]-a[1]).toFixed(1);
+      const row = el("div","field"); row.style.cssText="margin-top:8px;display:flex;align-items:center;gap:8px";
+      const cb = el("input"); cb.type="checkbox"; cb.checked = Canvas.isClosingEdge(p, i); cb.id="lp-edge-"+i;
+      const lbl = el("label", null, T("outlineEdgeLabel").replace("{a}",i+1).replace("{b}",((i+1)%n)+1).replace("{len}",len));
+      lbl.htmlFor = cb.id; lbl.style.cssText="flex:1";
+      row.appendChild(cb);
+      const cbLbl = el("label", null, T("outlineClosingEdge")); cbLbl.htmlFor=cb.id; cbLbl.style.cssText="font-weight:600;white-space:nowrap";
+      row.appendChild(lbl); row.appendChild(cbLbl);
+      body.appendChild(row);
+      cb.onchange = () => { Canvas.toggleClosingEdge(pieceIdx, i); };
+    }
   }
 
   // WP-14: dart manipulation — pivotDart/transferDart preserve intake
@@ -2648,6 +2706,16 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     if(has("elastic-band")) steps.push(T("sewInstrElastic").replace("{n}",byRole["elastic-band"].length));
     if(has("cuff","rib-cuff")) steps.push(T("sewInstrCuff").replace("{closure}",T("bomButtonsCuff")));
     if(has("strap")) steps.push(T("sewInstrStraps"));
+    // WP-46: matched/named points and closing edges are per-edge/per-vertex
+    // annotations a user places directly on the outline (Layer Props ▸ Edit
+    // Outline Points), not garment-role facts like everything above — read
+    // straight off the live pieces rather than through `byRole`.
+    Canvas.getMatchedPointGroups().forEach(g=>{
+      const where = g.points.map(pt=>L(pt.pieceName)).join(" ↔ ");
+      steps.push(T("sewInstrMatchedPoints").replace("{name}",g.name).replace("{pieces}",where));
+    });
+    const closingEdgePieces = pieces.filter(p=>p.closingEdges && p.closingEdges.length);
+    if(closingEdgePieces.length) steps.push(T("sewInstrClosingEdges").replace("{list}",closingEdgePieces.map(p=>L(p.name)).join(", ")));
     if(buttonFrontPresent) steps.push(T("sewInstrButtons").replace("{n}",Math.max(2,Math.round(m.backLen/12))));
     // A lining paired with a gusset (Underwear & Bra Library) is already
     // fully covered by the gusset step above ("sew the lining to the
@@ -2666,6 +2734,15 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     const sizeLbl = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids).label) : state.size;
     const rtl = state.lang==="ar";
     const stepsHTML = buildSewingSteps(pieces).map((s,i)=>`<li><span class="si-num">${i+1}</span><span>${s}</span></li>`).join("");
+    // WP-46: a short legend explaining what the amber dashed "closing edge"
+    // lines and the small point-name tags on the pattern actually mean —
+    // only shown when this pattern actually uses one of the two, so a plain
+    // pattern's guide isn't padded with an unused legend.
+    const usesClosingEdges = pieces.some(p=>p.closingEdges && p.closingEdges.length);
+    const usesMatchedPoints = Canvas.getMatchedPointGroups().length>0;
+    const legendHTML = (usesClosingEdges||usesMatchedPoints)
+      ? `<div class="note">${[usesClosingEdges?T("sewInstrClosingLegend"):"", usesMatchedPoints?T("sewInstrMatchedLegend"):""].filter(Boolean).join(" ")}</div>`
+      : "";
     return `<!doctype html><html lang="${state.lang}" dir="${rtl?"rtl":"ltr"}"><head><meta charset="utf-8">
 <title>BerryStudio — ${nameObj.en} · ${T("sewInstrTitle")}</title>
 <style>
@@ -2689,6 +2766,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   <h1>${nameObj.en} <span>/ ${nameObj.ar}</span></h1>
   <p class="sub">BerryStudio · ${T("sewInstrTitle")} · ${T("gradedTo")}: ${sizeLbl} · ${T("std_"+state.standard)}</p>
   <ol>${stepsHTML}</ol>
+  ${legendHTML}
   <div class="note">${T("sewInstrNote")}</div>
 </body></html>`;
   }
