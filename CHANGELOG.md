@@ -6,6 +6,80 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-42 Stage A: Optional account sign-in (Supabase Auth) — no gating yet
+
+Real sign-in only, per `BerryStudio-Upgrade-Plan-v3-2.md` §6/§7's staged
+approach — Stage A is deliberately just "a working sign-in button," not
+feature gating. Every existing feature keeps working with no account,
+unchanged by this WP.
+
+### Added
+- `js/auth.js` — thin wrapper around Supabase Auth's JS SDK, loaded on
+  demand via a dynamic `import()` of a direct esm.sh URL (not the bare
+  `@supabase/supabase-js` specifier the import map also defines — see
+  "Fixed" below for why). Email/password sign-up, sign-in, password
+  reset, Google OAuth, Facebook OAuth, sign-out, and an `onChange`
+  subscription mirroring Supabase's own auth-state events.
+- `js/auth-config.js` — the Supabase project's public `SUPABASE_URL`/
+  `SUPABASE_ANON_KEY` (not secrets — Supabase's security model is Row
+  Level Security, not hiding these, the same trust model as a Firebase
+  web config). Empty by default; `Auth.configured`/`isAuthConfigured()`
+  gate every code path so an unconfigured deployment shows a plain "not
+  set up yet" state instead of throwing.
+- Account icon button in the header (`index.html`, next to Settings) and
+  its modal (`js/app.js`'s `openAccount()`, following the existing
+  `openModal()`-then-populate-the-body pattern): signed-out shows email/
+  password fields + "Continue with Google"/"Continue with Facebook" +
+  forgot-password; signed-in shows the account email and a sign-out
+  button. The icon itself shows the signed-in user's initial in place of
+  the person glyph.
+- `en`/`ar` strings for all of the above in `js/i18n.js`.
+
+### Fixed
+- **A real bug, caught during browser verification, not merely
+  theorized**: `js/auth.js`'s dynamic `import('@supabase/supabase-js')`
+  (a bare specifier meant to resolve through `index.html`'s import map,
+  the same mechanism `three-view.js` already uses successfully) reliably
+  failed with "Failed to resolve module specifier" — reproducible even
+  after adding `auth.js` its own top-level `<script type=module>` tag
+  (matching every other `js/*.js` file), after a 4-second delay, and from
+  a real, engine-level trusted click (ruling out missing user-gesture as
+  the cause). Substituting the exact same specifier the ALWAYS-working
+  `three-view.js` uses ('three') into `auth.js`'s own call site
+  reproduced the identical failure — proving the bug follows the calling
+  module, not the specifier string. Fixed by importing a direct esm.sh
+  URL instead of the bare specifier (kept in sync by hand with the import
+  map's entry, which is left in place for tooling/readability only) —
+  proven 100% reliable in every test, and valid in any real browser
+  without needing an import map at all. Root cause not fully isolated
+  beyond that; worth another look if a future WP needs the bare-specifier
+  form to work from a new module.
+- `getClient()` cached a failed SDK load forever (`_clientPromise` was
+  never cleared on rejection) — the very first sign-in attempt after any
+  transient failure would silently fail again, permanently, for the rest
+  of the tab's lifetime. Fixed to clear and retry on the next call.
+
+### Explicitly not in this WP (see plan v3.2 §6 for the staged reasoning)
+- No feature gating — AI, Library, Auto Pattern, Export, and Cloth Lab
+  (the five surfaces named for Stage B) all stay fully free and usable
+  with no account, exactly as before.
+- No PayPal/billing (Stage C).
+
+### Verified
+- `npm test` — 253/253 passing, unaffected.
+- Browser-verified against a real Supabase project (email/password +
+  Google + Facebook providers configured): an invalid-credentials
+  sign-in attempt returns a genuine `AuthApiError` (`status: 400,
+  code: invalid_credentials`) from Supabase's own API, not a client-side
+  failure — proving the SDK loads, the client initializes, and the
+  request round-trips for real. "Continue with Google" and "Continue
+  with Facebook" both redirect cleanly to their real consent screens
+  (`accounts.google.com`, `facebook.com`) with correct `client_id`/
+  `redirect_uri` params and no config errors. Also re-verified the
+  unconfigured (`auth-config.js` empty) state still shows the plain "not
+  set up yet" message with zero console errors, unchanged from before
+  these fixes.
+
 ## WP-47: Rewrite the in-app Help modal and the docs site's tool/shortcut reference
 
 A correctness pass over both of BerryStudio's "how do I use this" surfaces —

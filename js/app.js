@@ -28,6 +28,7 @@ import { pivotDart, slashAndSpread, transferDart } from './darts.js';
 import { seamPointAtFraction } from './geometry.js';
 import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
+import { Auth, isAuthConfigured } from './auth.js';
 
 (() => {
   "use strict";
@@ -182,6 +183,16 @@ import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
   // unchanged pattern doesn't force a jarring cloth-sim restart for nothing.
   let clothLabReady = false;
   let lastClothLabPayloadJSON = null;
+
+  // BerryStudio-Upgrade-Plan-v3.2 WP-42 Stage A: current Supabase session,
+  // or null when signed out / not configured. Deliberately not part of
+  // `state` — it's not this app's data to persist, Supabase's own SDK
+  // already persists and refreshes it (see js/auth.js). `accountSeenFirstEvent`
+  // suppresses the "Signed in"/"Signed out" toast on the initial
+  // onAuthStateChange fire that just reports whatever session already
+  // existed on page load — toasts are for actual sign-in/out actions.
+  let currentSession = null;
+  let accountSeenFirstEvent = false;
 
   // ---------------- ICONS (inline SVG) ----------------
   const IC = {
@@ -4033,6 +4044,99 @@ import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
   }
 
   // Settings
+  // BerryStudio-Upgrade-Plan-v3.2 WP-42 Stage A: account sign-in. No feature
+  // gating happens anywhere in here — every surface stays free and usable
+  // with no account; this modal only shows/changes sign-in state. Same
+  // openModal()-then-populate-the-body pattern as openOutlineEditorModal.
+  function openAccount(){
+    openModal(T("accountTitle"), "");
+    const body=$("#genericModal .modal-body"); body.innerHTML="";
+    if(!isAuthConfigured()){
+      body.appendChild(el("div","help-note",T("accountNotConfigured")));
+      return;
+    }
+    body.appendChild(el("div","help-note",T("accountStageANotice")));
+    if(currentSession && currentSession.user){
+      const row=el("div","field"); row.style.marginTop="12px";
+      row.innerHTML=`<label>${T("signedInAs").replace("{email}", currentSession.user.email||"")}</label>`;
+      body.appendChild(row);
+      const out=el("button","big-btn ghost",T("signOut")); out.style.marginTop="10px";
+      out.onclick=async()=>{
+        try{ await Auth.signOut(); closeModal("#genericModal"); }
+        catch(e){ console.error("[auth] signOut failed", e); toast((e&&e.message)||String(e)); }
+      };
+      body.appendChild(out);
+      return;
+    }
+    const emailField=el("div","field"); emailField.style.marginTop="10px";
+    emailField.innerHTML=`<label>${T("emailLabel")}</label>`;
+    const emailInp=el("input","input"); emailInp.type="email"; emailInp.dir="ltr"; emailInp.autocomplete="email";
+    emailField.appendChild(emailInp); body.appendChild(emailField);
+
+    const pwField=el("div","field"); pwField.style.marginTop="10px";
+    pwField.innerHTML=`<label>${T("passwordLabel")}</label>`;
+    const pwInp=el("input","input"); pwInp.type="password"; pwInp.dir="ltr"; pwInp.autocomplete="current-password";
+    pwField.appendChild(pwInp); body.appendChild(pwField);
+
+    const btnRow=el("div"); btnRow.style.cssText="display:flex;gap:8px;margin-top:12px";
+    const signInBtn=el("button","big-btn",T("signIn"));
+    const signUpBtn=el("button","big-btn ghost",T("signUp"));
+    btnRow.appendChild(signInBtn); btnRow.appendChild(signUpBtn); body.appendChild(btnRow);
+
+    signInBtn.onclick=async()=>{
+      try{ await Auth.signInWithPassword(emailInp.value.trim(), pwInp.value); closeModal("#genericModal"); }
+      catch(e){ console.error("[auth] signIn failed", e); toast((e&&e.message)||String(e)); }
+    };
+    signUpBtn.onclick=async()=>{
+      try{ await Auth.signUpWithPassword(emailInp.value.trim(), pwInp.value); toast(T("checkYourEmail")); }
+      catch(e){ console.error("[auth] signUp failed", e); toast((e&&e.message)||String(e)); }
+    };
+
+    const forgot=el("button",null,T("forgotPassword"));
+    forgot.style.cssText="margin-top:8px;background:none;border:none;color:var(--brand);cursor:pointer;font-size:12px;padding:0";
+    forgot.onclick=async()=>{
+      const email=emailInp.value.trim();
+      if(!email){ toast(T("emailLabel")); return; }
+      try{ await Auth.resetPassword(email); toast(T("resetPasswordSent")); }
+      catch(e){ console.error("[auth] resetPassword failed", e); toast((e&&e.message)||String(e)); }
+    };
+    body.appendChild(forgot);
+
+    body.appendChild(el("div","help-note",T("orContinueWith")));
+    const oauthRow=el("div"); oauthRow.style.cssText="display:flex;gap:8px;margin-top:8px";
+    const googleBtn=el("button","big-btn ghost",T("continueWithGoogle"));
+    googleBtn.onclick=()=>Auth.signInWithOAuth("google").catch(e=>{ console.error("[auth] Google OAuth failed", e); toast((e&&e.message)||String(e)); });
+    const fbBtn=el("button","big-btn ghost",T("continueWithFacebook"));
+    fbBtn.onclick=()=>Auth.signInWithOAuth("facebook").catch(e=>{ console.error("[auth] Facebook OAuth failed", e); toast((e&&e.message)||String(e)); });
+    oauthRow.appendChild(googleBtn); oauthRow.appendChild(fbBtn); body.appendChild(oauthRow);
+  }
+
+  const ACCOUNT_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 1 0-16 0"/><circle cx="12" cy="8" r="4.5"/></svg>`;
+  function updateAccountButton(){
+    const btn=$("#accountBtn"); if(!btn) return;
+    if(currentSession && currentSession.user){
+      btn.textContent=(currentSession.user.email||"?").charAt(0).toUpperCase();
+      btn.style.fontWeight="800"; btn.style.fontSize="14px";
+    } else {
+      btn.style.fontWeight=""; btn.style.fontSize="";
+      btn.innerHTML=ACCOUNT_ICON_SVG;
+    }
+  }
+  // Subscribes once at boot; no-ops entirely when auth-config.js is empty
+  // (Auth.onChange never fires, button stays the plain signed-out icon).
+  // accountSeenFirstEvent skips the toast on the initial fire, which just
+  // reports whatever session already existed on page load (e.g. a returning
+  // signed-in user) — toasts are for actual sign-in/out actions, not boot.
+  async function initAccountUI(){
+    if(!isAuthConfigured()) return;
+    await Auth.onChange(session=>{
+      currentSession=session;
+      updateAccountButton();
+      if(accountSeenFirstEvent) toast(session ? T("signInSuccess") : T("signOutSuccess"));
+      accountSeenFirstEvent=true;
+    });
+  }
+
   function openSettings(){
     const body=$("#settingsModal .modal-body"); body.innerHTML="";
     const toggles=[["hoverHelp","hoverHelpD"],["highContrast","highContrastD"],["reduceMotion","reduceMotionD"],["cloudSync","cloudSyncD"]];
@@ -4254,6 +4358,7 @@ import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
     $("#langBtn").onclick=toggleLang; tip($("#langBtn"),T("language"),T("tt_lang"));
     $("#modeBtn").onclick=toggleMode; tip($("#modeBtn"),T("appearance"),T("tt_mode"));
     $("#settingsBtn").onclick=openSettings; tip($("#settingsBtn"),T("settings"),T("tt_settings"));
+    $("#accountBtn").onclick=openAccount; tip($("#accountBtn"),T("account"),T("tt_account"));
     tip($("#docsBtn"),T("docs"),T("tt_docs"));
     $("#helpBtn").onclick=openHelp; tip($("#helpBtn"),T("help"),T("helpTitle"));
     $("#installBtn").onclick=installApp;
@@ -4344,6 +4449,7 @@ import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
     Canvas.onCalibrationRequest(openCalibPrompt);
     Canvas.onWarnRequest(key=>toast(T(key)));
     buildToolRail(); buildRail(); wire();
+    initAccountUI();
     applyTheme(); applyLang();
     updateUnitsPill(); updateStageChips();
     $("#gridBtn").classList.toggle("active",Canvas.getOpt("grid"));
