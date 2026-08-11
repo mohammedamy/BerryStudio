@@ -899,6 +899,44 @@ in the app's own header.
   upgrade plan's WP-42 for the staged reasoning. The two OAuth providers'
   client secrets and Supabase's own service_role key never touch this
   codebase; they live only in the Supabase dashboard.
+- **Explicit per-piece body zone** (`js/body-zone.js`, "Body Zone" control
+  in the Layers panel's per-piece properties — WP-49) fixes a real,
+  confirmed bug: neither 3D Preview nor Cloth Lab had any reliable way to
+  tell a piece is upper- vs. lower-body — both guessed from the piece's
+  English NAME, defaulting an unmatched piece to "bodice" (upper). The
+  Underwear & Bra Library's brief pieces (generically named "Front
+  Panel"/"Back Panel") were a real instance of this: Cloth Lab placed and
+  simulated a brief — underwear bottom — as the torso. Two-layer fix:
+  `cloth-lab/src/pattern/roles.js`'s role table now tags every panel-shaped
+  role (front-panel, hip-panel-front, brief-front, sleeve, ...) with its
+  real zone, so any piece a generator already declares a role for is
+  correct with no user action; and a genuinely new, user-settable
+  `bodyZone` field ('upper'/'lower'/auto) lets a piece with no role at all
+  (freehand/custom/duplicated) — or a wrong auto-guess — be corrected by
+  hand, from the same Layer Props popover color/material already use.
+  That explicit choice is sent across the Cloth Lab bridge payload and
+  consumed by 3D Preview's own part classifier
+  (`js/app.js:classifyPart`) — both now check it (and the piece's role)
+  BEFORE ever falling back to the original name-only guess, which still
+  exists unchanged for pieces with neither signal. Deliberately does NOT
+  extend to accessory/attach roles (collar, cuff, waistband, pocket,
+  gusset, ...) — those are reused across garment types with genuinely
+  different real zones (a waistband sits on a skirt OR a dress' waist
+  seam), so a role alone can't say which; an explicit per-piece override
+  still works on those too, it's only the automatic role-based inference
+  that skips them. **Verified**: live in the browser, hiding the brief's
+  Front/Back Panel pieces now hides the lower-body (skirt) mesh, not the
+  bodice — confirmed by screenshot, not just by reading the code — plus
+  22 new unit tests across both projects (`test/body-zone.test.js`,
+  `cloth-lab/src/pattern/roles.test.js`,
+  `cloth-lab/src/pattern/importFromApp.bodyZone.test.js`). **Not verified
+  live**: Cloth Lab's actual simulated result for a corrected piece — this
+  session's dev environment hit a pre-existing, unrelated "Cloth Lab
+  (embedded engine) failed to load" module-resolution error switching
+  branches, so the placement fix is covered by the classifier unit tests
+  above (which assert the exact `hipPanelFront`/`hipPanelBack` role
+  Cloth Lab's own, already-tested `placeHipPanel` consumes) rather than a
+  live simulate-and-screenshot pass.
 
 ---
 
@@ -936,6 +974,7 @@ BerryStudio/                (repository root)
 │   ├── geometry.js       Polygon offsetting: per-edge seam allowance, miter/round/bevel joins, seam arc-length lookup
 │   ├── darts.js          Dart manipulation: pivot, transfer, slash-and-spread
 │   ├── pleats.js         Pleat/gather/tuck added-width math
+│   ├── body-zone.js      Explicit + role-derived upper/lower-body classification per piece (WP-49) — see Honest notes
 │   ├── berry-studio-api.js  `window.BerryStudio` local automation API (see "Automation API" below)
 │   ├── cloud-sync.js     Optional cloud sync: self-hosted endpoint, Google Drive, OneDrive (BYO OAuth client ID)
 │   ├── auth.js           Optional account sign-in (Supabase Auth) — Stage A, no gating, see Honest notes

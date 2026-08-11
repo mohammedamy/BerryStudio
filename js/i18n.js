@@ -122,6 +122,10 @@ export const I18N = {
     layersPanel: "Layers", addLayer: "Add layer",
     lock: "Lock layer", unlock: "Unlock layer", pieceColor: "Piece colour",
     pieceMaterial: "Piece material (3D)", pieceMaterialDefault: "Default (whole-garment)",
+    // WP-49: explicit per-piece upper/lower-body classification, linked
+    // into 3D Preview and Cloth Lab's draping/placement — see js/body-zone.js.
+    bodyZone: "Body zone", bodyZoneAuto: "Auto", bodyZoneUpper: "Upper body", bodyZoneLower: "Lower body",
+    bodyZoneD: "Which body region this piece drapes on in 3D Preview and Cloth Lab. Auto guesses from the piece's role/name; set it explicitly to fix a piece that's showing on the wrong part of the body.",
     newLayer: "New Layer", removeLayer: "Delete layer", layerProps: "Layer properties",
     editDarts: "Edit Darts", editDartsHint: "Pivot rotates a dart's legs around its apex (no fabric added or removed). Spread widens the dart's base to deliberately add fullness. Transfer swings the whole dart around an external pivot point (e.g. the bust point) to a new style line, keeping its shape. Use the Add Dart tool on the canvas to place a new dart; use the trash icon on a card below to delete one.",
     dart: "Dart", dartPivotDeg: "Pivot (°)", dartPivotApply: "Apply Pivot", dartSpreadCm: "Spread (cm)", dartSpreadApply: "Apply Spread", dartUpdated: "Dart updated",
@@ -566,6 +570,8 @@ export const I18N = {
     layersPanel: "الطبقات", addLayer: "إضافة طبقة",
     lock: "قفل الطبقة", unlock: "فتح الطبقة", pieceColor: "لون القطعة",
     pieceMaterial: "خامة القطعة (ثلاثي الأبعاد)", pieceMaterialDefault: "افتراضي (كل القطعة)",
+    bodyZone: "منطقة الجسم", bodyZoneAuto: "تلقائي", bodyZoneUpper: "أعلى الجسم", bodyZoneLower: "أسفل الجسم",
+    bodyZoneD: "أي منطقة من الجسم تُلبَس عليها هذه القطعة في المعاينة ثلاثية الأبعاد ومعمل القماش. الوضع التلقائي يخمّن من دور/اسم القطعة؛ حدّدها يدويًا لتصحيح قطعة تظهر على الجزء الخطأ من الجسم.",
     newLayer: "طبقة جديدة", removeLayer: "حذف الطبقة", layerProps: "خصائص الطبقة",
     editDarts: "تعديل البنسات", editDartsHint: "التدوير يُدير أرجل البنس حول رأسه (دون إضافة أو حذف قماش). التوسيع يوسّع قاعدة البنس لإضافة اتساع عمدًا. النقل يُدير البنس بالكامل حول نقطة ارتكاز خارجية (مثل نقطة الصدر) إلى خط تصميم جديد، مع الحفاظ على شكله. استخدمي أداة \"إضافة بنس\" على اللوحة لوضع بنس جديد؛ استخدمي أيقونة السلة على البطاقة أدناه لحذف بنس.",
     dart: "بنس", dartPivotDeg: "التدوير (°)", dartPivotApply: "تطبيق التدوير", dartSpreadCm: "التوسيع (سم)", dartSpreadApply: "تطبيق التوسيع", dartUpdated: "تم تحديث البنس",

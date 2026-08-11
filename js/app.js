@@ -28,6 +28,7 @@ import { pivotDart, slashAndSpread, transferDart } from './darts.js';
 import { seamPointAtFraction } from './geometry.js';
 import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
+import { inferBodyZone } from './body-zone.js';
 import { Auth, isAuthConfigured } from './auth.js';
 
 (() => {
@@ -595,6 +596,13 @@ import { Auth, isAuthConfigured } from './auth.js';
       <div class="field"><label>${T("nameEn")}</label><input class="input lp-en" dir="ltr" value="${escAttr(p.name.en)}"></div>
       <div class="field"><label>${T("nameAr")}</label><input class="input lp-ar" dir="rtl" value="${escAttr(p.name.ar)}"></div>
       <div class="field"><label>${T("pieceColor")}</label><input class="lp-col" type="color" value="${rgbToHex(p.color)}" style="width:100%;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)"></div>
+      <div class="field"><label>${T("bodyZone")}</label>
+        <div class="seg lp-zone" style="width:100%">
+          <button data-zone="" ${!p.bodyZone?'class="active"':''}>${T("bodyZoneAuto")}</button>
+          <button data-zone="upper" ${p.bodyZone==="upper"?'class="active"':''}>${T("bodyZoneUpper")}</button>
+          <button data-zone="lower" ${p.bodyZone==="lower"?'class="active"':''}>${T("bodyZoneLower")}</button>
+        </div>
+      </div>
       <div class="field"><label>${T("pieceMaterial")}</label>
         <select class="lp-mat" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2)">
           <option value="">${T("pieceMaterialDefault")}</option>
@@ -616,6 +624,19 @@ import { Auth, isAuthConfigured } from './auth.js';
     q(".lp-en").onchange = () => { Canvas.renamePiece(i,{en:q(".lp-en").value.trim()||p.name.en}); renderLayersPane(); };
     q(".lp-ar").onchange = () => { Canvas.renamePiece(i,{ar:q(".lp-ar").value.trim()||p.name.ar}); renderLayersPane(); };
     q(".lp-col").oninput = () => { Canvas.setColor(i,q(".lp-col").value); sync3DFabric(); renderLayersPane(); };
+    // WP-49: explicit upper/lower-body override — the single control that
+    // makes "determine explicitly which body region this piece is" real.
+    // Re-syncs BOTH 3D consumers immediately (not just re-rendering this
+    // popover), same as color/material do above — this is exactly the
+    // "link firmly to all views" half of the request, not just a saved
+    // field nothing reads until the next unrelated sync.
+    m.querySelectorAll(".lp-zone button").forEach(b=>{
+      b.onclick = () => {
+        Canvas.setPieceProps(i, { bodyZone: b.dataset.zone || null });
+        m.querySelectorAll(".lp-zone button").forEach(x=>x.classList.toggle("active", x===b));
+        sync3DVisibility(); syncClothLab(true);
+      };
+    });
     q(".lp-mat").onchange = () => { Canvas.setMaterial(i,q(".lp-mat").value||null); sync3DFabric(); };
     q(".lp-op").oninput = () => { const v=+q(".lp-op").value; q(".lp-opv").textContent=v+"%"; Canvas.setPieceProps(i,{opacity:v/100}); };
     q(".lp-del").onclick = () => { Canvas.removePiece(i); closeAnyMenu(); sync3DVisibility(); renderLayersPane(); toast("✓ "+T("removeLayer")); };
@@ -3217,16 +3238,41 @@ import { Auth, isAuthConfigured } from './auth.js';
     const m=/(\d+)\D+(\d+)\D+(\d+)/.exec(c); return m ? (+m[1]<<16)|(+m[2]<<8)|+m[3] : cssHex("--brand");
   }
   const fabricOpacity3D = () => Math.max(0.5, Math.min(1, 0.62 + Canvas.getOpt("fillOpacity")*0.6));
-  function pieceVisMap(){ return Canvas.getPieces().map(p=>({ key:(p.name&&p.name.en)||"", visible:p.visible!==false })); }
-  // Mirrors the part-classification regex in three-view.js's applyPieceVisibility() —
-  // the procedural 3D body only has 4 named mesh groups, so material (like visibility)
-  // is assigned per-part, picking the first visible piece that maps to each part.
-  function classifyPart(name){
-    const k=(name||"").toLowerCase();
-    return /sleeve|كم/.test(k) ? "sleeve"
-      : /skirt|تنور/.test(k) ? "skirt"
-      : /trouser|بنطل|pant|\bleg\b/.test(k) ? "trousers" : "bodice";
+  // WP-49: the single source of truth for "which of three-view.js's 4
+  // generic garment-part mesh groups (bodice/sleeve/skirt/trousers) does
+  // this piece belong to" — used by BOTH partsFabric() (material, below)
+  // and pieceVisMap() (visibility), so the two can never disagree about
+  // the same piece, and computed HERE (not duplicated inside three-view.js
+  // — see that file's own applyPieceVisibility() comment) so there's
+  // exactly one place to fix if it's ever wrong again.
+  //
+  // Before this WP, both call sites independently regex-matched the
+  // piece's NAME ONLY, each defaulting an unmatched piece to "bodice" —
+  // confirmed as a real bug (see js/body-zone.js's header comment): a
+  // piece with no informative name-keyword (e.g. underwear-library.js's
+  // brief panels, generically named "Front Panel"/"Back Panel") silently
+  // rendered/toggled as part of the TORSO. Fixed by consulting
+  // inferBodyZone() (explicit user override, or the piece's declared
+  // role — see js/body-zone.js) FIRST; the original name-only regex is
+  // now only a last resort for a piece with neither signal at all,
+  // unchanged from its pre-WP-49 behavior in that case.
+  const SLEEVE_NAME_RE = /sleeve|كم/i;
+  const SKIRT_NAME_RE = /skirt|تنور/i;
+  const TROUSERS_NAME_RE = /trouser|بنطل|pant|\bleg\b/i;
+  function classifyPart(p){
+    const name = (p && p.name && p.name.en) || (typeof p==="string" ? p : "");
+    if (SLEEVE_NAME_RE.test(name)) return "sleeve";
+    const zone = inferBodyZone(p);
+    if (zone === "lower") return TROUSERS_NAME_RE.test(name) ? "trousers" : "skirt";
+    if (zone === "upper") return "bodice";
+    if (TROUSERS_NAME_RE.test(name)) return "trousers";
+    if (SKIRT_NAME_RE.test(name)) return "skirt";
+    return "bodice";
   }
+  // {part, visible} per piece — three-view.js's applyPieceVisibility()
+  // trusts `part` outright now (see its own updated comment); classifyPart()
+  // above is the only place that ever decides it.
+  function pieceVisMap(){ return Canvas.getPieces().map(p=>({ part: classifyPart(p), visible: p.visible!==false })); }
   function isBackPiece(name){ return /\bback\b|خلفي|خلفية/.test((name||"").toLowerCase()); }
   // A part's mesh used to just take the FIRST matching piece's color/material and
   // silently drop every other one — a front+back bodice/skirt with a different
@@ -3241,7 +3287,7 @@ import { Auth, isAuthConfigured } from './auth.js';
   function partsFabric(){
     const buckets={};
     Canvas.getPieces().filter(p=>p.visible!==false).forEach(p=>{
-      const part=classifyPart(p.name&&p.name.en);
+      const part=classifyPart(p);
       const back = isBackPiece(p.name&&p.name.en) || isBackPiece(p.name&&p.name.ar);
       (buckets[part] ||= {front:[], back:[]})[back?"back":"front"].push(p);
     });
@@ -3413,6 +3459,11 @@ import { Auth, isAuthConfigured } from './auth.js';
         // — see cloth-lab/src/pattern/importFromApp.js and roles.js.
         role: p.role, cutOnFold: p.cutOnFold, foldEdgeIndex: p.foldEdgeIndex,
         bilateral: p.bilateral, edges: p.edges, grainline: p.grainline,
+        // WP-49: explicit upper/lower-body override (js/body-zone.js) —
+        // cloth-lab/src/pattern/importFromApp.js's classifyLegacy path
+        // consults this to correct a wrong name-based guess for pieces
+        // with no declared (or unrecognized) role.
+        bodyZone: p.bodyZone || null,
         // The 2D canvas's own per-piece color (Layers panel swatch/picker —
         // js/canvas.js's setColor()), so cloth-lab's Cloth/Pieces views can
         // render each simulated piece in the same color it has in 2D

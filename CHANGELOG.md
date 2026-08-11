@@ -6,6 +6,109 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-49: Explicit per-piece upper/lower-body zone, linked to 3D Preview and Cloth Lab
+
+Closes a real, confirmed bug: neither 3D Preview (`js/three-view.js`) nor
+Cloth Lab (`cloth-lab/src/pattern/importFromApp.js`) had any reliable way
+to tell whether a piece is upper- or lower-body — both independently
+guessed from the piece's English NAME via regex, with an unmatched piece
+silently defaulting to "bodice" (upper body). Confirmed against the
+Underwear & Bra Library (WP-43): its brief pieces declare
+`role: "brief-front"`/`"brief-back"`, generically NAMED "Front Panel"/
+"Back Panel" — that role was never registered in Cloth Lab's role table,
+so it fell back to the name-only guesser, which defaulted them to
+`bodice-front`/`bodice-back`. A brief (underwear bottom) was placed and
+simulated as the torso.
+
+### Added
+- `cloth-lab/src/pattern/roles.js`: every panel-shaped `SCHEMA_ROLE_INFO`
+  entry (front-panel, back-panel, hip-panel-front/back, bodice-*,
+  skirt-*-gore, sleeve variants) now carries a `zone: 'upper'|'lower'`.
+  New entries for `brief-front`/`brief-back` — placed via
+  `hipPanelFront`/`hipPanelBack` (the same body-conforming hip geometry a
+  skirt panel gets), `zone: 'lower'` — this alone is the actual bug fix
+  for any piece already declaring that role. New `zoneForRole(role)`
+  export. Accessory/attach roles (collar, cuff, waistband, pocket, gusset,
+  ...) deliberately left unzoned — they're reused across garment types
+  with different real zones, so role alone can't say which.
+  `cloth-lab/src/pattern/roles.test.js` — 7 tests, including one that
+  walks every `SCHEMA_ROLE_INFO` entry asserting its `zone` agrees with
+  its `placement` family (catches a role/zone pair drifting out of sync
+  by construction, not just for the two roles this WP happened to touch).
+- `js/body-zone.js` (new, pure, root app): `inferBodyZone(piece)` — a
+  hand-kept-in-sync subset of roles.js's zone table (same "duplicate two
+  small files across the two separate projects" convention already used
+  for auth-config.js/entitlement.js), plus the genuinely NEW part: a
+  `bodyZone` field ('upper'|'lower'|null-meaning-auto) a piece can carry
+  that isn't derived from anything — explicit and user-settable, for
+  freehand/custom/duplicated pieces with no role at all, or to correct a
+  wrong auto-guess by hand. Explicit always wins over role. `js/canvas.js`
+  round-trips it through `loadPieces()`, Project save/load, and
+  copy/paste, same as every other per-piece field. `test/body-zone.test.js`
+  — 8 tests.
+- Layers panel → per-piece "…" properties popover (`js/app.js:openLayerProps`):
+  a new "Body Zone" Auto/Upper/Lower segmented control, right alongside
+  the existing color/material fields — the actual UI that makes "determine
+  explicitly" real. Changing it calls `Canvas.setPieceProps(i,{bodyZone})`
+  and immediately re-syncs BOTH 3D consumers (`sync3DVisibility()`,
+  `syncClothLab(true)`), not just re-rendering the popover — the "link
+  firmly to all views" half of the request. `en`/`ar` strings in `js/i18n.js`.
+- `cloth-lab/src/pattern/importFromApp.js`: `applyBodyZoneOverride()` —
+  on the CLASSIFY_LEGACY path (pieces with no declared/recognized role),
+  corrects `classifyLegacy()`'s name-only front/back-vs-bodice/skirt
+  guess when the piece's own declared `bodyZone` disagrees. Deliberately
+  narrow: never invents a front-vs-back call `classifyLegacy` couldn't
+  make from the name at all (still skipped, never guessed — same
+  principle as everywhere else in that file), and never turns an
+  ignored accessory name into a panel. `js/app.js`'s
+  `buildClothLabPayload()` now forwards `bodyZone` per piece.
+  `cloth-lab/src/pattern/importFromApp.bodyZone.test.js` — 7 tests.
+
+### Changed
+- `js/app.js`: `classifyPart()` (used by both `partsFabric()` for 3D
+  material assignment and the new `pieceVisMap()` for 3D visibility) now
+  consults `inferBodyZone()` before its own pre-existing name regex —
+  single source of truth for "which of 3D Preview's 4 generic garment-part
+  mesh groups does this piece belong to," used by both call sites so they
+  can never classify the same piece two different ways (they could
+  before this WP — two independently-hand-copied regexes).
+- `js/three-view.js`'s `applyPieceVisibility()` no longer does ANY text
+  classification of its own — it used to independently re-derive
+  bodice/sleeve/skirt/trousers from the piece's raw name via its own
+  separate copy of the same regex `classifyPart()` had (a second,
+  driftable copy, which is exactly how the original bug could exist
+  undetected). It now trusts a pre-classified `part` field js/app.js's
+  `pieceVisMap()` sends instead.
+
+### Verified
+- `npm test` (root) — 261/261 (253 pre-existing + 8 new).
+- `cloth-lab`: `npx vitest run` — 172/172 (158 pre-existing + 14 new).
+- Live in the browser: loaded the Underwear & Bra Library's "Classic
+  Brief" (women), confirmed its pieces are literally named "Front Panel"/
+  "Back Panel" with no distinguishing keyword. Hiding both in the Layers
+  panel removed the 3D Preview's SKIRT mesh (legs bare, torso/bodice
+  fully intact) — the correct result, and the direct visual disproof of
+  the bug this WP fixes. Opened the Layer Props popover for an
+  accessory piece (Crotch Gusset, an unzoned `gusset`-role piece),
+  confirmed the Body Zone control defaults to "Auto," set it to "Lower
+  body," closed and reopened the popover, confirmed the choice persisted.
+  No new console errors introduced (the CSP inline-script warnings and a
+  "Cloth Lab (embedded engine) failed to load" error present in this
+  session's dev environment are both pre-existing, unrelated to this
+  change — see "Not verified" below).
+- **Not verified live, honestly**: Cloth Lab's actual simulated result
+  for a piece this WP corrects (e.g. re-simulating the Classic Brief and
+  confirming it now drapes at the hips, not the chest). This session's
+  local dev environment hit the embedded-engine load failure above
+  independent of this change (a module-resolution error switching git
+  branches, not caused by this WP's edits) before that specific check
+  could be made. The placement fix itself is covered by
+  `roles.test.js`/`importFromApp.bodyZone.test.js` asserting the exact
+  `hipPanelFront`/`hipPanelBack` role Cloth Lab's own, already-tested
+  `placeHipPanel()` consumes — a real test of the logic, just not a
+  rendered screenshot. Worth a manual re-check once that environment
+  issue is resolved.
+
 ## WP-35b: GPU spatial-hash self-collision broadphase (Cloth Lab, "High" tier)
 
 Per `BerryStudio-Upgrade-Plan-v3-2.md` §5's own recommendation: write and
