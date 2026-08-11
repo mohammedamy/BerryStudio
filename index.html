@@ -31,6 +31,15 @@
   MSAL.js CDN, for the optional OneDrive sync target) — both load only if
   the user explicitly opts into that specific cloud-sync target in Settings,
   never on a normal page load.
+  BerryStudio-Upgrade-Plan-v3.2 WP-42 Stage A adds js/auth.js's Supabase
+  Auth client, loaded from esm.sh (already allow-listed above) via the
+  import map below — no new script-src origin needed. Google/Facebook
+  sign-in themselves are a top-level browser *navigation* to Supabase's
+  hosted /auth/v1/authorize endpoint and back (accounts.google.com/
+  facebook.com are never fetched or scripted from this page directly),
+  so no connect-src/script-src entry for either provider is needed either;
+  the Supabase REST/auth calls the SDK itself makes are already covered by
+  connect-src's existing broad `https:` allowance.
 -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com https://esm.sh https://accounts.google.com https://alcdn.msauth.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https: http://localhost:* https://localhost:*; worker-src 'self' blob:; manifest-src 'self'; base-uri 'self'; form-action 'self';">
 <script type="importmap">
@@ -43,7 +52,8 @@
     "react-dom": "https://esm.sh/react-dom@19.2.7?external=react",
     "react-dom/client": "https://esm.sh/react-dom@19.2.7/client?external=react",
     "@react-three/fiber": "https://esm.sh/@react-three/fiber@9.6.1?external=react,react-dom,three",
-    "@react-three/drei": "https://esm.sh/@react-three/drei@10.7.7?external=react,react-dom,three,@react-three/fiber"
+    "@react-three/drei": "https://esm.sh/@react-three/drei@10.7.7?external=react,react-dom,three,@react-three/fiber",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.112.3"
   }
 }
 </script>
@@ -107,6 +117,10 @@
     <a class="icon-btn" id="docsBtn" href="docs/index.html" target="_blank" rel="noopener" data-i18n-aria="docs" aria-label="Docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H12v18H6.5A2.5 2.5 0 0 1 4 18.5v-13z"/><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H12v18h5.5a2.5 2.5 0 0 0 2.5-2.5v-13z"/></svg></a>
     <button class="icon-btn" id="helpBtn" data-i18n-aria="help" aria-label="Help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.8 2.8 0 1 1 4.3 2.4c-.9.6-1.5 1.1-1.5 2.1"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg></button>
     <button class="icon-btn" id="settingsBtn" data-i18n-aria="settings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5c.1-.3.1-.6.1-1z"/></svg></button>
+    <!-- BerryStudio-Upgrade-Plan-v3.2 WP-42 Stage A: account sign-in, optional,
+         no gating — see js/auth.js. Shows a person icon signed out, or the
+         first letter of the signed-in email (set by js/app.js's onAuthChange). -->
+    <button class="icon-btn" id="accountBtn" data-i18n-aria="account" aria-label="Account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 1 0-16 0"/><circle cx="12" cy="8" r="4.5"/></svg></button>
     <button class="icon-btn hidden" id="installBtn" data-i18n-aria="installApp" aria-label="Install App"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg></button>
   </header>
 
@@ -273,6 +287,16 @@
 <script type="module" src="js/data.js"></script>
 <script type="module" src="js/canvas.js"></script>
 <script type="module" src="js/three-view.js"></script>
+<!-- WP-42 Stage A: auth.js's own bare-specifier dynamic import() of
+     '@supabase/supabase-js' only resolves through the import map above when
+     auth.js has its own top-level module script tag here, matching every
+     other js/*.js file's convention — reaching it only via app.js's nested
+     `import` statement left its *own* later dynamic import() unable to
+     resolve the bare specifier (verified live: this exact failure mode,
+     "Failed to resolve module specifier", reproduced identically for a
+     definitely-working bare specifier like "three" once tested from a
+     module not on this list — not a bug in the import map itself). -->
+<script type="module" src="js/auth.js"></script>
 <script type="module" src="js/ai.js"></script>
 <script type="module" src="js/billboard.js"></script>
 <script type="module" src="js/library.js"></script>
