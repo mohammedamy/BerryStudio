@@ -6,6 +6,96 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-35b: GPU spatial-hash self-collision broadphase (Cloth Lab, "High" tier)
+
+Per `BerryStudio-Upgrade-Plan-v3-2.md` §5's own recommendation: write and
+verify the algorithm as a CPU reference first (same discipline WP-35's
+dihedral bend used for `dihedralBend.js`), then port it mechanically to
+GLSL. Replaces the brute-force O(N²) self-collision scan with a real
+spatial hash — but only on the opt-in "High (dihedral bend)" quality tier;
+the default tier's compiled shader is untouched.
+
+### Added
+- `cloth-lab/src/cloth/spatialHash.js` — CPU reference: a fixed, margined
+  grid built from the garment's rest pose; a bitonic sort written as the
+  exact GATHER-based compare-exchange network the GPU port uses (not
+  `Array.sort`); a binary-search cell-range query; and a full broadphase
+  reference matching the GLSL self-collision function's own averaging
+  semantics.
+- `cloth-lab/src/cloth/spatialHash.test.js` — 21 property-based tests:
+  cell-coordinate round-trips and clamping, sort correctness/stability
+  across random and adversarial arrays (duplicates, non-power-of-two
+  lengths, all-same, already/reverse-sorted), cell-range query exactness,
+  and — the property that actually matters — the spatial-hash broadphase
+  matching a brute-force reference exactly across many random particle
+  clouds, including a dense-cluster scan-cap stress test and a
+  cell-boundary-straddling case.
+- `cloth-lab/src/cloth/bitonicSortGPU.js` — `GPUBitonicSort`: a manual
+  multi-pass ping-pong GPGPU driver (`THREE.WebGLRenderTarget` pairs +
+  `three/addons/postprocessing/Pass.js`'s `FullScreenQuad`, not
+  `GPUComputationRenderer` — the sort needs ~78-105 sequential passes per
+  frame with a different `uK`/`uJ` uniform each time, which
+  `GPUComputationRenderer`'s one-shader-per-named-variable API can't
+  express). A cell-id seed pass followed by the full bitonic pass
+  sequence (`bitonicPassSequence`, unit-tested against the closed-form
+  pass count and a hand-worked P=8 case).
+- `ClothSimulation.js`: `selfCollisionSpatialHashGlsl` — the GLSL
+  self-collision function for the high-quality tier, spliced in under the
+  exact same function name (`selfCollisionCorrection`) the brute-force
+  version uses, so `main()`'s call site never changes. Buckets "me" into a
+  grid cell, binary-searches each of the 27 surrounding cells' index
+  ranges in the sorted buffer, and scans forward within each (capped —
+  same `DEFAULT_SCAN_CAP` the CPU reference validated).
+
+### Fixed
+- **A real, separate bug surfaced while landing this, not caused by it
+  alone but not shippable without fixing**: the existing dihedral-bend
+  hinge data already used 6 texture samplers; adding one more for the sort
+  buffer pushed the High tier's compiled shader to 19 active fragment
+  texture units — over `MAX_TEXTURE_IMAGE_UNITS`'s WebGL2 spec-floor
+  minimum of 16 (confirmed live: `THREE.WebGLProgram: Shader Error —
+  FRAGMENT shader texture image units count exceeds
+  MAX_TEXTURE_IMAGE_UNITS(16)`, on a GPU backend actually capped there).
+  This means the pre-existing (WP-35) High tier was already one sampler
+  away from failing outright on any GPU capped at the spec floor — a real
+  class of hardware (older/low-end mobile, some virtualized/software
+  renderers), not just this session's own test environment. Fixed by
+  halving the hinge-texture footprint: `packHingeTextures` now packs each
+  of the three hinge arrays (edge v0, edge v1, rest angle) into ONE
+  double-wide texture (the previous two 4-slot-batch textures side by side
+  in one, addressed via a left/right-half UV offset) instead of two
+  separate textures — identical data, identical values read, 3 samplers
+  instead of 6. Brings the High tier to exactly 16, with the default
+  tier's shader completely unaffected either way.
+
+### Changed
+- `spatialHash.js`'s `buildGrid` margin default (`cellSize*4`, sized for
+  that module's own small unit-test point clouds) is NOT what
+  `ClothSimulation.js` actually uses — the constructor passes an explicit
+  35cm margin, generous for real garment drape/settle motion, at
+  effectively zero cost (margin only changes the numeric cell-id range,
+  never the sort/query's actual cost, which depends on particle count
+  alone).
+
+### Verified
+- All 158 `cloth-lab` vitest tests green (134 pre-existing + 24 new), all
+  253 root `node --test` tests green (unaffected).
+- Live in the browser (not just unit-tested): a readback of the sorted
+  GPU buffer confirmed correct (monotonically sorted, exact particle
+  count, zero duplicate/dropped indices) across multiple frames; a
+  readback of live particle positions confirmed no NaN and values staying
+  well inside the grid's margined bounds during settle; the garment
+  renders and settles identically in shape to the pre-existing brute-force
+  self-collision (same wrinkled/folded look under the dihedral bend
+  constraint), stable over multiple seconds with zero WebGL errors in a
+  clean browser context. Step-cost (`?hud=1`'s Solver HUD) came back
+  comparable between tiers (~0.1-0.4ms either way) on the test GPU — not a
+  dramatic win in this specific measurement, reported honestly rather than
+  claiming one; the acceptance criterion (an actual reduction in
+  particles visited per query, not just cheaper per-visit math) holds by
+  construction (27-cell binary search vs. a full O(N) scan), independent
+  of this one environment's measured wall-clock noise.
+
 ## WP-42 Stage A: Optional account sign-in (Supabase Auth) — no gating yet
 
 Real sign-in only, per `BerryStudio-Upgrade-Plan-v3-2.md` §6/§7's staged

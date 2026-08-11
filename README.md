@@ -209,17 +209,39 @@ in the app's own header.
   sharper, more accurate drape on dense garments — the default tier's own
   behavior and performance are completely unchanged; switching tiers rebuilds
   the simulation rather than live-swapping. Self-collision stays brute-force
-  O(N²) in both tiers: `GPUComputationRenderer` (this solver's plain-WebGL2
-  GPGPU approach) has no compute-shader/atomics access, and a real GPU
-  spatial hash needs either a scatter-with-atomics compaction pass or a full
-  bitonic sort to build actual per-cell particle lists — neither available
-  here without adopting WebGPU compute shaders or a from-scratch verified
-  sort, a materially larger undertaking than an opt-in tier. A cheaper
+  O(N²) on the default tier — unchanged, byte-identical compiled shader, per
+  the same "default tier never regresses" guarantee this file already makes
+  for the bend constraint. As of WP-35b, the "High" tier replaces it with a
+  real GPU spatial-hash broadphase: a bitonic sort (`bitonicSortGPU.js`,
+  itself a mechanical GLSL port of a CPU reference verified first —
+  `spatialHash.js`/`spatialHash.test.js`, the same CPU-first discipline
+  WP-35's dihedral bend used) buckets particles by grid cell every frame,
+  and each particle's query then binary-searches the 27 surrounding cells'
+  index ranges instead of scanning every other particle — `GPUComputationRenderer`
+  (this solver's plain-WebGL2 GPGPU approach) has no compute-shader/atomics
+  access, so "sort, don't scatter" is what building real per-cell particle
+  lists takes here (see `bitonicSortGPU.js`'s own header). Landing this
+  surfaced a real, separate bug worth naming: the existing dihedral-bend
+  hinge data (6 texture samplers) plus one more for the sort buffer pushed
+  the High tier's compiled shader to 19 active texture units — already
+  over `MAX_TEXTURE_IMAGE_UNITS`'s WebGL2 spec-floor minimum of 16, which
+  real lower-end/older mobile GPUs (not just this project's own test
+  environment, where it was actually caught) can be capped at. Fixed by
+  halving the hinge texture count (3 double-wide textures instead of 6
+  separate ones, same data, same values — see `packHingeTextures`'s own
+  comment) to bring the High tier back to 16, with the same guarantee: the
+  default tier's shader is untouched by any of this. The spatial-hash grid
+  is built once, from the garment's rest pose plus a fixed margin (not a
+  per-frame GPU bounds reduction — see `buildGrid`'s own header for that
+  tradeoff); a particle that somehow drifts outside it clamps to an edge
+  cell rather than erroring or dropping a real collision silently. A cheaper
   middle ground (bucket each particle into a coarse grid cell, skip
-  obviously-far pairs) was considered and deliberately not shipped: the
-  loop's actual cost is the two texture fetches needed just to find out
-  where another particle IS, which a cell-based early-out can't avoid —
-  see `ClothSimulation.js`'s own comment. Fabric `structStiff`/`bendStiff`
+  obviously-far pairs) was considered for the ORIGINAL brute-force loop and
+  deliberately not shipped as a partial fix: the loop's actual cost was the
+  two texture fetches needed just to find out where another particle IS,
+  which a cell-based early-out couldn't avoid without a real per-cell index
+  list — which is exactly what the sort now builds for real. Fabric
+  `structStiff`/`bendStiff`
   values are tuned "feel" sliders, not Kawabata-instrument-calibrated SI
   values. Seams weld at mesh-build time (no gradual sewing ramp-in) — a
   garment can show a brief pop at the seam on the very first frame after a

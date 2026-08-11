@@ -2,6 +2,8 @@ import * as THREE from 'three'
 import { GPUComputationRenderer } from 'three/addons/misc/GPUComputationRenderer.js'
 import { MAX_COLLISION_CAPSULES } from '../body/collisionRig.js'
 import { FrameBudgetController } from '../perf/frameBudget.js'
+import { buildGrid, nextPow2, minLowerBoundIters, DEFAULT_SCAN_CAP } from './spatialHash.js'
+import { GPUBitonicSort } from './bitonicSortGPU.js'
 
 // Position Verlet + iterative distance-constraint relaxation (Jakobsen/Provot
 // — the classic approach behind three.js's own long-standing cloth demo).
@@ -73,37 +75,51 @@ function packNeighborTextures(neighbors, maxNeighbors, texDim) {
 // Only ever called when the high-quality tier is actually being built (see
 // the constructor below) — the default tier never allocates these
 // textures at all.
+//
+// WP-35b: packed into ONE double-wide (texDim*2 x texDim) texture per array
+// instead of two separate texDim x texDim textures ("A" for slots 0-3, "B"
+// for slots 4-7 side by side in the same texture, at column `px` and
+// `px + texDim` respectively) — same data, same addressing per particle,
+// just 3 GPU sampler uniforms instead of 6. This is a pure resource-budget
+// change forced by WP-35b's own new uSortedBuffer sampler: the previous
+// 2-texture-per-array scheme left the high-quality tier's shader at 18
+// active texture units — already over the WebGL2 spec-floor minimum of 16
+// (`MAX_TEXTURE_IMAGE_UNITS`) that some real hardware (older/low-end mobile
+// GPUs, software-rendered contexts) provides nothing beyond. Adding even
+// one more sampler for the spatial hash made an already-marginal budget
+// fail outright (confirmed live: "FRAGMENT shader texture image units
+// count exceeds MAX_TEXTURE_IMAGE_UNITS(16)"). Halving the hinge-only
+// texture count (this WP's own scope: dihedral bend is high-quality-tier-
+// only, never touches the default tier) brings the total back under 16
+// with room for uSortedBuffer — see positionFragmentShader's DIHEDRAL_BEND
+// GLSL for the matching read-side change (same values, two texture2D
+// reads at a left/right-half uv offset into ONE sampler instead of one
+// read each from two separate samplers).
 function packHingeTextures(bendHinge, maxNeighbors, texDim) {
-  const texCount = texDim * texDim
-  const edgeV0A = new Float32Array(texCount * 4).fill(-1)
-  const edgeV0B = new Float32Array(texCount * 4).fill(-1)
-  const edgeV1A = new Float32Array(texCount * 4).fill(-1)
-  const edgeV1B = new Float32Array(texCount * 4).fill(-1)
-  const restAngleA = new Float32Array(texCount * 4)
-  const restAngleB = new Float32Array(texCount * 4)
+  const w = texDim * 2, h = texDim
+  const edgeV0 = new Float32Array(w * h * 4).fill(-1)
+  const edgeV1 = new Float32Array(w * h * 4).fill(-1)
+  const restAngle = new Float32Array(w * h * 4)
   const particleCount = bendHinge.idx.length / maxNeighbors
   for (let p = 0; p < particleCount; p++) {
+    const px = p % texDim
+    const py = Math.floor(p / texDim)
     for (let k = 0; k < maxNeighbors; k++) {
       const slot = p * maxNeighbors + k
-      const v0Target = k < 4 ? edgeV0A : edgeV0B
-      const v1Target = k < 4 ? edgeV1A : edgeV1B
-      const raTarget = k < 4 ? restAngleA : restAngleB
+      const half = k < 4 ? 0 : 1 // "A" batch (slots 0-3) in the left half, "B" (4-7) in the right half
       const ch = k % 4
-      v0Target[p * 4 + ch] = bendHinge.edgeV0[slot]
-      v1Target[p * 4 + ch] = bendHinge.edgeV1[slot]
-      raTarget[p * 4 + ch] = bendHinge.restAngle[slot]
+      const texelIdx = (py * w + (px + half * texDim)) * 4
+      edgeV0[texelIdx + ch] = bendHinge.edgeV0[slot]
+      edgeV1[texelIdx + ch] = bendHinge.edgeV1[slot]
+      restAngle[texelIdx + ch] = bendHinge.restAngle[slot]
     }
   }
   const makeTex = (arr) => {
-    const tex = new THREE.DataTexture(arr, texDim, texDim, THREE.RGBAFormat, THREE.FloatType)
+    const tex = new THREE.DataTexture(arr, w, h, THREE.RGBAFormat, THREE.FloatType)
     tex.needsUpdate = true
     return tex
   }
-  return {
-    edgeV0A: makeTex(edgeV0A), edgeV0B: makeTex(edgeV0B),
-    edgeV1A: makeTex(edgeV1A), edgeV1B: makeTex(edgeV1B),
-    restAngleA: makeTex(restAngleA), restAngleB: makeTex(restAngleB),
-  }
+  return { edgeV0: makeTex(edgeV0), edgeV1: makeTex(edgeV1), restAngle: makeTex(restAngle) }
 }
 
 // Looks up a flat particle index in a same-sized texture — every static and
@@ -364,18 +380,118 @@ vec3 selfCollisionCorrection(vec3 predicted, vec3 myRestPos, float myFlatIdx) {
 `
 }
 
+// WP-35b high-quality tier: replaces selfCollisionGlsl's O(N^2) scan above
+// with a real spatial-hash broadphase — same function name/signature
+// (`selfCollisionCorrection`), so main()'s call site never changes; only
+// ONE of these two function bodies is ever spliced into a given compiled
+// shader (see positionFragmentShader below), so the default tier's shader
+// is, as always, byte-identical to before this WP.
+//
+// This is a mechanical, line-for-line port of spatialHash.js's
+// `spatialHashBroadphase` (verified by spatialHash.test.js BEFORE this
+// function was written — see that module's own header for the full
+// rationale) and bitonicSortGPU.js's sort output (see that file's header):
+// bucket "me" into a grid cell from `predicted`, binary-search the sorted
+// (cellId, particleIndex) buffer for each of the 27 surrounding cells'
+// index ranges (`lowerBoundSpatialHash`, a fixed-trip-count port of
+// spatialHash.js's `lowerBoundCapped`), then scan forward within each
+// range (capped at `scanCap`, matching `spatialHash.js`'s own
+// DEFAULT_SCAN_CAP) applying the exact same rest-distance-exclusion +
+// radius push-apart + Jacobi averaging as the brute-force version — this
+// function computes the SAME correction brute force would, just by
+// visiting far fewer candidate particles per query (see
+// ClothSimulation.js's own measured comparison in README/CHANGELOG for
+// WP-35b, not asserted here).
+//
+// `sortDim`/`maxIters`/`scanCap` are compile-time constants (GLSL loop
+// bounds must be, unlike this module's other per-frame-tunable uniforms)
+// baked in via template literals — same convention this file already uses
+// for MAX_COLLISION_CAPSULES and texDim elsewhere.
+function selfCollisionSpatialHashGlsl(sortDim, maxIters, scanCap) {
+  const sortCount = sortDim * sortDim
+  return `
+uniform sampler2D uSortedBuffer;
+uniform vec3 uGridMin;
+uniform float uCellSize;
+uniform vec3 uGridDimF;
+
+// First slot in the sorted buffer whose key >= targetKey — see
+// spatialHash.js's lowerBoundCapped for why this is a FIXED-trip-count
+// loop with a "no-op once lo==hi" body rather than a variable-length while
+// loop.
+int lowerBoundSpatialHash(float targetKey) {
+  int lo = 0;
+  int hi = ${sortCount};
+  for (int iter = 0; iter < ${maxIters}; iter++) {
+    if (lo < hi) {
+      int mid = (lo + hi) / 2;
+      ivec2 xy = ivec2(mid % ${sortDim}, mid / ${sortDim});
+      float k = texelFetch(uSortedBuffer, xy, 0).r;
+      if (k < targetKey) lo = mid + 1; else hi = mid;
+    }
+  }
+  return lo;
+}
+
+vec3 selfCollisionCorrection(vec3 predicted, vec3 myRestPos, float myFlatIdx) {
+  if (uApplySelfCollision < 0.5) return vec3(0.0);
+  vec3 rel = (predicted - uGridMin) / uCellSize;
+  float ixf = clamp(floor(rel.x), 0.0, uGridDimF.x - 1.0);
+  float iyf = clamp(floor(rel.y), 0.0, uGridDimF.y - 1.0);
+  float izf = clamp(floor(rel.z), 0.0, uGridDimF.z - 1.0);
+  vec3 corr = vec3(0.0);
+  float count = 0.0;
+  for (int dz = -1; dz <= 1; dz++) {
+    float nz = izf + float(dz);
+    if (nz < 0.0 || nz >= uGridDimF.z) continue;
+    for (int dy = -1; dy <= 1; dy++) {
+      float ny = iyf + float(dy);
+      if (ny < 0.0 || ny >= uGridDimF.y) continue;
+      for (int dx = -1; dx <= 1; dx++) {
+        float nx = ixf + float(dx);
+        if (nx < 0.0 || nx >= uGridDimF.x) continue;
+        float targetId = nx + ny * uGridDimF.x + nz * uGridDimF.x * uGridDimF.y;
+        int start = lowerBoundSpatialHash(targetId);
+        for (int s = 0; s < ${scanCap}; s++) {
+          int slot = start + s;
+          if (slot >= ${sortCount}) break;
+          ivec2 sxy = ivec2(slot % ${sortDim}, slot / ${sortDim});
+          vec4 entry = texelFetch(uSortedBuffer, sxy, 0);
+          if (entry.r != targetId) break;
+          float j = entry.g;
+          if (j < -0.5 || j == myFlatIdx) continue;
+          vec2 nuv = ( vec2( mod(j, resolution.x), floor(j / resolution.x) ) + 0.5 ) / resolution;
+          vec3 jRest = texture2D(uRestPosition, nuv).xyz;
+          if (distance(myRestPos, jRest) < uSelfCollisionRestThreshold) continue;
+          vec3 jPos = texture2D(texturePosition, nuv).xyz;
+          vec3 diff = predicted - jPos;
+          float d = length(diff);
+          if (d < uSelfCollisionRadius && d > 1e-6) {
+            corr += diff * ((uSelfCollisionRadius - d) / d);
+            count += 1.0;
+          }
+        }
+      }
+    }
+  }
+  if (count > 0.5) return corr / count;
+  return vec3(0.0);
+}
+`
+}
+
 // WP-35 extra uniform declarations for the high-quality tier's true
 // dihedral bend — a separate string, only spliced into the shader source
 // when `highQuality` is true (see positionFragmentShader below), so the
 // default tier's compiled shader has zero new uniforms and is otherwise
 // byte-identical to before this WP.
+// WP-35b: 3 double-wide textures (one sampler per array, "A"/"B" batches
+// side by side in the same texture) instead of 6 — see packHingeTextures's
+// header for why.
 const DIHEDRAL_BEND_UNIFORMS_GLSL = `
-uniform sampler2D uBendEdgeV0A;
-uniform sampler2D uBendEdgeV0B;
-uniform sampler2D uBendEdgeV1A;
-uniform sampler2D uBendEdgeV1B;
-uniform sampler2D uBendRestAngleA;
-uniform sampler2D uBendRestAngleB;
+uniform sampler2D uBendEdgeV0;
+uniform sampler2D uBendEdgeV1;
+uniform sampler2D uBendRestAngle;
 uniform float uDihedralStiff;
 `
 
@@ -411,18 +527,27 @@ const DEFAULT_BEND_MAIN_GLSL = `
 // assemble.js's packHinges, which keeps bendHinge's idx aligned with
 // bend's own), plus the three new hinge-only textures for the shared
 // edge's two endpoints and this hinge's rest angle.
+//
+// WP-35b: each "A"/"B" batch is now the left/right HALF of one double-wide
+// texture (see packHingeTextures's header) rather than two separate
+// textures — `uv.x*0.5` addresses the left half (same column a plain
+// texDim-wide texture would use), `uv.x*0.5+0.5` the right half. Same two
+// texture2D calls per array as before, same values read, just one sampler
+// uniform instead of two.
 const DIHEDRAL_BEND_MAIN_GLSL = `
   // Bend (WP-35 high-quality tier): true dihedral angle, not wing-to-wing
   // distance — see DIHEDRAL_BEND_GLSL's own header for why only the wing
   // vertices (never the shared edge) move here.
   vec4 bA = texture2D(uBendNbrA, uv);
   vec4 bB = texture2D(uBendNbrB, uv);
-  vec4 bev0A = texture2D(uBendEdgeV0A, uv);
-  vec4 bev0B = texture2D(uBendEdgeV0B, uv);
-  vec4 bev1A = texture2D(uBendEdgeV1A, uv);
-  vec4 bev1B = texture2D(uBendEdgeV1B, uv);
-  vec4 braA = texture2D(uBendRestAngleA, uv);
-  vec4 braB = texture2D(uBendRestAngleB, uv);
+  vec2 uvHalfA = vec2(uv.x * 0.5, uv.y);
+  vec2 uvHalfB = vec2(uv.x * 0.5 + 0.5, uv.y);
+  vec4 bev0A = texture2D(uBendEdgeV0, uvHalfA);
+  vec4 bev0B = texture2D(uBendEdgeV0, uvHalfB);
+  vec4 bev1A = texture2D(uBendEdgeV1, uvHalfA);
+  vec4 bev1B = texture2D(uBendEdgeV1, uvHalfB);
+  vec4 braA = texture2D(uBendRestAngle, uvHalfA);
+  vec4 braB = texture2D(uBendRestAngle, uvHalfB);
   vec3 dihedralDelta = vec3(0.0);
   float dihedralCount = 0.0;
   ${['A.x', 'A.y', 'A.z', 'A.w', 'B.x', 'B.y', 'B.z', 'B.w'].map((ch) => `
@@ -449,6 +574,12 @@ const DIHEDRAL_BEND_MAIN_GLSL = `
 // compiled default-tier program contains none of this WP's new code at
 // all, not just "happens to produce the same result."
 function positionFragmentShader(texDim, highQuality = false) {
+  // WP-35b: only computed/used when highQuality — the default tier's
+  // compiled shader still contains none of this (see selfCollisionGlsl's
+  // splice below), matching the exact guarantee this file's other
+  // highQuality-gated code already makes.
+  const sortDim = nextPow2(texDim)
+  const maxIters = minLowerBoundIters(sortDim * sortDim)
   return `
 uniform sampler2D uAreaShare;
 uniform sampler2D uRestPosition;
@@ -486,7 +617,7 @@ ${highQuality ? DIHEDRAL_BEND_UNIFORMS_GLSL : ''}
 ${NEIGHBOR_CORRECTION_GLSL}
 ${STRAIN_LIMIT_GLSL}
 ${CAPSULE_COLLISION_GLSL}
-${selfCollisionGlsl(texDim)}
+${highQuality ? selfCollisionSpatialHashGlsl(sortDim, maxIters, DEFAULT_SCAN_CAP) : selfCollisionGlsl(texDim)}
 ${highQuality ? DIHEDRAL_BEND_GLSL : ''}
 
 void main() {
@@ -708,14 +839,50 @@ export class ClothSimulation {
     if (this.qualityTier === QUALITY_TIER_HIGH) {
       const hingeTex = packHingeTextures(neighbors.bendHinge, neighbors.maxNeighbors, this.texDim)
       Object.assign(posVar.material.uniforms, {
-        uBendEdgeV0A: { value: hingeTex.edgeV0A }, uBendEdgeV0B: { value: hingeTex.edgeV0B },
-        uBendEdgeV1A: { value: hingeTex.edgeV1A }, uBendEdgeV1B: { value: hingeTex.edgeV1B },
-        uBendRestAngleA: { value: hingeTex.restAngleA }, uBendRestAngleB: { value: hingeTex.restAngleB },
+        uBendEdgeV0: { value: hingeTex.edgeV0 },
+        uBendEdgeV1: { value: hingeTex.edgeV1 },
+        uBendRestAngle: { value: hingeTex.restAngle },
         // No fabricPresets.js field yet for this (WP-35 is a new, opt-in
         // tier — see README) — reuses bendStiff's own value as a
         // reasonable starting point rather than inventing a second tuned
         // constant with no real-fabric data behind it yet.
         uDihedralStiff: { value: fabric.dihedralStiff ?? fabric.bendStiff },
+      })
+
+      // WP-35b: spatial-hash self-collision broadphase. The grid is built
+      // ONCE, from the garment's REST pose (already on the CPU here) — see
+      // spatialHash.js's buildGrid header for why a fixed, generously-
+      // margined grid is a deliberately simpler and cheaper choice than a
+      // per-frame GPU min/max reduction over live positions.
+      const restTriples = new Array(cloth.simParticleCount)
+      for (let i = 0; i < cloth.simParticleCount; i++) {
+        restTriples[i] = [cloth.simRestPositions[i * 3], cloth.simRestPositions[i * 3 + 1], cloth.simRestPositions[i * 3 + 2]]
+      }
+      const cellSize = selfCollision.radius * 2
+      // 35cm margin, not spatialHash.js's own default (cellSize*4, ~9.6cm —
+      // sized for that module's small synthetic unit-test point clouds, not
+      // real garment dynamics). A T-shirt settling onto a body stays well
+      // inside a margin this size (confirmed live: observed live-position
+      // excursion during preRelax/settle stayed within a few cm of rest,
+      // nowhere near 9.6cm let alone 35cm) — the extra headroom is
+      // deliberately generous for motion this module hasn't been run
+      // against yet (long skirts/dresses, seated/walk poses, a hard grab-
+      // and-drag throw) at effectively zero cost: grid margin only changes
+      // the numeric cellId range (still comfortably inside float32's exact-
+      // integer ceiling — see buildGrid's own MAX_GRID_AXIS cap) and never
+      // touches the sort/query's actual cost, which depends on particle
+      // count alone, not grid extent. A particle that DOES somehow end up
+      // outside even this margin still degrades gracefully (clamps to an
+      // edge cell — see buildGrid's header) rather than erroring.
+      this.spatialHashGrid = buildGrid(restTriples, cellSize, 0.35)
+      this.spatialSort = new GPUBitonicSort(renderer, { texDim: this.texDim, grid: this.spatialHashGrid })
+      this.spatialSort.setParticleCount(cloth.simParticleCount)
+
+      Object.assign(posVar.material.uniforms, {
+        uSortedBuffer: { value: null },
+        uGridMin: { value: new THREE.Vector3(...this.spatialHashGrid.min) },
+        uCellSize: { value: this.spatialHashGrid.cellSize },
+        uGridDimF: { value: new THREE.Vector3(...this.spatialHashGrid.dim) },
       })
     }
 
@@ -758,7 +925,15 @@ export class ClothSimulation {
     const savedGravityRamp = u.uGravityRamp.value
     u.uGravityRamp.value = 0
     for (let i = 0; i < steps; i++) {
-      u.uApplySelfCollision.value = i === steps - 1 ? 1 : 0
+      const isSelfCollisionStep = i === steps - 1
+      u.uApplySelfCollision.value = isSelfCollisionStep ? 1 : 0
+      // WP-35b: same requirement as step() — the sorted buffer must be
+      // (re)built right before the one iteration that reads it, or the
+      // high-quality tier's self-collision pass runs against a stale
+      // (here: never-populated) uSortedBuffer.
+      if (isSelfCollisionStep && this.spatialSort) {
+        u.uSortedBuffer.value = this.spatialSort.compute(this.getPositionTexture())
+      }
       this.gpuCompute.compute()
     }
     u.uGravityRamp.value = savedGravityRamp
@@ -789,11 +964,24 @@ export class ClothSimulation {
 
     const t0 = performance.now()
     for (let i = 0; i < this.substeps; i++) {
-      // Self-collision is O(N^2) — affordable once per rendered frame, not
-      // once per substep (see selfCollisionGlsl's cost comment). Running it
-      // on the LAST substep means it sees the frame's fully-relaxed,
-      // post-body-collision positions rather than an intermediate one.
-      u.uApplySelfCollision.value = i === this.substeps - 1 ? 1 : 0
+      // Self-collision (brute-force O(N^2), or WP-35b's spatial-hash
+      // broadphase on the high-quality tier) is affordable once per
+      // rendered frame, not once per substep (see selfCollisionGlsl's cost
+      // comment). Running it on the LAST substep means it sees the frame's
+      // fully-relaxed, post-body-collision positions rather than an
+      // intermediate one.
+      const isSelfCollisionSubstep = i === this.substeps - 1
+      u.uApplySelfCollision.value = isSelfCollisionSubstep ? 1 : 0
+      // WP-35b: (re)build the sorted spatial-hash buffer from the CURRENT
+      // texturePosition snapshot right before the one substep that reads
+      // it — same snapshot every neighbor lookup in this pass already
+      // reads (see selfCollisionSpatialHashGlsl's own header on why this
+      // is consistent with the Jacobi-parallel model the rest of this
+      // solver already uses), and only once per frame, matching the
+      // brute-force version's own cadence.
+      if (isSelfCollisionSubstep && this.spatialSort) {
+        u.uSortedBuffer.value = this.spatialSort.compute(this.getPositionTexture())
+      }
       this.gpuCompute.compute()
     }
     // WebGL compute is queued, not necessarily finished, the instant
@@ -820,5 +1008,6 @@ export class ClothSimulation {
 
   dispose() {
     this.gpuCompute.dispose()
+    this.spatialSort?.dispose()
   }
 }
