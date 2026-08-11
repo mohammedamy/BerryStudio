@@ -151,6 +151,46 @@ button { cursor: pointer; border: none; background: none; }
 .icon-btn:hover { color: var(--ink); border-color: var(--brand); transform: translateY(-1px); }
 .icon-btn svg { width: 18px; height: 18px; }
 
+/* ============ PROJECT TABS ============ */
+/* A real browser-tab strip: one pill per open pattern project, a close
+   "×" per tab (hidden until hover to keep the row calm with many tabs),
+   a trailing "+" to open a new blank one. Horizontally scrollable rather
+   than shrinking tabs to illegibility once there are more than fit. */
+.project-tabs {
+  display: flex; align-items: center; gap: 4px; padding: 6px var(--sp-4);
+  background: var(--panel); border-bottom: 1px solid var(--line);
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin;
+}
+.project-tabs:empty { display: none; }
+.project-tab {
+  display: flex; align-items: center; gap: 6px; flex: 0 0 auto; max-width: 200px;
+  padding: 7px 8px 7px 12px; border-radius: var(--r-sm) var(--r-sm) 0 0;
+  background: var(--panel-2); border: 1px solid var(--line); border-bottom: none;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-2); cursor: pointer;
+  transition: all var(--fast) var(--ease);
+}
+.project-tab:hover { color: var(--ink); }
+.project-tab.active { background: var(--bg-2); color: var(--ink); box-shadow: 0 -1px 0 var(--brand) inset; }
+.project-tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-tab-rename {
+  width: 100px; padding: 1px 4px; border-radius: 4px; border: 1px solid var(--brand);
+  background: var(--panel); color: var(--ink); font-size: 12.5px; font-weight: 600;
+}
+.project-tab-close {
+  width: 18px; height: 18px; flex: none; border-radius: 5px; display: inline-flex;
+  align-items: center; justify-content: center; font-size: 14px; line-height: 1;
+  color: var(--ink-2); opacity: 0; transition: opacity var(--fast), background var(--fast);
+}
+.project-tab:hover .project-tab-close, .project-tab.active .project-tab-close { opacity: 1; }
+.project-tab-close:hover { background: var(--danger); color: #fff; }
+.project-tab-add {
+  flex: none; width: 28px; height: 28px; border-radius: var(--r-sm); margin-inline-start: 2px;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700;
+  color: var(--ink-2); background: transparent; border: 1px dashed var(--line);
+  transition: all var(--fast) var(--ease);
+}
+.project-tab-add:hover { color: var(--brand); border-color: var(--brand); background: var(--panel-2); }
+
 /* ============ WORKSPACE ============ */
 .workspace { display: grid; grid-template-columns: auto 1fr auto; min-height: 0; }
 .left-rail, .right-rail { background: var(--panel); border-inline-end: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }

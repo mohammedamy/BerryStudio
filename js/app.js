@@ -17,7 +17,7 @@ import { AIProviders, AI_PROVIDER_IDS, getProvider, loadLocalModelFromFile, rest
 import { getModelFileMeta, clearModelFile } from './workers/model-file-cache.js';
 import { KeyStore } from './ai-keystore.js';
 import { probeCapabilities } from './capability-probe.js';
-import { generateFromSpec, provenanceMapFromSpec } from './ai-spec-pipeline.js';
+import { generateFromSpec, provenanceMapFromSpec, generateSVGPatternFromImage } from './ai-spec-pipeline.js';
 import { fuseStyle, mergeProvenance } from './ai-fusion.js';
 import { ImageProviders, IMAGE_PROVIDER_IDS } from './image-providers.js';
 import { MEAS_KEYS, renderMeasureFields } from './measure-form.js';
@@ -91,6 +91,30 @@ import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
     // access tokens never do — see js/cloud-sync.js.
     syncTarget: "endpoint", syncEndpointUrl: "", syncGoogleClientId: "", syncMicrosoftClientId: "",
     costCurrency: "USD",
+    // Project Tabs: multiple independent pattern projects open at once,
+    // switched like browser tabs (see initProjectTabs()/switchToProject()
+    // below). `projects[]` holds every open tab's own full canvas
+    // snapshot (pieces/texts/points/cons/variables/view — see
+    // Canvas.snapshotState()) plus its own undo/redo history
+    // (Canvas.getHistory()) so Undo in one tab never reaches into
+    // another's content. `activeProjectId` is which one is currently
+    // live in the single shared Canvas/View3D/Cloth-Lab instance — this
+    // app "swaps" the one real canvas between tabs rather than running N
+    // independent canvases at once (same end result a user sees as real
+    // browser tabs: only one tab's content is ever actually rendered at a
+    // time). Empty by default; initProjectTabs() seeds the first tab from
+    // whatever pattern boot-loads, so an existing user's saved "pps" blob
+    // with no `projects` key at all just gets a single tab wrapping their
+    // one pre-existing project — zero migration step of their own.
+    // Deliberately OUT of scope for v1 (shared across all tabs instead):
+    // the background/trace image (Canvas's `bg` isn't JSON-serializable —
+    // it holds a live Image element — and per-tab data-URL storage would
+    // multiply localStorage usage by tab count for a rarely-used power
+    // feature), and size/grading/measurement settings (state.size et al.
+    // stay one global "which size am I looking at" control, not
+    // per-document — reasonable for how this app is actually used, and a
+    // clearly separable follow-up if that turns out wrong in practice).
+    projects: [], activeProjectId: null,
   };
   const savedRaw = JSON.parse(localStorage.getItem("pps") || "{}");
   const state = Object.assign({}, DEF, savedRaw);
@@ -100,7 +124,15 @@ import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
   if (!("reduceMotion" in savedRaw) && typeof matchMedia === "function") {
     try { state.reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { /* matchMedia unavailable */ }
   }
-  const save = () => localStorage.setItem("pps", JSON.stringify(state));
+  // syncActiveProjectSnapshot (function-declared further below, hoisted)
+  // keeps the active Project Tab's own stored snapshot fresh from the live
+  // canvas on every save() — save() is already called after essentially
+  // every mutating action in this app, so piggybacking on it here means
+  // every OTHER call site (piece edits, AI generation, library loads...)
+  // keeps a tab's stored content correct with no per-call-site change of
+  // its own. A no-op before initProjectTabs() has ever run (activeProject()
+  // finds nothing yet) — safe to call from anywhere, at any point in boot.
+  const save = () => { syncActiveProjectSnapshot(); localStorage.setItem("pps", JSON.stringify(state)); };
   const T = k => (I18N[state.lang][k] ?? I18N.en[k] ?? k);
   const L = o => (o ? (o[state.lang] ?? o.en) : "");
 
@@ -1011,6 +1043,24 @@ import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
     c.appendChild(preview); c.appendChild(guided); c.appendChild(f); c.appendChild(file); c.appendChild(up); c.appendChild(gen);
     c.appendChild(statusBox); c.appendChild(attrsBox);
 
+    // ---- Direct SVG Pattern Import: sends the SAME uploaded reference
+    // image above to the configured AI provider with a fixed, highly-
+    // detailed technical-drafting prompt asking for the finished flat
+    // pattern as raw SVG — not a style spec — then imports that SVG
+    // straight onto the canvas through the exact same pipeline a
+    // hand-picked SVG file import uses (js/pattern-import.js,
+    // Canvas.importPieces()). Kept as its own button rather than folded
+    // into "Generate" above: the two produce fundamentally different
+    // geometry (this app's own deterministic drafter vs. whatever the
+    // model itself draws), and that's a deliberate choice a user should
+    // make, not an implicit fallback.
+    c.appendChild(el("div","section-title",IC.importf+T("aiSvgTitle"))).style.marginTop="22px";
+    c.appendChild(el("div","help-note",T("aiSvgDesc")));
+    const svgBtn=el("button","big-btn ghost",IC.importf+T("aiSvgGenerate")); svgBtn.style.marginTop="8px";
+    svgBtn.onclick=()=>runAISVGImport(svgBtn);
+    c.appendChild(svgBtn);
+    const svgStatus=el("div","ai-status"); svgStatus.id="aiSvgStatus"; c.appendChild(svgStatus);
+
     // ---- AI Fashion Billboard: dress a model in real garment photos, then
     // draw a measured pattern from that photo (see js/billboard.js) ----
     c.appendChild(el("div","section-title",IC.image+T("billboardTitle"))).style.marginTop="22px";
@@ -1288,6 +1338,58 @@ import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
     if(/\b429\b|rate.?limit/i.test(r)) return "specFallbackRateLimit";
     if(/fetch|network|timeout|abort|dns|offline/i.test(r)) return "specFallbackNetwork";
     return "specValidationFallback";
+  }
+  // Same shape as classifyAIFallbackReason() above, but NOT reusing its
+  // i18n keys — every one of those explicitly says "...showing the
+  // offline-analysis pattern instead", which would be a lie here: the
+  // direct-SVG path has no local fallback drafter to fall back TO, so a
+  // failure here just means nothing was imported and the canvas is
+  // unchanged. Reasons this recognizes come from two places:
+  // generateSVGPatternFromImage()'s own {reason:'no-image'|'no-svg-in-
+  // reply'|'no-shapes'|<provider error text>} (js/ai-spec-pipeline.js),
+  // classified below the same way classifyAIFallbackReason() classifies
+  // provider error text (auth/rate-limit/network) for anything else.
+  function classifySVGFailReason(reason){
+    const r = String(reason||"");
+    if(r==="no-image") return "aiSvgNeedImage";
+    if(r==="no-svg-in-reply") return "aiSvgFailNoSvg";
+    if(r==="no-shapes") return "aiSvgFailNoShapes";
+    if(/\b401\b|\b403\b|unauthor|invalid.{0,12}key|api.?key/i.test(r)) return "aiSvgFailAuth";
+    if(/\b429\b|rate.?limit/i.test(r)) return "aiSvgFailRateLimit";
+    if(/fetch|network|timeout|abort|dns|offline/i.test(r)) return "aiSvgFailNetwork";
+    return "aiSvgFailGeneric";
+  }
+  // Sends the uploaded AI-inspiration image (`aiImage`, same one the main
+  // "Generate" button reads) to the configured text/vision provider with
+  // SVG_PATTERN_PROMPT (js/ai-spec-pipeline.js) and imports whatever real
+  // pattern pieces come back — via Canvas.importPieces(), the exact same
+  // call importPatternFile() makes for a hand-picked SVG file. On any
+  // failure, the canvas is left completely untouched (unlike the main
+  // "Generate" flow, there is no local-heuristic fallback to drop into —
+  // this path only ever does one thing, honestly succeed or honestly fail).
+  async function runAISVGImport(btn){
+    if(!aiImage){ toast(T("aiSvgNeedImage")); return; }
+    ensureAIState();
+    const providerId = state.aiProvider || "proxy";
+    const adapter = AIProviders[providerId];
+    const cfg = await resolveAICfg(providerId, aiCfgFor(providerId, false));
+    const missingKey = providerId!=="proxy" && adapter.needsKey && !cfg.apiKey;
+    if(missingKey){ toast(T("specFallbackNoKey")); return; }
+    if(providerId==="proxy" && !cfg.baseUrl){ toast(T("aiSvgNeedProvider")); return; }
+    const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7"; btn.disabled=true;
+    const box=$("#aiSvgStatus");
+    if(box){ box.innerHTML=`<div class="ai-stage active"><span class="dot"></span><span>${T("aiSvgStageSending")}</span></div>`; box.classList.add("show"); }
+    try{
+      const res = await generateSVGPatternFromImage({ adapter, cfg, imageDataURL: aiImage });
+      if(!res.ok){ toast(T(classifySVGFailReason(res.reason))); return; }
+      const n = Canvas.importPieces(res.pieces);
+      hideEmpty(); renderLayersPane();
+      if(is3DActive()) build3D();
+      save();
+      const hasWarnings = res.warnings && res.warnings.length;
+      toast((hasWarnings ? T("importPatternPartial") : T("importPatternDone")).replace("{n}",n) + (hasWarnings ? " — "+res.warnings.join(" ") : ""));
+    } catch(e){ toast(T("aiSvgFailGeneric")); }
+    finally{ btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; if(box) box.classList.remove("show"); }
   }
   async function generatePatternFrom(prompt, imageDataURL, btn, doneToastKey){
     const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7"; btn.disabled=true;
@@ -1791,6 +1893,123 @@ import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
     if(is3DActive()) build3D();
     save(); toast(T("newDone"));
   }
+
+  // ---- Project Tabs: multiple independent patterns open at once, switched
+  // like browser tabs — see the `projects`/`activeProjectId` comment on DEF
+  // above for the overall design. "New Project" (above) and Import
+  // Project/import a pattern from the Library/SVG-DXF import etc. are all
+  // UNCHANGED — every one of them just edits "whatever the current active
+  // tab's canvas is", and this file's own save() (already called after all
+  // of those) keeps that tab's stored snapshot in sync automatically.
+  let projectSeq = 1;
+  function activeProject(){ return state.projects.find(p=>p.id===state.activeProjectId) || null; }
+  // Refresh the active tab's stored snapshot from the live canvas — see
+  // save()'s own comment for why this runs from there rather than at every
+  // individual mutation site.
+  function syncActiveProjectSnapshot(){
+    const p = activeProject(); if(!p) return;
+    p.snapshot = Canvas.snapshotState();
+    p.history = Canvas.getHistory();
+    p.loaded = state.loaded;
+    p.category = state.category;
+    p.aiImage = aiImage;
+    // Auto-title from the loaded library pattern's own name, like a
+    // browser tab's title tracking the page — unless the user has
+    // explicitly renamed this tab (double-click), which always wins.
+    if(!p.customTitle) p.title = p.loaded ? L((PATTERNS[p.loaded]||{}).name) || p.title : (p.title || T("untitledProject"));
+  }
+  // Called once at boot, after the initial pattern has finished loading
+  // (see init()'s setTimeout). Seeds a single tab from whatever's already
+  // in Canvas for a first-ever run or an existing user's pre-Project-Tabs
+  // saved state (no `projects` in their "pps" blob) — either way, zero
+  // data loss, zero required action from the user.
+  function initProjectTabs(){
+    if(!state.projects.length){
+      const p = { id: projectSeq++, title: state.loaded ? (L((PATTERNS[state.loaded]||{}).name)||T("untitledProject")) : T("untitledProject"), customTitle:false,
+        snapshot: Canvas.snapshotState(), history: Canvas.getHistory(), loaded: state.loaded, category: state.category, aiImage };
+      state.projects.push(p);
+      state.activeProjectId = p.id;
+    } else if(!activeProject()){
+      // stale/corrupted activeProjectId (e.g. edited storage) — fall back
+      // to the first tab rather than showing a blank canvas with no tab
+      // highlighted as active.
+      state.activeProjectId = null;
+      switchToProject(state.projects[0].id);
+      return;
+    }
+    renderProjectTabs();
+  }
+  function switchToProject(id){
+    if(id===state.activeProjectId) return;
+    syncActiveProjectSnapshot();
+    const target = state.projects.find(p=>p.id===id); if(!target) return;
+    state.activeProjectId = id;
+    Canvas.restoreState(target.snapshot);
+    Canvas.setHistory(target.history);
+    state.loaded = target.loaded||null;
+    if(target.category && target.category!==state.category){ state.category=target.category; syncCategoryUI(); }
+    aiImage = target.aiImage||null;
+    if(Canvas.getPieces().length) hideEmpty(); else showEmpty();
+    renderLayersPane(); renderAIPane(); renderSizePane(); renderMeasurePane();
+    if(is3DActive()) build3D();
+    renderProjectTabs();
+    save();
+  }
+  function newProjectTab(){
+    syncActiveProjectSnapshot();
+    Canvas.clearAll();
+    state.loaded=null; aiImage=null;
+    const p = { id: projectSeq++, title: T("untitledProject"), customTitle:false,
+      snapshot: Canvas.snapshotState(), history: Canvas.getHistory(), loaded:null, category: state.category, aiImage:null };
+    state.projects.push(p);
+    state.activeProjectId = p.id;
+    showEmpty(); renderLayersPane(); renderAIPane();
+    if(is3DActive()) build3D();
+    renderProjectTabs(); save();
+    toast(T("newTabOpened"));
+  }
+  function closeProjectTab(id){
+    const idx = state.projects.findIndex(p=>p.id===id); if(idx<0) return;
+    if(state.projects.length===1){ toast(T("lastTabCantClose")); return; }
+    const wasActive = state.activeProjectId===id;
+    state.projects.splice(idx,1);
+    if(wasActive){
+      const next = state.projects[Math.max(0, idx-1)];
+      state.activeProjectId = null; // so switchToProject's id===activeProjectId guard doesn't skip the restore
+      switchToProject(next.id);
+    } else { renderProjectTabs(); save(); }
+  }
+  function renameProjectTab(id, title){
+    const p = state.projects.find(x=>x.id===id); if(!p) return;
+    const v=(title||"").trim(); if(!v) return;
+    p.title=v; p.customTitle=true;
+    renderProjectTabs(); save();
+  }
+  function renderProjectTabs(){
+    const bar=$("#projectTabs"); if(!bar) return;
+    bar.innerHTML="";
+    state.projects.forEach(p=>{
+      const tab=el("div","project-tab"+(p.id===state.activeProjectId?" active":""));
+      const label=el("span","project-tab-label"); label.textContent=p.title||T("untitledProject"); label.title=label.textContent;
+      const closeBtn=el("button","project-tab-close","×"); closeBtn.type="button"; closeBtn.title=T("closeTab");
+      tab.appendChild(label); tab.appendChild(closeBtn);
+      tab.onclick=(e)=>{ if(e.target===closeBtn) return; switchToProject(p.id); };
+      closeBtn.onclick=(e)=>{ e.stopPropagation(); closeProjectTab(p.id); };
+      label.ondblclick=(e)=>{
+        e.stopPropagation();
+        const inp=el("input","project-tab-rename"); inp.value=p.title||"";
+        tab.replaceChild(inp,label); inp.focus(); inp.select();
+        const commit=()=>renameProjectTab(p.id, inp.value);
+        inp.onblur=commit;
+        inp.onkeydown=(ev)=>{ if(ev.key==="Enter") inp.blur(); else if(ev.key==="Escape"){ inp.value=p.title; inp.blur(); } };
+      };
+      bar.appendChild(tab);
+    });
+    const addBtn=el("button","project-tab-add","+"); addBtn.type="button"; addBtn.title=T("newTab");
+    addBtn.onclick=newProjectTab;
+    bar.appendChild(addBtn);
+  }
+
   function projectPayload(){
     return {app:"BerryStudio",version:1,pieces:Canvas.getPieces(),texts:Canvas.getTexts(),points:Canvas.getPoints(),cons:Canvas.getCons(),variables:Canvas.getVariables()};
   }
@@ -4147,6 +4366,7 @@ import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
       } else {
         loadPattern(state.loaded||"womens_dress"); setView(state.view||"2d");
       }
+      initProjectTabs();
     },200);
   }
   document.addEventListener("DOMContentLoaded",init);
