@@ -1,10 +1,13 @@
 /* ============================================================
-   Account sign-in — BerryStudio-Upgrade-Plan-v3.2 WP-42 Stage A.
+   Account sign-in — BerryStudio-Upgrade-Plan-v3.2 WP-42 Stage A,
+   plus Stage B's getProfile() (below) for reading trial/subscription state.
 
-   Sign-in only, no gating: every feature stays free and usable with no
-   account during this stage (plan v3.2 §6). This module exists purely so
-   js/app.js's Account UI has something real to call — WP-42 Stage B is
-   what turns account state into feature gating, later.
+   Sign-in itself stays exactly Stage A's shape: every feature that isn't
+   one of the five Stage B gates it free with no account at all. This
+   module exists so js/app.js's Account UI (and, as of Stage B, its gate
+   checks) have something real to call — the actual gating DECISION
+   (js/entitlement.js's computeEntitlement()) and every gate call site
+   live in js/app.js, not here; this file only fetches data.
 
    Backend: Supabase Auth (managed) — email/password plus Google and
    Facebook OAuth. Supabase issues, stores and refreshes the session
@@ -132,5 +135,33 @@ export const Auth = {
     if(!client) return;
     const { error } = await client.auth.signOut();
     if(error) throw error;
+  },
+
+  // WP-42 Stage B: reads the current user's `profiles` row (see
+  // server/supabase/migrations/0001_profiles_entitlement.sql) — the two
+  // fields js/entitlement.js's computeEntitlement() needs. Returns null
+  // for "can't tell" (signed out, not configured, the migration hasn't
+  // been run yet so the table doesn't exist, or a transient network/RLS
+  // error) rather than throwing — the caller (js/app.js) is responsible
+  // for deciding what "can't tell" means for gating (see its own
+  // fetchEntitlement()), which is deliberately NOT this module's call:
+  // auth.js stays a thin data-access wrapper, same as every other method
+  // here.
+  async getProfile(){
+    const client = await getClient();
+    if(!client) return null;
+    const { data: { user } } = await client.auth.getUser();
+    if(!user) return null;
+    const { data, error } = await client
+      .from('profiles')
+      .select('subscription_status, trial_started_at')
+      .eq('id', user.id)
+      .maybeSingle();
+    if(error){
+      console.warn('[auth] profiles fetch failed (migration not run yet, or a real error) —', error.message||error);
+      return null;
+    }
+    if(!data) return null;
+    return { subscriptionStatus: data.subscription_status, trialStartedAt: data.trial_started_at };
   },
 };

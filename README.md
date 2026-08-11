@@ -880,25 +880,67 @@ in the app's own header.
     bundled file, keyed by filename — it doesn't generalize to a real
     per-mesh auto-fit for future avatars, which remains the limitation
     above.
-- **Account sign-in** (`js/auth.js`, account icon in the header —
-  BerryStudio-Upgrade-Plan-v3.2 WP-42 Stage A) is **optional and gates
-  nothing yet**: every feature above still works fully with no account,
-  exactly as before this WP. Email/password plus Google and Facebook
-  OAuth via Supabase Auth (a managed backend — the app has no backend of
-  its own beyond the existing, separate, optional billboard-proxy Worker;
-  see `server/billboard-proxy/README.md`). `js/auth-config.js`'s
+- **Account sign-in + subscription gating** (`js/auth.js`, `js/entitlement.js`,
+  account icon in the header — BerryStudio-Upgrade-Plan-v3.2 WP-42 Stages
+  A+B) is BerryStudio's one reversal of its own "local-first, no-account"
+  framing (see the upgrade plan's WP-42 §6 for that call, made explicitly
+  rather than silently) — **five specific surfaces now require sign-in and
+  an active 30-day trial or subscription**: AI (pattern/image generation),
+  the Pattern Library (264 bundled patterns), Quick Draft/Auto Pattern,
+  Export (SVG/DXF/PDF/PNG/JPEG/HPGL/AI, Tech Pack, Bill of Materials), and
+  Cloth Lab (the GPU cloth-simulation app, both its iframe and embedded
+  entry points). **Everything else stays free with no account**, unchanged:
+  2D pattern drafting, measurements/grading, 3D Preview, Check Pattern,
+  Fit Chart, Sewing Instructions, Walk the Seam, marker/nesting, and local
+  project save/load (JSON) — the Export pane's own gated buttons sit
+  right next to these free ones, so a signed-out user still sees and can
+  use the free tools in that same pane, just not the gated ones (each
+  gated button/action checks entitlement itself, not the pane as a whole,
+  for Export specifically — the other three gated panes — Library, AI,
+  Quick Draft — gate the entire pane, since plan v3.2 §6 names each of
+  those as wholly gated features). Sign-in itself is email/password plus
+  Google and Facebook OAuth via Supabase Auth (a managed backend — the app
+  has no backend of its own beyond this and the existing, separate,
+  optional billboard-proxy Worker; see `server/billboard-proxy/README.md`
+  and, new this stage, `server/supabase/README.md`). `js/auth-config.js`'s
   `SUPABASE_URL`/`SUPABASE_ANON_KEY` gate every code path — empty, the
-  Account modal plainly says sign-in isn't set up rather than presenting
-  a broken form; filled in with a real project's values (verified live:
-  email/password, Google, and Facebook all round-trip against a real
-  Supabase project — see CHANGELOG's WP-42 Stage A entry for what was
-  actually checked, including a real bug this pass found and fixed in
-  the SDK's own loading mechanism). Stage B (entitlement gating for
-  AI/Library/Auto Pattern/Export/Cloth Lab) and Stage C (real PayPal
-  billing) are both deliberately not part of this landing — see the
-  upgrade plan's WP-42 for the staged reasoning. The two OAuth providers'
+  Account modal plainly says sign-in isn't set up, and (Stage B) every
+  gated surface fails toward "show the sign-in prompt," never toward
+  silently unlocking, when it can't prove entitlement (see
+  `js/entitlement.js`'s header comment for the exact fail-open-on-network-
+  hiccup-but-fail-closed-on-no-data reasoning).
+  The 30-day trial clock is a real, server-set `trial_started_at` column
+  (`server/supabase/migrations/0001_profiles_entitlement.sql`) a signed-in
+  user cannot rewrite — Row Level Security allows reading only your own
+  row, no client write path exists at all, so flipping to an active
+  subscription requires the Stage B admin-SQL stopgap
+  (`server/supabase/README.md`) until Stage C's real PayPal integration
+  lands. There is deliberately no "expired" value stored anywhere; it's
+  computed client-side from trial age at read time — see
+  `js/entitlement.js`. The standalone Cloth Lab subpath
+  (`cloth-lab/src/main.jsx`'s `EntitlementGate`) runs its own,
+  independent Supabase check (English-only, a defense-in-depth screen for
+  a direct-URL/bookmark path, not the primary bilingual gate) so opening
+  `/cloth-lab/` directly can't bypass the root app's own gate. **Verified
+  this stage**: the signed-out gated state for all five surfaces, in the
+  browser, end to end (Library/AI/Quick Draft panes replaced by the
+  upsell block; Export pane's four gated buttons individually blocked
+  while Fit Chart/Sewing Instructions/Check Pattern/Walk the Seam/marker-
+  making stay usable; Cloth Lab's tab showing the gate with the iframe's
+  `src` never set, confirming the GPU work never starts) — plus the full
+  `js/entitlement.js`/`cloth-lab/src/entitlement.js` trial/active/expired
+  math (day-boundary edge cases, malformed dates, clock skew) under unit
+  test. **Not verified this stage, honestly**: the actual signed-in
+  trial/active/expired visual states against a real account — doing that
+  live would mean creating a real Supabase account from this session,
+  which is out of scope for an automated pass to do on its own; this is a
+  real gap in this stage's verification, not an oversight, and worth a
+  manual pass with a real test account before relying on this in
+  production. Stage C (real PayPal billing) remains deliberately out of
+  scope — see the upgrade plan's WP-42 for the staged reasoning. OAuth
   client secrets and Supabase's own service_role key never touch this
-  codebase; they live only in the Supabase dashboard.
+  codebase; they live only in the Supabase dashboard (and the SQL
+  Editor, for the admin-flip stopgap).
 
 ---
 
@@ -938,14 +980,18 @@ BerryStudio/                (repository root)
 │   ├── pleats.js         Pleat/gather/tuck added-width math
 │   ├── berry-studio-api.js  `window.BerryStudio` local automation API (see "Automation API" below)
 │   ├── cloud-sync.js     Optional cloud sync: self-hosted endpoint, Google Drive, OneDrive (BYO OAuth client ID)
-│   ├── auth.js           Optional account sign-in (Supabase Auth) — Stage A, no gating, see Honest notes
+│   ├── auth.js           Account sign-in (Supabase Auth) + Stage B's getProfile() — see Honest notes
 │   ├── auth-config.js    Public Supabase project URL/anon key — empty until a real project is wired in
+│   ├── entitlement.js    Pure trial/active/expired math (WP-42 Stage B) — the five gated surfaces' single source of truth
 │   ├── vendor/           Generated/vendored files (pattern-spec-validate.generated.js) — see its own README
 │   └── app.js            Application controller (wires everything)
 ├── schema/               Pattern Spec JSON Schema + example fixtures (see Honest notes)
 ├── scripts/              Dev-only tooling (schema validator codegen)
 ├── docs/                 Bilingual docs site (quick start, tools, shortcuts, AI setup, 3D troubleshooting, FAQ)
 │                         + draft-program-design-note.md (internal design note, not part of the site)
+├── server/
+│   ├── billboard-proxy/  Optional Cloudflare Worker proxying the OpenAI key for AI Fashion Billboard — see its own README
+│   └── supabase/         Supabase schema (profiles table, RLS, admin-flip stopgap) — see its own README
 ├── test/                 node --test unit tests for the root app (`npm test`)
 ├── e2e/                  Playwright smoke + AI settings specs (`npm run test:e2e`)
 └── icons/                App icons (SVG + PNG 192/512)

@@ -29,6 +29,7 @@ import { seamPointAtFraction } from './geometry.js';
 import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
 import { Auth, isAuthConfigured } from './auth.js';
+import { computeEntitlement, isAllowed } from './entitlement.js';
 
 (() => {
   "use strict";
@@ -193,6 +194,87 @@ import { Auth, isAuthConfigured } from './auth.js';
   // existed on page load — toasts are for actual sign-in/out actions.
   let currentSession = null;
   let accountSeenFirstEvent = false;
+
+  // BerryStudio-Upgrade-Plan-v3.2 WP-42 Stage B: computed by
+  // js/entitlement.js's computeEntitlement() from the signed-in user's
+  // `profiles` row (js/auth.js's getProfile()), or null when signed out /
+  // not yet fetched. Every gate check below reads THIS, never currentSession
+  // directly and never re-fetches — refreshEntitlement() (called from
+  // initAccountUI()'s onChange handler) is the only writer, so there's
+  // exactly one place that decides what "can't tell" (a fetch error) means:
+  // keep the previous known value rather than snapping to gated, so a
+  // transient network hiccup doesn't lock out an actual subscriber
+  // mid-session. A brand-new sign-in with no reachable profile yet (e.g.
+  // the Stage B migration hasn't been run on this deployment) has no
+  // "previous known value" to fall back to, so it does read as gated —
+  // see refreshEntitlement()'s own comment.
+  let currentEntitlement = null;
+  // The four rail panes gated below re-render themselves after every
+  // refreshEntitlement() so a sign-in/out or trial-expiry check made while
+  // one is already open updates it live, without the user having to click
+  // away and back. Cloth Lab's own tab is re-synced the same way if it's
+  // the active view.
+  function refreshGatedUI(){
+    renderLibraryPane(); renderAIPane(); renderBuilderPane(); renderExportPane();
+    if(state.view==="clothlab") setView("clothlab");
+  }
+  async function refreshEntitlement(session){
+    if(!session || !session.user){ currentEntitlement = null; return; }
+    try{
+      const profile = await Auth.getProfile();
+      // No row at all (migration not run yet, or a real "not found") is
+      // the one case with no prior state to preserve — read as gated,
+      // matching js/entitlement.js's own "can't prove it, don't grant it"
+      // rule for a paid feature. A thrown/rejected fetch, by contrast,
+      // never reaches here — Auth.getProfile() already swallows those and
+      // returns null too, which is indistinguishable from "no row" at
+      // this layer; see that method's own comment for why splitting those
+      // two cases further isn't worth the complexity in Stage B.
+      currentEntitlement = computeEntitlement(profile, Date.now());
+    } catch(e){
+      console.error('[entitlement] refresh failed, keeping previous state', e);
+      // Deliberately do NOT overwrite currentEntitlement here — see the
+      // field's own comment above.
+    }
+  }
+  function gateAllowed(){ return isAllowed(currentEntitlement); }
+  // Shared upsell block every gated pane/action renders — one visual
+  // language for "sign in to start your trial" vs "your trial ended",
+  // rather than four panes each inventing their own copy. `T(...)` keys
+  // are new WP-42 Stage B strings, added to js/i18n.js alongside Stage A's.
+  function renderGateUpsell(container, surfaceTitleKey){
+    container.innerHTML = "";
+    container.appendChild(el("div","section-title",T(surfaceTitleKey)));
+    const signedIn = !!(currentSession && currentSession.user);
+    container.appendChild(el("div","help-note", signedIn ? T("gateExpiredNote") : T("gateSignedOutNote")));
+    const btn = el("button","big-btn", signedIn ? T("gateUpgradeBtn") : T("gateSignInBtn"));
+    btn.style.marginTop="12px";
+    btn.onclick = signedIn ? openUpgradePrompt : openAccount;
+    container.appendChild(btn);
+    if(!isAuthConfigured()){
+      container.appendChild(el("div","help-note", T("accountNotConfigured")));
+    }
+  }
+  // Called by every gated ACTION function (not just the pane renderers) —
+  // covers entry points that bypass the pane UI entirely (Project menu,
+  // ⌘K command palette, keyboard shortcuts all call the same underlying
+  // functions). Returns true and does nothing when allowed; returns false
+  // and opens the sign-in/upgrade modal when gated, so the caller can
+  // `if(!requireEntitlement()) return;` as its very first line.
+  function requireEntitlement(){
+    if(gateAllowed()) return true;
+    if(currentSession && currentSession.user) openUpgradePrompt(); else openAccount();
+    return false;
+  }
+  // Stage B has no real payment flow yet (Stage C/PayPal, plan v3.2 §6) —
+  // this is an honest placeholder, not a fake "Upgrade" button that
+  // silently does nothing. Reuses the generic modal, same pattern as
+  // openAccount().
+  function openUpgradePrompt(){
+    openModal(T("upgradeTitle"), "");
+    const body=$("#genericModal .modal-body"); body.innerHTML="";
+    body.appendChild(el("div","help-note",T("upgradeNotAvailableYet")));
+  }
 
   // ---------------- ICONS (inline SVG) ----------------
   const IC = {
@@ -882,8 +964,25 @@ import { Auth, isAuthConfigured } from './auth.js';
   }
 
   // LIBRARY PANE
+  // Wraps loadPattern() for the two call sites that mean "the user picked
+  // this from the Library surface" (the pane's own cards, and the command
+  // palette's library entries) — every OTHER loadPattern() call (default
+  // pattern on first boot, the AI-SVG-import handoff) stays a direct,
+  // ungated call: those aren't the gated "browse the 264-pattern catalog"
+  // feature, they're how the app has always started up.
+  function loadLibraryPattern(id){
+    if(!requireEntitlement()) return;
+    loadPattern(id);
+  }
   function renderLibraryPane() {
     const c = $(".rail-pane[data-pane=library]"); c.innerHTML="";
+    // WP-42 Stage B: gates the WHOLE pane, including the "My Patterns"
+    // quick-list below — not just the 264 bundled patterns plan v3.2 §6
+    // literally names. Simpler and more honest than splitting one pane
+    // into two different gate states; the user's own saved patterns
+    // (state.mine) aren't lost, just this particular UI to browse them is
+    // deferred until signed in/subscribed, same as everything else here.
+    if(!gateAllowed()){ renderGateUpsell(c, "libraryTitle"); return; }
     c.appendChild(el("div","section-title",IC.shirt+T("libraryTitle")+` <small style="font-weight:600;color:var(--ink-2);margin-inline-start:4px">(${LIBRARY.length})</small>`));
     const sb = el("div","field",`<div style="position:relative"><span style="position:absolute;inset-inline-start:10px;top:9px;color:var(--ink-2)">${IC.search}</span></div>`);
     const inp = el("input","input"); inp.placeholder=T("searchLib"); inp.style.paddingInlineStart="34px"; sb.firstChild.appendChild(inp); c.appendChild(sb);
@@ -904,7 +1003,7 @@ import { Auth, isAuthConfigured } from './auth.js';
           const card=el("div","lib-card");
           card.appendChild(el("div","lib-thumb", LIB_ICONS[x.type] || (x.cat==="men"?LIB_ICONS.shirt:LIB_ICONS.dress)));
           card.appendChild(el("div","lib-meta",`<div class="t">${L(p.name)}</div><div class="s">${L(x.tag)} · ${T(x.cat)}</div>`));
-          card.onclick=()=>loadPattern(x.id);
+          card.onclick=()=>loadLibraryPattern(x.id);
           grid.appendChild(card);
         });
       // my patterns
@@ -1018,6 +1117,7 @@ import { Auth, isAuthConfigured } from './auth.js';
   const AI_STAGES = ["analyzing","silhouette","drafting"];
   function renderAIPane() {
     const c = $(".rail-pane[data-pane=ai]"); c.innerHTML="";
+    if(!gateAllowed()){ renderGateUpsell(c, "aiTitle"); return; }
     c.appendChild(el("div","section-title",IC.spark+T("aiTitle")));
     c.appendChild(el("div","help-note",T("aiDesc")));
 
@@ -1379,6 +1479,7 @@ import { Auth, isAuthConfigured } from './auth.js';
   // "Generate" flow, there is no local-heuristic fallback to drop into —
   // this path only ever does one thing, honestly succeed or honestly fail).
   async function runAISVGImport(btn){
+    if(!requireEntitlement()) return; // WP-42 Stage B: AI surface gate
     if(!aiImage){ toast(T("aiSvgNeedImage")); return; }
     ensureAIState();
     const providerId = state.aiProvider || "proxy";
@@ -1501,6 +1602,7 @@ import { Auth, isAuthConfigured } from './auth.js';
     finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
   }
   async function runAI(txt, btn){
+    if(!requireEntitlement()) return; // WP-42 Stage B: AI surface gate
     const prompt=(txt||"").trim();
     if(!prompt && !aiImage){ toast(T("aiNeedInput")); return; }
     await generatePatternFrom(prompt, aiImage, btn, "generated");
@@ -1596,6 +1698,7 @@ import { Auth, isAuthConfigured } from './auth.js';
 
   function renderBuilderPane() {
     const c = $(".rail-pane[data-pane=builder]"); c.innerHTML = "";
+    if(!gateAllowed()){ renderGateUpsell(c, "builderTitle"); return; }
     c.appendChild(el("div","section-title",IC.ruler+T("builderTitle")));
     c.appendChild(el("div","help-note",T("builderDesc")));
 
@@ -1671,6 +1774,7 @@ import { Auth, isAuthConfigured } from './auth.js';
     return n;
   }
   function generateBuilderPattern(kind) {
+    if(!requireEntitlement()) return; // WP-42 Stage B: Quick Draft/Auto Pattern surface gate
     const m = Object.assign({}, currentMeas(), state.builderCustom);
     const o = state.builderOpts;
     let pieces;
@@ -1703,7 +1807,18 @@ import { Auth, isAuthConfigured } from './auth.js';
   const FORMATS=["PDF","DXF","SVG","AI","PNG","JPEG","HPGL"];
   function renderExportPane() {
     const c = $(".rail-pane[data-pane=export]"); c.innerHTML="";
+    // WP-42 Stage B: NOT a blanket pane gate, unlike Library/AI/Quick Draft
+    // — plan v3.2 §6 names specific formats/artifacts as gated (file-format
+    // export, Tech Pack, BOM) while explicitly listing Fit Chart, Sewing
+    // Instructions, and (by the same "2D drafting" logic) Check Pattern and
+    // Walk the Seam as staying free. So every control here still renders;
+    // only the four gated buttons' own action functions (exportAs (except
+    // the JSON "Save Project" format, which is local persistence, not
+    // "Export"), techPack, exportSummary, exportBom) call requireEntitlement()
+    // themselves below. This help-note is purely informational — it never
+    // blocks anything, the functions do that.
     c.appendChild(el("div","section-title",IC.download+T("exportTitle")));
+    if(!gateAllowed()) c.appendChild(el("div","help-note",T("exportPartialGateNote")));
     c.appendChild(el("div",null,`<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("paperSize")}</label>`));
     const pg=el("div","opt-grid"); pg.style.margin="8px 0 4px";
     PAPERS.forEach((p,i)=>{const o=el("div","opt"+(i===4?" active":""),p);o.onclick=()=>{$$("#pg .opt").forEach(x=>x.classList.remove("active"));o.classList.add("active");};pg.appendChild(o);}); pg.id="pg"; c.appendChild(pg);
@@ -1872,8 +1987,14 @@ import { Auth, isAuthConfigured } from './auth.js';
   }
   // Central exporter used by both the Export pane and the Project menu.
   function exportAs(fmt){
-    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
     const F=(fmt||"SVG").toUpperCase();
+    // WP-42 Stage B: every real export format is gated except "JSON" (the
+    // Project menu's "Save Project" — local pattern persistence, not the
+    // "Export" surface plan v3.2 §6 names). Checked before the empty-canvas
+    // guard below so a gated user sees the sign-in/upgrade prompt rather
+    // than a misleading "nothing to export" toast.
+    if(F!=="JSON" && !requireEntitlement()) return;
+    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
     if(F==="SVG")      download("berrystudio-pattern.svg","image/svg+xml",Canvas.exportSVG());
     else if(F==="DXF") download("berrystudio-pattern.dxf","application/dxf",Canvas.exportDXF());
     else if(F==="HPGL")download("berrystudio-pattern.hpgl","application/vnd.hp-hpgl",Canvas.exportHPGL());
@@ -2494,6 +2615,7 @@ import { Auth, isAuthConfigured } from './auth.js';
     openModal(T("helpTitle"), html, true);
   }
   function techPack(){
+    if(!requireEntitlement()) return; // WP-42 Stage B: Export surface gate ("Tech Pack")
     const pieces=Canvas.getPieces(); if(!pieces.length){toast(T("empty2d"));return;}
     const m=currentMeas();
     let html=`<h2 style="margin-bottom:8px">${state.loaded?L(PATTERNS[state.loaded].name):"Tech Pack"}</h2>`;
@@ -2856,6 +2978,7 @@ import { Auth, isAuthConfigured } from './auth.js';
 </body></html>`;
   }
   function exportSummary(){
+    if(!requireEntitlement()) return; // WP-42 Stage B: Export surface gate
     if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
     const w=window.open("","_blank");
     if(!w){ toast(T("patternSummary")+": allow pop-ups"); return; }
@@ -2944,6 +3067,7 @@ import { Auth, isAuthConfigured } from './auth.js';
 </body></html>`;
   }
   function exportBom(){
+    if(!requireEntitlement()) return; // WP-42 Stage B: Export surface gate ("BOM")
     const pieces=Canvas.getPieces(); if(!pieces.length){ toast(T("empty2d")); return; }
     const w=window.open("","_blank");
     if(!w){ toast(T("bom")+": allow pop-ups"); return; }
@@ -3329,7 +3453,41 @@ import { Auth, isAuthConfigured } from './auth.js';
   // WP-5.4) dynamically imported and mounted directly into #clothLabEmbed —
   // same lazy-on-first-switch principle, just no iframe/postMessage
   // boundary to cross.
+  // WP-42 Stage B: Cloth Lab is named as gated (plan v3.2 §6), and this is
+  // the ONE call site both engines (iframe and embedded) route through, so
+  // gating here covers both without either mount function needing its own
+  // check. Deliberately does NOT set frame.src / call mountClothLabEmbedded()
+  // at all while gated — the GPU work never starts, matching "unless the
+  // user actually opens this tab" the existing lazy-load comment already
+  // promises, now extended to "and is entitled to". The standalone
+  // `/cloth-lab/` subpath (reachable directly by URL, bypassing this
+  // function entirely) gets its own, separate gate — see
+  // cloth-lab/src/main.jsx's EntitlementGate.
+  function renderClothLabGate(){
+    const wrap=$("#viewClothLab");
+    let g=document.getElementById("clothLabGate");
+    if(!g){
+      g=el("div"); g.id="clothLabGate";
+      g.style.cssText="position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:var(--canvas-bg)";
+      const card=el("div"); card.style.cssText="max-width:340px;text-align:center;padding:24px";
+      g.appendChild(card);
+      wrap.appendChild(g);
+    }
+    const card=g.firstChild; card.innerHTML="";
+    card.appendChild(el("div","section-title",T("viewClothLab")));
+    const signedIn = !!(currentSession && currentSession.user);
+    card.appendChild(el("div","help-note", signedIn ? T("gateExpiredNote") : T("gateSignedOutNote")));
+    const btn=el("button","big-btn", signedIn ? T("gateUpgradeBtn") : T("gateSignInBtn")); btn.style.marginTop="12px";
+    btn.onclick = signedIn ? openUpgradePrompt : openAccount;
+    card.appendChild(btn);
+  }
+  function hideClothLabGate(){
+    const g=document.getElementById("clothLabGate");
+    if(g) g.remove();
+  }
   function loadClothLab(){
+    if(!gateAllowed()){ renderClothLabGate(); return; }
+    hideClothLabGate();
     if(state.clothLabEngine==="embedded"){ mountClothLabEmbedded(); return; }
     const frame=$("#clothLabFrame");
     if(frame.dataset.loaded) return;
@@ -4044,9 +4202,9 @@ import { Auth, isAuthConfigured } from './auth.js';
   }
 
   // Settings
-  // BerryStudio-Upgrade-Plan-v3.2 WP-42 Stage A: account sign-in. No feature
-  // gating happens anywhere in here — every surface stays free and usable
-  // with no account; this modal only shows/changes sign-in state. Same
+  // BerryStudio-Upgrade-Plan-v3.2 WP-42 Stage A account sign-in, plus
+  // Stage B's trial/subscription status block below (signed-in branch) —
+  // the account-state UI stays in one modal across both stages, same
   // openModal()-then-populate-the-body pattern as openOutlineEditorModal.
   function openAccount(){
     openModal(T("accountTitle"), "");
@@ -4055,11 +4213,32 @@ import { Auth, isAuthConfigured } from './auth.js';
       body.appendChild(el("div","help-note",T("accountNotConfigured")));
       return;
     }
-    body.appendChild(el("div","help-note",T("accountStageANotice")));
+    body.appendChild(el("div","help-note",T("accountNotice")));
     if(currentSession && currentSession.user){
       const row=el("div","field"); row.style.marginTop="12px";
       row.innerHTML=`<label>${T("signedInAs").replace("{email}", currentSession.user.email||"")}</label>`;
       body.appendChild(row);
+      // WP-42 Stage B: currentEntitlement is refreshed asynchronously on
+      // every sign-in (see initAccountUI()) — it may still be null here for
+      // a split second right after signing in, before the profile fetch
+      // resolves, which reads as "expired" below. Unlike the four rail
+      // panes, this modal isn't re-rendered by refreshGatedUI() when the
+      // fetch resolves — a stale "expired" flash is possible if the user
+      // opens Account instantly after signing in. Acceptable for Stage B
+      // (closing and reopening the modal shows the real state); not worth
+      // extra plumbing for a fetch that normally resolves well under a
+      // second.
+      const ent = currentEntitlement;
+      const statusRow=el("div","help-note"); statusRow.style.marginTop="10px";
+      if(ent && ent.status==="active") statusRow.textContent=T("accountStatusActive");
+      else if(ent && ent.status==="trial") statusRow.textContent=T("accountStatusTrial").replace("{days}", String(ent.daysRemaining));
+      else statusRow.textContent=T("accountStatusExpired");
+      body.appendChild(statusRow);
+      if(!ent || ent.status==="expired"){
+        const up=el("button","big-btn",T("gateUpgradeBtn")); up.style.marginTop="8px";
+        up.onclick=openUpgradePrompt;
+        body.appendChild(up);
+      }
       const out=el("button","big-btn ghost",T("signOut")); out.style.marginTop="10px";
       out.onclick=async()=>{
         try{ await Auth.signOut(); closeModal("#genericModal"); }
@@ -4134,6 +4313,12 @@ import { Auth, isAuthConfigured } from './auth.js';
       updateAccountButton();
       if(accountSeenFirstEvent) toast(session ? T("signInSuccess") : T("signOutSuccess"));
       accountSeenFirstEvent=true;
+      // WP-42 Stage B: async on purpose — the four gated panes/Cloth Lab
+      // render with whatever currentEntitlement already is (null on first
+      // boot, i.e. gated) and re-render themselves once the real fetch
+      // resolves, rather than this whole handler blocking sign-in/out UI
+      // feedback (the button flip, the toast above) on a network round trip.
+      refreshEntitlement(session).then(refreshGatedUI);
     });
   }
 
@@ -4210,7 +4395,7 @@ import { Auth, isAuthConfigured } from './auth.js';
     {t:T("exportTitle"),i:IC.download,run:()=>{showPane("export");}},
     {t:T("aiTitle"),i:IC.spark,run:()=>showPane("ai")},
     {t:T("libraryTitle"),i:IC.shirt,run:()=>showPane("library")},
-    ...LIBRARY.map(x=>({t:L(PATTERNS[x.id].name),i:IC.dress,run:()=>loadPattern(x.id)})),
+    ...LIBRARY.map(x=>({t:L(PATTERNS[x.id].name),i:IC.dress,run:()=>loadLibraryPattern(x.id)})),
     {t:T("language")+" · "+(state.lang==="en"?"العربية":"English"),i:IC.globe,run:toggleLang},
   ]; }
   function openCmd(){ $("#cmdModal").classList.add("show"); const inp=$("#cmdInput"); inp.value=""; inp.focus(); renderCmd(""); }
