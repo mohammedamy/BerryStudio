@@ -195,6 +195,47 @@ export const Canvas = (() => {
   function doUndo(){ if(!undo.length) return; redo.push(snapshot()); const s=JSON.parse(undo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; promoteBuf=[]; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; render(); }
   function doRedo(){ if(!redo.length) return; undo.push(snapshot()); const s=JSON.parse(redo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; promoteBuf=[]; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; render(); }
 
+  // ---- Project Tabs support: full-state snapshot/restore + undo/redo
+  // history pass-through, used by js/app.js to swap the ENTIRE canvas
+  // between independent pattern projects. Deliberately separate from
+  // loadPieces() (the user-facing "Import Project" action, which pushes
+  // the pre-import state onto undo — exactly right for that action, but
+  // wrong here: switching tabs shouldn't let Undo on tab B jump back to
+  // whatever tab A last looked like) and from doUndo/doRedo's own
+  // snapshot() (a JSON *string*, sized for the undo stack; snapshotState()
+  // returns real, already-deep-cloned objects a caller can hold onto and
+  // JSON-serialize itself into localStorage). `view` (pan/zoom) is
+  // included so switching back to a tab restores exactly where the user
+  // left it; `bg` (trace/reference image) is deliberately NOT — see
+  // js/app.js's Project Tabs comment for why that's out of scope.
+  function snapshotState(){
+    return {
+      pieces: JSON.parse(JSON.stringify(pieces)),
+      sketch: JSON.parse(JSON.stringify(sketch)),
+      texts: JSON.parse(JSON.stringify(texts)),
+      points: JSON.parse(JSON.stringify(points)),
+      cons: JSON.parse(JSON.stringify(cons)),
+      variables: { ...variables },
+      view: { ...view },
+    };
+  }
+  function restoreState(snap){
+    snap = snap || {};
+    pieces = snap.pieces || []; sketch = snap.sketch || []; texts = snap.texts || [];
+    points = snap.points || []; cons = snap.cons || []; variables = snap.variables || {};
+    // drop every ephemeral interaction/tool state — a tab switch mid-drag
+    // (rare, but possible via a fast keyboard shortcut) must never leave a
+    // stale drag/edit anchored to the OTHER tab's now-gone geometry.
+    selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null;
+    promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null;
+    curveEdit=null; dartEdit=null; dartHoverPreview=null; lassoPts=null; drawing=null; edit=null;
+    clickBuf=[]; measurePts=[]; pan=null; dragPiece=null; dragText=null; dragPoint=null; addPointPreview=null;
+    pickCb=null; snapMark=null;
+    if (snap.view){ view = { ...snap.view }; userAdjusted = true; render(); } else fit();
+  }
+  function getHistory(){ return { undo: undo.slice(), redo: redo.slice() }; }
+  function setHistory(h){ undo.length=0; redo.length=0; if (h){ if (h.undo) undo.push(...h.undo); if (h.redo) redo.push(...h.redo); } }
+
   // ---- seam allowance offset (outward polygon offset) ----
   // WP-14: the actual algorithm now lives in js/geometry.js (pure, unit
   // tested) so it can accept `opts.perEdge`/`opts.join` for per-edge
@@ -2405,6 +2446,7 @@ export const Canvas = (() => {
            addText, updateText, removeText, getTexts, onTextRequest,
            addPiece, removePiece, renamePiece, setPieceProps, nudgePiece, nudgePieces, importPieces,
            onZoomChange, exportSVG, exportDXF, exportHPGL, exportRaster, exportPDF, loadPieces, clearAll, screenOf, snapAngle45,
+           snapshotState, restoreState, getHistory, setHistory,
            // construction geometry
            addPoint, removePoint, getPointById, getPoints, setPointName, setPointXY, setPointFormula, onPointRequest,
            getCons, removeCons, onPromoteRequest, finishPromotePiece, cancelPromote, onWarnRequest,

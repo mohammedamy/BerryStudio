@@ -47,6 +47,7 @@
 import { AIGen } from './ai.js';
 import { PatternSpecValidator } from './schema-validate.js';
 import { PatternValidator } from './validate.js';
+import { parseSVGPattern } from './pattern-import.js';
 
 // Mirrors AIGen.build()'s own default palette (js/ai.js's DEFAULT_COLORS) —
 // the schema has no colour field, measured/traced pieces have no colour
@@ -490,4 +491,82 @@ async function finishMeasuredPieces({ adapter, cfg, system, convo, images, schem
     summary: AIGen.summary(style, lang), style, attributes: attrs,
     source: 'spec-measured', spec, validation,
   };
+}
+
+// ============================================================
+// Direct SVG pattern generation from a reference image — a parallel,
+// simpler path to generateFromSpec() above: instead of asking the model
+// for a schema-validated STYLE spec that this app's own deterministic
+// drafter (AIGen.build()) turns into geometry, this asks the model to
+// hand back the finished technical flat-pattern geometry itself, as raw
+// SVG markup, which js/pattern-import.js then parses into real pieces —
+// exactly like a user-imported SVG file would be. Deliberately no
+// `schema`/tool-forcing here: SVG markup isn't representable in this
+// app's JSON pattern-spec schema, so this asks for, and parses, free text.
+// ============================================================
+
+export const SVG_PATTERN_PROMPT = `Role: You are an expert technical pattern maker and garment engineer.
+Task: Analyze the attached reference image of the garment. I need you to reverse-engineer this design and generate a highly detailed, professional flat pattern block layout for every individual fabric piece required to construct this exact garment.
+Visual Requirements:
+
+Style: Black and white 2D technical vector-style line art on a stark white background. No shading, no 3D elements, no human models.
+
+View: Lay out all pattern pieces completely flat (e.g., Front bodice, back bodice, sleeves, collars, facings, pockets, waistbands, gussets).
+
+Technical Details: You MUST include standard pattern markings on every single piece: grainlines (arrows), fold lines, notches (T-marks), darts, and clearly distinguish between cutting lines (solid) and seam lines (dashed).
+
+Proportions: Draw the pieces proportionally to each other, representing a standard fit.
+
+Labels: Briefly label each piece (e.g., 'Center Front', 'Side Back', 'Sleeve') and indicate cutting instructions (e.g., 'Cut 1 on fold', 'Cut 2').
+Output: Output ONLY the 2D pattern pieces laid out structurally as a master pattern draft ready for a CAD software reference. Make your output in the form of . SVG file`;
+
+// A follow-up correction sent only if the first reply's SVG couldn't be
+// extracted — the same "one corrective retry, not a silent failure"
+// shape generateFromMeasuredSpec()'s own validation-failure retry above
+// uses, just for "wasn't valid SVG" instead of "wasn't valid JSON".
+const SVG_RETRY_NUDGE = "Your last reply did not contain a single well-formed <svg>...</svg> document. Reply with ONLY the raw SVG markup this time — no prose, no markdown code fences, nothing before <svg> or after </svg>.";
+
+// Pulls the outermost <svg>...</svg> document out of a model reply that
+// may otherwise contain prose explanation and/or a ```svg markdown fence
+// around it (both common even when explicitly told not to). Pure/
+// testable — no network, no DOM.
+export function extractSVGMarkup(text) {
+  if (!text) return null;
+  const start = text.search(/<svg[\s>]/i);
+  if (start < 0) return null;
+  const end = text.toLowerCase().lastIndexOf('</svg>');
+  if (end < 0 || end < start) return null;
+  return text.slice(start, end + '</svg>'.length).trim();
+}
+
+// Orchestrates one (or, on a malformed first reply, two) round trip(s) to
+// the given text/vision adapter, returning real pattern pieces via
+// js/pattern-import.js's parseSVGPattern() — the same geometry a hand-
+// exported SVG file import would produce. `adapter`/`cfg` come from
+// js/ai-providers.js exactly like generateFromSpec()'s own params (this
+// module still never touches KeyStore/DOM/fetch directly — see
+// test/ai-svg-pattern.test.js for a plain-mock-adapter test of this).
+export async function generateSVGPatternFromImage({ adapter, cfg, imageDataURL, opts }) {
+  if (!imageDataURL) return { ok: false, reason: 'no-image' };
+  const call = (nudge) => adapter.complete(cfg, {
+    system: SVG_PATTERN_PROMPT,
+    messages: [{ role: 'user', content: nudge || 'Here is the reference garment image — generate the SVG pattern now.' }],
+    images: [imageDataURL],
+    maxTokens: 8192, // a full multi-piece technical draft with markings/labels runs well past the 4096-token default other callers use
+  }, opts);
+  let res;
+  try { res = await call(); }
+  catch (e) { return { ok: false, reason: String((e && e.message) || e) }; }
+  if (!res.ok) return { ok: false, reason: res.error || 'request-failed' };
+  let svg = extractSVGMarkup(res.text);
+  if (!svg) {
+    try { res = await call(SVG_RETRY_NUDGE); }
+    catch (e) { return { ok: false, reason: String((e && e.message) || e) }; }
+    if (!res.ok) return { ok: false, reason: res.error || 'request-failed' };
+    svg = extractSVGMarkup(res.text);
+  }
+  if (!svg) return { ok: false, reason: 'no-svg-in-reply' };
+  const parsed = parseSVGPattern(svg);
+  if (!parsed.pieces.length) return { ok: false, reason: 'no-shapes', warnings: parsed.warnings, svg };
+  return { ok: true, pieces: parsed.pieces, warnings: parsed.warnings, svg };
 }

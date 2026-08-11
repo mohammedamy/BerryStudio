@@ -126,7 +126,7 @@ const anthropic = {
       }
       return { role: m.role, content: m.content };
     });
-    const body = { model, max_tokens: 4096, system: req.system, messages };
+    const body = { model, max_tokens: req.maxTokens || 4096, system: req.system, messages };
     if (req.schema) {
       body.tools = [{ name: 'emit_pattern_spec', description: 'Emit the result matching the required JSON Schema.', input_schema: req.schema }];
       body.tool_choice = { type: 'tool', name: 'emit_pattern_spec' };

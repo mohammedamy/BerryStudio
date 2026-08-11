@@ -427,3 +427,62 @@ test("snapAngle45 covers all four quadrants (up-left, up-right, down-left, down-
   assert.deepEqual(r(Canvas.snapAngle45(0, 0, 10, -10)), [10, -10]);   // -45°/315°, already exact
   assert.deepEqual(r(Canvas.snapAngle45(0, 0, -10, -10)), [-10, -10]); // 225°, already exact
 });
+
+// Project Tabs support (see js/app.js) — snapshotState()/restoreState()
+// swap the WHOLE canvas between independent pattern projects, and
+// getHistory()/setHistory() carry each tab's own undo/redo stack across
+// that swap so Undo in tab B never jumps back into tab A's content.
+test("snapshotState/restoreState round-trips pieces/texts/points/cons/variables/view", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "Tab A Piece", ar: "أ" });
+  Canvas.setPieceProps(i, { darts: [[[5, 5], [4, 6], [6, 6]]] });
+  Canvas.addText({ x: 10, y: 10, text: "hello" });
+  Canvas.setVariable("waist", "70");
+  const snap = Canvas.snapshotState();
+
+  Canvas.clearAll();
+  assert.equal(Canvas.getPieces().length, 0);
+
+  Canvas.restoreState(snap);
+  assert.equal(Canvas.getPieces().length, 1);
+  assert.equal(Canvas.getPieces()[0].name.en, "Tab A Piece");
+  assert.equal(Canvas.getTexts().length, 1);
+  assert.equal(Canvas.getVariables().waist, "70");
+});
+
+test("restoreState clears selection/tool ephemera left over from the outgoing tab", () => {
+  Canvas.clearAll();
+  const i = Canvas.addPiece({ en: "P", ar: "ب" });
+  Canvas.selectPiece(i);
+  assert.equal(Canvas.getSelected(), i);
+  Canvas.restoreState(Canvas.snapshotState());
+  assert.equal(Canvas.getSelected(), -1);
+});
+
+test("getHistory/setHistory carries undo/redo across a restoreState() swap without cross-tab leakage", () => {
+  Canvas.clearAll();
+  Canvas.setHistory({ undo: [], redo: [] }); // isolate from whatever this shared-singleton module's undo stack accumulated in earlier tests
+  Canvas.addPiece({ en: "Tab A v1", ar: "أ" });
+  const undoBeforeSecondPiece = Canvas.getHistory().undo.length;
+  Canvas.addPiece({ en: "Tab A v2", ar: "أ٢" }); // pushes one more undo entry, for "just v1"
+  const tabAHistory = Canvas.getHistory();
+  const tabASnap = Canvas.snapshotState();
+  assert.equal(tabAHistory.undo.length, undoBeforeSecondPiece + 1, "adding the 2nd piece should have pushed exactly one more undo entry");
+
+  // Switch to a fresh "tab B" (built the same shape js/app.js's own
+  // tab-switch code hands restoreState() — pieces + a view, exactly what
+  // snapshotState() itself would have produced for it).
+  Canvas.restoreState({ pieces: [{ name: { en: "Tab B", ar: "ب" }, outline: [[0, 0], [1, 0], [1, 1], [0, 1]] }], view: { x: 0, y: 0, scale: 1 } });
+  Canvas.setHistory({ undo: [], redo: [] });
+  assert.equal(Canvas.getHistory().undo.length, 0);
+  Canvas.doUndo(); // must be a no-op — tab B's own (empty) history, not tab A's leaked entry
+  assert.equal(Canvas.getPieces()[0].name.en, "Tab B");
+
+  // Switch back to tab A: its own history (captured above) must restore exactly.
+  Canvas.restoreState(tabASnap);
+  Canvas.setHistory(tabAHistory);
+  assert.equal(Canvas.getPieces().length, 2);
+  Canvas.doUndo();
+  assert.equal(Canvas.getPieces().length, 1);
+  assert.equal(Canvas.getPieces()[0].name.en, "Tab A v1");
+});

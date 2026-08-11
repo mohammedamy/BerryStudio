@@ -110,6 +110,12 @@
     <button class="icon-btn hidden" id="installBtn" data-i18n-aria="installApp" aria-label="Install App"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg></button>
   </header>
 
+  <!-- ===== PROJECT TABS ===== multiple independent pattern projects open
+       at once, switched like browser tabs — see js/app.js's
+       renderProjectTabs()/switchToProject(). Click a tab to switch, "×" to
+       close, "+" to open a new blank one, double-click a label to rename. -->
+  <div class="project-tabs" id="projectTabs"></div>
+
   <!-- ===== WORKSPACE ===== -->
   <div class="workspace">
 
