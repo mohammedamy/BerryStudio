@@ -3656,6 +3656,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // switching language while already on the Cloth Lab tab left it
     // showing the old language until the next unrelated pattern edit.
     if(clothLabReady) syncClothLab(true);
+    // WP-42 Stage B: the gate card is built once by loadClothLab()/
+    // renderClothLabGate() and (unlike the rest of the chrome above) isn't
+    // one of buildRail()'s panes, so it's easy to miss on a language
+    // switch — caught live, in the browser, during this WP's own
+    // verification: toggling language while gated left the gate card
+    // showing its old language until the next tab round-trip. Re-render
+    // is idempotent and cheap (a few DOM nodes, no network) — safe to call
+    // unconditionally whether or not Cloth Lab is the active view.
+    if(!gateAllowed()) renderClothLabGate();
   }
 
   // ================= TOOLTIPS =================

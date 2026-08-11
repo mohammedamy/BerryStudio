@@ -82,6 +82,37 @@ gate as an expired trial, not free access, since no trial has started yet.
   un-entitled too."
 - `en`/`ar` strings for all of the above in `js/i18n.js`.
 
+### Fixed
+- **A real bug, caught live during this WP's own follow-up browser pass,
+  not merely theorized**: `cloth-lab/src/main.jsx` originally wrapped
+  `<App/>` with a static `import App from './App.jsx'` at the top of the
+  file, gating only the RENDER/mount step (`<EntitlementGate><App/>
+  </EntitlementGate>`). Network-request inspection during verification
+  showed App.jsx's entire module graph — three.js, `@react-three/fiber`,
+  every cloth/body/GPU module, the bulk of a 1.4MB bundle — loading (and,
+  in a production build, executing its top-level code) regardless of the
+  gate, because ES module top-level evaluation runs at import time, not
+  render time. Fixed by moving the `import('./App.jsx')` itself inside
+  `EntitlementGate.jsx`, called only after `checkEntitlement()` resolves
+  allowed — confirmed via a real before/after network-request diff (the
+  gated page load no longer fetches `App.jsx` or any of its dependencies
+  at all) and via the production build's own output: one small entry
+  chunk (~195KB) plus a separate `App-*.js` chunk (~1.24MB) that only
+  loads once entitled, replacing the previous single 1.43MB bundle. This
+  is what actually makes "the GPU work never starts while gated" true for
+  the standalone subpath too, matching the guarantee `js/app.js`'s
+  `loadClothLab()` already gives the root app's two entry points.
+- **A second real bug, also caught live**: toggling language while gated
+  (on the Cloth Lab tab, or after switching tabs away and back) left the
+  Cloth Lab gate card showing its OLD language until the next unrelated
+  tab round-trip — `applyLang()`'s existing Cloth Lab re-sync
+  (`syncClothLab(true)`) is guarded on `clothLabReady`, which is never
+  true while gated (the iframe/embed never loads), so that branch silently
+  never ran for a gated user. Fixed by having `applyLang()` also call
+  `renderClothLabGate()` directly whenever `!gateAllowed()` — confirmed
+  live in both directions (ar→en and en→ar while already on the gated
+  Cloth Lab tab, gate card text updates immediately, no stale text).
+
 ### Changed
 - `js/i18n.js`'s `accountStageANotice` → `accountNotice`, reworded: the old
   copy ("everything stays free with no account") is no longer true as of
@@ -104,16 +135,34 @@ gate as an expired trial, not free access, since no trial has started yet.
   new `entitlement.test.js` cases); `vite build` (standalone) and
   `vite build --config vite.lib.config.js` (embedded) both succeed
   unchanged.
-- Browser-verified, signed-out state, end to end: Library/AI/Quick Draft
-  panes each replaced by the sign-in upsell (confirmed via their rendered
-  `innerHTML`, not just visually); the Export pane's paper-size/format
-  pickers, cost calculator, Fit Chart, Sewing Instructions, Check Pattern,
-  Walk the Seam, and Create Marker all still fully present and functional,
-  with only its informational gate note shown; Cloth Lab's tab showing the
-  gate card with `#clothLabFrame`'s `src` confirmed still empty (the GPU
-  work never started) and `#viewClothLab`'s embedded container untouched;
-  the gate's "Sign in" button confirmed to open the real Account modal
-  with the updated notice text.
+- Browser-verified, signed-out state, end to end, across every gated entry
+  point named in this WP — not just the pane UI:
+  - Library/AI/Quick Draft panes each replaced by the sign-in upsell
+    (confirmed via rendered `innerHTML`); the command palette's own
+    library entries (`⌘K`, search "dress") confirmed to open the sign-in
+    modal too, not silently load a pattern, proving `loadLibraryPattern()`
+    covers that second entry point and not just the pane's own cards.
+  - Export pane: **Export**, **Generate Tech Pack**, and **Bill of
+    Materials** each confirmed, by actually clicking them, to open the
+    Account modal instead of doing anything — while **Fit Chart** and
+    **Check Pattern** confirmed to open their own real modals, **Sewing
+    Instructions** confirmed to call `window.open()` (intercepted and
+    counted, not just assumed), and **Walk the Seam**/**Create Marker**
+    confirmed NOT to trigger the Account modal — i.e. the pane's per-
+    button gating is real, not just the informational note.
+  - Cloth Lab: the tab's gate card confirmed with `#clothLabFrame`'s `src`
+    still empty (the GPU work never started) and `#viewClothLab`'s
+    embedded container untouched; the gate's "Sign in" button confirmed
+    to open the real Account modal with the updated notice text; the
+    **standalone `/cloth-lab/` subpath**, loaded directly (not through the
+    root app), independently confirmed to show its own gate with zero
+    console errors — and, after the module-graph fix above, confirmed via
+    network-request inspection to never fetch `App.jsx` or any of its
+    dependencies while gated.
+  - Arabic/RTL: every gated surface above re-checked with the app in `ar`/
+    RTL mode — all new strings render correctly (no missing keys, no
+    layout breakage); the language-toggle bug above was caught specifically
+    because of this pass.
 - **Not verified live, honestly**: the actual signed-in trial/active/
   expired UI states (the Account modal's status line, a gated pane
   un-gating, Cloth Lab actually loading) against a real Supabase account.
