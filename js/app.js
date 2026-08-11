@@ -27,6 +27,7 @@ import { stepForSize, resolveGradedPieces } from './grading.js';
 import { pivotDart, slashAndSpread, transferDart } from './darts.js';
 import { seamPointAtFraction } from './geometry.js';
 import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
+import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
 
 (() => {
   "use strict";
@@ -216,6 +217,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     calib:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h16M4 12v-3M20 12v-3M9 12v-3M15 12v-3"/></svg>',
     lasso:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3C7 3 3 6.5 3 11c0 3 2.5 5 6 5 1.8 0 3-1 3-2.3S10.8 12 9.5 12" stroke-dasharray="2.4 2.2"/><circle cx="17" cy="15" r="3.4"/></svg>',
     curve:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 18C4 10 20 14 20 6"/><path d="M4 18l4.5-4.5M20 6l-4.5 4.5" stroke-dasharray="1.6 1.6"/><circle cx="4" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.7" fill="currentColor" stroke="none"/></svg>',
+    dart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h6M15 6h6"/><path d="M9 6l3 12 3-12"/></svg>',
   };
 
   // Library thumbnails: real, full-colour illustrations (not currentColor-themed
@@ -247,7 +249,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     { id:"circle", i:"circleTool" }, { id:"promote", i:"promote" }, "sep",
     { id:"move", i:"move" }, { id:"rotate", i:"rotate" },
     { id:"scale", i:"scale" }, { id:"measure", i:"measure" }, { id:"text", i:"text" }, "sep",
-    { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"addpoint", i:"addpoint" }, { id:"curve", i:"curve" }, { id:"grain", i:"grain" },
+    { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"addpoint", i:"addpoint" }, { id:"curve", i:"curve" }, { id:"dart", i:"dart" }, { id:"grain", i:"grain" },
   ];
 
   // ================= RENDER SHELL =================
@@ -645,6 +647,12 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   // `presetPivot` (WP-19, optional): {dartIndex,x,y} — set right after a
   // "pick on canvas" click reopens this modal, so that one dart's pivot
   // fields show the picked point instead of resetting to the apex default.
+  // Redesigned (WP-48) as one bordered card per dart — each of the three
+  // operations (Pivot/Spread/Transfer) gets its own labeled block instead
+  // of everything crammed into single flex rows of unlabeled, min-width:60px
+  // inputs — plus a per-dart Delete, the one thing this modal couldn't do
+  // at all before (new darts come from the canvas's own Add Dart tool;
+  // this is the only place to remove one short of Undo).
   function openDartEditorModal(pieceIdx, presetPivot){
     Canvas.cancelPick(); // modal is (re)open — any still-armed pick from a previous call is stale
     const p = Canvas.getPieces()[pieceIdx]; if(!p || !p.darts || !p.darts.length) return;
@@ -653,15 +661,27 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     body.appendChild(el("div","help-note",T("editDartsHint")));
 
     p.darts.forEach((dart, di) => {
-      const sec = el("div","field"); sec.style.marginTop="14px";
-      sec.innerHTML = `<label>${T("dart")} ${di+1}</label>`;
-      body.appendChild(sec);
+      const card = el("div","dart-card");
+      card.innerHTML = `<div class="dart-card-head"><span class="dart-card-title">${T("dart")} ${di+1}</span></div>`;
+      const delBtn = el("button","dart-del",IC.trash); delBtn.type="button"; delBtn.title=T("dartDelete");
+      card.querySelector(".dart-card-head").appendChild(delBtn);
+      body.appendChild(card);
+      delBtn.onclick = () => {
+        Canvas.removeDart(pieceIdx, di);
+        toast(T("dartDeleted"));
+        if (Canvas.getPieces()[pieceIdx]?.darts?.length) openDartEditorModal(pieceIdx);
+        else closeModal("#genericModal");
+        renderLayersPane();
+      };
 
-      const row1 = el("div","row"); row1.style.cssText="display:flex;gap:8px;align-items:center;margin-top:6px";
-      const pivotInp = el("input","input"); pivotInp.type="number"; pivotInp.step="1"; pivotInp.value="0"; pivotInp.style.flex="1";
-      const pivotBtn = el("button","big-btn ghost",T("dartPivotApply")); pivotBtn.style.flex="0 0 auto";
-      row1.appendChild(el("span",null,T("dartPivotDeg")+":")); row1.appendChild(pivotInp); row1.appendChild(pivotBtn);
-      body.appendChild(row1);
+      // ---- Pivot: rotate this dart's legs around its own apex ----
+      const opPivot = el("div","dart-op");
+      opPivot.appendChild(el("div","dart-op-title",T("dartPivotDeg")));
+      const pivotRow = el("div","dart-op-row");
+      const pivotInp = el("input","input"); pivotInp.type="number"; pivotInp.step="1"; pivotInp.value="0";
+      const pivotBtn = el("button","big-btn ghost",T("dartPivotApply")); pivotBtn.type="button";
+      pivotRow.appendChild(pivotInp); pivotRow.appendChild(pivotBtn);
+      opPivot.appendChild(pivotRow); card.appendChild(opPivot);
       pivotBtn.onclick = () => {
         const deg = +pivotInp.value || 0;
         const newDarts = p.darts.map((d,i)=> i===di ? pivotDart(d, deg*Math.PI/180) : d);
@@ -669,11 +689,14 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         toast(T("dartUpdated")); openDartEditorModal(pieceIdx);
       };
 
-      const row2 = el("div","row"); row2.style.cssText="display:flex;gap:8px;align-items:center;margin-top:8px";
-      const spreadInp = el("input","input"); spreadInp.type="number"; spreadInp.step="0.5"; spreadInp.value="0"; spreadInp.style.flex="1";
-      const spreadBtn = el("button","big-btn ghost",T("dartSpreadApply")); spreadBtn.style.flex="0 0 auto";
-      row2.appendChild(el("span",null,T("dartSpreadCm")+":")); row2.appendChild(spreadInp); row2.appendChild(spreadBtn);
-      body.appendChild(row2);
+      // ---- Spread: widen this dart's own mouth, symmetrically ----
+      const opSpread = el("div","dart-op");
+      opSpread.appendChild(el("div","dart-op-title",T("dartSpreadCm")));
+      const spreadRow = el("div","dart-op-row");
+      const spreadInp = el("input","input"); spreadInp.type="number"; spreadInp.step="0.5"; spreadInp.value="0";
+      const spreadBtn = el("button","big-btn ghost",T("dartSpreadApply")); spreadBtn.type="button";
+      spreadRow.appendChild(spreadInp); spreadRow.appendChild(spreadBtn);
+      opSpread.appendChild(spreadRow); card.appendChild(opSpread);
       spreadBtn.onclick = () => {
         const cm = +spreadInp.value || 0;
         const newDarts = p.darts.map((d,i)=> i===di ? slashAndSpread(d, cm) : d);
@@ -681,31 +704,37 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
         toast(T("dartUpdated")); openDartEditorModal(pieceIdx);
       };
 
-      // Real "dart transfer": swing the WHOLE dart (apex included) around an
+      // ---- Transfer: swing the WHOLE dart (apex included) around an
       // external pivot — typically an anatomical reference like the bust
-      // point — rather than the dart's own apex (that's pivotDart above).
+      // point — rather than the dart's own apex (that's Pivot above).
       // Pivot X/Y default to the dart's own apex so applying with 0° is a
       // visible no-op; moving the pivot away from the apex is what actually
-      // makes this "transfer" rather than "pivot".
+      // makes this "transfer" rather than "pivot". Each field gets its own
+      // sub-label (X / Y / angle) rather than one shared prefix, so it's
+      // clear at a glance which number is which. ----
       const [apex] = dart;
       const preset = (presetPivot && presetPivot.dartIndex===di) ? presetPivot : null;
-      const row3 = el("div","row"); row3.style.cssText="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap";
-      const pivotX = el("input","input"); pivotX.type="number"; pivotX.step="0.1"; pivotX.value=(preset?preset.x:apex[0]).toFixed(1); pivotX.style.cssText="flex:1;min-width:60px";
-      const pivotY = el("input","input"); pivotY.type="number"; pivotY.step="0.1"; pivotY.value=(preset?preset.y:apex[1]).toFixed(1); pivotY.style.cssText="flex:1;min-width:60px";
-      const transferDeg = el("input","input"); transferDeg.type="number"; transferDeg.step="1"; transferDeg.value=String((preset&&preset.deg!=null)?preset.deg:0); transferDeg.style.cssText="flex:1;min-width:60px";
-      const transferBtn = el("button","big-btn ghost",T("dartTransferApply")); transferBtn.style.flex="0 0 auto";
-      // WP-19: pick the pivot on canvas instead of typing coordinates you'd
-      // have to already know — the whole point of transferring around an
-      // external pivot is usually a point you can SEE (e.g. the bust
-      // point), not one you've measured. Closes the modal so the real
-      // canvas underneath is clickable, arms a one-shot pick, then reopens
-      // this same modal with that dart's pivot fields pre-filled.
-      const pickBtn = el("button","big-btn ghost",T("dartPivotPick")); pickBtn.style.flex="0 0 auto"; pickBtn.type="button";
-      row3.appendChild(el("span",null,T("dartTransferPivot")+":"));
-      row3.appendChild(pivotX); row3.appendChild(pivotY); row3.appendChild(pickBtn);
-      row3.appendChild(el("span",null,T("dartPivotDeg")+":"));
-      row3.appendChild(transferDeg); row3.appendChild(transferBtn);
-      body.appendChild(row3);
+      const opTransfer = el("div","dart-op");
+      opTransfer.appendChild(el("div","dart-op-title",T("dartTransferPivot")));
+      const pivotRow2 = el("div","dart-op-row");
+      const pivotX = el("input","input"); pivotX.type="number"; pivotX.step="0.1"; pivotX.value=(preset?preset.x:apex[0]).toFixed(1); pivotX.placeholder="X";
+      const pivotY = el("input","input"); pivotY.type="number"; pivotY.step="0.1"; pivotY.value=(preset?preset.y:apex[1]).toFixed(1); pivotY.placeholder="Y";
+      // WP-19: pick the pivot on canvas instead of typing coordinates
+      // you'd have to already know — the whole point of transferring
+      // around an external pivot is usually a point you can SEE (e.g.
+      // the bust point), not one you've measured. Closes the modal so the
+      // real canvas underneath is clickable, arms a one-shot pick, then
+      // reopens this same modal with that dart's pivot fields pre-filled.
+      const pickBtn = el("button","big-btn ghost",T("dartPivotPick")); pickBtn.type="button";
+      pivotRow2.appendChild(pivotX); pivotRow2.appendChild(pivotY); pivotRow2.appendChild(pickBtn);
+      opTransfer.appendChild(pivotRow2);
+      const degTitle = el("div","dart-op-title",T("dartPivotDeg")); degTitle.style.marginTop="10px";
+      opTransfer.appendChild(degTitle);
+      const degRow = el("div","dart-op-row");
+      const transferDeg = el("input","input"); transferDeg.type="number"; transferDeg.step="1"; transferDeg.value=String((preset&&preset.deg!=null)?preset.deg:0);
+      const transferBtn = el("button","big-btn ghost",T("dartTransferApply")); transferBtn.type="button";
+      degRow.appendChild(transferDeg); degRow.appendChild(transferBtn);
+      opTransfer.appendChild(degRow); card.appendChild(opTransfer);
       pickBtn.onclick = () => {
         const deg = +transferDeg.value || 0;
         closeModal("#genericModal");
@@ -1788,6 +1817,36 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     inp.click();
   }
 
+  // Import an .svg or .dxf FILE as new pattern piece(s) on the canvas —
+  // distinct from Import Project above (which round-trips this app's own
+  // JSON project format): this brings in outlines drawn/exported by other
+  // software (or another BerryStudio export, re-imported as fresh editable
+  // pieces rather than replacing the whole project). Parsing itself is
+  // pure (js/pattern-import.js, unit-tested against js/pattern-export.js's
+  // own buildDXF()); this just wires a file picker to it and reports what
+  // came in — including anything skipped, never silently.
+  function importPatternFile(){
+    const inp=el("input"); inp.type="file"; inp.accept=".svg,.dxf,image/svg+xml"; inp.style.display="none";
+    inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(!f) return;
+      const r=new FileReader();
+      r.onload=()=>{
+        const isDXF = /\.dxf$/i.test(f.name);
+        let result;
+        try{ result = isDXF ? parseDXFPattern(String(r.result)) : parseSVGPattern(String(r.result)); }
+        catch(e){ toast(T("importPatternFail")); return; }
+        const { pieces, warnings } = result || {};
+        if(!pieces || !pieces.length){ toast((warnings&&warnings[0]) || T("importPatternNone")); return; }
+        const n = Canvas.importPieces(pieces);
+        hideEmpty(); renderLayersPane();
+        if(is3DActive()) build3D();
+        save();
+        toast((warnings&&warnings.length ? T("importPatternPartial") : T("importPatternDone")).replace("{n}",n) + (warnings&&warnings.length ? " — "+warnings.join(" ") : ""));
+      };
+      r.readAsText(f);
+    };
+    inp.click();
+  }
+
   // ---- WP-18: cloud sync (opt-in, off unless Settings → Cloud Sync is on
   // AND a target is configured) ----
   function syncTargetImpl(){
@@ -1838,6 +1897,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
   function projectMenuItems(){ return [
     { icon:IC.newdoc,  label:T("newProject"),    run:newProject },
     { icon:IC.importf, label:T("importProject"), run:importProject },
+    { icon:IC.importf, label:T("importPattern"), run:importPatternFile },
     "sep",
     { icon:IC.download,label:T("exportSVG"),     run:()=>exportAs("SVG") },
     { icon:IC.download,label:T("exportDXF"),     run:()=>exportAs("DXF") },
@@ -3808,6 +3868,7 @@ import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
     {t:T("addLayer"),i:IC.layers,run:()=>{Canvas.addPiece({en:I18N.en.newLayer,ar:I18N.ar.newLayer});hideEmpty();renderLayersPane();showPane("layers");}},
     {t:T("newProject"),i:IC.newdoc,run:newProject},
     {t:T("importProject"),i:IC.importf,run:importProject},
+    {t:T("importPattern"),i:IC.importf,run:importPatternFile},
     {t:T("savePDF"),i:IC.pdf,run:()=>exportAs("PDF")},
     {t:T("exportDXF"),i:IC.download,run:()=>exportAs("DXF")},
     {t:T("printProject"),i:IC.printer,run:printPattern},

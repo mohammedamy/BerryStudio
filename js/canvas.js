@@ -26,6 +26,14 @@ export const Canvas = (() => {
   // p.curves entry for this edge if it was already curved (re-drag to
   // reshape), else null (a fresh curve).
   let curveEdit = null;
+  // Add Dart tool's live drag state: {pieceIdx, edgeIdx, mouth, apex,
+  // startX, startY, moved} — mouth is the point on the outline edge the
+  // dart's two legs straddle (set on pointerdown, via findEdgeInsertion);
+  // apex tracks the cursor while dragging and commits as the dart's apex
+  // on release. Same "grab now, decide the real shape on release" shape as
+  // curveEdit above.
+  let dartEdit = null;
+  let dartHoverPreview = null;        // {pieceIdx, edgeIdx, point} — live preview while hovering with the Add Dart tool, before the drag starts
   let tool = "select";
   let opts = { grid: true, snap: true, seam: true, unitsCm: true, seamCm: 1, fillOpacity: 0.12 };
   let sketch = [];                              // user-drawn strokes {tool, pts:[[cm,cm]]}
@@ -777,6 +785,7 @@ export const Canvas = (() => {
     drawAddPointPreview();
     drawLassoPreview();
     drawCurveEditPreview();
+    drawDartEditPreview();
   }
   // Dashed accent outline around every group-selected piece (Shift+click or
   // Lasso) — SHOW_HANDLES-style single-piece handles don't apply to a
@@ -963,6 +972,28 @@ export const Canvas = (() => {
     ctx.strokeStyle=CSS("--accent"); ctx.lineWidth=1.5; ctx.setLineDash([2,2]);
     ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle=CSS("--accent"); ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fill();
+  }
+  // Add Dart tool: before the drag starts, a ring at the edge point the
+  // dart's two legs would straddle (same visual language as
+  // drawAddPointPreview above); once dragging, a live V preview of the
+  // actual dart (legA -> apex -> legC) that would commit on release.
+  function drawDartEditPreview(){
+    if (dartEdit){
+      if (dartEdit.moved < DART_MIN_DEPTH_CM) return;
+      const { legA, legC } = dartLegsFor(dartEdit.pieceIdx, dartEdit.edgeIdx, dartEdit.mouth);
+      if (!legA) return;
+      const sa=toScreen(legA[0],legA[1]), sc=toScreen(legC[0],legC[1]), sap=toScreen(dartEdit.apex[0],dartEdit.apex[1]);
+      ctx.save(); ctx.strokeStyle=CSS("--brand"); ctx.lineWidth=2.2; ctx.setLineDash([5,3]);
+      ctx.beginPath(); ctx.moveTo(sa[0],sa[1]); ctx.lineTo(sap[0],sap[1]); ctx.lineTo(sc[0],sc[1]); ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    if (tool==="dart" && dartHoverPreview){
+      const [x,y]=toScreen(dartHoverPreview.point[0], dartHoverPreview.point[1]);
+      ctx.strokeStyle=CSS("--brand"); ctx.lineWidth=1.5; ctx.setLineDash([2,2]);
+      ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=CSS("--brand"); ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fill();
+    }
   }
 
   function drawGrid(W,H) {
@@ -1373,6 +1404,17 @@ export const Canvas = (() => {
         render(); return;
       }
 
+      // Add Dart: arm on pointerdown near an edge (its two legs will
+      // straddle that point), drag inward to place the apex, commits on
+      // release — same shape as Curve Edge just above.
+      if (tool==="dart"){
+        const hit=findEdgeInsertion(wx,wy);
+        if (!hit) return;
+        selected=hit.pieceIdx; onPick(pieces[hit.pieceIdx], e.clientX, e.clientY);
+        dartEdit = { pieceIdx:hit.pieceIdx, edgeIdx:hit.edgeIdx, mouth:hit.point.slice(), apex:hit.point.slice(), startX:wx, startY:wy, moved:0 };
+        render(); return;
+      }
+
       // text: click empty space to place, click existing text to edit
       if (tool==="text"){
         const ti = hitText(e.offsetX, e.offsetY);
@@ -1510,6 +1552,12 @@ export const Canvas = (() => {
         curveEdit.moved=Math.max(curveEdit.moved, Math.hypot(wx-curveEdit.startX, wy-curveEdit.startY));
         render(); return;
       }
+      if (dartEdit){
+        dartEdit.apex=[wx,wy];
+        dartEdit.moved=Math.max(dartEdit.moved, Math.hypot(wx-dartEdit.startX, wy-dartEdit.startY));
+        render(); return;
+      }
+      if (tool==="dart"){ dartHoverPreview=findEdgeInsertion(wx,wy); render(); return; }
 
       // hover cursor feedback over handles
       if (selected>=0 && pieces[selected] && SHOW_HANDLES.has(tool)){
@@ -1550,6 +1598,7 @@ export const Canvas = (() => {
         lassoPts=null; render();
       }
       if (curveEdit) commitCurveEdit();
+      if (dartEdit) commitDartEdit();
       pan=null; dragPiece=null; dragText=null; dragPoint=null;
     });
     cv.addEventListener("dblclick", (e)=>{
@@ -1643,6 +1692,7 @@ export const Canvas = (() => {
     if(drawing&&drawing.tool==="circle"&&t!=="circle"){ drawing=null; }
     if(t!=="lasso") lassoPts=null;
     if(t!=="curve") curveEdit=null;   // drop an in-progress (uncommitted) curve drag
+    if(t!=="dart"){ dartEdit=null; dartHoverPreview=null; }   // drop an in-progress (uncommitted) dart drag
     // Group selection only stays meaningful for the tools that can act on
     // a group at all (select/move to drag it, lasso to add to it) — every
     // other tool (rotate/scale/curve/promote/knife/...) has single-piece or
@@ -1729,6 +1779,47 @@ export const Canvas = (() => {
   function removePiece(i){ if(!pieces[i]) return false; pushUndo(); pieces.splice(i,1); if(selected>=pieces.length) selected=-1; render(); return true; }
   function renamePiece(i, name){ if(!pieces[i]) return false; pushUndo(); pieces[i].name={ ...pieces[i].name, ...name }; render(); return true; }
   function setPieceProps(i, props){ if(!pieces[i]) return false; Object.assign(pieces[i], props); render(); return true; }
+
+  // ---- import pieces parsed from an external SVG/DXF file (js/pattern-
+  // import.js does the actual file parsing — pure, no Canvas state; this
+  // just places the resulting outlines into the pattern). Same "free space
+  // to the right of whatever's already there" placement addPiece() uses,
+  // except the whole imported batch moves together as one group (translated,
+  // not individually repositioned) so a multi-piece DXF/SVG keeps its
+  // pieces' relative layout intact instead of scattering them. Every new
+  // piece lands group-selected (multiSelected) so it's immediately obvious
+  // in the Layers pane which ones just arrived. Returns the count imported.
+  function importPieces(newPieces){
+    if (!Array.isArray(newPieces) || !newPieces.length) return 0;
+    pushUndo();
+    let ox=8, oy=8;
+    if (pieces.length){
+      const xs=pieces.flatMap(p=>p.outline.map(pt=>pt[0]));
+      const ys=pieces.flatMap(p=>p.outline.map(pt=>pt[1]));
+      ox=Math.max(...xs)+12; oy=Math.min(...ys);
+    }
+    const allX = newPieces.flatMap(p=>p.outline.map(pt=>pt[0]));
+    const allY = newPieces.flatMap(p=>p.outline.map(pt=>pt[1]));
+    const dx = ox-Math.min(...allX), dy = oy-Math.min(...allY);
+    const startIdx = pieces.length;
+    newPieces.forEach((np,i)=>{
+      const mv = pt => [pt[0]+dx, pt[1]+dy];
+      const outline = np.outline.map(mv);
+      const curves = (np.curves||[]).map(c=>({ fromIdx:c.fromIdx, toIdx:c.toIdx, c1:mv(c.c1), c2:mv(c.c2) }));
+      const xs=outline.map(p=>p[0]), ys=outline.map(p=>p[1]);
+      const gx=(Math.min(...xs)+Math.max(...xs))/2, gTop=Math.min(...ys), gBot=Math.max(...ys);
+      pieces.push({
+        name: np.name ? { en:np.name, ar:np.name } : { en:`Imported ${startIdx+i+1}`, ar:`مستورد ${startIdx+i+1}` },
+        desc:{ en:"", ar:"" }, outline, curves, darts:[], notches:[],
+        grain: gBot-gTop>4 ? [[gx,gTop+2],[gx,gBot-2]] : [[gx,gTop],[gx,gBot]],
+        visible:true, locked:false,
+        color:["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][(startIdx+i)%6],
+      });
+    });
+    multiSelected = newPieces.map((_,i)=>startIdx+i);
+    selected = multiSelected.length===1 ? multiSelected[0] : -1;
+    fit(); return newPieces.length;
+  }
 
   // WP-17: keyboard nudge for the selected piece (arrow keys in js/app.js's
   // keys() handler). Translates every coordinate-bearing field a piece can
@@ -2013,6 +2104,54 @@ export const Canvas = (() => {
     if (perpDist(bulge, p0, p1) < CURVE_MIN_BULGE_CM){ onWarn('curveTooFlat'); render(); return; }
     curveEdge(pieceIdx, fromIdx, bulge);
   }
+
+  // ---- Add Dart tool ----
+  // Below this drag distance a dart's apex would sit right on top of its
+  // own mouth — a degenerate, invisible dart — so it's treated as a
+  // too-short drag (warn, no-op) rather than silently creating one; same
+  // convention as CURVE_CLICK_CM/CURVE_MIN_BULGE_CM above.
+  const DART_MIN_DEPTH_CM = 0.5;
+  // Default full mouth width (leg-to-leg) for a freshly placed dart, in
+  // cm — a common real-world bust/waist dart width; the Edit Darts
+  // modal's Spread control (js/darts.js's slashAndSpread) widens it
+  // further from there if the piece needs more.
+  const DART_DEFAULT_WIDTH_CM = 2.5;
+  // The two leg endpoints a dart placed at `mouthPoint` on piece
+  // `pieceIdx`'s edge `edgeIdx` would get: straddling mouthPoint along
+  // that edge's own direction, symmetric, capped at 90% of the edge's
+  // length so a dart can never be wider than the edge it sits on.
+  function dartLegsFor(pieceIdx, edgeIdx, mouthPoint){
+    const p = pieces[pieceIdx]; if (!p) return {};
+    const n = p.outline.length, a = p.outline[edgeIdx], b = p.outline[(edgeIdx+1)%n];
+    const dx=b[0]-a[0], dy=b[1]-a[1], len=Math.hypot(dx,dy)||1;
+    const ux=dx/len, uy=dy/len;
+    const half = Math.min(DART_DEFAULT_WIDTH_CM/2, len*0.45);
+    return { legA:[mouthPoint[0]-ux*half, mouthPoint[1]-uy*half], legC:[mouthPoint[0]+ux*half, mouthPoint[1]+uy*half] };
+  }
+  // The actual geometry operation behind the Add Dart tool — pure and
+  // pointer-independent (plain arguments, no ephemeral drag state), same
+  // "real API, not just an event-handler side effect" shape curveEdge()
+  // above already is. Appends a new [apex, legA, legC] entry (js/darts.js's
+  // convention, apex at index 0) rather than touching the outline itself —
+  // a dart is drawn as an overlay V, never cut into the outline polygon.
+  function addDart(pieceIdx, edgeIdx, mouthPoint, apexPoint){
+    const p = pieces[pieceIdx]; if (!p) return false;
+    const { legA, legC } = dartLegsFor(pieceIdx, edgeIdx, mouthPoint);
+    if (!legA) return false;
+    pushUndo();
+    (p.darts = p.darts||[]).push([apexPoint.slice(), legA, legC]);
+    selected = pieceIdx; render(); return true;
+  }
+  function removeDart(pieceIdx, dartIdx){
+    const p = pieces[pieceIdx]; if (!p || !p.darts || !p.darts[dartIdx]) return false;
+    pushUndo(); p.darts.splice(dartIdx,1); render(); return true;
+  }
+  function commitDartEdit(){
+    const { pieceIdx, edgeIdx, mouth, apex, moved } = dartEdit;
+    dartEdit = null;
+    if (moved < DART_MIN_DEPTH_CM){ onWarn('dartTooShort'); render(); return; }
+    addDart(pieceIdx, edgeIdx, mouth, apex);
+  }
   function drawCurveEditPreview(){
     if (!curveEdit || !curveEdit.bulge) return;
     const { p0, p1, bulge, moved, existing } = curveEdit;
@@ -2264,12 +2403,12 @@ export const Canvas = (() => {
            getMultiSelection, selectPiece, clearSketch, render, deleteSelection,
            copySelection, cutSelection, pasteClipboard, hasClipboard,
            addText, updateText, removeText, getTexts, onTextRequest,
-           addPiece, removePiece, renamePiece, setPieceProps, nudgePiece, nudgePieces,
+           addPiece, removePiece, renamePiece, setPieceProps, nudgePiece, nudgePieces, importPieces,
            onZoomChange, exportSVG, exportDXF, exportHPGL, exportRaster, exportPDF, loadPieces, clearAll, screenOf, snapAngle45,
            // construction geometry
            addPoint, removePoint, getPointById, getPoints, setPointName, setPointXY, setPointFormula, onPointRequest,
            getCons, removeCons, onPromoteRequest, finishPromotePiece, cancelPromote, onWarnRequest,
-           insertOutlinePoint, removeOutlinePoint, promoteSketchToPiece, curveEdge, revertCurveEdge, isSketchClosed,
+           insertOutlinePoint, removeOutlinePoint, promoteSketchToPiece, curveEdge, revertCurveEdge, isSketchClosed, addDart, removeDart,
            toggleClosingEdge, isClosingEdge, setOutlinePointName, getOutlinePointName, setOutlinePointXY, getMatchedPointGroups,
            getSketch, addSketchStroke,
            setVariable, removeVariable, getVariables, setMeasureProvider, recomputeConstruction, evalExpr,
