@@ -449,6 +449,25 @@ button { cursor: pointer; border: none; background: none; }
 .layer-props .field { margin-bottom: 9px; }
 .layer-props .field > label { display: block; font-size: 11px; font-weight: 700; color: var(--ink-2); margin-bottom: 4px; }
 
+/* Edit Darts modal — one bordered card per dart (Pivot/Spread/Transfer),
+   each control given its own label-above-input block instead of the
+   cramped inline-label single-row layout this replaced, so every field
+   reads clearly at the modal's normal (wide) width. */
+.dart-card { border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--sp-4); margin-top: var(--sp-4); background: var(--panel-2); }
+.dart-card:first-of-type { margin-top: var(--sp-5); }
+.dart-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-3); }
+.dart-card-title { font-size: 14px; font-weight: 800; color: var(--ink); }
+.dart-del { width: 30px; height: 30px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); color: var(--danger); border: 1px solid var(--line); background: var(--panel); }
+.dart-del:hover { background: var(--danger); color: #fff; border-color: transparent; }
+.dart-del svg { width: 15px; height: 15px; }
+.dart-op { margin-top: var(--sp-3); }
+.dart-op:first-of-type { margin-top: 0; }
+.dart-op-title { font-size: 11.5px; font-weight: 700; color: var(--ink-2); margin-bottom: 6px; }
+.dart-op-row { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+.dart-op-row .input { flex: 1 1 100px; min-width: 100px; width: auto; }
+.dart-op-row .big-btn { width: auto; flex: 0 0 auto; padding: 10px 16px; white-space: nowrap; }
+.dart-op-sub { font-size: 10.5px; color: var(--ink-2); margin-top: 4px; }
+
 /* ============ TOOLTIP ============ */
 .tt { position: fixed; z-index: 9999; pointer-events: none; max-width: 240px; background: var(--ink); color: var(--bg); padding: 8px 11px; border-radius: var(--r-sm); font-size: 11.5px; line-height: 1.45; box-shadow: var(--shadow-2); opacity: 0; transform: translateY(4px); transition: opacity var(--fast), transform var(--fast); }
 .tt.show { opacity: 1; transform: none; }
