@@ -929,12 +929,16 @@ in the app's own header.
   bodice — confirmed by screenshot, not just by reading the code — plus
   22 new unit tests across both projects (`test/body-zone.test.js`,
   `cloth-lab/src/pattern/roles.test.js`,
-  `cloth-lab/src/pattern/importFromApp.bodyZone.test.js`). **Not verified
-  live**: Cloth Lab's actual simulated result for a corrected piece — this
-  session's dev environment hit a pre-existing, unrelated "Cloth Lab
-  (embedded engine) failed to load" module-resolution error switching
-  branches, so the placement fix is covered by the classifier unit tests
-  above (which assert the exact `hipPanelFront`/`hipPanelBack` role
+  `cloth-lab/src/pattern/importFromApp.bodyZone.test.js`). The local dev
+  sandbox's own "Cloth Lab (embedded engine) failed to load" error
+  (initially flagged as possibly a real, separate bug) was checked
+  against the actual deployed production site in real Chrome and does
+  NOT reproduce there — confirmed sandbox-tool-specific, not a real app
+  bug; see CHANGELOG's WP-49 entry for the full investigation. **Not
+  verified live**: Cloth Lab's actual simulated result for a corrected
+  piece — neither this WP nor WP-42 is deployed yet to check against
+  production, so the placement fix is covered by the classifier unit
+  tests above (which assert the exact `hipPanelFront`/`hipPanelBack` role
   Cloth Lab's own, already-tested `placeHipPanel` consumes) rather than a
   live simulate-and-screenshot pass.
 

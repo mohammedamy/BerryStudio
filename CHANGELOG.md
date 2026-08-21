@@ -92,22 +92,31 @@ simulated as the torso.
   accessory piece (Crotch Gusset, an unzoned `gusset`-role piece),
   confirmed the Body Zone control defaults to "Auto," set it to "Lower
   body," closed and reopened the popover, confirmed the choice persisted.
-  No new console errors introduced (the CSP inline-script warnings and a
-  "Cloth Lab (embedded engine) failed to load" error present in this
-  session's dev environment are both pre-existing, unrelated to this
-  change — see "Not verified" below).
-- **Not verified live, honestly**: Cloth Lab's actual simulated result
-  for a piece this WP corrects (e.g. re-simulating the Classic Brief and
-  confirming it now drapes at the hips, not the chest). This session's
-  local dev environment hit the embedded-engine load failure above
-  independent of this change (a module-resolution error switching git
-  branches, not caused by this WP's edits) before that specific check
-  could be made. The placement fix itself is covered by
+  No new console errors introduced (the CSP inline-script warnings are
+  self-inflicted by the automated test tool's own script injection, not
+  the app; see "Verified" below for the embedded-engine load failure's
+  own resolution).
+- **Follow-up, verified separately**: the local dev sandbox's "Cloth Lab
+  (embedded engine) failed to load" (`Failed to resolve module specifier
+  "react"`) initially looked like it might be a real, unrelated bug worth
+  chasing — investigated on request. Reproduced on a clean `main`
+  checkout with no changes from this WP at all, so it wasn't caused by
+  this work — but then checked against the REAL deployed production site
+  (`https://mohammedamy.github.io/BerryStudio/`) in actual Chrome (not
+  the local static-file sandbox): the embedded engine loads and renders
+  correctly there, no resolution error at all. **Conclusion: the failure
+  was specific to this session's sandboxed local test-browser tool's
+  import-map handling for dynamically-imported nested modules, not a
+  real app bug** — no fix needed, nothing to change. This does mean
+  Cloth Lab's actual simulated result for a piece this WP corrects (e.g.
+  re-simulating the Classic Brief and confirming it now drapes at the
+  hips) is STILL not verified live in this session, since neither this
+  WP's nor WP-42's branch is deployed yet to check against production —
+  but there's no longer any reason to believe the mechanism itself is
+  broken. The placement fix itself is covered by
   `roles.test.js`/`importFromApp.bodyZone.test.js` asserting the exact
   `hipPanelFront`/`hipPanelBack` role Cloth Lab's own, already-tested
-  `placeHipPanel()` consumes — a real test of the logic, just not a
-  rendered screenshot. Worth a manual re-check once that environment
-  issue is resolved.
+  `placeHipPanel()` consumes.
 
 ## WP-35b: GPU spatial-hash self-collision broadphase (Cloth Lab, "High" tier)
 
