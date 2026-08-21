@@ -51,6 +51,7 @@ export const STRINGS = {
     // SeamEditorPanel
     seamAuthoring: 'Seam Authoring',
     seamAuthoringHint: 'Click a start point then an end point on a piece to mark an edge (walking forward through its outline), then do the same on a second piece to pair them into a seam. Anything you never mark stays a free edge (like a hem or neckline).',
+    startPointPicked: 'Start point picked on {piece} — click an end point on the SAME piece to finish this edge (click the start point again to cancel).',
     edgeN: 'Edge {n}',
     pickTwoMore: 'Pick 2 points on another piece to pair with…',
     reverse: 'Reverse',
@@ -103,6 +104,7 @@ export const STRINGS = {
     exportFailed: 'فشل {key}: {msg}',
     seamAuthoring: 'إنشاء الغرز',
     seamAuthoringHint: 'اضغط على نقطة بداية ثم نقطة نهاية على إحدى القطع لتحديد حافة (بالسير للأمام عبر محيطها)، ثم كرّر ذلك على قطعة ثانية لتزاوجهما في غرزة واحدة. أي حافة لا تُحدَّدها تبقى حافة حرة (كالكفة أو خط الرقبة).',
+    startPointPicked: 'تم اختيار نقطة البداية على {piece} — اضغط على نقطة نهاية في نفس القطعة لإتمام هذه الحافة (أو اضغط على نقطة البداية مجددًا للإلغاء).',
     edgeN: 'الحافة {n}',
     pickTwoMore: 'اختر نقطتين على قطعة أخرى لتزاوجها معها…',
     reverse: 'عكس',

@@ -6,6 +6,53 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Cloth Lab: Seam Authoring flicker/crash fix + pending-point feedback
+
+User-reported bug, not tied to a plan work package: "the seam thing is not
+easy to be used or understand for users. and it cause the platform to
+fliker always or even crash." Investigated live (real interaction in the
+dev server, not just code reading) before changing anything, then fixed
+both the usability gap and the underlying performance issue it was
+entangled with.
+
+### Fixed
+- **`cloth-lab/src/seam/SeamEditorScene.jsx` rendered one individual,
+  non-instanced `<mesh>` (its own `sphereGeometry` + `meshBasicMaterial` +
+  3 event handlers) PER OUTLINE VERTEX**, to make each point clickable.
+  Harmless for the trivial demo pattern (a handful of points), but a real
+  imported garment's outlines are bezier-sampled — `js/canvas.js`'s
+  `cubicBezierSample()` / `js/pattern-import.js`'s `sampleCubic()` both
+  default to n≈6 points per curve span — so a multi-piece garment with a
+  few curved edges each routinely reaches a few hundred outline points
+  combined. That turned into a few hundred separate WebGL draw calls just
+  to show clickable dots, on top of drei's `<Line>` rebuilding its own
+  geometry buffer from a brand-new points array every render. That's
+  exactly the per-frame cost `AdaptiveDpr.jsx`'s `FrameBudgetController`
+  (WP-9.4) watches — heavy enough on modest hardware to push measured
+  frame time back and forth across its adaptive-resolution thresholds, so
+  the pixel ratio it drives oscillates visibly (the reported "flicker"),
+  and in the worst case the draw-call/GC load stalls the tab hard enough
+  to read as a crash. Fixed by collapsing each piece's vertices into a
+  **single `instancedMesh`** — one draw call per piece regardless of point
+  count, with per-instance position/color/scale set imperatively via
+  `setMatrixAt`/`setColorAt` (no React reconciliation, no new geometry per
+  point) and a single `onClick` resolved through the THREE.js-native
+  `event.instanceId`. Verified: all 184 `cloth-lab` tests + 275 root tests
+  still pass; live-tested vertex picking, edge creation, and seam
+  creation in the browser — same visuals, same click behavior, zero
+  console errors.
+- **No feedback anywhere in the sidebar for "you just picked a start
+  point"** — confirmed live: clicking a vertex to start an edge changed
+  only the 3D view (the point turns yellow and grows), with the
+  `SeamEditorPanel` showing nothing different until the *second* click
+  completed the edge. First-time users had no way to tell, from the
+  panel alone, that their first click had registered at all. Fixed by
+  adding a highlighted status line to `SeamEditorPanel.jsx` — "Start
+  point picked on \<piece\> — click an end point on the SAME piece to
+  finish this edge (click the start point again to cancel)." — shown
+  the instant `pendingStart` is set, in both `en` and `ar`
+  (`cloth-lab/src/i18n.js`'s new `startPointPicked` key).
+
 ## WP-49 follow-up: code review found the explicit override didn't fully work
 
 Before merge, ran the same 8-angle multi-agent code review (3 correctness +
