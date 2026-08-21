@@ -223,8 +223,29 @@ export function convertAppPattern(payload) {
     }
 
     // ---------- WP-6 metadata path: thin structural validation, trust the declared role ----------
-    const { role: schemaRole, placement, cutOnFold, bilateral, edges, princessSeamId } = resolved
+    const { role: schemaRole, placement: declaredPlacement, cutOnFold, bilateral, edges, princessSeamId } = resolved
     const local = relocalize(p.outline)
+
+    // Code-review fix (WP-49 follow-up): an explicit p.bodyZone override
+    // (js/body-zone.js, set via js/app.js's Layer Props "Body Zone"
+    // control) used to be read ONLY on the classifyLegacy (no-declared-
+    // role) path above — any piece with a RECOGNIZED role silently
+    // ignored it entirely, even though 3D Preview's inferBodyZone()
+    // always honors it first. Since nearly every generator-authored
+    // piece already declares a role, that made the override a no-op for
+    // the vast majority of real pieces — the opposite of "explicit
+    // always wins" (js/body-zone.js's own header comment). Scoped to the
+    // PANEL placements only — frontPanel<->hipPanelFront, backPanel<->
+    // hipPanelBack, the only two pairs with a meaningful "flip" between
+    // the two zones. Attach-only roles (collar/waistband/pocket/...) and
+    // sleeve have no zone-derived placement to flip in the first place
+    // (ZONE_FLIP has no entry for them, so this is a harmless no-op) —
+    // matching js/body-zone.js's own "accessory roles are reused across
+    // garment types, role alone can't say which" scoping.
+    const ZONE_FLIP = { frontPanel: 'hipPanelFront', backPanel: 'hipPanelBack', hipPanelFront: 'frontPanel', hipPanelBack: 'backPanel' }
+    const placement = (p.bodyZone && p.bodyZone !== resolved.zone && ZONE_FLIP[declaredPlacement])
+      ? ZONE_FLIP[declaredPlacement]
+      : declaredPlacement
 
     if (SLEEVE_ROLES.has(schemaRole)) {
       sleeves.push({ id: p.id, label, outline: local, color: p.color })

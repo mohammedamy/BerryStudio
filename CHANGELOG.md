@@ -6,6 +6,72 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-49 follow-up: code review found the explicit override didn't fully work
+
+Before merge, ran the same 8-angle multi-agent code review (3 correctness +
+3 cleanup + altitude + conventions, each candidate independently
+re-verified) against this PR. Two serious, independently-confirmed-by-
+three-separate-angles findings, both self-verified by direct code reading
+and fixed here — worth calling out plainly: they undermined the PR's own
+core claim ("explicit always wins over role," "link firmly to all views").
+
+### Fixed
+- **Cloth Lab silently ignored an explicit `bodyZone` override for any
+  piece with a declared role** — `convertAppPattern()`'s metadata path
+  (`cloth-lab/src/pattern/importFromApp.js`) only ever read `p.bodyZone`
+  on the CLASSIFY_LEGACY (no-role) branch; the WP-6 metadata path
+  destructured `role/placement/cutOnFold/bilateral/edges/princessSeamId`
+  from the resolved role and never looked at `p.bodyZone` at all. Since
+  nearly every generator-authored piece already declares a role, this
+  made the override a no-op for the vast majority of real pieces — 3D
+  Preview honored a correction, Cloth Lab silently kept draping the piece
+  by its original role. Fixed with a `ZONE_FLIP` table swapping
+  `frontPanel<->hipPanelFront`/`backPanel<->hipPanelBack` when an explicit
+  `bodyZone` disagrees with the role's own zone, applied once right after
+  resolving the role so every downstream branch (cutOnFold/bilateral/
+  plain) sees the corrected placement. Deliberately scoped to panel
+  placements only — accessory roles (collar, waistband, ...) have no
+  zone-derived placement to flip, so an override on one of those is a
+  harmless no-op, matching `js/body-zone.js`'s own accessory-role scoping.
+- **`classifyPart()` (3D Preview's material+visibility classifier) checked
+  a pure name regex for "sleeve" BEFORE ever consulting the piece's
+  explicit/role-derived zone** — directly contradicting its own header
+  comment's "FIRST" claim. A piece with an explicit `bodyZone` override
+  (or a declared non-sleeve role) whose name happened to contain "sleeve"/
+  "كم" — e.g. a renamed/duplicated custom piece — had that override
+  silently overridden right back by the name match. Fixed with an
+  explicit priority ladder: explicit `bodyZone` wins outright (it can't
+  even land in the sleeve bucket, since sleeve isn't one of its two
+  values); a declared sleeve ROLE (new `SLEEVE_ROLES` export from
+  `js/body-zone.js`) wins next; only with neither signal does the
+  original name-only regex chain run, unchanged in its original order.
+- **`js/body-zone.js`'s role→zone tables had no automated check against
+  `cloth-lab/src/pattern/roles.js`'s own `zone` field** — a real drift
+  risk (three review angles flagged this independently): a future role
+  added to one table and forgotten in the other would silently reproduce
+  the exact "brief simulated as torso" bug class this WP fixes, for
+  whatever new role it happened to. Both files are plain, dependency-free
+  ESM, so a root `node --test` can import both directly — added
+  `test/body-zone-roles-sync.test.js`, asserting every
+  `SCHEMA_ROLE_INFO` entry resolves to the same zone in both modules. Not
+  a hypothetical fix: while writing it, confirmed the two tables
+  currently DO agree — this is regression coverage against future drift,
+  not evidence of a live bug today.
+- **`cloth-lab/src/pattern/roles.test.js`'s accessory-role test had a
+  self-defeating ternary** — `'gusset' in SCHEMA_ROLE_INFO ? 'gusset' :
+  'pocket'` always fell back to `'pocket'` (already in the same list,
+  since `gusset` was never actually registered — see roles.js's own
+  header comment on why), so the test silently exercised 4 distinct
+  roles while claiming to cover 5. Replaced with `lining`, a genuinely
+  different declared-but-unzoned role.
+- Wired up `bodyZoneD`'s help text (defined in `js/i18n.js`, never
+  referenced by any `T()` call) into the Layer Props "Body Zone" control
+  as a small caption — it existed but was dead/unreachable.
+
+### Verified
+- `npm test` (root) — 275/275.
+- `cloth-lab`: `npx vitest run` — 184/184.
+
 ## WP-49: Explicit per-piece upper/lower-body zone, linked to 3D Preview and Cloth Lab
 
 Closes a real, confirmed bug: neither 3D Preview (`js/three-view.js`) nor
