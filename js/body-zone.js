@@ -41,10 +41,18 @@ export const ZONE_UPPER = "upper";
 export const ZONE_LOWER = "lower";
 export const ZONE_VALUES = [ZONE_UPPER, ZONE_LOWER];
 
+// Exported (code-review fix) so js/app.js's classifyPart() can ask "is
+// this piece's ROLE a sleeve" without re-deriving its own list — sleeve is
+// a real third bucket in three-view.js's 4-part system (bodice/sleeve/
+// skirt/trousers), not just "upper zone," so inferBodyZone()'s plain
+// upper/lower answer alone can't distinguish it from a bodice piece.
+export const SLEEVE_ROLES = new Set([
+  "sleeve", "sleeve-upper", "sleeve-under", "cap-sleeve", "puff-sleeve", "butterfly-sleeve",
+]);
 const UPPER_ROLES = new Set([
   "front-panel", "back-panel",
   "bodice-front-center", "bodice-front-side", "bodice-back-center", "bodice-back-side",
-  "sleeve", "sleeve-upper", "sleeve-under", "cap-sleeve", "puff-sleeve", "butterfly-sleeve",
+  ...SLEEVE_ROLES,
 ]);
 const LOWER_ROLES = new Set([
   "hip-panel-front", "hip-panel-back",
@@ -54,6 +62,19 @@ const LOWER_ROLES = new Set([
 // schema/pattern-spec.v1.json's Phase-0 legacy role aliases (see
 // cloth-lab/src/pattern/roles.js's own LEGACY_ROLE_ALIASES) — kept in
 // sync here too so an older saved project's role string still resolves.
+// Code-review fix: this table (and UPPER_ROLES/LOWER_ROLES above) is a
+// hand-kept-in-sync duplicate of cloth-lab/src/pattern/roles.js's own
+// `zone` field/LEGACY_ROLE_ALIASES — the exact same "two independently-
+// hand-copied classifiers can silently drift" risk this WP was written to
+// eliminate for piece NAMES, now one layer up for role TABLES. Since the
+// root app (build-free ES modules) can't import from cloth-lab's separate
+// Vite package, there's no way to make one derive from the other at
+// runtime — instead, test/body-zone-roles-sync.test.js imports BOTH
+// modules directly (both are plain, dependency-free ESM, so a root
+// node --test can reach across the project boundary) and asserts every
+// SCHEMA_ROLE_INFO entry's zone agrees with inferBodyZone()'s answer for
+// that role — CI actually catches a drift now, not just a comment asking
+// nicely for one.
 const LEGACY_ROLE_ALIASES = {
   "bodice-front": "front-panel",
   "bodice-back": "back-panel",

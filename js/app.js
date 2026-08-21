@@ -28,7 +28,7 @@ import { pivotDart, slashAndSpread, transferDart } from './darts.js';
 import { seamPointAtFraction } from './geometry.js';
 import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
-import { inferBodyZone } from './body-zone.js';
+import { inferBodyZone, SLEEVE_ROLES } from './body-zone.js';
 import { Auth, isAuthConfigured } from './auth.js';
 import { computeEntitlement, isAllowed } from './entitlement.js';
 
@@ -689,6 +689,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
           <button data-zone="upper" ${p.bodyZone==="upper"?'class="active"':''}>${T("bodyZoneUpper")}</button>
           <button data-zone="lower" ${p.bodyZone==="lower"?'class="active"':''}>${T("bodyZoneLower")}</button>
         </div>
+        <small style="display:block;margin-top:4px;color:var(--ink-2);font-size:11px;line-height:1.4">${T("bodyZoneD")}</small>
       </div>
       <div class="field"><label>${T("pieceMaterial")}</label>
         <select class="lp-mat" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2)">
@@ -3398,18 +3399,35 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // confirmed as a real bug (see js/body-zone.js's header comment): a
   // piece with no informative name-keyword (e.g. underwear-library.js's
   // brief panels, generically named "Front Panel"/"Back Panel") silently
-  // rendered/toggled as part of the TORSO. Fixed by consulting
-  // inferBodyZone() (explicit user override, or the piece's declared
-  // role — see js/body-zone.js) FIRST; the original name-only regex is
+  // rendered/toggled as part of the TORSO. Fixed by consulting an
+  // explicit/role-derived signal FIRST; the original name-only regex is
   // now only a last resort for a piece with neither signal at all,
   // unchanged from its pre-WP-49 behavior in that case.
+  //
+  // Code-review fix: this originally checked SLEEVE_NAME_RE (a pure name
+  // guess) BEFORE ever consulting inferBodyZone() — directly contradicting
+  // this comment's own "FIRST" claim and js/body-zone.js's "explicit
+  // always wins over role" rule. A piece with an explicit bodyZone
+  // override (or a declared non-sleeve role) whose NAME happened to
+  // contain "sleeve"/"كم" (e.g. a renamed/duplicated custom piece) had
+  // that override silently ignored. Fixed with an explicit priority
+  // ladder: (1) explicit bodyZone always wins outright — it can't even
+  // land in the sleeve bucket, since "sleeve" isn't one of its two values;
+  // (2) a declared sleeve ROLE (not just a name match) wins next; (3) only
+  // with NEITHER signal does the original name-only regex chain run,
+  // unchanged in its original priority order (sleeve, then trousers, then
+  // skirt, else bodice).
   const SLEEVE_NAME_RE = /sleeve|كم/i;
   const SKIRT_NAME_RE = /skirt|تنور/i;
   const TROUSERS_NAME_RE = /trouser|بنطل|pant|\bleg\b/i;
   function classifyPart(p){
     const name = (p && p.name && p.name.en) || (typeof p==="string" ? p : "");
+    if (p && (p.bodyZone === "upper" || p.bodyZone === "lower")) {
+      return p.bodyZone === "lower" ? (TROUSERS_NAME_RE.test(name) ? "trousers" : "skirt") : "bodice";
+    }
+    if (p && SLEEVE_ROLES.has(p.role)) return "sleeve";
     if (SLEEVE_NAME_RE.test(name)) return "sleeve";
-    const zone = inferBodyZone(p);
+    const zone = inferBodyZone(p); // role-derived only at this point — explicit bodyZone already handled above
     if (zone === "lower") return TROUSERS_NAME_RE.test(name) ? "trousers" : "skirt";
     if (zone === "upper") return "bodice";
     if (TROUSERS_NAME_RE.test(name)) return "trousers";

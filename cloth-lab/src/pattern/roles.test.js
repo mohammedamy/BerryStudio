@@ -30,8 +30,17 @@ describe('zoneForRole', () => {
   })
 
   it('accessory/attach roles are deliberately unzoned (reused across garment types)', () => {
-    for (const role of ['waistband', 'collar', 'cuff', 'pocket', 'gusset' in SCHEMA_ROLE_INFO ? 'gusset' : 'pocket', 'other']) {
-      expect(zoneForRole(role)).toBeNull()
+    // Code-review fix: this used to include `'gusset' in SCHEMA_ROLE_INFO
+    // ? 'gusset' : 'pocket'` — since 'gusset' was never actually
+    // registered here (see roles.js's own header comment: it's one of
+    // underwear-library.js's roles this WP deliberately left unaddressed,
+    // scoped only to brief-front/brief-back), that ternary always
+    // silently fell back to 'pocket' — already present earlier in this
+    // same list — so the test looked like it covered 5 distinct roles but
+    // only ever exercised 4. Replaced with 'lining', a genuinely different
+    // declared-but-unzoned role, actually testing what the test claims to.
+    for (const role of ['waistband', 'collar', 'cuff', 'pocket', 'lining', 'other']) {
+      expect(zoneForRole(role), role).toBeNull()
     }
   })
 

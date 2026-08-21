@@ -52,13 +52,57 @@ describe('convertAppPattern — explicit bodyZone correcting classifyLegacy (WP-
     expect(r.skipped).toHaveLength(1)
   })
 
-  it('a piece WITH a declared, recognized role ignores bodyZone entirely (role is authoritative on that path)', () => {
+  // Code-review fix: this test used to assert the OPPOSITE — that a
+  // declared role always won over an explicit bodyZone override, i.e.
+  // that the override was a no-op for any piece with a recognized role
+  // (which is nearly every generator-authored piece). That contradicted
+  // js/body-zone.js's own "explicit always wins over role" rule, which
+  // 3D Preview already honored — Cloth Lab alone silently ignored it.
+  // Fixed: an explicit, disagreeing bodyZone now flips a PANEL placement
+  // (frontPanel<->hipPanelFront, backPanel<->hipPanelBack) even when a
+  // role is declared.
+  it('an explicit bodyZone override flips a declared panel role\'s placement — the actual bug fix', () => {
     const r = convertAppPattern({
       pieces: [{ id: 'a', label: { en: 'X' }, outline: RECT, role: 'front-panel', bodyZone: 'lower' }],
     })
-    // front-panel's own placement (frontPanel/upper) wins — bodyZone only
-    // matters on the classifyLegacy (no-role) path, see importFromApp.js's
-    // own comment on applyBodyZoneOverride().
+    expect(r.roles.a).toBe('hipPanelFront')
+  })
+
+  it('the same override on a back-panel role flips to hipPanelBack', () => {
+    const r = convertAppPattern({
+      pieces: [{ id: 'a', label: { en: 'X' }, outline: RECT, role: 'back-panel', bodyZone: 'lower' }],
+    })
+    expect(r.roles.a).toBe('hipPanelBack')
+  })
+
+  it('an explicit bodyZone that AGREES with the role\'s own zone changes nothing', () => {
+    const r = convertAppPattern({
+      pieces: [{ id: 'a', label: { en: 'X' }, outline: RECT, role: 'front-panel', bodyZone: 'upper' }],
+    })
     expect(r.roles.a).toBe('frontPanel')
+  })
+
+  it('no bodyZone at all still uses the role\'s own placement unchanged — no regression', () => {
+    const r = convertAppPattern({
+      pieces: [{ id: 'a', label: { en: 'X' }, outline: RECT, role: 'front-panel', bodyZone: null }],
+    })
+    expect(r.roles.a).toBe('frontPanel')
+  })
+
+  it('a hip-panel role explicitly overridden to upper flips to the front-panel family', () => {
+    const r = convertAppPattern({
+      pieces: [{ id: 'a', label: { en: 'X' }, outline: RECT, role: 'hip-panel-front', bodyZone: 'upper' }],
+    })
+    expect(r.roles.a).toBe('frontPanel')
+  })
+
+  it('an accessory role (no zone-derived placement to flip) ignores a disagreeing bodyZone harmlessly — not an error', () => {
+    const r = convertAppPattern({
+      pieces: [{ id: 'a', label: { en: 'X' }, outline: RECT, role: 'collar', bodyZone: 'lower' }],
+    })
+    // collar has no frontPanel/backPanel/hipPanelFront/hipPanelBack
+    // placement to flip (ZONE_FLIP has no entry for attachNeck) — stays
+    // its own declared placement, same as before this fix.
+    expect(r.roles.a).toBe('attachNeck')
   })
 })
