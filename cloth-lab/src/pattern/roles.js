@@ -22,19 +22,43 @@
 // correctly placed piece drapes plausibly from gravity+placement alone,
 // safer than guessing a seam location"). WP-6's acceptance bar is "imports
 // and simulates," not "every accessory piece is seam-perfect."
+// WP-49: `zone` ('upper' | 'lower') on the entries below is the same
+// upper/lower-body fact js/body-zone.js's inferBodyZone() derives in the
+// root app — kept in sync by hand between the two (see that file's own
+// header comment), same convention already used for auth-config.js/
+// entitlement.js between the two projects. Deliberately only present on
+// PANEL-shaped roles (the pieces that actually stand in for "torso" or
+// "hips/legs" — what a garment silhouette is built from), not on
+// accessory/attach roles further down (collar, cuff, waistband, pocket,
+// gusset, ...): those are reused across garment types with different real
+// zones (a waistband sits on a skirt OR a dress' waist seam), so a role
+// alone can't say which — see js/body-zone.js for the full reasoning.
 export const SCHEMA_ROLE_INFO = {
   // simple front/back (existing 5-role vocabulary, unchanged in spirit)
-  'front-panel': { placement: 'frontPanel' },
-  'back-panel': { placement: 'backPanel' },
-  'hip-panel-front': { placement: 'hipPanelFront' },
-  'hip-panel-back': { placement: 'hipPanelBack' },
-  sleeve: { placement: 'sleeve' },
+  'front-panel': { placement: 'frontPanel', zone: 'upper' },
+  'back-panel': { placement: 'backPanel', zone: 'upper' },
+  'hip-panel-front': { placement: 'hipPanelFront', zone: 'lower' },
+  'hip-panel-back': { placement: 'hipPanelBack', zone: 'lower' },
+  sleeve: { placement: 'sleeve', zone: 'upper' },
+
+  // WP-49: underwear-library.js's brief pieces (WP-43) declared this role
+  // from day one, but it was never added here — resolveSchemaRole()
+  // returned null for it, so convertAppPattern() fell back to
+  // classifyLegacy's NAME-based guess on the piece's generic label
+  // ("Front Panel"/"Back Panel", no "skirt"/"trouser" keyword), which
+  // defaults an unmatched front/back panel to 'bodice-front'/'bodice-back'
+  // — a real, confirmed bug: a brief (underwear bottom) was placed and
+  // simulated as the torso bodice. hipPanelFront/hipPanelBack is the
+  // correct placement family — same body-conforming hip geometry a skirt
+  // panel gets, which is what a brief's front/back panel actually is.
+  'brief-front': { placement: 'hipPanelFront', zone: 'lower' },
+  'brief-back': { placement: 'hipPanelBack', zone: 'lower' },
 
   // princess seams
-  'bodice-front-center': { placement: 'frontPanel', cutOnFold: true, seamFamily: 'princess-front' },
-  'bodice-front-side': { placement: 'frontPanel', bilateral: true, seamFamily: 'princess-front' },
-  'bodice-back-center': { placement: 'backPanel', cutOnFold: true, seamFamily: 'princess-back' },
-  'bodice-back-side': { placement: 'backPanel', bilateral: true, seamFamily: 'princess-back' },
+  'bodice-front-center': { placement: 'frontPanel', cutOnFold: true, seamFamily: 'princess-front', zone: 'upper' },
+  'bodice-front-side': { placement: 'frontPanel', bilateral: true, seamFamily: 'princess-front', zone: 'upper' },
+  'bodice-back-center': { placement: 'backPanel', cutOnFold: true, seamFamily: 'princess-back', zone: 'upper' },
+  'bodice-back-side': { placement: 'backPanel', bilateral: true, seamFamily: 'princess-back', zone: 'upper' },
 
   // Gores — placed at a fixed angular slot around the hip circumference
   // (front/back/side-left/side-right), not auto-seamed to their neighbor
@@ -43,17 +67,17 @@ export const SCHEMA_ROLE_INFO = {
   // Collection gored-skirt design uses (confirmed by direct inspection —
   // front + back + explicitly-authored Left/Right side gores), not a
   // generalized N-gore scheme.
-  'skirt-front-gore': { placement: 'goreFront' },
-  'skirt-back-gore': { placement: 'goreBack' },
-  'skirt-side-gore-left': { placement: 'goreSideLeft' },
-  'skirt-side-gore-right': { placement: 'goreSideRight' },
+  'skirt-front-gore': { placement: 'goreFront', zone: 'lower' },
+  'skirt-back-gore': { placement: 'goreBack', zone: 'lower' },
+  'skirt-side-gore-left': { placement: 'goreSideLeft', zone: 'lower' },
+  'skirt-side-gore-right': { placement: 'goreSideRight', zone: 'lower' },
 
   // sleeve variants
-  'sleeve-upper': { placement: 'sleeve', seamFamily: 'sleeve-2pc', tubeHalf: 'upper' },
-  'sleeve-under': { placement: 'sleeve', seamFamily: 'sleeve-2pc', tubeHalf: 'under' },
-  'cap-sleeve': { placement: 'sleeve' },
-  'puff-sleeve': { placement: 'sleeve' },
-  'butterfly-sleeve': { placement: 'sleeve' },
+  'sleeve-upper': { placement: 'sleeve', seamFamily: 'sleeve-2pc', tubeHalf: 'upper', zone: 'upper' },
+  'sleeve-under': { placement: 'sleeve', seamFamily: 'sleeve-2pc', tubeHalf: 'under', zone: 'upper' },
+  'cap-sleeve': { placement: 'sleeve', zone: 'upper' },
+  'puff-sleeve': { placement: 'sleeve', zone: 'upper' },
+  'butterfly-sleeve': { placement: 'sleeve', zone: 'upper' },
 
   // neckline-attached accessories (no auto-seam this pass)
   collar: { placement: 'attachNeck' },
@@ -119,4 +143,14 @@ export function resolveSchemaRole(role) {
   const aliased = LEGACY_ROLE_ALIASES[role]
   if (aliased) return { role: aliased, ...SCHEMA_ROLE_INFO[aliased] }
   return null
+}
+
+// WP-49: 'upper' | 'lower' | null (unmapped role, current alias, or role
+// not declared at all) — the same lookup resolveSchemaRole() already does
+// internally, exposed standalone so importFromApp.js's classifyLegacy path
+// (pieces with NO declared role, or one this file doesn't recognize) can
+// still ask "does the PAYLOAD say a zone regardless?" without needing a
+// full placement resolution first.
+export function zoneForRole(role) {
+  return resolveSchemaRole(role)?.zone ?? null
 }

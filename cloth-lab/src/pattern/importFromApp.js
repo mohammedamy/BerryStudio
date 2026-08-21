@@ -44,6 +44,26 @@ function classifyLegacy(labelEn) {
   return { unrecognized: true, reason: 'couldn’t tell if this is a front or back piece from its name' }
 }
 
+// WP-49: js/app.js's Layer Props panel lets a user explicitly mark ANY
+// piece 'upper' or 'lower' body (js/body-zone.js), specifically to correct
+// cases like this classifier's own name-guessing getting it wrong — e.g. a
+// duplicated/hand-edited piece still named "Front Panel" that's actually a
+// lower-body panel. classifyLegacy() above only sees the name, so a piece
+// with no "skirt"/"trouser" keyword defaults to 'bodice-*' regardless of
+// what it's actually for. This corrects that classification when the
+// piece's own declared bodyZone disagrees, WITHOUT touching front-vs-back
+// (still name-derived — never guessed) or the ignore/unrecognized/sleeve
+// outcomes (an explicit zone can't turn an ignored accessory into a panel,
+// or resolve a front-vs-back guess classifyLegacy couldn't make at all).
+function applyBodyZoneOverride(cls, bodyZone) {
+  if (typeof cls !== 'string' || (bodyZone !== 'upper' && bodyZone !== 'lower')) return cls
+  if (bodyZone === 'lower' && cls === 'bodice-front') return 'skirt-front'
+  if (bodyZone === 'lower' && cls === 'bodice-back') return 'skirt-back'
+  if (bodyZone === 'upper' && cls === 'skirt-front') return 'bodice-front'
+  if (bodyZone === 'upper' && cls === 'skirt-back') return 'bodice-back'
+  return cls
+}
+
 // ---------- geometry (shared by both paths) ----------
 
 function bbox(outline) {
@@ -180,8 +200,8 @@ export function convertAppPattern(payload) {
     const resolved = resolveSchemaRole(p.role)
 
     if (!resolved) {
-      // ---------- CLASSIFY_LEGACY path (unchanged from pre-WP-6) ----------
-      const cls = classifyLegacy(label)
+      // ---------- CLASSIFY_LEGACY path (unchanged from pre-WP-6, plus WP-49's explicit-zone correction) ----------
+      const cls = applyBodyZoneOverride(classifyLegacy(label), p.bodyZone)
       if (cls && typeof cls === 'object') { skipped.push({ label, reason: cls.reason }); continue }
       const local = relocalize(p.outline)
 

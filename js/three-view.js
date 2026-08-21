@@ -961,13 +961,21 @@ export const View3D = (() => {
     };
     // A garment part is shown unless the pattern has piece(s) mapping to it
     // that are ALL hidden. Parts with no matching piece stay on (full outfit).
+    //
+    // WP-49: `p.part` arrives PRE-CLASSIFIED — js/app.js's classifyPart()
+    // (pieceVisMap()'s caller) is now the one and only place that decides
+    // which of these 4 buckets a piece belongs to, consulting the piece's
+    // explicit/role-derived body zone (js/body-zone.js) before ever
+    // falling back to a name guess. This function used to re-derive the
+    // same classification from `p.key` (the piece's raw name) via its OWN
+    // separate regex — a second, independently-hand-copied copy of
+    // js/app.js's classifyPart() that could (and did — see body-zone.js's
+    // header comment) silently disagree with it. Trusting the given part
+    // outright removes that whole class of drift.
     const present = { bodice: false, sleeve: false, skirt: false, trousers: false };
     const vis = { bodice: false, sleeve: false, skirt: false, trousers: false };
     (lastPieceVis || []).forEach(p => {
-      const k = (p.key || "").toLowerCase();
-      const part = /sleeve|كم/.test(k) ? "sleeve"
-        : /skirt|تنور/.test(k) ? "skirt"
-        : /trouser|بنطل|pant|\bleg\b/.test(k) ? "trousers" : "bodice";
+      const part = Object.prototype.hasOwnProperty.call(present, p.part) ? p.part : "bodice";
       present[part] = true; if (p.visible) vis[part] = true;
     });
     const show = part => !present[part] || vis[part];

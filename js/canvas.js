@@ -2423,6 +2423,11 @@ export const Canvas = (() => {
       visible:p.visible!==false, locked:!!p.locked, opacity:p.opacity,
       color:p.color||["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][i%6],
       material:p.material||null,
+      // WP-49: 'upper' | 'lower' | null (auto — inferred from role/name by
+      // the consumer, see js/body-zone.js). Explicit and user-settable via
+      // js/app.js's Layer Props panel, specifically to prevent a piece
+      // drapes/displays as the wrong body region in 3D Preview/Cloth Lab.
+      bodyZone:p.bodyZone||null,
     }));
     texts = Array.isArray(txts) ? txts.map(t=>({ ...t, id: t.id || textSeq++ })) : [];
     points = Array.isArray(pts) ? pts.map(p=>({ xExpr:null, yExpr:null, ...p, id: p.id || pointSeq++ })) : [];
