@@ -1035,11 +1035,15 @@ const m = BerryStudio.grade({ category: "women", size: "L", standard: "intl", ki
 const colors = ["#6d5efc", "#00c2a8", "#ff5d8f", "#e2a52b", "#4c8dff", "#c1492e"];
 Canvas.setPattern(PATTERNS.womens_dress.pieces(m), colors);
 
-// Export the currently loaded pattern.
-const svg = BerryStudio.export("svg");                                   // string
-const dxf = BerryStudio.export("dxf");                                   // string (AAMA/ASTM D6673 layers)
-const { blob, dpi } = await BerryStudio.export("png", { dpi: 300 });      // Promise<{blob, dpi, clamped}>
-const pdf = BerryStudio.export("pdf", { tiled: true, pageSize: "a4" });   // tiled home-printing PDF
+// Export the currently loaded pattern. Requires sign-in + an active
+// trial/subscription as of WP-42 Stage B (Export is a gated surface) —
+// export() is async for every format now, including svg/dxf/hpgl/pdf,
+// specifically so it can check entitlement before returning anything;
+// it throws if you're not entitled.
+const svg = await BerryStudio.export("svg");                             // string
+const dxf = await BerryStudio.export("dxf");                             // string (AAMA/ASTM D6673 layers)
+const { blob, dpi } = await BerryStudio.export("png", { dpi: 300 });      // {blob, dpi, clamped}
+const pdf = await BerryStudio.export("pdf", { tiled: true, pageSize: "a4" }); // tiled home-printing PDF
 
 // Run the 8 patternmaking checks over every loaded piece.
 const report = BerryStudio.validate({ seamAllowanceCm: 1 });
@@ -1051,6 +1055,7 @@ console.log(`${Math.round(nested.utilization * 100)}% fabric utilization`);
 
 // Generate a new pattern from a prompt (offline heuristic unless you pass
 // `endpoint`, in which case it POSTs there and falls back to local on failure).
+// Also gated (AI) as of WP-42 Stage B — throws if not entitled.
 const generated = await BerryStudio.generate({
   prompt: "a fitted knee-length dress with a V-neck",
   category: "women",

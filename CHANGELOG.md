@@ -6,6 +6,111 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-42 Stage B follow-up: multi-agent code review found and fixed 7 real gate bypasses
+
+Before merging, this PR went through an 8-angle automated code review
+(3 correctness + 3 cleanup + altitude + conventions), each candidate
+independently re-verified by a second pass. Result: **7 CONFIRMED, 1
+PLAUSIBLE** — a genuinely serious set of findings, all fixed before merge.
+Documented here in full rather than folded quietly into the original
+Stage B entry, since these are real security-relevant gaps a reviewer
+should be able to see were caught and closed, not just claimed fixed.
+
+### Fixed
+- **`window.BerryStudio` (`js/berry-studio-api.js`) completely bypassed
+  entitlement gating** — the most serious finding. `generate()`/`export()`
+  called `AIGen.generate`/`Canvas.export*` directly; any signed-out or
+  expired-trial user could call `BerryStudio.generate(...)` or
+  `BerryStudio.export('pdf')` from devtools and get full AI/Export
+  functionality for free, defeating all five gated surfaces through one
+  documented, always-loaded API. Fixed with the facade's own fresh
+  entitlement check (`checkEntitlement()`, mirroring
+  `refreshEntitlement()`'s own isAuthConfigured→getSession→getProfile→
+  computeEntitlement chain, since this module has no access to
+  `js/app.js`'s private gate state). **Real API contract change**:
+  `export()` is now `async` for every format, including the previously-
+  synchronous svg/dxf/hpgl/pdf — there is no synchronous way to check
+  entitlement — documented in README's Automation API section and covered
+  by a new e2e test (`e2e/smoke.spec.js`) asserting both calls reject
+  when signed out.
+- **Cloth Lab never actually stopped once entitlement was revoked
+  mid-session** — `loadClothLab()` only overlaid the gate card when
+  `gateAllowed()` failed; it never reset `clothLabReady`/`frame.src` or
+  unmounted the embedded engine, and `syncClothLab()` had no gate check
+  of its own — so a user who signed out (or whose trial expired) while
+  Cloth Lab was open kept a live, updating GPU simulation running behind
+  the overlay indefinitely, contradicting the PR's own "GPU work never
+  starts while gated" claim. Fixed with a new `teardownClothLab()`
+  (resets `clothLabReady`, unmounts the embedded engine, clears the
+  iframe) called from `loadClothLab()`'s gated branch, plus a
+  `gateAllowed()` guard added directly to `syncClothLab()` as a second
+  layer.
+- **No backfill for accounts that signed up during Stage A** — the
+  `on_auth_user_created` trigger only fires on new `auth.users` inserts;
+  real accounts already existed (Stage A shipped first) with no
+  `profiles` row, which `computeEntitlement(null)` reads as `expired`
+  with 0 trial days — a real, permanent lockout for every pre-existing
+  user, granting them none of the 30-day trial every other account gets.
+  Fixed with an idempotent backfill `insert ... on conflict do nothing`
+  in the migration, called out explicitly in `server/supabase/README.md`.
+- **`Auth.getProfile()` swallowed real fetch/RLS errors into the same
+  `null` "no row" returns** — `currentEntitlement`'s own header comment
+  promises a transient network hiccup won't lock out an actual
+  subscriber, via a try/catch in `refreshEntitlement()` built specifically
+  for that. But `getProfile()` never threw on a real error, so that catch
+  was dead code for the exact scenario it exists to handle — a genuine
+  active subscriber hitting any transient Supabase blip got instantly
+  (mis)computed as `expired`. Fixed: `getProfile()` now throws on a real
+  fetch error, only returning `null` for a genuine 0-row result. While
+  touching this, also fixed a real redundant-network-round-trip
+  (efficiency finding): `getProfile()` now accepts an optional `userId`
+  to skip its own `client.auth.getUser()` call when the caller (both
+  `refreshEntitlement()` and the automation API's `checkEntitlement()`)
+  already has the session's user id.
+- **AI Fashion Billboard's "Generate Pattern Pieces From This"/"Read
+  Pattern Pieces From This Tech-Pack" bypassed the AI gate** —
+  `runPatternPieces()`/`runTechPackPieces()` call the exact same
+  `generatePatternFrom()` pipeline `runAI()` uses, but had no
+  `requireEntitlement()` of their own. Fixed by gating both. `runBillboard()`
+  itself (the billboard image render) is deliberately left ungated — the
+  plan's AI gate is scoped to "pattern generation, image generation —
+  js/ai.js's AIGen" specifically; turning a billboard image into real
+  pattern pieces is what actually crosses into that territory.
+- **Print (Project menu / ⌘K) bypassed the Export gate** — `printPattern()`
+  builds and opens the full pattern SVG (directly save-as-PDF-able via the
+  browser's print dialog), same underlying data the gated SVG/PDF export
+  buttons block, with no gate of its own. Fixed.
+- **Category tabs (header Women/Men/Girls/Boys) bypassed the Library
+  gate** — `setCategory()` unconditionally called `loadPattern()` (the
+  same function `loadLibraryPattern()` gates) to swap in a different one
+  of the 264 catalog patterns on every tab click. Fixed narrowly:
+  switching category itself stays free (basic navigation, unchanged), but
+  auto-loading a brand-new catalog pattern for the new category now
+  requires the same entitlement the Library pane does — a gated user
+  keeps whatever pattern they already had.
+- **`renderClothLabGate()` duplicated `renderGateUpsell()`'s logic** by
+  hand instead of calling it, and had silently drifted — missing the
+  `accountNotConfigured` diagnostic the other four gated panes show when
+  `auth-config.js` is empty. Fixed by having it delegate to
+  `renderGateUpsell()` directly, closing both the duplication (a reuse/
+  simplification finding, flagged independently by two review angles)
+  and the missing message in one change.
+
+### Verified
+- `npm test` — 265/265 (unchanged from Stage A's landing count).
+- Playwright e2e (`npm run test:e2e`): the two tests touching gated
+  behavior — the automation API's export/generate, and the embedded
+  Cloth Lab engine — both rewritten to assert the correct GATED behavior
+  (rejecting/staying unmounted when signed out) and pass reliably on
+  repeat runs. Three unrelated tests flaked once each across repeated
+  full-suite runs (a different random test each time — "select-anything"/
+  notch selection, cloud-sync's settings-modal timing, keyboard
+  selection, Add Point) and passed cleanly every time re-run in
+  isolation — confirmed as the exact pre-existing CI-resource-contention
+  flakiness `playwright.config.js`'s own comment already documents
+  ("settings-modal timing, Cloth Lab embed load, notch selection"), not
+  a regression from these fixes.
+
 ## WP-42 Stage B: Trial/subscription gating for AI, Library, Quick Draft, Export, Cloth Lab
 
 Per `BerryStudio-Upgrade-Plan-v3-2.md` §6/§7: turns Stage A's sign-in-only

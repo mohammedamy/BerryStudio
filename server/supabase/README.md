@@ -27,8 +27,14 @@ like any other change instead of living invisibly in a dashboard.
 3. **Schema** (Stage B, new): open the SQL Editor and run
    `migrations/0001_profiles_entitlement.sql` in full, once. It's
    idempotent (`create table if not exists`, `drop ... if exists` before
-   each `create trigger`/`create policy`) — safe to re-run if you're
-   unsure whether it already applied.
+   each `create trigger`/`create policy`, `on conflict do nothing` on the
+   backfill insert) — safe to re-run if you're unsure whether it already
+   applied. **If this project already had Stage A sign-in live before
+   Stage B's migration ran** (true for this project — Stage A shipped
+   first), the script's backfill step gives every pre-existing account a
+   `profiles` row (and a fresh 30-day trial) the moment you run it — skip
+   this and those accounts read as `expired` with 0 trial days forever,
+   since nothing else ever creates their row.
 4. Copy the project's **URL** and **anon public key** (Project Settings ->
    API) into `js/auth-config.js`'s `SUPABASE_URL`/`SUPABASE_ANON_KEY`. Both
    are public identifiers, not secrets — see that file's own header

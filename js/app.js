@@ -221,15 +221,20 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   async function refreshEntitlement(session){
     if(!session || !session.user){ currentEntitlement = null; return; }
     try{
-      const profile = await Auth.getProfile();
+      // Pass session.user.id straight through — js/auth.js's getProfile()
+      // skips its own client.auth.getUser() round trip when given one
+      // (code-review efficiency fix; we already have the id from the
+      // onAuthStateChange event that got us here).
+      const profile = await Auth.getProfile(session.user.id);
       // No row at all (migration not run yet, or a real "not found") is
       // the one case with no prior state to preserve — read as gated,
       // matching js/entitlement.js's own "can't prove it, don't grant it"
-      // rule for a paid feature. A thrown/rejected fetch, by contrast,
-      // never reaches here — Auth.getProfile() already swallows those and
-      // returns null too, which is indistinguishable from "no row" at
-      // this layer; see that method's own comment for why splitting those
-      // two cases further isn't worth the complexity in Stage B.
+      // rule for a paid feature. Code-review fix: Auth.getProfile() now
+      // THROWS on a genuine fetch/RLS/network error instead of also
+      // returning null for that case — so a thrown error actually reaches
+      // the catch block below and preserves currentEntitlement, instead of
+      // that catch being unreachable dead code for the exact scenario its
+      // own comment described.
       currentEntitlement = computeEntitlement(profile, Date.now());
     } catch(e){
       console.error('[entitlement] refresh failed, keeping previous state', e);
@@ -1618,7 +1623,19 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // message outright. A concrete instruction steers it toward mode 1 (photo
   // silhouette, not tech-pack tracing) and toward reading real construction
   // details instead of a generic runway guess.
+  // Code-review fix: these two call the exact same generatePatternFrom()
+  // pipeline runAI()/runAISVGImport() use (real, paid AI pattern
+  // generation) but had no requireEntitlement() guard of their own — a
+  // signed-out/expired user could reach the full AI pipeline for free via
+  // the Billboard flow's "Generate Pattern Pieces"/"Read Tech-Pack" buttons
+  // even with the AI pane itself correctly gated. runBillboard() itself
+  // (the billboard IMAGE, above) is deliberately left ungated — the plan's
+  // own AI gate is scoped to "pattern generation, image generation — js/ai.js's
+  // AIGen" specifically; billboard.js's image render is a separate, narrower
+  // feature, and turning a billboard image into real pattern pieces (these
+  // two functions) is what actually crosses into AIGen's paid territory.
   async function runPatternPieces(btn){
+    if(!requireEntitlement()) return;
     if(!bbBillboard) return;
     const prompt = "The attached image is a photorealistic photo of a professional fashion model wearing the exact garment(s) the user dressed them in with the AI Fashion Billboard tool above — read it as a real worn-garment photo (mode 1), not a technical tech-pack drawing. Identify this garment's actual construction as precisely as the photo allows: garment type, neckline, sleeve length and width, overall silhouette (fitted vs. flared), hem shape, and closure — a confident, specific read, not a generic default.";
     await generatePatternFrom(prompt, bbBillboard, btn, "billboardPiecesReady");
@@ -1631,6 +1648,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // (read pieces[].outlineCm off the image literally) instead of guessing
   // silhouette/construction factors as it would for a plain photo.
   async function runTechPackPieces(btn){
+    if(!requireEntitlement()) return;
     if(!bbPattern) return;
     const prompt = "The attached image is a technical flat-sketch / tech-pack drawing: individual pattern piece diagrams with printed dimensions, and possibly its own body-measurement table. Read the actual piece shapes and printed numbers directly off the image — do not guess relative style factors for pieces you can trace exactly.";
     await generatePatternFrom(prompt, bbPattern, btn, "billboardTechPackReady");
@@ -2236,6 +2254,11 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     return null;
   }
   function printPattern(){
+    // Code-review fix: Print (Project menu / ⌘K) opens the same full
+    // pattern SVG the gated Export pane's SVG button does (and is directly
+    // save-as-PDF-able from the browser's print dialog) — was missing the
+    // Export gate every sibling export action already has.
+    if(!requireEntitlement()) return;
     const svg=Canvas.exportSVG(); if(!svg){ toast(T("empty2d")); return; }
     const w=window.open("","_blank");
     if(!w){ toast(T("printProject")+": allow pop-ups"); return; }
@@ -3463,6 +3486,13 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // `/cloth-lab/` subpath (reachable directly by URL, bypassing this
   // function entirely) gets its own, separate gate — see
   // cloth-lab/src/main.jsx's EntitlementGate.
+  // Code-review fix: this used to hand-rebuild renderGateUpsell()'s exact
+  // signedIn/note/button logic locally (a second, independently-hand-
+  // copied copy that could — and, per that finding, did — silently drift:
+  // it was missing the accountNotConfigured diagnostic the other four
+  // gated panes show). Delegates to renderGateUpsell() for the actual
+  // content now; this function's only remaining job is the overlay
+  // wrapper/card DOM that the rail panes don't need.
   function renderClothLabGate(){
     const wrap=$("#viewClothLab");
     let g=document.getElementById("clothLabGate");
@@ -3473,20 +3503,14 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       g.appendChild(card);
       wrap.appendChild(g);
     }
-    const card=g.firstChild; card.innerHTML="";
-    card.appendChild(el("div","section-title",T("viewClothLab")));
-    const signedIn = !!(currentSession && currentSession.user);
-    card.appendChild(el("div","help-note", signedIn ? T("gateExpiredNote") : T("gateSignedOutNote")));
-    const btn=el("button","big-btn", signedIn ? T("gateUpgradeBtn") : T("gateSignInBtn")); btn.style.marginTop="12px";
-    btn.onclick = signedIn ? openUpgradePrompt : openAccount;
-    card.appendChild(btn);
+    renderGateUpsell(g.firstChild, "viewClothLab");
   }
   function hideClothLabGate(){
     const g=document.getElementById("clothLabGate");
     if(g) g.remove();
   }
   function loadClothLab(){
-    if(!gateAllowed()){ renderClothLabGate(); return; }
+    if(!gateAllowed()){ teardownClothLab(); renderClothLabGate(); return; }
     hideClothLabGate();
     if(state.clothLabEngine==="embedded"){ mountClothLabEmbedded(); return; }
     const frame=$("#clothLabFrame");
@@ -3494,6 +3518,26 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const isLocal=/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
     frame.src = isLocal ? "http://localhost:5173/" : "cloth-lab/";
     frame.dataset.loaded="1";
+  }
+  // WP-42 Stage B code-review fix: an already-running Cloth Lab session
+  // (embedded engine mounted, or iframe loaded and simulating) used to
+  // keep running indefinitely behind the gate overlay when entitlement was
+  // revoked mid-session (e.g. the user signs out while Cloth Lab is open)
+  // — loadClothLab() only overlaid renderClothLabGate() without resetting
+  // clothLabReady/frame.src or unmounting the embedded engine, so
+  // syncClothLab() (called from e.g. applyLang() on every language toggle)
+  // kept posting live pattern updates to the still-mounted, still-
+  // simulating engine. Tears down BOTH engines unconditionally (not just
+  // whichever state.clothLabEngine currently says) since the user could
+  // have switched the setting mid-session while the other engine was still
+  // live from before the switch.
+  function teardownClothLab(){
+    clothLabReady = false;
+    lastClothLabPayloadJSON = null;
+    if(clothLabEmbedModule){ clothLabEmbedModule.unmount(); clothLabEmbedModule = null; }
+    clothLabEmbedLoadPromise = null;
+    const frame=$("#clothLabFrame");
+    if(frame){ frame.src = ""; delete frame.dataset.loaded; }
   }
   // `clothLabEmbedModule` holds the {update, unmount} handle mount() returns
   // once the dynamic import + first render actually complete — syncClothLab()
@@ -3586,7 +3630,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // identical payload on every tab visit would force a jarring multi-second
   // resim restart purely from switching tabs to look.
   function syncClothLab(force){
-    if(!clothLabReady) return;
+    // WP-42 Stage B code-review fix: belt-and-suspenders alongside
+    // teardownClothLab() above — if entitlement is ever gated while
+    // clothLabReady is still (incorrectly) true for any reason, this stops
+    // fresh pattern data from ever reaching a live simulation a gated user
+    // shouldn't have.
+    if(!clothLabReady || !gateAllowed()) return;
     const payload = buildClothLabPayload();
     const json = JSON.stringify(payload);
     if(!force && json===lastClothLabPayloadJSON) return;
@@ -3611,7 +3660,17 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     state.category=cat; syncCategoryUI();
     // load a default pattern for that category
     const def=DEFAULT_PATTERN_BY_CATEGORY[cat];
-    if(state.loaded) loadPattern(def); else { renderMeasurePane(); grade(); }
+    // Code-review fix: this unconditionally called loadPattern(def) — the
+    // exact same function loadLibraryPattern() gates for the Library pane
+    // — meaning any signed-out/expired user could load a different one of
+    // the 264 catalog patterns for free just by clicking a header category
+    // tab, bypassing the Library gate entirely. Switching category itself
+    // stays free (basic navigation — updates the measurement standard/UI
+    // context below regardless of entitlement, same as before), but
+    // auto-swapping in a brand-new full catalog pattern for the new
+    // category is gated the same as any other Library pick; a gated user
+    // keeps whatever pattern they already had loaded.
+    if(state.loaded){ if(gateAllowed()) loadPattern(def); } else { renderMeasurePane(); grade(); }
     renderLibraryPane();
   }
 

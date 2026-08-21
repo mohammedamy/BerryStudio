@@ -55,6 +55,24 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- Code-review fix: the trigger above only fires on FUTURE auth.users
+-- inserts — it does nothing for accounts that already existed before this
+-- migration ran. That's a real gap on THIS deployment specifically: WP-42
+-- Stage A (sign-in only, no profiles table at all) already shipped before
+-- Stage B's migration exists, so real accounts can already be signed up
+-- with no profiles row. Without this backfill, getProfile() sees "0 rows"
+-- (not an error) for those accounts, computeEntitlement(null) resolves to
+-- 'expired' with 0 days, and every pre-existing user is instantly and
+-- permanently locked out of every gated surface, having never received
+-- the 30-day trial every other account gets. `on conflict do nothing`
+-- makes this safe to re-run alongside the rest of this idempotent script —
+-- it only ever inserts a row for a user who genuinely has none yet, never
+-- touches trial_started_at/subscription_status for an account this has
+-- already run for once.
+insert into public.profiles (id, email)
+select id, email from auth.users
+on conflict (id) do nothing;
+
 -- Row Level Security: every signed-in user may READ their own row (the
 -- client needs this to compute its own entitlement) and NOTHING ELSE.
 -- No insert/update/delete policy exists for the authenticated role at

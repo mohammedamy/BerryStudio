@@ -140,28 +140,48 @@ export const Auth = {
   // WP-42 Stage B: reads the current user's `profiles` row (see
   // server/supabase/migrations/0001_profiles_entitlement.sql) — the two
   // fields js/entitlement.js's computeEntitlement() needs. Returns null
-  // for "can't tell" (signed out, not configured, the migration hasn't
-  // been run yet so the table doesn't exist, or a transient network/RLS
-  // error) rather than throwing — the caller (js/app.js) is responsible
-  // for deciding what "can't tell" means for gating (see its own
-  // fetchEntitlement()), which is deliberately NOT this module's call:
-  // auth.js stays a thin data-access wrapper, same as every other method
-  // here.
-  async getProfile(){
+  // ONLY for "genuinely no row" (signed out, not configured, or a real
+  // 0-row result — .maybeSingle() with no error) — a fetch/RLS/network
+  // error now THROWS instead of being swallowed into the same null.
+  //
+  // Code-review fix: this used to catch every `profiles` SELECT error
+  // (network blip, RLS denial, migration-not-run) and return null just
+  // like "no row found" — but js/app.js's refreshEntitlement() wraps its
+  // call to this in a try/catch SPECIFICALLY so a thrown error leaves
+  // currentEntitlement at its previous known-good value (per that field's
+  // own comment: "a transient network hiccup shouldn't lock out an actual
+  // subscriber mid-session"). Because this never threw, that catch block
+  // was dead code for the one case it exists to handle — a real active
+  // subscriber hitting any transient Supabase error got instantly
+  // (mis)computed as `expired` and locked out until the next successful
+  // fetch. Now: a real fetch error propagates (refreshEntitlement's catch
+  // does its job); "no row, no error" (a genuinely nonexistent account,
+  // or the migration hasn't been run) still resolves to null, which
+  // computeEntitlement() correctly reads as "can't prove entitlement" —
+  // that part of the design is unchanged and correct, only the
+  // error-vs-no-row conflation is fixed.
+  //
+  // `userId` (optional): pass the caller's already-known session.user.id
+  // (e.g. js/app.js's refreshEntitlement(session) already has it from the
+  // onAuthStateChange event) to skip a redundant client.auth.getUser()
+  // round trip — falls back to fetching it here for a standalone caller
+  // with no session object handy (e.g. js/berry-studio-api.js).
+  async getProfile(userId){
     const client = await getClient();
     if(!client) return null;
-    const { data: { user } } = await client.auth.getUser();
-    if(!user) return null;
+    let uid = userId;
+    if(!uid){
+      const { data: { user } } = await client.auth.getUser();
+      if(!user) return null;
+      uid = user.id;
+    }
     const { data, error } = await client
       .from('profiles')
       .select('subscription_status, trial_started_at')
-      .eq('id', user.id)
+      .eq('id', uid)
       .maybeSingle();
-    if(error){
-      console.warn('[auth] profiles fetch failed (migration not run yet, or a real error) —', error.message||error);
-      return null;
-    }
-    if(!data) return null;
+    if(error) throw error; // real fetch/RLS/network failure — let the caller decide (see comment above)
+    if(!data) return null; // genuinely no row (migration not run, or no account)
     return { subscriptionStatus: data.subscription_status, trialStartedAt: data.trial_started_at };
   },
 };
