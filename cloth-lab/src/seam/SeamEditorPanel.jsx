@@ -4,7 +4,7 @@ import { t } from '../i18n'
 // HTML sidebar counterpart to SeamEditorScene's 3D vertex-picking — the seam
 // list, commit/remove controls, and the handoff to the simulation pipeline.
 export default function SeamEditorPanel({ lang = 'en', editor, onSimulate }) {
-  const { drafts, pendingEdges, seams, error, commitSeam, removeSeam, toggleReverse, clearPending, finalize } = editor
+  const { drafts, pendingStart, pendingEdges, seams, error, commitSeam, removeSeam, toggleReverse, clearPending, finalize } = editor
   const [reverseNext, setReverseNext] = useState(false)
 
   const pieceLabel = (pieceIdx) => drafts[pieceIdx]?.label || drafts[pieceIdx]?.id
@@ -17,6 +17,13 @@ export default function SeamEditorPanel({ lang = 'en', editor, onSimulate }) {
       <p style={{ fontSize: 12, color: 'var(--text-2)', margin: '0 0 10px' }}>
         {t(lang, 'seamAuthoringHint')}
       </p>
+
+      {pendingStart && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel-2)', border: '1px solid #ffcc33', borderRadius: 8, padding: 8, marginBottom: 10, fontSize: 12.5 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ffcc33', flexShrink: 0 }} />
+          <span>{t(lang, 'startPointPicked', { piece: pieceLabel(pendingStart.pieceIdx) })}</span>
+        </div>
+      )}
 
       {pendingEdges.length > 0 && (
         <div style={{ background: 'var(--panel-2)', borderRadius: 8, padding: 8, marginBottom: 10, fontSize: 12.5 }}>
