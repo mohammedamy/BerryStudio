@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-theme="intl" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#6d5efc">
+<title>BerryStudio — Privacy Policy</title>
+<meta name="description" content="How BerryStudio handles your data: what stays on your device, what an account touches, and which third parties are involved.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-512.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+<!--
+  Static text page — no dynamic imports, no network calls of its own, so
+  the CSP here is deliberately tighter than index.html/body.html's (no
+  esm.sh/unpkg script-src, no broad connect-src). Only self + the same
+  Google Fonts origins every other page already allows.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self';">
+<style>
+  .pp-wrap { max-width: 760px; margin: 0 auto; padding: var(--sp-8) var(--sp-5) var(--sp-10); }
+  .pp-back { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); text-decoration: none; font-size: 13px; margin-bottom: var(--sp-6); }
+  .pp-back:hover { color: var(--ink); }
+  .pp-wrap h1 { font-size: 26px; margin: 0 0 4px; }
+  .pp-effective { color: var(--ink-2); font-size: 13px; margin: 0 0 var(--sp-8); }
+  .pp-wrap h2 { font-size: 16px; margin: var(--sp-8) 0 var(--sp-2); }
+  .pp-wrap p, .pp-wrap li { color: var(--ink-2); line-height: 1.6; font-size: 14px; }
+  .pp-wrap ul { margin: var(--sp-2) 0; padding-inline-start: 20px; }
+  .pp-wrap li { margin-bottom: 4px; }
+  .pp-wrap strong { color: var(--ink); }
+  .pp-wrap a { color: var(--brand); }
+  .pp-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--sp-6); }
+</style>
+</head>
+<body data-theme="intl" data-mode="light">
+
+<div class="pp-wrap">
+  <a class="pp-back" href="index.html">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    Back to BerryStudio
+  </a>
+
+  <div class="pp-card">
+    <h1>Privacy Policy</h1>
+    <p class="pp-effective">Effective August 21, 2026</p>
+
+    <p>BerryStudio is a browser-based pattern-drafting and 3D fit tool. This page explains what data the app collects, how it's used, and who it's shared with. Signing in is optional — most features work fully without an account.</p>
+
+    <h2>Data that stays on your device</h2>
+    <p>Your pattern projects, measurements, drafting settings, and any AI provider API key you add yourself are stored in your browser's local/session storage. None of that is sent to our servers. An API key you choose to save persistently is encrypted first, with a passphrase only you know, and is used solely to call that provider directly from your own browser.</p>
+
+    <h2>If you create an account</h2>
+    <p>Account sign-in is handled by <a href="https://supabase.com" target="_blank" rel="noopener">Supabase</a>, our authentication provider:</p>
+    <ul>
+      <li><strong>Email/password</strong> — your email and a securely hashed password are stored by Supabase. We never see or store your plaintext password.</li>
+      <li><strong>Continue with Google / Continue with Facebook</strong> — we receive your email address and account ID from that provider through a standard OAuth sign-in. We never see or receive your Google or Facebook password.</li>
+      <li>We keep one small record per account: subscription status (trial or active) and the date your trial started, used only to determine feature access.</li>
+    </ul>
+
+    <h2>Third parties involved</h2>
+    <ul>
+      <li><strong>Supabase</strong> — hosts authentication and the account record described above.</li>
+      <li><strong>Google</strong> / <strong>Meta (Facebook)</strong> — only if you choose to sign in with one of those; they authenticate you and share your email/account ID with us as part of that sign-in.</li>
+      <li><strong>AI providers</strong> (e.g. OpenAI) — only if you add your own API key for an AI feature. Those requests go directly from your browser to that provider using your key; we never see or store that traffic.</li>
+    </ul>
+
+    <h2>What we don't do</h2>
+    <ul>
+      <li>No ads, and no ad-tracking or analytics cookies.</li>
+      <li>No selling or sharing your data with data brokers.</li>
+      <li>No access to your pattern files or measurements — those never leave your browser unless you explicitly export or sync them yourself.</li>
+    </ul>
+
+    <h2>Your choices</h2>
+    <ul>
+      <li>Sign out at any time to end your session.</li>
+      <li>To delete your account and its stored data, email us at the address below.</li>
+      <li>Clear all locally stored data (patterns, saved keys) any time via your browser's site-data settings.</li>
+    </ul>
+
+    <h2>Contact</h2>
+    <p>Questions about this policy: <a href="mailto:mr.mohammed.abdallah@gmail.com">mr.mohammed.abdallah@gmail.com</a></p>
+
+    <h2>Changes</h2>
+    <p>If this policy changes, the effective date above will be updated.</p>
+  </div>
+</div>
+
+</body>
+</html>
