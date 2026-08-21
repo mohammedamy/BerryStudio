@@ -181,7 +181,19 @@ test('AI Provider settings panel renders and a mocked Test Connection round-trip
 // to fail dynamic `import('react')` even though the import map is correctly
 // present in the DOM — a tool-specific limitation, not a bug in this code
 // (confirmed by this same check passing here).
-test('embedded Cloth Lab engine mounts real content with no console errors', async ({ page }) => {
+// Code-review fix (WP-42 Stage B): Cloth Lab (both entry points) is now a
+// gated surface — signed out (this suite never authenticates, same
+// constraint noted throughout this project's own WP-42 verification), the
+// embedded engine must NOT mount at all, matching js/app.js's
+// loadClothLab()/teardownClothLab() ("the GPU work never starts while
+// gated"). This test used to assert the OPPOSITE (a real canvas renders)
+// before gating existed; it now asserts the gate itself, which is the
+// actual current, correct behavior for a signed-out visitor. The
+// "embedded engine genuinely mounts and renders a working Three.js scene"
+// coverage this test used to provide now needs a real signed-in account
+// to exercise at all — same limitation as the automation API's
+// export()/generate() tests above — so it isn't re-asserted here.
+test('embedded Cloth Lab engine stays gated (does not mount) when signed out', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(String(err)));
   page.on('console', (msg) => {
@@ -202,18 +214,13 @@ test('embedded Cloth Lab engine mounts real content with no console errors', asy
 
   await page.getByRole('button', { name: '3D Cloth Lab' }).click();
 
-  const embedContainer = page.locator('#clothLabEmbed');
-  await expect(embedContainer).toBeVisible();
-  // React having actually mounted into the container, not just the div
-  // existing — the concrete assertion the dynamic import() + mount() call
-  // succeeded rather than silently failing into the .catch() in
-  // mountClothLabEmbedded() (js/app.js).
-  await expectVisibleOrDumpErrors(embedContainer.locator('canvas'), errors, 15000);
-
-  // The iframe path must be genuinely inactive, not just visually hidden —
-  // .engine-embedded's CSS rule (css/styles.css) is what proves the flag
-  // actually took effect end-to-end, not merely that a canvas rendered.
-  await expect(page.locator('#viewClothLab')).toHaveClass(/engine-embedded/);
+  // The gate overlay renders instead of the embedded engine mounting.
+  await expect(page.locator('#clothLabGate')).toBeVisible();
+  // React never mounted into #clothLabEmbed at all — the concrete
+  // assertion that the dynamic import()/mount() call was never even
+  // attempted (js/app.js's loadClothLab() gate short-circuits before
+  // calling mountClothLabEmbedded()), not just that its result is hidden.
+  await expect(page.locator('#clothLabEmbed canvas')).toHaveCount(0);
 
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
@@ -439,9 +446,13 @@ test('Walk the Seam finds a real princess-seam pair and renders at multiple posi
 // (window.BerryStudio, js/berry-studio-api.js) — every verb is a direct
 // pass-through to capability the rest of this suite already exercises
 // individually, so this test's job is narrower: prove the FACADE itself
-// wires correctly end-to-end against a real loaded pattern, for all five
-// verbs, not stubbed/mocked results.
-test('window.BerryStudio automation API: all five verbs return real (not stubbed) results', async ({ page }) => {
+// wires correctly end-to-end against a real loaded pattern, for the three
+// UNGATED verbs (grade/validate/nest — grading, nesting, and pattern
+// validation are explicitly free surfaces per plan v3.2 §6), not
+// stubbed/mocked results. export()/generate() are covered by the
+// signed-out-throws test right below instead — see that test's own
+// comment for why this one can't also assert their SUCCESS path.
+test('window.BerryStudio automation API: three ungated verbs return real (not stubbed) results', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(String(err)));
   page.on('console', (msg) => {
@@ -465,10 +476,6 @@ test('window.BerryStudio automation API: all five verbs return real (not stubbed
   );
   expect(graded.chest).toBeGreaterThan(gradedM.chest);
 
-  // export() — the default-loaded pattern's real SVG.
-  const svg = await page.evaluate(() => window.BerryStudio.export('svg'));
-  expect(svg).toContain('<svg');
-
   // validate() — PatternValidator's real report shape over the loaded pieces.
   const report = await page.evaluate(() => window.BerryStudio.validate({}));
   expect(Array.isArray(report.perPiece)).toBe(true);
@@ -481,12 +488,50 @@ test('window.BerryStudio automation API: all five verbs return real (not stubbed
   expect(nestResult.placements.length).toBeGreaterThan(0);
   expect(nestResult.utilization).toBeGreaterThan(0);
 
-  // generate() — the real local (offline) silhouette+prompt pipeline, no endpoint configured.
-  const generated = await page.evaluate(() =>
-    window.BerryStudio.generate({ prompt: 'a fitted knee-length dress', category: 'women', measurements: { chest: 88, waist: 70, hips: 96, backLen: 41, sleeve: 58, bicep: 28, height: 167 } })
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});
+
+// Code-review fix (WP-42 Stage B): window.BerryStudio.generate()/export()
+// used to call AIGen.generate()/Canvas.export* directly, completely
+// bypassing js/app.js's entitlement gate — a signed-out or expired-trial
+// user could get full AI generation / real exports from the console for
+// free, with no sign-in prompt, even though the exact same actions are
+// gated everywhere in the real UI. Fixed by giving the facade its own
+// fresh entitlement check (js/berry-studio-api.js's checkEntitlement()).
+// This test asserts the actual regression: signed out (this suite never
+// authenticates against Supabase — creating/using a real test account is
+// out of scope for an automated e2e run, same constraint noted throughout
+// this project's own WP-42 verification notes), both calls must now
+// REJECT rather than silently succeed. The entitled-success path (an
+// active/trial account actually getting real results back) is instead
+// covered at the unit level by test/entitlement.test.js's
+// computeEntitlement() cases, which is what checkEntitlement() itself
+// is built from.
+test('window.BerryStudio.export()/generate() are gated — reject when signed out', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+
+  await page.goto('/index.html');
+  await dismissOnboarding(page);
+  await expect(page.locator('#patternCanvas')).toBeVisible();
+
+  const exportResult = await page.evaluate(() =>
+    window.BerryStudio.export('svg').then(
+      () => ({ threw: false }),
+      (e) => ({ threw: true, message: String(e && e.message || e) })
+    )
   );
-  expect(generated.pieces.length).toBeGreaterThan(0);
-  expect(generated.source).toBe('local');
+  expect(exportResult.threw).toBe(true);
+  expect(exportResult.message).toMatch(/sign-in|subscription/i);
+
+  const generateResult = await page.evaluate(() =>
+    window.BerryStudio.generate({ prompt: 'a fitted knee-length dress', category: 'women', measurements: { chest: 88, waist: 70, hips: 96, backLen: 41, sleeve: 58, bicep: 28, height: 167 } }).then(
+      () => ({ threw: false }),
+      (e) => ({ threw: true, message: String(e && e.message || e) })
+    )
+  );
+  expect(generateResult.threw).toBe(true);
+  expect(generateResult.message).toMatch(/sign-in|subscription/i);
 
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });

@@ -1,10 +1,13 @@
 /* ============================================================
-   Account sign-in — BerryStudio-Upgrade-Plan-v3.2 WP-42 Stage A.
+   Account sign-in — BerryStudio-Upgrade-Plan-v3.2 WP-42 Stage A,
+   plus Stage B's getProfile() (below) for reading trial/subscription state.
 
-   Sign-in only, no gating: every feature stays free and usable with no
-   account during this stage (plan v3.2 §6). This module exists purely so
-   js/app.js's Account UI has something real to call — WP-42 Stage B is
-   what turns account state into feature gating, later.
+   Sign-in itself stays exactly Stage A's shape: every feature that isn't
+   one of the five Stage B gates it free with no account at all. This
+   module exists so js/app.js's Account UI (and, as of Stage B, its gate
+   checks) have something real to call — the actual gating DECISION
+   (js/entitlement.js's computeEntitlement()) and every gate call site
+   live in js/app.js, not here; this file only fetches data.
 
    Backend: Supabase Auth (managed) — email/password plus Google and
    Facebook OAuth. Supabase issues, stores and refreshes the session
@@ -132,5 +135,53 @@ export const Auth = {
     if(!client) return;
     const { error } = await client.auth.signOut();
     if(error) throw error;
+  },
+
+  // WP-42 Stage B: reads the current user's `profiles` row (see
+  // server/supabase/migrations/0001_profiles_entitlement.sql) — the two
+  // fields js/entitlement.js's computeEntitlement() needs. Returns null
+  // ONLY for "genuinely no row" (signed out, not configured, or a real
+  // 0-row result — .maybeSingle() with no error) — a fetch/RLS/network
+  // error now THROWS instead of being swallowed into the same null.
+  //
+  // Code-review fix: this used to catch every `profiles` SELECT error
+  // (network blip, RLS denial, migration-not-run) and return null just
+  // like "no row found" — but js/app.js's refreshEntitlement() wraps its
+  // call to this in a try/catch SPECIFICALLY so a thrown error leaves
+  // currentEntitlement at its previous known-good value (per that field's
+  // own comment: "a transient network hiccup shouldn't lock out an actual
+  // subscriber mid-session"). Because this never threw, that catch block
+  // was dead code for the one case it exists to handle — a real active
+  // subscriber hitting any transient Supabase error got instantly
+  // (mis)computed as `expired` and locked out until the next successful
+  // fetch. Now: a real fetch error propagates (refreshEntitlement's catch
+  // does its job); "no row, no error" (a genuinely nonexistent account,
+  // or the migration hasn't been run) still resolves to null, which
+  // computeEntitlement() correctly reads as "can't prove entitlement" —
+  // that part of the design is unchanged and correct, only the
+  // error-vs-no-row conflation is fixed.
+  //
+  // `userId` (optional): pass the caller's already-known session.user.id
+  // (e.g. js/app.js's refreshEntitlement(session) already has it from the
+  // onAuthStateChange event) to skip a redundant client.auth.getUser()
+  // round trip — falls back to fetching it here for a standalone caller
+  // with no session object handy (e.g. js/berry-studio-api.js).
+  async getProfile(userId){
+    const client = await getClient();
+    if(!client) return null;
+    let uid = userId;
+    if(!uid){
+      const { data: { user } } = await client.auth.getUser();
+      if(!user) return null;
+      uid = user.id;
+    }
+    const { data, error } = await client
+      .from('profiles')
+      .select('subscription_status, trial_started_at')
+      .eq('id', uid)
+      .maybeSingle();
+    if(error) throw error; // real fetch/RLS/network failure — let the caller decide (see comment above)
+    if(!data) return null; // genuinely no row (migration not run, or no account)
+    return { subscriptionStatus: data.subscription_status, trialStartedAt: data.trial_started_at };
   },
 };

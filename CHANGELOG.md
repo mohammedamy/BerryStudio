@@ -6,6 +6,282 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-42 Stage B follow-up: multi-agent code review found and fixed 7 real gate bypasses
+
+Before merging, this PR went through an 8-angle automated code review
+(3 correctness + 3 cleanup + altitude + conventions), each candidate
+independently re-verified by a second pass. Result: **7 CONFIRMED, 1
+PLAUSIBLE** — a genuinely serious set of findings, all fixed before merge.
+Documented here in full rather than folded quietly into the original
+Stage B entry, since these are real security-relevant gaps a reviewer
+should be able to see were caught and closed, not just claimed fixed.
+
+### Fixed
+- **`window.BerryStudio` (`js/berry-studio-api.js`) completely bypassed
+  entitlement gating** — the most serious finding. `generate()`/`export()`
+  called `AIGen.generate`/`Canvas.export*` directly; any signed-out or
+  expired-trial user could call `BerryStudio.generate(...)` or
+  `BerryStudio.export('pdf')` from devtools and get full AI/Export
+  functionality for free, defeating all five gated surfaces through one
+  documented, always-loaded API. Fixed with the facade's own fresh
+  entitlement check (`checkEntitlement()`, mirroring
+  `refreshEntitlement()`'s own isAuthConfigured→getSession→getProfile→
+  computeEntitlement chain, since this module has no access to
+  `js/app.js`'s private gate state). **Real API contract change**:
+  `export()` is now `async` for every format, including the previously-
+  synchronous svg/dxf/hpgl/pdf — there is no synchronous way to check
+  entitlement — documented in README's Automation API section and covered
+  by a new e2e test (`e2e/smoke.spec.js`) asserting both calls reject
+  when signed out.
+- **Cloth Lab never actually stopped once entitlement was revoked
+  mid-session** — `loadClothLab()` only overlaid the gate card when
+  `gateAllowed()` failed; it never reset `clothLabReady`/`frame.src` or
+  unmounted the embedded engine, and `syncClothLab()` had no gate check
+  of its own — so a user who signed out (or whose trial expired) while
+  Cloth Lab was open kept a live, updating GPU simulation running behind
+  the overlay indefinitely, contradicting the PR's own "GPU work never
+  starts while gated" claim. Fixed with a new `teardownClothLab()`
+  (resets `clothLabReady`, unmounts the embedded engine, clears the
+  iframe) called from `loadClothLab()`'s gated branch, plus a
+  `gateAllowed()` guard added directly to `syncClothLab()` as a second
+  layer.
+- **No backfill for accounts that signed up during Stage A** — the
+  `on_auth_user_created` trigger only fires on new `auth.users` inserts;
+  real accounts already existed (Stage A shipped first) with no
+  `profiles` row, which `computeEntitlement(null)` reads as `expired`
+  with 0 trial days — a real, permanent lockout for every pre-existing
+  user, granting them none of the 30-day trial every other account gets.
+  Fixed with an idempotent backfill `insert ... on conflict do nothing`
+  in the migration, called out explicitly in `server/supabase/README.md`.
+- **`Auth.getProfile()` swallowed real fetch/RLS errors into the same
+  `null` "no row" returns** — `currentEntitlement`'s own header comment
+  promises a transient network hiccup won't lock out an actual
+  subscriber, via a try/catch in `refreshEntitlement()` built specifically
+  for that. But `getProfile()` never threw on a real error, so that catch
+  was dead code for the exact scenario it exists to handle — a genuine
+  active subscriber hitting any transient Supabase blip got instantly
+  (mis)computed as `expired`. Fixed: `getProfile()` now throws on a real
+  fetch error, only returning `null` for a genuine 0-row result. While
+  touching this, also fixed a real redundant-network-round-trip
+  (efficiency finding): `getProfile()` now accepts an optional `userId`
+  to skip its own `client.auth.getUser()` call when the caller (both
+  `refreshEntitlement()` and the automation API's `checkEntitlement()`)
+  already has the session's user id.
+- **AI Fashion Billboard's "Generate Pattern Pieces From This"/"Read
+  Pattern Pieces From This Tech-Pack" bypassed the AI gate** —
+  `runPatternPieces()`/`runTechPackPieces()` call the exact same
+  `generatePatternFrom()` pipeline `runAI()` uses, but had no
+  `requireEntitlement()` of their own. Fixed by gating both. `runBillboard()`
+  itself (the billboard image render) is deliberately left ungated — the
+  plan's AI gate is scoped to "pattern generation, image generation —
+  js/ai.js's AIGen" specifically; turning a billboard image into real
+  pattern pieces is what actually crosses into that territory.
+- **Print (Project menu / ⌘K) bypassed the Export gate** — `printPattern()`
+  builds and opens the full pattern SVG (directly save-as-PDF-able via the
+  browser's print dialog), same underlying data the gated SVG/PDF export
+  buttons block, with no gate of its own. Fixed.
+- **Category tabs (header Women/Men/Girls/Boys) bypassed the Library
+  gate** — `setCategory()` unconditionally called `loadPattern()` (the
+  same function `loadLibraryPattern()` gates) to swap in a different one
+  of the 264 catalog patterns on every tab click. Fixed narrowly:
+  switching category itself stays free (basic navigation, unchanged), but
+  auto-loading a brand-new catalog pattern for the new category now
+  requires the same entitlement the Library pane does — a gated user
+  keeps whatever pattern they already had.
+- **`renderClothLabGate()` duplicated `renderGateUpsell()`'s logic** by
+  hand instead of calling it, and had silently drifted — missing the
+  `accountNotConfigured` diagnostic the other four gated panes show when
+  `auth-config.js` is empty. Fixed by having it delegate to
+  `renderGateUpsell()` directly, closing both the duplication (a reuse/
+  simplification finding, flagged independently by two review angles)
+  and the missing message in one change.
+
+### Verified
+- `npm test` — 265/265 (unchanged from Stage A's landing count).
+- Playwright e2e (`npm run test:e2e`): the two tests touching gated
+  behavior — the automation API's export/generate, and the embedded
+  Cloth Lab engine — both rewritten to assert the correct GATED behavior
+  (rejecting/staying unmounted when signed out) and pass reliably on
+  repeat runs. Three unrelated tests flaked once each across repeated
+  full-suite runs (a different random test each time — "select-anything"/
+  notch selection, cloud-sync's settings-modal timing, keyboard
+  selection, Add Point) and passed cleanly every time re-run in
+  isolation — confirmed as the exact pre-existing CI-resource-contention
+  flakiness `playwright.config.js`'s own comment already documents
+  ("settings-modal timing, Cloth Lab embed load, notch selection"), not
+  a regression from these fixes.
+
+## WP-42 Stage B: Trial/subscription gating for AI, Library, Quick Draft, Export, Cloth Lab
+
+Per `BerryStudio-Upgrade-Plan-v3-2.md` §6/§7: turns Stage A's sign-in-only
+account system into real gating for the five surfaces the plan names, with
+no real payment flow yet (Stage C, PayPal, stays deliberately deferred).
+Everything not in that five-item list stays free with no account, matching
+the plan's explicit acceptance criteria — including the "or with no
+account" clause, i.e. an anonymous (never-signed-in) user sees the same
+gate as an expired trial, not free access, since no trial has started yet.
+
+### Added
+- `js/entitlement.js` — pure `computeEntitlement(profile, now)` /
+  `isAllowed()`: derives `trial | active | expired` from a `profiles` row's
+  `subscriptionStatus` (`'trial'|'active'`, never `'expired'` — see its own
+  header comment for why) and `trialStartedAt`, with `active` always
+  winning regardless of trial age. Written and unit-tested first, in
+  isolation, before any `js/app.js` call site — same "CPU reference before
+  it touches the app" discipline WP-35/WP-35b used for their own math.
+  `test/entitlement.test.js` — 12 cases: no-profile, active-wins, exact
+  30-day boundary (`>=`, not `>`), 1ms-before-boundary, malformed/
+  unparseable `trialStartedAt`, ISO-string vs. epoch-ms input, future
+  `trialStartedAt` (clock skew), `isAllowed`'s null/undefined fold.
+- `server/supabase/migrations/0001_profiles_entitlement.sql` +
+  `server/supabase/README.md` — the `profiles` table (one row per account,
+  auto-created at sign-up via an `auth.users` insert trigger so
+  `trial_started_at` is a real server timestamp, not client-suppliable),
+  Row Level Security (`select`-only for the signed-in user's own row — no
+  insert/update/delete policy for anyone but the SQL Editor's service-role
+  context, which is what makes "only an admin can grant a subscription" a
+  server-enforced rule, not a client-side convention), and the admin-flip
+  SQL stopgap standing in for Stage C's PayPal webhook.
+- `js/auth.js`: `Auth.getProfile()` — reads the current user's `profiles`
+  row; returns `null` (not a throw) for signed-out, not-configured, or a
+  fetch/RLS error, so a misconfigured deployment (e.g. the migration
+  hasn't been run) degrades to "can't prove entitlement" rather than
+  crashing the account UI.
+- `js/app.js`: `currentEntitlement` (refreshed on every `Auth.onChange`,
+  keeping its previous value on a fetch error rather than snapping to
+  gated — a network hiccup shouldn't lock out a real subscriber
+  mid-session), `gateAllowed()`/`requireEntitlement()`/`renderGateUpsell()`
+  as the shared gate primitives. Library/AI/Quick Draft rail panes gate
+  their entire pane (each is wholly one of the five named surfaces);
+  Export gates only its four specific actions (`exportAs()` for every
+  format except `"JSON"` — Project menu's "Save Project" is local
+  persistence, not "Export"; `techPack()`; `exportSummary()`;
+  `exportBom()`) since the plan explicitly keeps Fit Chart, Sewing
+  Instructions, and (by the same "2D drafting" logic) Check Pattern, Walk
+  the Seam, and marker/nesting free, all four of which live in the same
+  Export pane. `loadLibraryPattern()` wraps the two call sites that mean
+  "picked from the Library surface" (its own cards, the command palette's
+  library entries) — every other `loadPattern()` call (default pattern on
+  boot, the AI-SVG-import handoff) stays direct and ungated, since those
+  aren't the gated "browse the catalog" feature. Cloth Lab: `loadClothLab()`
+  gates both engines through their one shared call site — while gated,
+  neither the iframe `src` is ever set nor the embedded engine's dynamic
+  import ever runs, so the GPU work genuinely never starts, not just
+  hidden behind an overlay. Account modal (`openAccount()`) shows
+  active/trial-days-remaining/expired status and an Upgrade CTA when
+  expired. `openUpgradePrompt()` — an honest "billing isn't wired up yet,
+  contact the site owner" placeholder, not a fake button that silently
+  does nothing.
+- `cloth-lab/src/auth-config.js`, `cloth-lab/src/entitlement.js`,
+  `cloth-lab/src/entitlement.test.js` — hand-kept-in-sync duplicates of
+  the root app's own config/math (a genuinely separate Vite project, same
+  "duplicate two small files rather than couple two build systems"
+  reasoning `js/auth.js`'s header comment already uses for its esm.sh URL).
+  `cloth-lab/src/EntitlementGate.jsx` wraps `main.jsx`'s standalone entry
+  only (not `embed.js` — the embedded engine has no direct URL of its own,
+  so `js/app.js`'s own gate already covers it; a second Supabase round
+  trip there would be pure latency for no coverage gain) — a real,
+  independent Supabase session+profile check so the `/cloth-lab/` subpath
+  can't be used to bypass the root app's gate by direct URL/bookmark, per
+  the plan's own "ideally the standalone subpath itself refuses to render
+  un-entitled too."
+- `en`/`ar` strings for all of the above in `js/i18n.js`.
+
+### Fixed
+- **A real bug, caught live during this WP's own follow-up browser pass,
+  not merely theorized**: `cloth-lab/src/main.jsx` originally wrapped
+  `<App/>` with a static `import App from './App.jsx'` at the top of the
+  file, gating only the RENDER/mount step (`<EntitlementGate><App/>
+  </EntitlementGate>`). Network-request inspection during verification
+  showed App.jsx's entire module graph — three.js, `@react-three/fiber`,
+  every cloth/body/GPU module, the bulk of a 1.4MB bundle — loading (and,
+  in a production build, executing its top-level code) regardless of the
+  gate, because ES module top-level evaluation runs at import time, not
+  render time. Fixed by moving the `import('./App.jsx')` itself inside
+  `EntitlementGate.jsx`, called only after `checkEntitlement()` resolves
+  allowed — confirmed via a real before/after network-request diff (the
+  gated page load no longer fetches `App.jsx` or any of its dependencies
+  at all) and via the production build's own output: one small entry
+  chunk (~195KB) plus a separate `App-*.js` chunk (~1.24MB) that only
+  loads once entitled, replacing the previous single 1.43MB bundle. This
+  is what actually makes "the GPU work never starts while gated" true for
+  the standalone subpath too, matching the guarantee `js/app.js`'s
+  `loadClothLab()` already gives the root app's two entry points.
+- **A second real bug, also caught live**: toggling language while gated
+  (on the Cloth Lab tab, or after switching tabs away and back) left the
+  Cloth Lab gate card showing its OLD language until the next unrelated
+  tab round-trip — `applyLang()`'s existing Cloth Lab re-sync
+  (`syncClothLab(true)`) is guarded on `clothLabReady`, which is never
+  true while gated (the iframe/embed never loads), so that branch silently
+  never ran for a gated user. Fixed by having `applyLang()` also call
+  `renderClothLabGate()` directly whenever `!gateAllowed()` — confirmed
+  live in both directions (ar→en and en→ar while already on the gated
+  Cloth Lab tab, gate card text updates immediately, no stale text).
+
+### Changed
+- `js/i18n.js`'s `accountStageANotice` → `accountNotice`, reworded: the old
+  copy ("everything stays free with no account") is no longer true as of
+  this WP. `tt_account`'s tooltip updated the same way.
+
+### Explicitly not in this WP (see plan v3.2 §6 for the staged reasoning)
+- Stage C: real PayPal billing. Granting a subscription today is the
+  manual SQL Editor stopgap in `server/supabase/README.md`.
+- Automatic trial expiry enforcement in the database — nothing ever
+  writes `'expired'` to `subscription_status`; it's derived at read time,
+  client-side, from `trial_started_at` (see `js/entitlement.js`'s header
+  comment for why that's a deliberate choice, not a gap).
+- A live signed-in trial/active/expired visual check — see "Verified"
+  below.
+
+### Verified
+- `npm test` (root) — 265/265 passing (253 pre-existing + 12 new
+  `entitlement.test.js` cases).
+- `cloth-lab`: `npx vitest run` — 165/165 passing (158 pre-existing + 7
+  new `entitlement.test.js` cases); `vite build` (standalone) and
+  `vite build --config vite.lib.config.js` (embedded) both succeed
+  unchanged.
+- Browser-verified, signed-out state, end to end, across every gated entry
+  point named in this WP — not just the pane UI:
+  - Library/AI/Quick Draft panes each replaced by the sign-in upsell
+    (confirmed via rendered `innerHTML`); the command palette's own
+    library entries (`⌘K`, search "dress") confirmed to open the sign-in
+    modal too, not silently load a pattern, proving `loadLibraryPattern()`
+    covers that second entry point and not just the pane's own cards.
+  - Export pane: **Export**, **Generate Tech Pack**, and **Bill of
+    Materials** each confirmed, by actually clicking them, to open the
+    Account modal instead of doing anything — while **Fit Chart** and
+    **Check Pattern** confirmed to open their own real modals, **Sewing
+    Instructions** confirmed to call `window.open()` (intercepted and
+    counted, not just assumed), and **Walk the Seam**/**Create Marker**
+    confirmed NOT to trigger the Account modal — i.e. the pane's per-
+    button gating is real, not just the informational note.
+  - Cloth Lab: the tab's gate card confirmed with `#clothLabFrame`'s `src`
+    still empty (the GPU work never started) and `#viewClothLab`'s
+    embedded container untouched; the gate's "Sign in" button confirmed
+    to open the real Account modal with the updated notice text; the
+    **standalone `/cloth-lab/` subpath**, loaded directly (not through the
+    root app), independently confirmed to show its own gate with zero
+    console errors — and, after the module-graph fix above, confirmed via
+    network-request inspection to never fetch `App.jsx` or any of its
+    dependencies while gated.
+  - Arabic/RTL: every gated surface above re-checked with the app in `ar`/
+    RTL mode — all new strings render correctly (no missing keys, no
+    layout breakage); the language-toggle bug above was caught specifically
+    because of this pass.
+- **Not verified live, honestly**: the actual signed-in trial/active/
+  expired UI states (the Account modal's status line, a gated pane
+  un-gating, Cloth Lab actually loading) against a real Supabase account.
+  Doing that from this session would mean creating a real account and
+  authenticating with a password, which is out of scope for an automated
+  session to do on its own — this is a real, acknowledged gap in this
+  WP's verification, covered instead by `computeEntitlement()`'s unit
+  tests and a close reading of the call sites, not a live round trip. A
+  manual pass with a real test account (sign up, confirm the trial-days
+  countdown, run the admin-flip SQL, confirm `active` unlocks everything,
+  let a trial's `trialStartedAt` be set to 31+ days in the past via SQL
+  and confirm `expired` re-gates) is worth doing before relying on this
+  in production.
+
 ## WP-35b: GPU spatial-hash self-collision broadphase (Cloth Lab, "High" tier)
 
 Per `BerryStudio-Upgrade-Plan-v3-2.md` §5's own recommendation: write and
