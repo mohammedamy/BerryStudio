@@ -6,6 +6,44 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Cloth Lab follow-up: fixed the ACTUAL crash — a real React render bug
+
+User report right after the previous entry shipped: "when i click two seam
+points in seam view it craches." The previous entry's `instancedMesh`
+performance fix was real and stays, but it turned out not to be what the
+user was hitting — this is the actual crash.
+
+### Fixed
+- **`SeamEditorPanel.jsx`'s `pieceLabel()` returned a piece's raw `label`
+  field and it was rendered directly as a JSX child** — fine for the
+  built-in skirt demo (`pattern/library/skirt.js`, a plain string label),
+  but every REAL garment piece imported from the root BerryStudio app
+  carries a bilingual `label: {en, ar}` OBJECT — all 8 `rawPieces.push()`
+  call sites in `pattern/importFromApp.js` pass `p.label` straight through
+  without ever extracting a string, and `pattern/seamAuthoring.js`'s
+  `createDraftPiece()` copies it onto `draft.label` unchanged. The instant
+  `pendingEdges` gets its first entry — i.e. the moment the SECOND click
+  of an edge completes it — the panel tried to render that object directly
+  (`{pieceLabel(pe.pieceIdx)}`), and React throws "Objects are not valid
+  as a React child" and crashes the whole panel. That's exactly "click two
+  seam points → crash": the first click only sets `pendingStart` (routed
+  through `t()`'s string interpolation, which just silently stringified it
+  to "[object Object]" instead of crashing); the second click is what
+  first renders a piece label as a bare JSX child. Missed in the previous
+  entry's testing because that testing only ever exercised the string-
+  labeled built-in demo, never a real (object-labeled) imported garment.
+  Fixed by extracting a proper display string — language-aware
+  (`label[lang]`), falling back to `.en` then the piece id — instead of
+  handing React the raw object. Added
+  `cloth-lab/src/seam/SeamEditorPanel.test.jsx`: renders the panel via
+  `react-dom/server`'s `renderToStaticMarkup` with an object-labeled draft
+  and a pending edge/pending-start — reproduced the exact crash with the
+  fix reverted (verified byte-for-byte against the same "Objects are not
+  valid as a React child (found: object with keys {en, ar})" error),
+  confirmed clean with the fix restored, plus a case guarding the
+  pre-existing plain-string path stays unchanged and one for the Arabic
+  `lang` prop.
+
 ## Cloth Lab: Seam Authoring flicker/crash fix + pending-point feedback
 
 User-reported bug, not tied to a plan work package: "the seam thing is not
