@@ -757,24 +757,35 @@ export const QUALITY_TIER_HIGH = 'high'
 // near 1 is perfectly safe (it just blends a position correction). The
 // dihedral constraint (DIHEDRAL_BEND_GLSL/dihedralBend.js) is a Jacobi
 // ROTATION correction instead — `delta = stiffness * error`, then a full
-// Rodrigues rotation of the wing vertex by `delta` — and that only
-// converges without overshooting past the target and flipping sign each
-// substep for stiffness <= 0.5. Confirmed directly: dihedralBend.js's own
-// dihedralBendCorrection() defaults its `stiffness` param to exactly 0.5,
-// and dihedralBend.test.js's convergence property test hardcodes 0.5 too
-// — 0.5 was always the one value anyone actually verified. Numerically
-// swept 0.1-0.9 against a fixed hinge (see this fix's own commit): every
-// value at or below 0.5 converges monotonically; every value above 0.5
-// overshoots and flips sign on the very first correction, then keeps
-// oscillating — visually, on a whole garment with many coupled hinges
-// correcting in parallel every substep, exactly the kind of "crazy"
-// jitter/explosion the report describes. Several real presets exceed
-// 0.5 (wool 0.58, denim 0.80, leather 0.92), so this reproduced for any
-// user who had one of those selected (or switched to one) while on the
-// High tier — not just an edge case. Clamped at the one source both call
-// sites (the constructor and setFabric()) already read through.
+// Rodrigues rotation of the wing vertex by `delta`.
+//
+// A first pass at this fix clamped at 0.5 — the value dihedralBend.js's
+// own `dihedralBendCorrection()` defaults `stiffness` to, and the only
+// value dihedralBend.test.js's convergence property test ever exercises,
+// because a SINGLE isolated hinge genuinely does converge to rest in one
+// correction at exactly 0.5, no overshoot. That shipped, and the user
+// still saw "crazy things" — confirmed live (denim/leather + High:
+// visible high-frequency wrinkling/ballooning, growing worse frame over
+// frame, not settling). The isolated-hinge math was real but incomplete:
+// a real garment has many hinges sharing vertices, all correcting in
+// PARALLEL from the same Jacobi-parallel snapshot every substep (see this
+// file's own module header), then averaging their independently-computed
+// ROTATED positions (`dihedralDelta / dihedralCount` below) — unlike the
+// structural/default-bend correction, which averages simple LINEAR
+// displacements, a rotation's resulting displacement is a nonlinear
+// function of position, so averaging several disagreeing rotations at a
+// shared vertex doesn't damp the same way. What a lone hinge tolerates at
+// 0.5 compounds once coupled this way. Re-verified live (Denim AND
+// Leather — bendStiff 0.80 and 0.92, the two stiffest real presets — both
+// High-tier, watched settle over several seconds, not just the first
+// frame) by sweeping the clamp down: 0.5 and 0.2 both still visibly
+// wrinkle/balloon and keep growing; 0.12 settles clean, indistinguishable
+// from the default tier's own drape, and stays stable. Clamped at the one
+// source both call sites (the constructor and setFabric()) already read
+// through — see dihedralStiffFor.test.js for the numeric record of what
+// was actually tried.
 export function dihedralStiffFor(fabric) {
-  return Math.min(0.5, fabric.dihedralStiff ?? fabric.bendStiff)
+  return Math.min(0.12, fabric.dihedralStiff ?? fabric.bendStiff)
 }
 
 export class ClothSimulation {
