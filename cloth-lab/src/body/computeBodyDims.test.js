@@ -60,16 +60,58 @@ describe('torsoProfile / armProfile / legProfile', () => {
     for (const [r] of legProfile(dims)) expect(r).toBeGreaterThan(0)
   })
 
-  it('arm/leg profiles taper monotonically from shoulder/hip toward the hand/ankle', () => {
+  // Used to assert a STRICTLY monotonic taper (every consecutive point
+  // narrower than the last) — that was the deliberate design at the time
+  // (see armProfile's own header, then). Revisited for a more human
+  // silhouette: both profiles now have a real, intentional bicep/thigh
+  // swell and a knee/elbow pinch, so a strictly-decreasing sequence is no
+  // longer the right property to assert. What still has to hold — and is
+  // exactly what would break if a "subtle" swell stopped being subtle —
+  // is checked in the two tests below instead.
+  it('arm/leg profiles are overall widest at the shoulder/hip attachment and narrowest at the hand/ankle', () => {
     const arm = armProfile(dims)
-    for (let i = 1; i < arm.length; i++) expect(arm[i][0]).toBeLessThanOrEqual(arm[i - 1][0])
+    const armRadii = arm.map(([r]) => r)
+    expect(arm[0][0]).toBe(Math.max(...armRadii))
+    expect(arm[arm.length - 1][0]).toBe(Math.min(...armRadii))
     const leg = legProfile(dims)
-    for (let i = 1; i < leg.length; i++) expect(leg[i][0]).toBeLessThanOrEqual(leg[i - 1][0])
+    const legRadii = leg.map(([r]) => r)
+    expect(leg[0][0]).toBe(Math.max(...legRadii))
+    expect(leg[leg.length - 1][0]).toBe(Math.min(...legRadii))
+  })
+
+  it('the bicep/thigh swell stays subtle — narrower than the shoulder/hip attachment point, not a new widest point', () => {
+    const arm = armProfile(dims)
+    for (const [r] of arm.slice(1)) expect(r).toBeLessThan(arm[0][0])
+    const leg = legProfile(dims)
+    for (const [r] of leg.slice(1)) expect(r).toBeLessThan(leg[0][0])
   })
 
   it('arm/leg profiles start at y=0 (the shoulder/hip pivot) and descend', () => {
     const arm = armProfile(dims)
     expect(arm[0][1]).toBe(0)
     expect(arm[arm.length - 1][1]).toBeLessThan(0)
+  })
+
+  // pattern/placement.js and body/collisionRig.js each carry their OWN
+  // hardcoded copy of these three (Y, radius) anchors rather than reading
+  // torsoProfile() directly (grep either file for `0.44`/`0.76` to see
+  // every site) — see torsoProfile()'s own header for why. This is the one
+  // test that actually catches the two ever drifting apart: it doesn't
+  // import from those files (avoiding a circular/coupled test), it just
+  // pins torsoProfile()'s own three load-bearing points to the exact
+  // values those files assume, so an edit to the curve that moves one of
+  // THESE three points fails loudly here instead of silently mis-aligning
+  // collision capsules or garment placement with the visible mesh.
+  it('keeps the waist/chest/shoulder-base anchors other modules hardcode their own copies of', () => {
+    const profile = torsoProfile(dims)
+    const waist = profile.find(([, y]) => Math.abs(y - (dims.hipY + dims.span * 0.44)) < 1e-9)
+    expect(waist).toBeDefined()
+    expect(waist[0]).toBe(dims.waistR)
+    const chest = profile.find(([, y]) => Math.abs(y - (dims.hipY + dims.span * 0.76)) < 1e-9)
+    expect(chest).toBeDefined()
+    expect(chest[0]).toBeCloseTo(dims.chestR * 0.98, 10) // women's multiplier — WOMEN_M is female
+    const shoulderBase = profile.find(([, y]) => Math.abs(y - (dims.shoulderY - dims.span * 0.03)) < 1e-9)
+    expect(shoulderBase).toBeDefined()
+    expect(shoulderBase[0]).toBeCloseTo(dims.chestR * 0.9, 10) // women's multiplier
   })
 })
