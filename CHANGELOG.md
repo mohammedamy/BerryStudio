@@ -6,6 +6,96 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Female torso: a real breast and lower back, front now differs from back
+
+Direct follow-up to the mannequin redesign below — user feedback on it:
+"for woman manniquin it should have a breast and a lower back so its front
+body differ significantly from back body." Fair: that redesign's bust was
+still two spheres glued onto an otherwise plain lathe torso, and the torso
+itself had no back-specific shape at all — rotate it 180° and the "back"
+was identical to the front apart from those two spheres. This entry fixes
+that specifically.
+
+### Changed
+- **The torso mesh itself is no longer radially symmetric for adult female
+  bodies.** A `THREE.LatheGeometry` is a surface of revolution — one
+  profile, revolved uniformly — so it structurally cannot express a front
+  that differs from its back. New `cloth-lab/src/body/torsoSculpt.js`
+  (`torsoZBump()`) displaces the lathe's own vertices after the revolve,
+  keyed off each vertex's height and lathe angle (`phi`): a breast bulge
+  on the front (**two separate lobes with a flat "valley" between them at
+  dead center**, not one central mound — the two-lobe placement is a
+  raised-cosine window in `phi` centered at each lobe's own angle, chosen
+  narrow enough that both windows reach exactly 0 before phi=0) and a
+  lower-back curve on the back only (a concave lumbar dip above a convex
+  glute swell, both centered on straight-back). Every window tapers to
+  exactly 0 well inside the torso's own side profile, so
+  `torsoProfile()`'s hip/waist/chest/shoulder anchor values — and every
+  other module that hardcodes its own copy of them — are completely
+  unaffected.
+- **The old glued-on bust spheres are gone** from both
+  `cloth-lab/src/body/Avatar.jsx` and `js/three-view.js` — the torso
+  surface itself now carries that volume, blended into the surrounding
+  ribcage curve instead of reading as two balls stuck onto a flat chest.
+- `js/three-view.js` gets an independent, hand-matched port
+  (`bumpWindow()`/`femaleTorsoSculpt()`/`torsoZBump()`/`sculptedTorso()`)
+  of the same math — that file isn't an ES module cloth-lab can import
+  from, matching this whole redesign's existing convention for it.
+
+### Fixed (a risk introduced by this same change, caught before it shipped)
+- **Cloth Lab's collision rig assumed a radially-symmetric torso.**
+  `collisionRig.js`'s own header already states its job as "don't let
+  cloth clip through what the user sees" — once the visible mesh could
+  locally bulge beyond `torsoProfile()`'s plain circular radius (the
+  breast/glute peaks), the plain capsule rig built from that radius alone
+  would sit *inside* the sculpted surface there, meaning cloth resting on
+  the collision boundary could visibly clip through the bust. Fixed with
+  `femaleTorsoExtraRadius()`: for each torso collision primitive, samples
+  96 angles at that height and finds the largest extra radius any of them
+  needs so the collision ellipse never falls inside the sculpted mesh —
+  used instead of a single closed-form formula because a first hand-solved
+  version (solved only at each bump's exact peak angle) undershot by about
+  0.5% just off that peak, where the raised-cosine bump and the ellipse's
+  own `cos(phi)` have different curvature; sampling avoids relying on that
+  assumption ever holding, and stays correct through future retuning of
+  the bump's own numbers without re-deriving anything by hand.
+- Amplitudes were also deliberately sized against `js/three-view.js`'s
+  *static* bodice/skirt garment shell — the least forgiving consumer of
+  this mesh, since it has no collision system to fall back on the way
+  Cloth Lab does — checked by hand against that garment's own existing
+  ease before picking numbers, not after.
+
+### Verification
+- New `cloth-lab/src/body/torsoSculpt.test.js` (10 tests): the breast
+  bump's phi=0 valley is exactly 0, its two lobes are mirror-symmetric,
+  every feature is exactly 0 outside its own Y/phi window, the lower-back
+  curve pulls the waist in and pushes the hip out only on the true back
+  (phi=PI) and not at all on the front. The key regression test samples a
+  61×101 grid of (height, angle) across the whole torso and asserts the
+  collision ellipse (base radius + `femaleTorsoExtraRadius`) never sits
+  inside the sculpted mesh surface anywhere — the actual safety property
+  `collisionRig.js` depends on, checked directly rather than assumed from
+  the derivation.
+- `npx vitest run` in `cloth-lab/`: 205/205 pass (195 prior + these 10 new).
+- `node --test "test/**/*.test.js"` at the repo root: 275/275 pass (still
+  no test targets `js/three-view.js` directly).
+- `npx oxlint` on every touched file: zero new warnings.
+- Live-verified in Cloth Lab (bodice/sleeve/skirt layers hidden via the
+  Layers panel for a bare-body view): front shows two distinct breast
+  lobes with a flat center line between them; rotating 180° shows a
+  materially different back — a smooth waist-in/hip-out curve, no bust
+  bumps. Re-enabled the garment and draped the default fitted dress over
+  the sculpted body: no clipping/poke-through at the bust, confirming the
+  collision margin held in the actual physics sim, not just analytically.
+  Live-verified the same front/back asymmetry in the root app's 3D Preview
+  in a real (non-sandboxed) Chrome tab, using `View3D.setPieceVisibility()`
+  to hide the bodice/skirt for a bare-body view — front and back read as
+  clearly different shapes there too.
+- Spot-checked Men in Cloth Lab: body shape unchanged (this redesign is
+  scoped to adult female bodies only, per the user's own request — girls'
+  bodies are also deliberately excluded, same `female && !kid` gate the
+  original bust spheres already used).
+
 ## Mannequin redesign: a much more human body, in both 3D Preview and Cloth Lab
 
 User feedback on the dihedral-bend/self-collision instability fix above was

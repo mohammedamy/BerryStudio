@@ -387,6 +387,69 @@ export const View3D = (() => {
   }
   function sphere(r, mat) { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), mat); m.castShadow = true; return m; }
 
+  // Front/back torso sculpting for the female body — user-requested: "it
+  // should have a breast and a lower back so its front body differ
+  // significantly from back body." A lathe (surface of revolution) is
+  // radially symmetric by construction, so the plain torso() lathe below
+  // reads identically from front and back apart from the two bust spheres
+  // that used to be glued onto the front only. This displaces the torso
+  // lathe's own vertices instead: a breast bulge (front, two separate
+  // lobes with a flat "valley" between them, not one central mound) and a
+  // lower-back curve (a concave lumbar dip above a convex glute swell,
+  // back only). Direct port of cloth-lab/src/body/torsoSculpt.js's own
+  // bumpWindow()/femaleTorsoSculpt()/torsoZBump() — same numbers, same
+  // math, expressed as plain functions the way every other helper in this
+  // file already is (this file isn't an ES module cloth-lab can import
+  // from). No collision-margin counterpart is needed here the way
+  // collisionRig.js needed one for cloth-lab's real cloth sim — this
+  // file's own garments (buildGarment() below) are a fixed static shell,
+  // not physics, and were sized with generous fixed ease specifically
+  // checked against these same bump amplitudes before picking them.
+  function bumpWindow(x, center, halfWidth) {
+    const d = Math.abs(x - center);
+    return d >= halfWidth ? 0 : 0.5 * (1 + Math.cos((Math.PI * d) / halfWidth));
+  }
+  function femaleTorsoSculpt(d) {
+    const { hipY, span, chestR, waistR, hipR } = d;
+    return {
+      breast: { centerY: hipY + span * 0.72, halfWidth: span * 0.13, amplitude: chestR * 0.10, phi0: 0.5, phiHalfWidth: 0.42 },
+      lumbar: { centerY: hipY + span * 0.38, halfWidth: span * 0.12, amplitude: waistR * 0.10 },
+      glute: { centerY: hipY - span * 0.02, halfWidth: span * 0.10, amplitude: hipR * 0.14 },
+    };
+  }
+  function torsoZBump(y, phi, d) {
+    const { breast, lumbar, glute } = femaleTorsoSculpt(d);
+    let dz = 0;
+    const lobe = bumpWindow(phi, breast.phi0, breast.phiHalfWidth) + bumpWindow(phi, -breast.phi0, breast.phiHalfWidth);
+    dz += breast.amplitude * bumpWindow(y, breast.centerY, breast.halfWidth) * lobe;
+    const backWeight = Math.max(0, -Math.cos(phi)); // 1 at phi=PI (straight back), 0 at the side seams
+    dz += lumbar.amplitude * bumpWindow(y, lumbar.centerY, lumbar.halfWidth) * backWeight;
+    dz -= glute.amplitude * bumpWindow(y, glute.centerY, glute.halfWidth) * backWeight;
+    return dz;
+  }
+  // Builds the torso the same way lathe() does, then bakes in the Z
+  // flatten (instead of leaving it as a mesh-level scale.z) and, for adult
+  // female bodies, displaces each vertex by torsoZBump() — see that
+  // function's own header. Recomputes normals afterward since the flatten
+  // is now baked into the geometry's own vertex positions rather than left
+  // for three.js's automatic scale-to-normal-matrix handling to fix up.
+  function sculptedTorso(profile, mat, zScale, female, kid, dims, seg = 32) {
+    const pts = profile.map(p => new THREE.Vector2(Math.max(0.001, p[0]), p[1]));
+    const geo = new THREE.LatheGeometry(pts, seg);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), zRaw = pos.getZ(i);
+      let z = zRaw * zScale;
+      if (female && !kid) z += torsoZBump(y, Math.atan2(x, zRaw), dims);
+      pos.setZ(i, z);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, mat);
+    m.castShadow = true;
+    return m;
+  }
+
   // One hand — a flattened palm capsule + 4 fingers (the middle two
   // slightly longer, matching real proportions) + an angled thumb, added
   // as children of `parentGroup` (an arm's own pivot group) at the wrist
@@ -528,7 +591,14 @@ export const View3D = (() => {
     // file's OWN buildGarment() below also hardcodes (waist at
     // hipY+span*0.44, chest at hipY+span*0.76) is unchanged — only the
     // curve BETWEEN them picked up the 2 new points.
-    const torso = lathe([
+    //
+    // Built via sculptedTorso(), not the plain lathe() helper — a second
+    // pass, still user-requested: the female torso now has a real breast
+    // and lower-back curve displaced into its own mesh (see that
+    // function's own header), not just two spheres glued onto an
+    // otherwise front/back-symmetric shell. The old glued-on bust spheres
+    // below are gone; the torso surface itself now carries that volume.
+    const torso = sculptedTorso([
       [hipR * 0.55, hipY - span * 0.16],
       [hipR * 0.98, hipY],
       [hipR, hipY + span * 0.06],
@@ -538,20 +608,8 @@ export const View3D = (() => {
       [chestR * (female ? 0.98 : 1.02), hipY + span * 0.76],
       [chestR * (female ? 0.9 : 1.06), shoulderY - span * 0.03],
       [neckR * 1.15, shoulderY + span * 0.02],
-    ], skin, 32);
-    torso.scale.z = female ? 0.72 : 0.78;
+    ], skin, female ? 0.72 : 0.78, female, kid, d0, 32);
     bodyGroup.add(torso);
-
-    // bust (female adults) — kept close to the chest so the bodice covers it
-    if (female && !kid) {
-      const bustR = chestR * 0.32;
-      [-1, 1].forEach(s => {
-        const b = sphere(bustR, skin);
-        b.scale.set(1, 0.8, 0.62);
-        b.position.set(s * chestR * 0.38, hipY + span * 0.72, chestR * 0.3);
-        bodyGroup.add(b);
-      });
-    }
 
     // neck + head
     const neck = capsule(neckR, headH * 0.35, skin);

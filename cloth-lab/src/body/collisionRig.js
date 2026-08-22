@@ -1,4 +1,5 @@
 import { torsoProfile } from './computeBodyDims.js'
+import { femaleTorsoExtraRadius } from './torsoSculpt.js'
 
 // Tapered-capsule ("round cone": distance-to-segment + linearly-interpolated
 // radius) collision primitives — a pure function of computeBodyDims()'s
@@ -38,15 +39,25 @@ import { torsoProfile } from './computeBodyDims.js'
 // centered taper continuing straight down from the torso profile's own
 // last point, all the way to thighR — not copying Avatar.jsx's leg meshes.
 export function deriveCollisionRig(dims) {
-  const { hipY, shoulderY, span, neckTopY, headH, neckR, shoulderHalf, chestR, upperR, armLen, hipR, legLen, thighR, female } = dims
+  const { hipY, shoulderY, span, neckTopY, headH, neckR, shoulderHalf, chestR, upperR, armLen, hipR, legLen, thighR, female, kid } = dims
   const zScale = female ? 0.72 : 0.78
   const primitives = []
+
+  // Avatar.jsx's female torso mesh isn't a plain lathe any more (see
+  // torsoSculpt.js) — it sculpts a breast + lower-back curve into the
+  // surface itself, which can locally protrude beyond torsoProfile()'s own
+  // radius. `extraRadiusAt` reproduces exactly enough headroom to keep
+  // this rig's own promise ("match the VISIBLE mesh", this file's own
+  // header above) true for that sculpted surface too — see
+  // femaleTorsoExtraRadius's own header for the derivation and
+  // torsoSculpt.test.js for the sampled proof that it never falls short.
+  const extraRadiusAt = (y) => (female && !kid ? femaleTorsoExtraRadius(y, dims, zScale) : 0)
 
   const profile = torsoProfile(dims)
   for (let i = 0; i < profile.length - 1; i++) {
     const [r0, y0] = profile[i]
     const [r1, y1] = profile[i + 1]
-    primitives.push({ a: [0, y0, 0], b: [0, y1, 0], ra: r0, rb: r1, zScale })
+    primitives.push({ a: [0, y0, 0], b: [0, y1, 0], ra: r0 + extraRadiusAt(y0), rb: r1 + extraRadiusAt(y1), zScale })
   }
 
   const neckCenterY = (neckTopY + shoulderY) / 2
@@ -86,7 +97,7 @@ export function deriveCollisionRig(dims) {
   const [hipBottomR, hipBottomY] = profile[0]
   const thighTopY = hipBottomY - legLen * 0.18
   const thighBottomY = hipBottomY - legLen * 0.5
-  primitives.push({ a: [0, thighTopY, 0], b: [0, hipBottomY, 0], ra: thighR, rb: hipBottomR, zScale })
+  primitives.push({ a: [0, thighTopY, 0], b: [0, hipBottomY, 0], ra: thighR, rb: hipBottomR + extraRadiusAt(hipBottomY), zScale })
   primitives.push({ a: [0, thighBottomY, 0], b: [0, thighTopY, 0], ra: thighR, rb: thighR, zScale })
 
   return primitives

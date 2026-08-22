@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
 import { torsoProfile, armProfile, legProfile } from './computeBodyDims'
+import { torsoZBump } from './torsoSculpt'
 
 // A simplified but proportionally-faithful port of the production app's
 // procedural avatar (js/three-view.js buildProcedural): lathed-torso +
@@ -24,6 +25,15 @@ import { torsoProfile, armProfile, legProfile } from './computeBodyDims'
 // sibling implementation it's a port of). Ported here as JSX rather than
 // copied verbatim — same geometry/positions, expressed the way this file's
 // existing torso/limb meshes already are.
+//
+// A second pass, still user-requested: the female torso itself now has a
+// real breast and lower-back curve sculpted into its own mesh, not just
+// two spheres glued onto an otherwise front/back-symmetric lathe shell —
+// see torsoSculpt.js's own header for why a lathe alone can't express that
+// asymmetry and how this displaces its vertices to get it anyway. The old
+// glued-on bust spheres are gone; the torso surface itself now carries
+// that volume, blended smoothly into the surrounding ribcage/waist curve
+// instead of reading as two balls stuck onto a flat chest.
 // WP-8.5: static geometry/rotation pose variants. Arm/leg lathe meshes are
 // built with their pivot (y=0 in armProfile/legProfile) at the shoulder/hip
 // attach point (see those functions' own header comment), so an arm's whole
@@ -123,6 +133,30 @@ export default function Avatar({ dims, skinColor = '#e3b08c', pose = 'standing' 
     () => torsoProfile(dims).map(([r, y]) => new THREE.Vector2(Math.max(0.001, r), y)),
     [dims],
   )
+  // Built imperatively (not `<latheGeometry>` JSX) because the front/back
+  // breast + lower-back sculpt (torsoZBump) needs to displace individual
+  // vertices after the lathe revolve — something a declarative geometry
+  // element can't do. The Z flatten (scale.z on the old plain-lathe mesh)
+  // is baked in here instead of left as a mesh-level `scale`, so the
+  // sculpt's own Z deltas are added in real, already-flattened meters —
+  // matching what torsoSculpt.js's femaleTorsoExtraRadius assumes when
+  // sizing collisionRig.js's safety margin.
+  const torsoGeometry = useMemo(() => {
+    const geo = new THREE.LatheGeometry(torsoPts, 32)
+    const zScale = female ? 0.72 : 0.78
+    const pos = geo.attributes.position
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i)
+      const y = pos.getY(i)
+      const zRaw = pos.getZ(i)
+      let z = zRaw * zScale
+      if (female && !kid) z += torsoZBump(y, Math.atan2(x, zRaw), dims)
+      pos.setZ(i, z)
+    }
+    pos.needsUpdate = true
+    geo.computeVertexNormals()
+    return geo
+  }, [torsoPts, female, kid, dims])
   const armPts = useMemo(
     () => armProfile(dims).map(([r, y]) => new THREE.Vector2(Math.max(0.001, r), y)),
     [dims],
@@ -179,23 +213,9 @@ export default function Avatar({ dims, skinColor = '#e3b08c', pose = 'standing' 
 
   return (
     <group name="avatar">
-      <mesh castShadow receiveShadow scale={[1, 1, female ? 0.72 : 0.78]} rotation={[0, 0, torsoTilt]}>
-        <latheGeometry args={[torsoPts, 32]} />
+      <mesh castShadow receiveShadow geometry={torsoGeometry} rotation={[0, 0, torsoTilt]}>
         {mat}
       </mesh>
-
-      {/* Bust (female adults) — kept close to the chest so a bodice covers
-          it; port of js/three-view.js's own bust spheres. */}
-      {female && !kid && [-1, 1].map((s) => (
-        <mesh
-          key={`bust${s}`} castShadow
-          scale={[1, 0.8, 0.62]}
-          position={[s * chestR * 0.38, hipY + span * 0.72, chestR * 0.3]}
-        >
-          <sphereGeometry args={[chestR * 0.32, 16, 12]} />
-          {mat}
-        </mesh>
-      ))}
 
       {/* Deltoid shoulder volume — port of js/three-view.js's own shoulder
           spheres; softens the hard seam a bare torso/arm join otherwise
