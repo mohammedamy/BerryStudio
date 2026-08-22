@@ -5,7 +5,14 @@
 // all the way around) — the triangulator resamples the boundary one declared
 // edge at a time, in walk order, so a gap or overlap here would silently
 // corrupt the outline. Also derives `edgeOrder` (edges in polygon-walk order).
-export function finalizePiece(id, role, outline, seamEdges, color) {
+// `placementHint` (optional): { index, count } — set when this piece
+// shares its role/slot with `count` siblings (e.g. two independent
+// "front" panels the importer couldn't tell apart — see
+// pattern/importFromApp.js's own placementHints), so placement.js can
+// spread same-slot siblings apart instead of stacking them exactly on top
+// of each other. undefined for the normal one-piece-per-role case —
+// every existing caller that doesn't pass it keeps today's behavior.
+export function finalizePiece(id, role, outline, seamEdges, color, placementHint) {
   const n = outline.length
   const edgeOrder = Object.keys(seamEdges).sort((a, b) => seamEdges[a].from - seamEdges[b].from)
   let totalSteps = 0
@@ -20,5 +27,5 @@ export function finalizePiece(id, role, outline, seamEdges, color) {
   if (totalSteps !== n) {
     throw new Error(`${id}: declared edges cover ${totalSteps} steps but the outline has ${n} points — perimeter isn't fully (and only once) tiled`)
   }
-  return { id, role, outline, seamEdges, edgeOrder, color }
+  return { id, role, outline, seamEdges, edgeOrder, color, placementHint }
 }

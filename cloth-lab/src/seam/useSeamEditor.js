@@ -13,9 +13,12 @@ let edgeCounter = 0
 // through, so a seeded state can never be more invalid than a manually
 // authored one. `seedSeams` similarly pre-populates the seams list. Both
 // default to nothing, so the existing skirt-demo call site is unaffected.
-export function useSeamEditor(rawPieces, roles, seedEdges, seedSeams) {
+// `placementHints` (optional, keyed by piece id) carries importFromApp.js's
+// {index, count} for any piece sharing its role/slot with siblings the
+// importer couldn't otherwise tell apart — see that file's own header.
+export function useSeamEditor(rawPieces, roles, seedEdges, seedSeams, placementHints) {
   const [drafts, setDrafts] = useState(() => {
-    const ds = rawPieces.map((rp) => createDraftPiece(rp, roles[rp.id]))
+    const ds = rawPieces.map((rp) => createDraftPiece(rp, roles[rp.id], placementHints?.[rp.id]))
     if (seedEdges && seedEdges.length) {
       const byId = {}
       ds.forEach((d) => { byId[d.id] = d })
@@ -102,7 +105,7 @@ export function useSeamEditor(rawPieces, roles, seedEdges, seedSeams) {
 
   function finalize() {
     try {
-      const finalPieces = drafts.map((d) => finalizeDraftPiece({ id: d.id, role: d.role, outline: d.outline, color: d.color, edges: { ...d.edges } }))
+      const finalPieces = drafts.map((d) => finalizeDraftPiece({ id: d.id, role: d.role, outline: d.outline, color: d.color, edges: { ...d.edges }, placementHint: d.placementHint }))
       return { pieces: finalPieces, seams }
     } catch (e) {
       setError(e.message)
