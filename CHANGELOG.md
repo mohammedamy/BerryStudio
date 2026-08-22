@@ -6,6 +6,76 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-50: pattern library rebuild, Phase 0-1 — baseline, seam-edge parity, and a real generated thumbnail per pattern
+
+First two phases of `docs/plan 4.md` (Professional Pattern Library
+Rebuild). Phase 0 is diagnostic only; Phase 1 is infrastructure — neither
+phase changes any of the 264/308 registered patterns' actual geometry.
+Phases 2-5 (drafting 12 reference patterns to the plan's full standard,
+then extending to the 100/64/100/44-pattern collections) are follow-up
+work, gated on review per the plan's own §9 phasing table.
+
+### Phase 0 — baseline
+- `scripts/baseline-report.mjs`: reproduces the plan's §5 numbers with a
+  real `bodyChestCm` and a real `offsetPoly` (js/geometry.js's, the same
+  one `Canvas.offsetPoly` wraps) wired in — `test/validate-library.test.js`
+  runs `checkEase`/`checkSeamAllowance` with neither, by design, so it
+  can't see what these checks actually find with real context. Confirmed
+  every §5.1 number against the plan text, and found one the plan itself
+  didn't measure: `seamAllowance` with a real offset has **76 genuine
+  failures** (not "1867 warn — harness artifact"), all four princess-seam
+  bodice pieces across 19 Fancy Collection patterns, where the 1cm offset
+  self-intersects near the princess-seam/armhole join — a real drafting
+  defect for a later phase to fix at source, not a harness artifact.
+
+### Phase 1 — infrastructure
+- **Seam-edge declaration** (`js/validate.js`): a piece may now declare
+  `seamEdges: { <key>: [fromIdx, toIdx] }` naming a specific outline edge
+  as a real seam. `checkSeamLengthParity` measures the actual paired edge
+  polyline length when both sides of a pair declare the same key, falling
+  back to the original bounding-box-extent proxy, unchanged, when they
+  don't — exactly the plan's §5.2 fix for the 242 "seam-parity failures"
+  that are mostly a proxy artifact (a legitimately deeper front neckline
+  reads as a constant ~5mm failure under the old proxy alone). No pattern
+  declares `seamEdges` yet — this is the mechanism, not new coverage.
+- **`js/pattern-flat.js`** (new): a deterministic garment-flat thumbnail
+  renderer. Composes each pattern's own `pieces(m)` at size M into a real
+  inline SVG technical flat — selecting front-facing pieces by `role`,
+  unfolding cut-on-fold halves, mirroring bilateral pairs, honouring
+  `curves` for real bezier armholes/necklines/princess seams, and
+  overlaying darts — instead of `js/app.js`'s 13-entry `LIB_ICONS` generic
+  glyph map. When two pieces declare a matching `edges[].seamId` (as
+  `js/fancy-patterns.js`'s `princessBodice` already does), they're placed
+  in their own shared authored coordinate frame instead of a generic
+  bbox-flank heuristic — this is what makes a princess-seamed bodice's
+  thumbnail actually read as one joined garment instead of disconnected
+  panels. Per-design colourway is derived deterministically from the
+  pattern id (a future registration may set an explicit `color` on its
+  `LIBRARY` entry to override this). Cached per id; `LIB_ICONS` stays the
+  fallback for the ~18% of patterns (54/308, measured) with no recognized
+  front-facing role yet — mostly `js/ai.js`-derived trouser/skirt pieces
+  that already declare no placement role by design, plus
+  `js/underwear-library.js`'s bra pieces (which also declare roles like
+  `band`/`cup`/`strap` outside the 46-value vocabulary entirely — a real
+  gap for a later phase, not something this renderer papers over).
+  `js/app.js`'s `renderLibraryPane` now prefers it.
+- New tests: `test/library-roles.test.js` (46-value role-vocabulary
+  coverage, with the two known pre-existing exceptions documented rather
+  than silently allowed to grow), `test/library-thumbnails.test.js` (every
+  pattern composes or honestly declines, no two ever produce identical
+  SVG, purity), `test/library-i18n.test.js` (asserts the real final gate —
+  the library is already 100% bilingual at both pattern and piece level
+  across all 308 patterns, name+desc+tag, no bidi control characters),
+  `test/library-grading.test.js` (XXS/M/6XL × intl/egypt/saudi for
+  women/men, all 7 KIDS_AGES bands for girls/boys — found two real,
+  pre-existing self-intersections at extreme kid age bands in
+  `js/girls-leotards.js`'s gf08/gf10, documented as a known set rather
+  than hidden). Extended `test/validate.test.js` with seamEdges coverage.
+  `npm test` (289/289) and `npm run test:e2e` both green (the latter's one
+  consistently-failing spec, and the couple of others that fail only
+  under full-suite parallel load, are pre-existing and unrelated — none
+  touch pattern data, `validate.js`, or the library pane).
+
 ## Cloth Lab: multiple same-slot pattern pieces no longer silently dropped
 
 User report: "in cloth lab why i cant sea 3 or 4 different darts from 4

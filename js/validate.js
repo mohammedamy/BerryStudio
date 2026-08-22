@@ -18,8 +18,13 @@
    falls back to the SAME closed-world front/back name-matching idiom
    cloth-lab's importFromApp.js:classifyLegacy() uses for the identical
    fallback case ("Heuristic"). Unpairable pieces are flagged as such,
-   never silently guessed. The comparison math itself is identical either
-   way — only pairing confidence changes:
+   never silently guessed. The pairing confidence works this way for both
+   checks; the MATH each check does once paired differs (Phase 1, docs/
+   plan 4.md §5.2): notchAlignment is always the same arc-position compare.
+   seamLengthParity measures the real declared seam-edge polyline length
+   (see `seamEdges` / walkEdgeLength below) when BOTH paired pieces declare
+   the same seam key, falling back to the original bounding-box-extent
+   proxy — unchanged — when they don't:
      seamLengthParity, notchAlignment
 
    REAL-OR-DEFERRED, PER PIECE (WP-24): ease needs to know which outline
@@ -261,17 +266,73 @@ function pairByRole(pieces) {
 const SEAM_LENGTH_TOL_MM = 3;
 const NOTCH_ARC_TOL_FRACTION = 0.05; // 5% of perimeter
 
+// ---------- seam-edge declaration (docs/plan 4.md §5.2 / Phase 1) ----------
+// A piece may optionally declare `seamEdges: { <seamKey>: [fromIdx, toIdx] }`
+// — the same fromIdx/toIdx-on-the-outline convention `curves` already uses,
+// naming a specific edge (or contiguous run of edges) as a seam a real
+// counterpart piece is sewn to. This is the "real seam data" the library
+// has never carried (schema/pattern-spec.v1.json's pattern-level `seams`
+// array sketches the same idea for the separate future AI-spec pipeline;
+// this is the equivalent for the live pieces(m) piece objects the 2D
+// canvas/3D Cloth Lab actually consume today). Declaring it is optional —
+// undeclared pieces keep the exact previous bounding-box-extent proxy
+// behaviour, unchanged.
+//
+// walkEdgeLength always walks the outline FORWARD (increasing index,
+// wrapping past the end) from fromIdx to toIdx, matching curves' own
+// fromIdx/toIdx convention — authors pick indices so that direction is the
+// seam edge, not its complement.
+function walkEdgeLength(outline, fromIdx, toIdx) {
+  const n = outline.length;
+  if (!Number.isInteger(fromIdx) || !Number.isInteger(toIdx) || fromIdx < 0 || toIdx < 0 || fromIdx >= n || toIdx >= n) return null;
+  let i = fromIdx, len = 0, guard = 0;
+  while (i !== toIdx) {
+    const next = (i + 1) % n;
+    len += segLen(outline[i], outline[next]);
+    i = next;
+    if (++guard > n) return null; // malformed indices — never loop forever
+  }
+  return len;
+}
+
+// The shared seam key both pieces of a pair declare for the same physical
+// seam (e.g. 'side'). Only ever returns a key present on BOTH sides —
+// pairing a front's declared seam against a back that declares none (or a
+// different one) is exactly the "not applicable" case the proxy exists for.
+function sharedSeamKey(front, back) {
+  if (!front.seamEdges || !back.seamEdges) return null;
+  return Object.keys(front.seamEdges).find((k) => k in back.seamEdges) || null;
+}
+
 function checkSeamLengthParity(pair) {
   if (!pair.front || !pair.back) return { status: 'warn', message: 'could not confidently pair this piece with a front/back counterpart' };
+  const heightOf = (p) => { const ys = p.outline.map((pt) => pt[1]); return Math.max(...ys) - Math.min(...ys); };
+  const hf = heightOf(pair.front), hb = heightOf(pair.back);
+  const proxyDiffMm = Math.abs(hf - hb) * 10;
+
+  const seamKey = sharedSeamKey(pair.front, pair.back);
+  if (seamKey) {
+    const lf = walkEdgeLength(pair.front.outline, ...pair.front.seamEdges[seamKey]);
+    const lb = walkEdgeLength(pair.back.outline, ...pair.back.seamEdges[seamKey]);
+    if (lf != null && lb != null) {
+      const diffMm = Math.abs(lf - lb) * 10;
+      const proxyNote = ` (bounding-box proxy for continuity: ${proxyDiffMm.toFixed(1)}mm)`;
+      if (diffMm <= SEAM_LENGTH_TOL_MM) return { status: 'pass', message: `declared "${seamKey}" seam matches within ${diffMm.toFixed(1)}mm (front ${lf.toFixed(1)}cm / back ${lb.toFixed(1)}cm)${proxyNote}` };
+      return { status: 'fail', message: `declared "${seamKey}" seam: front (${lf.toFixed(1)}cm) and back (${lb.toFixed(1)}cm) differ by ${diffMm.toFixed(1)}mm — an un-sewable seam, not a proxy artifact${proxyNote}` };
+    }
+    // Indices present but malformed — fall through to the proxy rather than
+    // silently guessing, but say so, since this is an authoring bug.
+  }
+
   // Heuristic proxy for "the side seam": each piece's own vertical extent.
   // Front/back bodice pieces in this codebase's convention run top-to-
   // bottom along the side seam, so a mismatch here is a real, catchable
-  // drafting bug even without true edge-to-edge seam metadata.
-  const heightOf = (p) => { const ys = p.outline.map((pt) => pt[1]); return Math.max(...ys) - Math.min(...ys); };
-  const hf = heightOf(pair.front), hb = heightOf(pair.back);
-  const diffMm = Math.abs(hf - hb) * 10;
-  if (diffMm <= SEAM_LENGTH_TOL_MM) return { status: 'pass', message: `matches within ${diffMm.toFixed(1)}mm` };
-  return { status: 'fail', message: `front (${hf.toFixed(1)}cm) and back (${hb.toFixed(1)}cm) side lengths differ by ${diffMm.toFixed(1)}mm` };
+  // drafting bug even without true edge-to-edge seam metadata. This is the
+  // ONLY signal available for a pair with no declared seamEdges — see
+  // docs/plan 4.md §5.2 for why a constant ~5mm reading here is often
+  // correct patternmaking (a deeper front neckline) rather than a bug.
+  if (proxyDiffMm <= SEAM_LENGTH_TOL_MM) return { status: 'pass', message: `matches within ${proxyDiffMm.toFixed(1)}mm (bounding-box proxy — no declared seam edge)` };
+  return { status: 'fail', message: `front (${hf.toFixed(1)}cm) and back (${hb.toFixed(1)}cm) side lengths differ by ${proxyDiffMm.toFixed(1)}mm (bounding-box proxy — no declared seam edge)` };
 }
 
 function checkNotchAlignment(pair) {

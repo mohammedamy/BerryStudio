@@ -68,6 +68,58 @@ test('an unpairable piece (no front/back counterpart) warns rather than guessing
   assert.equal(report.crossPiece[0].checks.seamLengthParity.status, 'warn');
 });
 
+// Phase 1 (docs/plan 4.md §5.2): declared seamEdges measure the real edge
+// polyline instead of the bounding-box-extent proxy. The side edge here is
+// outline index 1→2, [10,0]→[10,20], length 20cm on both pieces.
+test('a matched pair with declared seamEdges passes on the real edge length, not the proxy', () => {
+  const front = { name: { en: 'Bodice Front' }, outline: [[0, 0], [10, 0], [10, 20], [0, 20]], grain: [[5, 2], [5, 18]], notches: [], seamEdges: { side: [1, 2] } };
+  const back = { name: { en: 'Bodice Back' }, outline: [[0, 0], [10, 0], [10, 20], [0, 20]], grain: [[5, 2], [5, 18]], notches: [], seamEdges: { side: [1, 2] } };
+  const report = run([front, back]);
+  const c = report.crossPiece[0].checks.seamLengthParity;
+  assert.equal(c.status, 'pass');
+  assert.match(c.message, /declared "side" seam/);
+});
+
+test('declared seamEdges catch a real un-sewable side seam that the bounding-box proxy would also have caught', () => {
+  const front = { name: { en: 'Bodice Front' }, outline: [[0, 0], [10, 0], [10, 20], [0, 20]], grain: [[5, 2], [5, 18]], notches: [], seamEdges: { side: [1, 2] } };
+  const back = { name: { en: 'Bodice Back' }, outline: [[0, 0], [10, 0], [10, 25], [0, 25]], grain: [[5, 2], [5, 23]], notches: [], seamEdges: { side: [1, 2] } };
+  const report = run([front, back]);
+  const c = report.crossPiece[0].checks.seamLengthParity;
+  assert.equal(c.status, 'fail');
+  assert.match(c.message, /declared "side" seam/);
+});
+
+// The exact scenario docs/plan 4.md §5.2 calls out: a front drafted with a
+// deeper neckline is legitimately taller overall (bounding-box proxy would
+// fail it), but its actual side-seam edge is identical in length to the
+// back's — a declared seamEdges pairing must pass where the proxy alone
+// would have failed.
+test('declared seamEdges pass a legitimately deeper-neckline front that the bounding-box proxy alone would fail', () => {
+  // Front: neckline dips down to y=-3 (making the overall bbox taller /
+  // proxy height 23), but its SIDE edge (idx 1->2) is still 20cm, same as
+  // the back's.
+  const front = {
+    name: { en: 'Bodice Front' },
+    outline: [[0, -3], [10, 0], [10, 20], [0, 20]],
+    grain: [[5, 2], [5, 18]],
+    notches: [],
+    seamEdges: { side: [1, 2] },
+  };
+  const back = { name: { en: 'Bodice Back' }, outline: [[0, 0], [10, 0], [10, 20], [0, 20]], grain: [[5, 2], [5, 18]], notches: [], seamEdges: { side: [1, 2] } };
+  const report = run([front, back]);
+  const c = report.crossPiece[0].checks.seamLengthParity;
+  assert.equal(c.status, 'pass');
+});
+
+test('a piece declaring seamEdges the counterpart does not still falls back to the bounding-box proxy', () => {
+  const front = { name: { en: 'Bodice Front' }, outline: [[0, 0], [10, 0], [10, 20], [0, 20]], grain: [[5, 2], [5, 18]], notches: [], seamEdges: { side: [1, 2] } };
+  const back = { name: { en: 'Bodice Back' }, outline: [[0, 0], [10, 0], [10, 20], [0, 20]], grain: [[5, 2], [5, 18]], notches: [] }; // no seamEdges
+  const report = run([front, back]);
+  const c = report.crossPiece[0].checks.seamLengthParity;
+  assert.equal(c.status, 'pass');
+  assert.match(c.message, /bounding-box proxy/);
+});
+
 test('a sleeve piece is excluded from front/back pairing entirely', () => {
   const sleeve = { name: { en: 'Set-in Sleeve' }, outline: goodSquare.outline, grain: goodSquare.grain, notches: [] };
   const report = run([sleeve]);

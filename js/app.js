@@ -13,6 +13,7 @@ import './girls-leotards.js'; // side-effect only — adds the 100-pattern Girls
 import './underwear-library.js'; // side-effect only — adds the 44-pattern Underwear & Bra collection
 import { FancyGen } from './fancy-patterns.js';
 import { PatternValidator } from './validate.js';
+import { renderPatternFlat } from './pattern-flat.js';
 import { AIProviders, AI_PROVIDER_IDS, getProvider, loadLocalModelFromFile, restoreLocalModelFromCache, runOnnxTestInference, loadSegmentationModel, runSegmentationOn } from './ai-providers.js';
 import { getModelFileMeta, clearModelFile } from './workers/model-file-cache.js';
 import { KeyStore } from './ai-keystore.js';
@@ -1028,7 +1029,13 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       }).forEach(x=>{
           const p=PATTERNS[x.id];
           const card=el("div","lib-card");
-          card.appendChild(el("div","lib-thumb", LIB_ICONS[x.type] || (x.cat==="men"?LIB_ICONS.shirt:LIB_ICONS.dress)));
+          // docs/plan 4.md §7.3: a real technical flat derived from this
+          // pattern's own geometry, when composePattern can recognize a
+          // front-facing role to build one from; LIB_ICONS (13 generic
+          // glyphs) stays the fallback for whatever it can't yet — same
+          // as it always has been for state.mine below.
+          const flatSvg = renderPatternFlat(x.id, x);
+          card.appendChild(el("div","lib-thumb", flatSvg || LIB_ICONS[x.type] || (x.cat==="men"?LIB_ICONS.shirt:LIB_ICONS.dress)));
           card.appendChild(el("div","lib-meta",`<div class="t">${L(p.name)}</div><div class="s">${L(x.tag)} · ${T(x.cat)}</div>`));
           card.onclick=()=>loadLibraryPattern(x.id);
           grid.appendChild(card);
