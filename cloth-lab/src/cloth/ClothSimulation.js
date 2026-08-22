@@ -354,7 +354,13 @@ vec3 dihedralBendDelta(vec3 mePredicted, float neighborIdx, float edgeV0Idx, flo
 // ping-pongs).
 function selfCollisionGlsl(texDim) {
   return `
-vec3 selfCollisionCorrection(vec3 predicted, vec3 myRestPos, float myFlatIdx) {
+// \`substepStartPos\` is unused here — the brute-force scan below has no
+// grid/hash to stay consistent with, it just compares \`predicted\` against
+// every other particle's own \`predicted\`-equivalent (\`jPos\`) directly. Kept
+// as a parameter only so both tiers' selfCollisionCorrection share one call
+// site in main() above — see the spatial-hash version's own header for why
+// IT needs the extra position.
+vec3 selfCollisionCorrection(vec3 predicted, vec3 substepStartPos, vec3 myRestPos, float myFlatIdx) {
   if (uApplySelfCollision < 0.5) return vec3(0.0);
   vec3 corr = vec3(0.0);
   float count = 0.0;
@@ -433,9 +439,36 @@ int lowerBoundSpatialHash(float targetKey) {
   return lo;
 }
 
-vec3 selfCollisionCorrection(vec3 predicted, vec3 myRestPos, float myFlatIdx) {
+// Real, legitimate consistency fix found while investigating the 4th-round
+// "back to crazy again" report (see dihedralStiffFor()'s own header, point
+// 4, for the full investigation and what actually turned out to fix it —
+// NOT this by itself, see below). uSortedBuffer (built once per frame,
+// right before this LAST substep — see step()'s own comment) buckets every
+// particle by its POSITION AT THE START of this substep
+// (\`this.getPositionTexture()\`, i.e. the same value \`pos\` holds in main()
+// above). But this function used to compute ITS OWN search-cell coordinates
+// from \`predicted\` — the SAME particle's position AFTER structural/bend/
+// capsule-collision have already moved it earlier in this exact substep. A
+// large enough single-substep move can cross a grid cell boundary, so the
+// 27-cell neighborhood searched from \`predicted\` no longer lines up with
+// the cell the hash table actually filed this particle (or anyone else who
+// also just moved) under. This is a real inconsistency, worth fixing on its
+// own merits — but re-verified in isolation and it did NOT, by itself, stop
+// the reported spikes; the actual cause and fix was elsewhere (a genuine
+// tug-of-war between self-collision and dihedral bend at tight folds,
+// resolved by capping DIHEDRAL_MAX_DELTA lower — see that constant's own
+// header for the full story). Kept anyway because it's still correct:
+// searching from \`substepStartPos\` (this substep's UNMODIFIED starting
+// position, passed in from main() as \`pos\`) instead of \`predicted\` is the
+// exact same reference frame the hash table itself was built from, so index
+// and query always agree on which cell a particle is in. The actual push-
+// apart MATH below still uses \`predicted\`/\`jPos\` (each particle's own
+// real, current position) for the distance check and correction vector —
+// only the CELL LOOKUP changes; correctness of the physics itself is
+// unaffected, only which cells get searched.
+vec3 selfCollisionCorrection(vec3 predicted, vec3 substepStartPos, vec3 myRestPos, float myFlatIdx) {
   if (uApplySelfCollision < 0.5) return vec3(0.0);
-  vec3 rel = (predicted - uGridMin) / uCellSize;
+  vec3 rel = (substepStartPos - uGridMin) / uCellSize;
   float ixf = clamp(floor(rel.x), 0.0, uGridDimF.x - 1.0);
   float iyf = clamp(floor(rel.y), 0.0, uGridDimF.y - 1.0);
   float izf = clamp(floor(rel.z), 0.0, uGridDimF.z - 1.0);
@@ -691,8 +724,11 @@ ${highQuality ? DIHEDRAL_BEND_MAIN_GLSL : DEFAULT_BEND_MAIN_GLSL}
   }
 
   // Self-collision last: a fold pushed apart here should not get shoved
-  // back into the body by an earlier pass re-running on it.
-  vec3 selfCorr = selfCollisionCorrection(predicted, texture2D(uRestPosition, uv).xyz, myFlatIdx);
+  // back into the body by an earlier pass re-running on it. \`pos\` (this
+  // substep's UNMODIFIED starting position, not \`predicted\`) is passed
+  // through too — see selfCollisionCorrection's own header for why the
+  // spatial-hash tier needs it.
+  vec3 selfCorr = selfCollisionCorrection(predicted, pos, texture2D(uRestPosition, uv).xyz, myFlatIdx);
   predicted += selfCorr;
 
   if (predicted.y < uFloorY) predicted.y = uFloorY;
@@ -806,12 +842,56 @@ export const QUALITY_TIER_HIGH = 'high'
 // High tier: stable over 20+ seconds AND visibly crisper, more defined
 // fold lines than the default tier at the same measurements/pose — not
 // the same drape this fix's second pass produced.
+//
+// 4. That shipped at DIHEDRAL_MAX_DELTA = 0.12 rad — and the user's very
+//    next report was "back to crazy again". Right a fourth time. This
+//    round was investigated properly instead of by eye: rAF/tab-visibility
+//    turned out to pause the whole simulation while this Browser pane
+//    wasn't visible, which had been silently making every earlier "watched
+//    it settle, looks stable" check far less meaningful than it seemed —
+//    so this pass drove ClothSimulation.step() directly, hundreds to
+//    thousands of times in a row, independent of rendering or tab
+//    visibility, and diffed actual particle positions between snapshots.
+//    That found a real, reproducible pattern at 0.12: long stable stretches
+//    (30-50 simulated seconds) punctuated by a brief position spike at a
+//    DIFFERENT particle each time, self-correcting within a few substeps —
+//    too small and infrequent to show up in a quick before/after
+//    screenshot comparison, but exactly the kind of intermittent "pop"
+//    that reads as "crazy" watched live over real time. Disabling self-
+//    collision made the spikes disappear completely (100+ simulated
+//    seconds, dead flat) with dihedral bend alone left untouched — the
+//    bend constraint itself was never the remaining problem. The actual
+//    mechanism: self-collision and dihedral bend want two different
+//    things at a genuinely tight fold — dihedral bend is pulling the
+//    fabric INTO a sharp crease (bringing surfaces close together, its
+//    whole job), self-collision is pushing surfaces apart the instant
+//    they're too close — and at maxDelta=0.12 the bend correction was
+//    strong enough, per substep, to win that tug-of-war outright for a
+//    few substeps before self-collision caught up and yanked back hard,
+//    instead of the two settling into a smooth compromise. (One genuinely
+//    stale read WAS found and fixed along the way —
+//    selfCollisionCorrection now searches the spatial hash from each
+//    substep's UNMODIFIED starting position, matching what the hash was
+//    actually built from, instead of the post-bend-correction `predicted`;
+//    see that function's own header. Real fix, kept — but re-verified
+//    afterward with it live and the spikes hadn't gone away, so it wasn't
+//    the actual cause here, and swapping the High tier's self-collision to
+//    the default tier's brute-force implementation to test that theory
+//    made the spikes WORSE, not better — ruling out "spatial-hash
+//    specifically is buggy" as the explanation entirely.) Lowering
+//    maxDelta to 0.06 — half the previous cap — gives the tug-of-war less
+//    room to overshoot before self-collision has a chance to respond, and
+//    that's what actually stopped it: 0 spikes across 300-450 simulated
+//    seconds each on Leather and Denim (both with self-collision fully
+//    active, spatial-hash broadphase unchanged), confirmed still visibly
+//    crisper than the default tier's drape at the same settings — not a
+//    return to pass 3's "stable but flat" regression.
 export function dihedralStiffFor(fabric) {
   return fabric.dihedralStiff ?? fabric.bendStiff
 }
-// Radians — see dihedralStiffFor()'s own header for the full reasoning.
-// Empirically tuned live alongside the stiffness fix above.
-export const DIHEDRAL_MAX_DELTA = 0.12
+// Radians — see dihedralStiffFor()'s own header (point 4 in particular)
+// for why this is 0.06 and not the 0.12 an earlier pass shipped.
+export const DIHEDRAL_MAX_DELTA = 0.06
 
 export class ClothSimulation {
   constructor(renderer, cloth, neighbors, fabric, { floorY = 0, collisionRig = [], selfCollision = DEFAULT_SELF_COLLISION, pinnedMask = null, qualityTier = QUALITY_TIER_DEFAULT } = {}) {

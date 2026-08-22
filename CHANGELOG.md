@@ -6,6 +6,67 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Fourth pass: found the real cause — self-collision vs. dihedral bend
+
+User report right after the third pass shipped: "back to crazy again."
+This time investigated properly instead of by eye — see the reasoning
+below for why the first three passes' live checks were less meaningful
+than they looked.
+
+### Fixed
+- **Discovered mid-investigation: this Browser pane's `document.hidden`
+  pauses `requestAnimationFrame` entirely, not just throttles it** — a
+  direct read confirmed particle positions were bit-identical across a
+  real 28-second wait. Every earlier "watched it settle, looks stable"
+  check in this whole saga was accordingly far less meaningful than it
+  seemed; whatever brief windows the pane happened to be visible is likely
+  all any of them ever actually observed. Fixed the *investigation*
+  method, not the app: called `ClothSimulation.step()` directly, hundreds
+  to thousands of times in a row, independent of rendering or tab
+  visibility, and diffed real particle positions between snapshots —
+  deterministic, and not dependent on this environment's rendering quirks.
+- **That method found a real, reproducible pattern**: long stable
+  stretches (30–50 simulated seconds) on the third pass's
+  `DIHEDRAL_MAX_DELTA = 0.12`, punctuated by a brief position spike at a
+  different particle each time, self-correcting within a few substeps —
+  too small and infrequent to show up in a quick before/after screenshot,
+  but exactly the kind of intermittent pop that reads as "crazy" watched
+  live. Disabling self-collision made the spikes disappear completely
+  (100+ simulated seconds, dead flat) with dihedral bend itself untouched
+  — ruling out the bend constraint as the remaining problem.
+- **The actual mechanism**: self-collision and dihedral bend want two
+  different things at a genuinely tight fold — dihedral bend pulls fabric
+  *into* a sharp crease (bringing surfaces close together, its whole job),
+  self-collision pushes surfaces apart the instant they're too close. At
+  `maxDelta = 0.12`, the bend correction was strong enough per substep to
+  win that tug-of-war outright for a few substeps before self-collision
+  caught up and yanked back hard, instead of the two settling into a
+  smooth compromise.
+  Along the way, a real (but ultimately secondary) staleness bug was also
+  found and fixed: `selfCollisionCorrection` (`ClothSimulation.js`) used
+  to compute its spatial-hash search-cell coordinates from `predicted`
+  (this substep's post-bend-correction position) while the hash table
+  itself was built from each particle's UNMODIFIED substep-start position
+  — a real index/query mismatch. Fixed by searching from that same
+  substep-start position instead (passed through as a new
+  `substepStartPos` parameter; the actual push-apart math is unaffected,
+  only which grid cells get searched). Re-verified afterward with this
+  fix alone and the spikes hadn't gone away — and swapping the High
+  tier's self-collision to the default tier's brute-force implementation
+  to test "is spatial-hash itself just buggy" made the spikes *worse*,
+  not better, ruling that theory out entirely.
+  What actually stopped it: lowering `DIHEDRAL_MAX_DELTA` from 0.12 to
+  0.06 — half the previous cap gives the tug-of-war less room to
+  overshoot before self-collision has a chance to respond. Verified: 0
+  spikes across 300–450 simulated seconds each on Leather and Denim (the
+  two stiffest real presets, self-collision fully active, spatial-hash
+  broadphase unchanged from WP-35b), confirmed still visibly crisper than
+  the default tier's own drape at the same settings — not a return to the
+  third pass's "stable but flat" regression.
+  Updated `dihedralStiffFor.test.js`'s small-residual-error case for the
+  new, lower cap. Verified: all 193 `cloth-lab` tests pass, `oxlint`
+  clean.
+
 ## Third pass: dihedral bend is now stable AND actually visible
 
 User report right after the 0.12 clamp shipped: "better but still
