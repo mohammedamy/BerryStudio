@@ -748,6 +748,35 @@ const DEFAULT_SELF_COLLISION = { radius: 0.012, restThreshold: 0.035 }
 export const QUALITY_TIER_DEFAULT = 'default'
 export const QUALITY_TIER_HIGH = 'high'
 
+// Real bug fix — user report: "in cloth lab whenever i clicked high
+// [dihedral bend] crazy things happen". `uDihedralStiff` was reading
+// `fabric.dihedralStiff ?? fabric.bendStiff` uncapped: no fabric preset
+// defines `dihedralStiff`, so every one of them silently handed this a raw
+// `bendStiff` (0.06-0.92 — see fabricPresets.js) that was tuned for the
+// DEFAULT tier's own, unrelated distance-based bend spring, where a value
+// near 1 is perfectly safe (it just blends a position correction). The
+// dihedral constraint (DIHEDRAL_BEND_GLSL/dihedralBend.js) is a Jacobi
+// ROTATION correction instead — `delta = stiffness * error`, then a full
+// Rodrigues rotation of the wing vertex by `delta` — and that only
+// converges without overshooting past the target and flipping sign each
+// substep for stiffness <= 0.5. Confirmed directly: dihedralBend.js's own
+// dihedralBendCorrection() defaults its `stiffness` param to exactly 0.5,
+// and dihedralBend.test.js's convergence property test hardcodes 0.5 too
+// — 0.5 was always the one value anyone actually verified. Numerically
+// swept 0.1-0.9 against a fixed hinge (see this fix's own commit): every
+// value at or below 0.5 converges monotonically; every value above 0.5
+// overshoots and flips sign on the very first correction, then keeps
+// oscillating — visually, on a whole garment with many coupled hinges
+// correcting in parallel every substep, exactly the kind of "crazy"
+// jitter/explosion the report describes. Several real presets exceed
+// 0.5 (wool 0.58, denim 0.80, leather 0.92), so this reproduced for any
+// user who had one of those selected (or switched to one) while on the
+// High tier — not just an edge case. Clamped at the one source both call
+// sites (the constructor and setFabric()) already read through.
+export function dihedralStiffFor(fabric) {
+  return Math.min(0.5, fabric.dihedralStiff ?? fabric.bendStiff)
+}
+
 export class ClothSimulation {
   constructor(renderer, cloth, neighbors, fabric, { floorY = 0, collisionRig = [], selfCollision = DEFAULT_SELF_COLLISION, pinnedMask = null, qualityTier = QUALITY_TIER_DEFAULT } = {}) {
     this.frameCount = 0
@@ -845,8 +874,10 @@ export class ClothSimulation {
         // No fabricPresets.js field yet for this (WP-35 is a new, opt-in
         // tier — see README) — reuses bendStiff's own value as a
         // reasonable starting point rather than inventing a second tuned
-        // constant with no real-fabric data behind it yet.
-        uDihedralStiff: { value: fabric.dihedralStiff ?? fabric.bendStiff },
+        // constant with no real-fabric data behind it yet. Clamped via
+        // dihedralStiffFor() — see its own header for why: bendStiff
+        // alone goes well past the stable range for this constraint.
+        uDihedralStiff: { value: dihedralStiffFor(fabric) },
       })
 
       // WP-35b: spatial-hash self-collision broadphase. The grid is built
@@ -901,7 +932,7 @@ export class ClothSimulation {
     // WP-35: only present at all when constructed with qualityTier 'high'
     // (see the constructor) — a plain fabric switch on the default tier
     // never touches a uniform that doesn't exist.
-    if (u.uDihedralStiff) u.uDihedralStiff.value = fabric.dihedralStiff ?? fabric.bendStiff
+    if (u.uDihedralStiff) u.uDihedralStiff.value = dihedralStiffFor(fabric)
   }
 
   // Pins `particleIndex` to `targetPosition` every substep until cleared —
