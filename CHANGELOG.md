@@ -6,6 +6,54 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Fix: the zoombar's +/−/Fit buttons did nothing in 3D Preview or Cloth Lab
+
+User report: "in 3d view and Cloth Lab, the zoom panel and fit button are
+not working."
+
+### Fixed
+- **The page's zoombar (`#zin`/`#zout`/`#zfit`, always visible bottom-end
+  of the canvas area) was wired ONLY to `Canvas.zoom()`/`Canvas.fit()` —
+  the 2D pattern canvas — no matter which tab was actually open.**
+  `setView()` (`js/app.js`) hides `#patternCanvas` itself while in 3D
+  Preview or Cloth Lab (`visibility:hidden` via `.canvas-wrap.threed`/
+  `.clothlab`), but never touched the zoombar, so it stayed visible and
+  clickable while doing nothing to the 3D scene or Cloth Lab the user was
+  actually looking at.
+  - **3D Preview**: `js/three-view.js`'s `View3D` had no zoom/fit API at
+    all — only an internal `frameCamera(H)` used at build time. Added
+    `zoom(f)` (dollies the camera toward/away from `controls.target`,
+    clamped to the existing `minDistance`/`maxDistance`, same `f>1` =
+    zoom-in convention as `Canvas.zoom()`) and `fit()` (calls
+    `frameCamera(curH)`, the module's already-tracked last-built avatar
+    height — the same framing a fresh build already lands on).
+  - **Cloth Lab**: a separate app (iframe or embedded engine, WP-5) with
+    its own camera the root page has no direct handle to. Added a
+    `postMessage` bridge, mirroring `syncClothLab()`'s own embedded-vs-
+    iframe dispatch exactly: the iframe engine posts to
+    `frame.contentWindow`; the embedded engine has no iframe at all, so
+    it posts to the root page's own `window` — cloth-lab/src/App.jsx's
+    new listener lives in that same `window` either way, so one message
+    type pair (`berrystudio:zoom`/`berrystudio:fit`) and one listener
+    covers both engines with no per-engine branching on the receiving
+    end. On the receiving side, `cloth-lab/src/scene/Scene.jsx`'s
+    `<OrbitControls>` now forwards a `controlsRef` up to `App.jsx`,
+    which reads/writes it directly (same dolly-by-factor math as
+    `View3D.zoom()`; `fit()` restores the exact camera position/target
+    the `<Canvas>`/`<Scene>` already start with for the current `dims`).
+  - `js/app.js`'s `#zin`/`#zout`/`#zfit` handlers now dispatch on
+    `state.view` (`"3d"` → `View3D`, `"clothlab"` → the new postMessage
+    helpers, otherwise unchanged `Canvas.zoom()`/`fit()` — including
+    during Split View, which `setView()` only ever reaches with
+    `state.view` still `"2d"`).
+  - Verified: all 188 `cloth-lab` tests + 275 root tests pass, `oxlint`
+    clean. Live-verified the 3D Preview and Cloth Lab dispatch paths by
+    invoking the actual installed `onclick` handlers directly (this
+    session's Browser pane was not visibly composited for true pixel
+    clicks/screenshots at the time — confirmed via `document.hidden`) and
+    confirmed each one calls the correct target (`View3D.zoom`/`.fit`, or
+    the correct `postMessage` payload/origin) with zero errors.
+
 ## Cloth Lab follow-up: fixed the ACTUAL crash — a real React render bug
 
 User report right after the previous entry shipped: "when i click two seam

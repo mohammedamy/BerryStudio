@@ -1031,8 +1031,28 @@ export const View3D = (() => {
   // again since THREE is still null at this point.
   async function retryInit() { if (ready) return true; await init(host); return ready; }
 
+  // Real bug fix: the page's zoombar (js/app.js's #zin/#zout/#zfit) used to
+  // be wired ONLY to Canvas.zoom()/Canvas.fit() (the 2D pattern canvas)
+  // regardless of which tab was open — so its buttons silently did nothing
+  // while viewing 3D Preview (this module) or Cloth Lab. `dolly()` mirrors
+  // Canvas.zoom(f)'s convention exactly: f>1 moves the camera closer
+  // (zoom in), f<1 moves it away, clamped to OrbitControls' own
+  // min/maxDistance so this can never punch through the model or drift
+  // past its already-tuned zoom-out limit. `fit()` reuses frameCamera()
+  // with `curH` (the last-built avatar's height, already tracked at
+  // module scope for exactly this kind of "what am I looking at right
+  // now" query) — the same framing a fresh build already lands on.
+  function dolly(f) {
+    if (!controls || !camera || !f) return;
+    const dir = camera.position.clone().sub(controls.target);
+    const dist = Math.min(controls.maxDistance, Math.max(controls.minDistance, dir.length() / f));
+    camera.position.copy(controls.target).add(dir.setLength(dist));
+    controls.update();
+  }
+  function fit() { if (ready && camera) frameCamera(curH); }
+
   return {
-    init, build, resize, setFabric, setPieceVisibility,
+    init, build, resize, setFabric, setPieceVisibility, zoom: dolly, fit,
     setSpin: v => { spinning = v; if (controls) controls.autoRotate = v && !reduceMotion; },
     setWalk: v => walking = v,
     setReduceMotion: v => { reduceMotion = !!v; if (controls) controls.autoRotate = spinning && !reduceMotion; },

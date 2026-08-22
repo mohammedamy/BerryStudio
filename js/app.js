@@ -3643,6 +3643,26 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const frame=$("#clothLabFrame");
     return frame && frame.src ? new URL(frame.src).origin : location.origin;
   }
+  // Real bug fix: the zoombar (#zin/#zout/#zfit below) used to be wired
+  // ONLY to Canvas.zoom()/Canvas.fit() (the 2D pattern canvas) regardless
+  // of which tab was open, so its buttons silently did nothing while
+  // viewing Cloth Lab — same class of bug View3D.zoom()/fit() above just
+  // fixed for the 3D Preview tab. Mirrors syncClothLab()'s own
+  // embedded-vs-iframe dispatch: the embedded engine shares this page's
+  // own `window` (no iframe boundary at all), so posting to `window`
+  // itself reaches cloth-lab/src/App.jsx's listener exactly as if it were
+  // the iframe's contentWindow; the iframe engine keeps using
+  // contentWindow + clothLabOrigin() like every other cloth-lab message.
+  function clothLabZoom(factor){
+    if(state.clothLabEngine==="embedded"){ window.postMessage({type:"berrystudio:zoom", factor}, location.origin); return; }
+    const frame=$("#clothLabFrame");
+    if(frame && frame.contentWindow) frame.contentWindow.postMessage({type:"berrystudio:zoom", factor}, clothLabOrigin());
+  }
+  function clothLabFit(){
+    if(state.clothLabEngine==="embedded"){ window.postMessage({type:"berrystudio:fit"}, location.origin); return; }
+    const frame=$("#clothLabFrame");
+    if(frame && frame.contentWindow) frame.contentWindow.postMessage({type:"berrystudio:fit"}, clothLabOrigin());
+  }
   // Majority vote over each visible piece's chosen material — both apps use
   // identical fabric key names (cotton/denim/silk/satin/chiffon/wool/linen/
   // leather), so this is a direct passthrough, not a translation.
@@ -4704,10 +4724,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // re-toggled it anyway, so a clean "off" is the honest starting state.
     state.splitView = false;
     applySplitViewClasses();
-    // zoom
-    $("#zin").onclick=()=>Canvas.zoom(1.2); tip($("#zin"),"+",T("tt_zoomin"));
-    $("#zout").onclick=()=>Canvas.zoom(0.83); tip($("#zout"),"−",T("tt_zoomout"));
-    $("#zfit").onclick=()=>Canvas.fit(); tip($("#zfit"),"Fit",T("tt_zoomfit"));
+    // zoom — real bug fix: these used to unconditionally call Canvas.zoom()/
+    // fit() (the 2D pattern canvas) no matter which tab was open, so the
+    // zoombar stayed visible over 3D Preview and Cloth Lab but did nothing
+    // there. state.view stays "2d" during Split View (setView() only ever
+    // sets it to "2d"/"3d"/"clothlab" — see its own comment), so this keeps
+    // driving the 2D canvas in that mode too, unchanged from before.
+    $("#zin").onclick=()=>{ if(state.view==="3d") View3D.zoom(1.2); else if(state.view==="clothlab") clothLabZoom(1.2); else Canvas.zoom(1.2); }; tip($("#zin"),"+",T("tt_zoomin"));
+    $("#zout").onclick=()=>{ if(state.view==="3d") View3D.zoom(0.83); else if(state.view==="clothlab") clothLabZoom(0.83); else Canvas.zoom(0.83); }; tip($("#zout"),"−",T("tt_zoomout"));
+    $("#zfit").onclick=()=>{ if(state.view==="3d") View3D.fit(); else if(state.view==="clothlab") clothLabFit(); else Canvas.fit(); }; tip($("#zfit"),"Fit",T("tt_zoomfit"));
     // empty state
     $("#emptyDraft").onclick=()=>{hideEmpty();setTool("pen");};
     $("#emptyLib").onclick=()=>{showPane("library");};

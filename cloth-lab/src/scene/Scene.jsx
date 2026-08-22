@@ -12,7 +12,7 @@ import ExportControls from './ExportControls'
 import { getAssetBase } from '../assetBase'
 
 // The actual <Canvas> contents: lighting, ground, avatar, orbit camera.
-export default function Scene({ dims, lang = 'en', debugView, fabricId, qualityTier, skinToneId, poseId, garment, seamEditor, avatarGLBUrl, statsRef, exportRef, onPoseWarning }) {
+export default function Scene({ dims, lang = 'en', debugView, fabricId, qualityTier, skinToneId, poseId, garment, seamEditor, avatarGLBUrl, statsRef, exportRef, onPoseWarning, controlsRef }) {
   // Disabled while grabbing a cloth particle — otherwise dragging the mouse
   // to move the pin also orbits the camera at the same time, fighting itself.
   const [dragging, setDragging] = useState(false)
@@ -58,7 +58,17 @@ export default function Scene({ dims, lang = 'en', debugView, fabricId, qualityT
         {debugView === 'seams' && <SeamEditorScene editor={seamEditor} />}
       </group>
 
+      {/* `controlsRef` (from Workspace, App.jsx) forwards drei's ref straight
+          to the underlying three.js OrbitControls instance — App.jsx's
+          zoomBy()/fitCamera() read/write it directly (object.position,
+          target, min/maxDistance) to serve the root BerryStudio app's
+          zoombar (js/app.js), which otherwise has no way to reach a camera
+          living inside this separate app/iframe. Fixes a real bug: that
+          zoombar used to stay visible over both 3D Preview and Cloth Lab
+          but only ever drove the 2D pattern canvas, so its +/−/Fit buttons
+          did nothing here — see CHANGELOG. */}
       <OrbitControls
+        ref={controlsRef}
         target={[0, dims.H * 0.55, 0]} minDistance={0.6} maxDistance={4}
         enableDamping dampingFactor={0.1} enabled={!dragging}
       />
