@@ -180,6 +180,7 @@ export function triangulatePiece(piece, subdivForPiece, targetSpacingCm) {
     positions2D: allPts,
     triangles: new Uint32Array(triangles),
     boundaryChains,
+    placementHint: piece.placementHint,
   }
 }
 

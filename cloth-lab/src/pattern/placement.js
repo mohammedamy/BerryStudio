@@ -202,13 +202,23 @@ export function placeAttachBody(positions2D, dims, zSign = 1) {
 // specifically so triangulate.js's {pieceId,role,positions2D,...} shape
 // (used unmodified) never needs a new field threaded through it.
 export function placePiece(triangulated, dims) {
-  const { pieceId, role, positions2D } = triangulated
+  const { pieceId, role, positions2D, placementHint } = triangulated
   const side = (pieceId.endsWith('L') || pieceId.endsWith('_l')) ? -1 : 1
-  if (role === 'frontPanel') return placeTorsoPanel(positions2D, dims, { zSign: 1 })
-  if (role === 'backPanel') return placeTorsoPanel(positions2D, dims, { zSign: -1 })
+  // Same-slot siblings (importFromApp.js's placementHint: pieces the
+  // importer recognized as e.g. "front" but had no way to tell apart —
+  // see that file's own header on why it no longer just drops all but
+  // the first one) get progressively more ease so they don't sit at the
+  // exact same radius as each other. This isn't a real anatomical
+  // placement — nothing here knows which panel actually belongs where —
+  // it's just enough separation that every recognized piece is visible
+  // (and individually selectable/seamable in the Seam editor) instead of
+  // later ones being hidden exactly behind the first.
+  const siblingEase = placementHint ? placementHint.index * 0.08 : 0
+  if (role === 'frontPanel') return placeTorsoPanel(positions2D, dims, { zSign: 1, easeFactor: 1.1 + siblingEase })
+  if (role === 'backPanel') return placeTorsoPanel(positions2D, dims, { zSign: -1, easeFactor: 1.1 + siblingEase })
   if (role === 'sleeve') return placeSleeve(positions2D, dims, side)
-  if (role === 'hipPanelFront') return placeHipPanel(positions2D, dims, { zSign: 1 })
-  if (role === 'hipPanelBack') return placeHipPanel(positions2D, dims, { zSign: -1 })
+  if (role === 'hipPanelFront') return placeHipPanel(positions2D, dims, { zSign: 1, easeFactor: 1.15 + siblingEase })
+  if (role === 'hipPanelBack') return placeHipPanel(positions2D, dims, { zSign: -1, easeFactor: 1.15 + siblingEase })
   if (role === 'goreFront') return placeGorePanel(positions2D, dims, 0)
   if (role === 'goreBack') return placeGorePanel(positions2D, dims, Math.PI)
   if (role === 'goreSideLeft') return placeGorePanel(positions2D, dims, -Math.PI / 2)

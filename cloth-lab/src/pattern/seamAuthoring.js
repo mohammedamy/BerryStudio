@@ -9,8 +9,8 @@ import { finalizePiece } from './piece.js'
 // {id, role, outline, seamEdges, edgeOrder} shape tshirt.js's pieces have,
 // so the rest of the pipeline (triangulate/assemble/simulate) never needs to
 // know whether a piece was hand-authored or interactively authored.
-export function createDraftPiece(rawPiece, role) {
-  return { id: rawPiece.id, label: rawPiece.label, role, outline: rawPiece.outline, color: rawPiece.color, edges: {} }
+export function createDraftPiece(rawPiece, role, placementHint) {
+  return { id: rawPiece.id, label: rawPiece.label, role, outline: rawPiece.outline, color: rawPiece.color, edges: {}, placementHint }
 }
 
 function edgeIndices(from, to, n) {
@@ -73,5 +73,5 @@ export function finalizeDraftPiece(draft) {
       }
     }
   }
-  return finalizePiece(draft.id, draft.role, draft.outline, edges, draft.color)
+  return finalizePiece(draft.id, draft.role, draft.outline, edges, draft.color, draft.placementHint)
 }

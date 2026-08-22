@@ -208,10 +208,17 @@ export function convertAppPattern(payload) {
       if (cls === 'sleeve') { sleeves.push({ id: p.id, label, outline: local, color: p.color }); continue }
 
       const slotKey = { 'bodice-front': 'frontPanel', 'bodice-back': 'backPanel', 'skirt-front': 'hipPanelFront', 'skirt-back': 'hipPanelBack' }[cls]
-      if (bySlot[slotKey].length) {
-        skipped.push({ label, reason: `already have a piece for "${cls}" (${bySlot[slotKey][0].label}) — this pattern has more structure than the importer understands` })
-        continue
-      }
+      // Used to skip every piece after the first one classified into a
+      // given slot outright — "this pattern has more structure than the
+      // importer understands." True (classifyLegacy really can't tell a
+      // front-left panel from a front-right one — it only recognizes
+      // front vs back), but dropping the extras entirely meant a design
+      // with e.g. 2 darted front panels + 2 darted back panels only ever
+      // showed 1 of the 4. Recognizing all of them and letting
+      // placementHints (assigned below, once every piece's final slot is
+      // known) spread same-slot siblings apart is more useful than
+      // silently discarding real pattern pieces — see this function's own
+      // placementHints comment.
       const isSkirt = cls.startsWith('skirt')
       const outline = isFoldPiece(local) ? unfoldPiece(local) : local
       rawPieces.push({ id: p.id, label: p.label, outline, color: p.color })
@@ -383,5 +390,18 @@ export function convertAppPattern(payload) {
 
   const fabricId = FABRIC_NAME_TO_ID.has(payload.fabricId) ? payload.fabricId : null
 
-  return { rawPieces, roles, edgeInstructions, seamInstructions, recognized, skipped, fabricId }
+  // Same-slot siblings (bySlot already collects every recognized piece for
+  // each of the 4 torso/hip roles, from every path above — classifyLegacy,
+  // plain WP-6 single pieces, and cutOnFold non-princess pieces all push
+  // into it): when a slot has more than one member, tag each with its
+  // {index, count} so placement.js's placePiece can spread them apart
+  // instead of stacking every "front" piece at the exact same spot. A
+  // slot with exactly one member gets no hint at all (undefined), so
+  // ordinary single-front/single-back patterns place exactly as before.
+  const placementHints = {}
+  for (const members of Object.values(bySlot)) {
+    if (members.length > 1) members.forEach((m, i) => { placementHints[m.id] = { index: i, count: members.length } })
+  }
+
+  return { rawPieces, roles, edgeInstructions, seamInstructions, recognized, skipped, fabricId, placementHints }
 }

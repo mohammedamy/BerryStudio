@@ -201,7 +201,8 @@ function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, f
   const roles = imported ? imported.roles : SKIRT_ROLES
   const seedEdges = imported ? imported.edgeInstructions : undefined
   const seedSeams = imported ? imported.seamInstructions : undefined
-  const seamEditor = useSeamEditor(rawPieces, roles, seedEdges, seedSeams)
+  const placementHints = imported ? imported.placementHints : undefined
+  const seamEditor = useSeamEditor(rawPieces, roles, seedEdges, seedSeams, placementHints)
   const statsRef = useRef({ substeps: 0, emaMs: 0, lastCostMs: 0 })
   const exportRef = useRef(null)
 

@@ -6,6 +6,80 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Cloth Lab: multiple same-slot pattern pieces no longer silently dropped
+
+User report: "in cloth lab why i cant sea 3 or 4 different darts from 4
+different pieces together. that should be allowed according to soe
+designs." Investigated and confirmed two separate real gaps:
+
+1. Darts are never transmitted into the cloth mesh at all, for any piece
+   — the root app's payload does include `darts: p.darts`
+   ([js/app.js](js/app.js)'s `buildClothLabPayload`), but
+   `pattern/importFromApp.js` never reads it when building `rawPieces`.
+   Left as-is this pass — the user chose to scope this entry to gap #2
+   below; actually sewing a dart shut into real 3D shaping is a much
+   bigger change to the pattern-to-cloth-mesh pipeline (triangulation,
+   seam welding), not just the importer.
+2. **The recognition cap, fixed here**: `convertAppPattern`'s legacy
+   classifier (`classifyLegacy` — used for any piece with no declared
+   WP-6 `role`, since it only ever has the piece's own name to go on) can
+   only tell front from back, never panel from panel. It used to drop
+   every piece after the first one landing in an already-filled slot
+   outright: `"already have a piece for 'bodice-front' ... this pattern
+   has more structure than the importer understands."` A design with, say,
+   2 independent darted front panels + 2 independent darted back panels
+   (no declared role to disambiguate them) only ever showed 1 of the 4 —
+   exactly the report.
+
+### Changed
+- `pattern/importFromApp.js`: every piece `classifyLegacy` can place into
+  a slot (`frontPanel`/`backPanel`/`hipPanelFront`/`hipPanelBack`) is now
+  recognized and imported, not just the first. The pre-existing auto-seam
+  step already only fires "when BOTH sides have exactly 1 member" (its own
+  comment, unchanged) — over-subscribed slots correctly fall back to
+  placed-but-unseamed instead of guessing a pairing, exactly as they
+  already did for the metadata (declared-role) import path.
+- New `placementHints` (keyed by piece id, `{index, count}`) computed once
+  every piece's final slot is known, from the same `bySlot` map every
+  import path already populated (so this covers the WP-6 metadata paths
+  too, not just `classifyLegacy` — those never had the drop bug but could
+  already produce multiple same-slot pieces with no separation between
+  them). Threaded through `pattern/piece.js` → `pattern/seamAuthoring.js`
+  → `pattern/triangulate.js` → `pattern/placement.js`'s `placePiece`,
+  which gives each same-slot sibling progressively more ease
+  (`+ index * 0.08`) than the last — not a real anatomical placement
+  (nothing in this pipeline knows which panel actually belongs where),
+  just enough separation that every recognized piece is visible and
+  individually selectable in the Seam editor instead of later ones sitting
+  exactly behind the first. A slot with exactly one member gets no hint at
+  all, so ordinary single-front/single-back patterns place identically to
+  before.
+
+### Verification
+- New `pattern/importFromApp.multiPanel.test.js` (6 tests): a single
+  front+back pair still gets no placementHint (no regression); 2
+  independent front panels are BOTH recognized; 3 same-slot siblings get
+  `{index,count}` in payload order; the exact reported 4-panel (2 front +
+  2 back) scenario all 4 recognized; an over-subscribed slot still gets no
+  auto-seam guess; genuinely unclassifiable pieces (accessories, unnamed
+  blobs) are still skipped, unaffected by this change.
+- New tests in `pattern/placement.test.js` (4 tests): no-placementHint
+  places identically to before; increasing sibling index sits
+  progressively further from the body's own axis; the same holds for
+  backPanel/hipPanelFront/hipPanelBack; roles with no torso-panel
+  placement heuristic (sleeve) are unaffected by an (irrelevant)
+  placementHint.
+- `npx vitest run` in `cloth-lab/`: 215/215 pass (205 prior + 10 new).
+- `npx oxlint` on every touched file: zero new warnings.
+- Live-verified: posted a synthetic 4-panel darted pattern (2 front + 2
+  back, no declared roles — the exact reported shape) directly into a
+  running Cloth Lab tab via the same `berrystudio:pattern` postMessage
+  bridge the root app uses. Before this change 2 of the 4 pieces would
+  have been silently dropped; after, the sidebar shows no skipped-pieces
+  note and all 4 panels render together and are individually visible from
+  both front and back — confirmed in the Pieces debug view, rotating the
+  camera to see both the staggered front pair and the staggered back pair.
+
 ## Female torso: a real breast and lower back, front now differs from back
 
 Direct follow-up to the mannequin redesign below — user feedback on it:
