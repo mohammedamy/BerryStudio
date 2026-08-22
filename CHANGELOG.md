@@ -6,6 +6,47 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Fix: "High (dihedral bend)" quality tier went unstable on real fabrics
+
+User report: "in cloth lab whenever i clicked high[dihederal bend] crazy
+things happen."
+
+### Fixed
+- **`ClothSimulation.js` fed the High-quality tier's dihedral bend
+  constraint `fabric.dihedralStiff ?? fabric.bendStiff`, UNCLAMPED.** No
+  fabric preset defines `dihedralStiff` (WP-35 shipped without one — see
+  its own comment), so every fabric silently handed this a raw
+  `bendStiff` value (0.06–0.92, see `fabricPresets.js`) tuned for the
+  DEFAULT tier's own, unrelated distance-based bend spring — where a
+  value near 1 is perfectly safe, since it just blends a position
+  correction. The dihedral constraint (`dihedralBend.js`/
+  `DIHEDRAL_BEND_GLSL`) is a Jacobi ROTATION correction instead —
+  `delta = stiffness * error`, then a full Rodrigues rotation of the wing
+  vertex by `delta` radians — and that only converges without
+  overshooting past the target and flipping sign every substep for
+  stiffness ≤ 0.5. Confirmed directly: `dihedralBend.js`'s own
+  `dihedralBendCorrection()` defaults `stiffness` to exactly 0.5, and
+  `dihedralBend.test.js`'s convergence property test hardcodes 0.5 too —
+  0.5 was always the one value anyone had actually verified; nothing
+  above it was ever exercised by a test. Several real presets exceed it
+  (wool 0.58, denim 0.80, leather 0.92), so any user on one of those —
+  not an exotic edge case — hit escalating per-substep sign-flip
+  oscillation, coupled across every hinge sharing a vertex, the instant
+  they switched to the High tier.
+  Fixed with a new `dihedralStiffFor(fabric)` (`ClothSimulation.js`,
+  exported), clamping at the proven-stable 0.5 ceiling, used at both
+  call sites (the constructor and `setFabric()`) that used to read the
+  raw value directly.
+  Added `cloth-lab/src/cloth/dihedralStiffFor.test.js`: asserts every
+  real `FABRIC_PRESETS` entry clamps to ≤0.5 (confirmed non-vacuous —
+  leather's own `bendStiff` really does exceed it), that an explicit
+  `fabric.dihedralStiff` override is respected but still clamped, and a
+  worked example showing stiffness=0.5 converges a hinge to rest in one
+  correction with zero overshoot while the unclamped leather value
+  (0.92) visibly flips the angle's sign past the target on the very
+  first correction. Verified: all 192 `cloth-lab` tests pass (188 + 4
+  new), `oxlint` clean.
+
 ## Fix: the zoombar's +/−/Fit buttons did nothing in 3D Preview or Cloth Lab
 
 User report: "in 3d view and Cloth Lab, the zoom panel and fit button are
