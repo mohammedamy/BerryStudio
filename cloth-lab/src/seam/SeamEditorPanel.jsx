@@ -7,7 +7,22 @@ export default function SeamEditorPanel({ lang = 'en', editor, onSimulate }) {
   const { drafts, pendingStart, pendingEdges, seams, error, commitSeam, removeSeam, toggleReverse, clearPending, finalize } = editor
   const [reverseNext, setReverseNext] = useState(false)
 
-  const pieceLabel = (pieceIdx) => drafts[pieceIdx]?.label || drafts[pieceIdx]?.id
+  // Real imported pieces carry a bilingual `label: {en, ar}` object (every
+  // rawPieces.push() in pattern/importFromApp.js passes p.label straight
+  // through) — only the built-in skirt demo (pattern/library/skirt.js)
+  // happens to use a plain string, which is why this went unnoticed until
+  // a real garment was tested. Rendering the raw object directly as a JSX
+  // child (the old `drafts[pieceIdx]?.label` return value) makes React
+  // throw "Objects are not valid as a React child" the instant it's
+  // rendered below — i.e. crashes the whole panel the moment a SECOND
+  // vertex click completes an edge and this label is first displayed.
+  const pieceLabel = (pieceIdx) => {
+    const draft = drafts[pieceIdx]
+    if (!draft) return ''
+    const { label, id } = draft
+    if (label && typeof label === 'object') return label[lang] || label.en || id
+    return label || id
+  }
 
   return (
     <div style={{ padding: 14, borderTop: '1px solid var(--border)' }}>
