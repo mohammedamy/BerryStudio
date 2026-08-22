@@ -205,6 +205,52 @@ function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, f
   const statsRef = useRef({ substeps: 0, emaMs: 0, lastCostMs: 0 })
   const exportRef = useRef(null)
 
+  // Real bug fix: the root BerryStudio app's zoombar (js/app.js's
+  // #zin/#zout/#zfit) sits ABOVE both the 3D Preview and Cloth Lab panes
+  // and used to always call its own 2D pattern-canvas zoom/fit — the only
+  // thing it had ever been wired to — so its buttons silently did nothing
+  // whenever a user was actually looking at this app (iframe engine) or
+  // the embedded engine (WP-5.4, same window, no iframe). Fixed on the
+  // root app's side by dispatching a `postMessage` instead; this ref +
+  // the listener below is the receiving end. `window.postMessage` reaches
+  // both engines identically: for the iframe engine the root app posts to
+  // `frame.contentWindow` and this `window` IS that iframe's window; for
+  // the embedded engine there's no iframe at all, so the root app posts
+  // to its own `window` and this `window` is that SAME window — either
+  // way a listener registered here picks it up, so this one code path
+  // (and this one listener) covers both engines with no extra plumbing.
+  const controlsRef = useRef(null)
+
+  function zoomBy(factor) {
+    const c = controlsRef.current
+    if (!c || !factor) return
+    const dir = c.object.position.clone().sub(c.target)
+    const dist = Math.min(c.maxDistance, Math.max(c.minDistance, dir.length() / factor))
+    c.object.position.copy(c.target).add(dir.setLength(dist))
+    c.update()
+  }
+  // Restores the exact same framing the Canvas/Scene start with (camera
+  // position [1.6, dims.H*0.6, 2.2], target [0, dims.H*0.55, 0]) rather
+  // than computing a fresh bounding-box fit — cheap, predictable, and
+  // matches what "Fit" already means for a fresh load of this same dims.
+  function fitCamera() {
+    const c = controlsRef.current
+    if (!c) return
+    c.object.position.set(1.6, dims.H * 0.6, 2.2)
+    c.target.set(0, dims.H * 0.55, 0)
+    c.update()
+  }
+  useEffect(() => {
+    function onControlMessage(e) {
+      if (!e.data || typeof e.data !== 'object') return
+      if (e.data.type === 'berrystudio:zoom') zoomBy(e.data.factor)
+      else if (e.data.type === 'berrystudio:fit') fitCamera()
+    }
+    window.addEventListener('message', onControlMessage)
+    return () => window.removeEventListener('message', onControlMessage)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dims])
+
   return (
     <div style={{ flex: '1 1 auto', display: 'flex', minHeight: 0 }}>
       <aside style={{ width: 260, flex: '0 0 auto', borderInlineEnd: '1px solid var(--border)', background: 'var(--panel)', overflowY: 'auto' }}>
@@ -262,7 +308,7 @@ function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, f
           </div>
         )}
         <Canvas shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
-          <Scene dims={dims} lang={lang} debugView={debugView} fabricId={fabricId} qualityTier={qualityTier} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} />
+          <Scene dims={dims} lang={lang} debugView={debugView} fabricId={fabricId} qualityTier={qualityTier} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} controlsRef={controlsRef} />
         </Canvas>
         {debugView === 'cloth' && isSolverHUDEnabled() && <SolverHUD statsRef={statsRef} />}
       </main>
