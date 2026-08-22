@@ -1,87 +1,103 @@
 import { describe, it, expect } from 'vitest'
-import { dihedralStiffFor } from './ClothSimulation.js'
+import { dihedralStiffFor, DIHEDRAL_MAX_DELTA } from './ClothSimulation.js'
 import { FABRIC_PRESETS, FABRIC_IDS } from './fabricPresets.js'
 import { dihedralAngle, dihedralBendCorrection } from './dihedralBend.js'
 
-// Regression test for a real, user-reported bug: "in cloth lab whenever i
-// clicked high [dihedral bend] crazy things happen." ClothSimulation.js
-// used to feed the High-quality tier's dihedral bend constraint
-// `fabric.dihedralStiff ?? fabric.bendStiff` UNCLAMPED — no preset defines
-// `dihedralStiff`, so every fabric silently handed it a `bendStiff` value
-// (0.06-0.92, see fabricPresets.js) tuned for the DEFAULT tier's unrelated
-// distance-based bend spring, where stiffness near 1 is safe. The dihedral
-// constraint is a Jacobi ROTATION correction instead
-// (dihedralBend.js/DIHEDRAL_BEND_GLSL: delta = stiffness*error, then a
-// full rotation by delta).
+// Regression test for a real, user-reported bug that took THREE passes to
+// actually fix — see ClothSimulation.js's dihedralStiffFor() for the full
+// story of what each report meant and why the previous two attempts
+// weren't enough:
+//   1. "crazy things happen" — uDihedralStiff read fabric.bendStiff
+//      (0.06-0.92) completely unclamped; genuinely explosive.
+//   2. "still crazy" — clamped stiffness at 0.5 (a single hinge's own
+//      proven-safe convergence value). Still exploded once many hinges
+//      shared vertices and corrected in parallel every substep.
+//   3. "better but still useless" — re-clamped at 0.12. Stable, but at
+//      that stiffness a hinge starting far from rest (every hinge, right
+//      after a fresh drape) only ever creeps toward its target and the
+//      garment settles before the constraint visibly does anything — the
+//      High tier's whole reason to exist (sharper folds than the default
+//      tier) never showed up in the render.
 //
-// A first version of this fix clamped at 0.5 — the value dihedralBend.js's
-// own default `stiffness` param uses, and the only value
-// dihedralBend.test.js's convergence property test ever exercises, because
-// a SINGLE isolated hinge genuinely converges to rest in one correction at
-// exactly 0.5 (see the second test below). That shipped, and the user
-// still reported "crazy things" — confirmed live (Denim/Leather + High:
-// visible wrinkling/ballooning that kept growing, not settling). The
-// isolated-hinge math undersold the real failure mode: a garment has many
-// hinges sharing vertices, all correcting in PARALLEL from the same
-// snapshot every substep, then averaging independently-computed ROTATED
-// positions at each shared vertex — a nonlinear average, unlike the
-// structural/default-bend constraints' simple linear-displacement
-// averaging — so what a lone hinge tolerates at 0.5 compounds once
-// coupled. Re-verified live by sweeping the clamp down with Denim AND
-// Leather (bendStiff 0.80 and 0.92, the two stiffest real presets) on the
-// High tier, watched settle over several seconds: 0.5 and 0.2 both still
-// visibly wrinkle/balloon and keep growing; 0.12 settles clean,
-// indistinguishable from the default tier's own drape, and stays stable.
+// The actual fix: stop capping `stiffness` uniformly and instead cap the
+// ROTATION ITSELF per substep (`maxDelta`, independent of stiffness) —
+// dihedralStiffFor() now returns the fabric's real bendStiff, uncapped,
+// and DIHEDRAL_MAX_DELTA bounds how far any single correction can turn a
+// wing vertex regardless of how large stiffness*error would otherwise be.
+// Live-verified with Denim and Leather (bendStiff 0.80 and 0.92) on the
+// High tier: stable over 20+ seconds AND visibly crisper fold lines than
+// the default tier — not the same flat drape the second-pass fix produced.
 describe('dihedralStiffFor', () => {
-  it('clamps at 0.12 (empirically re-verified live — see this file\'s own header) for every real fabric preset', () => {
+  it('returns the fabric\'s real bendStiff, uncapped — stability now comes from DIHEDRAL_MAX_DELTA, not from suppressing this', () => {
     for (const id of FABRIC_IDS) {
-      const stiff = dihedralStiffFor(FABRIC_PRESETS[id])
-      expect(stiff).toBeLessThanOrEqual(0.12)
-      expect(stiff).toBeGreaterThan(0) // never silently zeroed either
+      expect(dihedralStiffFor(FABRIC_PRESETS[id])).toBe(FABRIC_PRESETS[id].bendStiff)
     }
-    // Confirms this test isn't vacuous — several real presets' bendStiff
-    // really do exceed 0.12, so the clamp is actually doing something.
-    expect(FABRIC_PRESETS.wool.bendStiff).toBeGreaterThan(0.12)
-    expect(FABRIC_PRESETS.leather.bendStiff).toBeGreaterThan(0.12)
-    expect(dihedralStiffFor(FABRIC_PRESETS.leather)).toBe(0.12)
+    // Non-vacuous: several real presets are well above the old 0.12/0.5
+    // clamps this fix replaces — confirms nothing is silently suppressing
+    // them any more.
+    expect(dihedralStiffFor(FABRIC_PRESETS.leather)).toBeGreaterThan(0.5)
   })
 
-  it('passes a low-bendStiff fabric through unchanged (already within the clamped range)', () => {
-    expect(FABRIC_PRESETS.chiffon.bendStiff).toBeLessThan(0.12)
-    expect(dihedralStiffFor(FABRIC_PRESETS.chiffon)).toBe(FABRIC_PRESETS.chiffon.bendStiff)
-  })
-
-  it('respects an explicit fabric.dihedralStiff override, clamped the same way', () => {
+  it('respects an explicit fabric.dihedralStiff override', () => {
     expect(dihedralStiffFor({ bendStiff: 0.9, dihedralStiff: 0.1 })).toBe(0.1)
-    expect(dihedralStiffFor({ bendStiff: 0.05, dihedralStiff: 0.9 })).toBe(0.12) // an override can still be unsafe
+    expect(dihedralStiffFor({ bendStiff: 0.05, dihedralStiff: 0.9 })).toBe(0.9)
+  })
+})
+
+describe('DIHEDRAL_MAX_DELTA', () => {
+  it('is a small, positive number of radians (a per-substep rotation cap, not an angle in degrees or a stiffness fraction)', () => {
+    expect(DIHEDRAL_MAX_DELTA).toBeGreaterThan(0)
+    expect(DIHEDRAL_MAX_DELTA).toBeLessThan(Math.PI / 4) // well under a 45 degree single-substep swing
   })
 
-  // The isolated-hinge property that made 0.5 look safe in the first pass
-  // at this fix — genuinely true, kept as a record of why that number was
-  // picked, and why it turned out not to be enough on its own (see this
-  // file's own header for the coupled-system mechanism that actually
-  // mattered).
-  it('stiffness=0.5 converges an ISOLATED hinge to rest in one correction with zero overshoot', () => {
+  it('caps a single correction\'s rotation for a huge initial error, even at the highest real fabric stiffness (leather)', () => {
     const p1 = [0, 0, 0], p2 = [1, 0, 0]
-    const nearFlatRad = (10 * Math.PI) / 180
+    // A hinge starting ~150 degrees from its rest angle of 0 — exactly the
+    // kind of large excursion a fresh drape produces on its first frames,
+    // the case that caused the coupled-hinge explosion in the first two
+    // fix attempts. dihedralAngle's convention (verified in
+    // dihedralBend.test.js and directly above in a scratch check): this
+    // p3/p4 construction's MEASURED angle is (180 - foldDeg), so foldDeg=30
+    // is what actually produces a ~150 degree starting error.
+    const foldRad = (30 * Math.PI) / 180
     const p3 = [0.5, 0, 1]
-    const p4 = [0.5, Math.sin(nearFlatRad), Math.cos(nearFlatRad)]
+    const p4 = [0.5, Math.sin(foldRad), Math.cos(foldRad)]
     const restRad = 0
+    const stiffness = FABRIC_PRESETS.leather.bendStiff // 0.92 — highest real preset, now unclamped
 
-    const safe = dihedralBendCorrection(p1, p2, p3, p4, restRad, 0.5)
-    expect(Math.abs(safe.angle - restRad)).toBeGreaterThan(0) // the pre-correction error was real
-    const afterSafe = dihedralAngle(p1, p2, safe.p3, safe.p4)
-    expect(Math.abs(afterSafe)).toBeLessThan(1e-6) // exact convergence, one step, no overshoot
+    const angleBefore = dihedralAngle(p1, p2, p3, p4)
+    const uncapped = dihedralBendCorrection(p1, p2, p3, p4, restRad, stiffness) // maxDelta defaults to PI (unclamped)
+    const capped = dihedralBendCorrection(p1, p2, p3, p4, restRad, stiffness, DIHEDRAL_MAX_DELTA)
 
-    // The actual shipped clamp (0.12) converges the same isolated hinge
-    // too, just more gradually across several corrections rather than in
-    // one — the whole point of leaving real margin below the single-hinge
-    // "perfect" value for a system where many hinges correct at once.
-    let hp3 = p3, hp4 = p4
-    for (let i = 0; i < 40; i++) {
-      const r = dihedralBendCorrection(p1, p2, hp3, hp4, restRad, 0.12)
-      hp3 = r.p3; hp4 = r.p4
-    }
-    expect(Math.abs(dihedralAngle(p1, p2, hp3, hp4))).toBeLessThan(1e-3)
+    const movedUncapped = Math.abs(dihedralAngle(p1, p2, uncapped.p3, uncapped.p4) - angleBefore)
+    const movedCapped = Math.abs(dihedralAngle(p1, p2, capped.p3, capped.p4) - angleBefore)
+
+    // Without the cap, 0.92 stiffness on a huge error swings the angle far
+    // in one call — this is what "crazy things happen" actually was.
+    expect(movedUncapped).toBeGreaterThan(DIHEDRAL_MAX_DELTA * 2)
+    // With the cap, the SAME huge error only ever moves the angle by
+    // roughly the cap itself per call, regardless of stiffness.
+    expect(movedCapped).toBeLessThanOrEqual(2 * DIHEDRAL_MAX_DELTA + 1e-6) // 2x: both p3 and p4 rotate
+  })
+
+  it('does NOT engage for a small residual error — high stiffness still converges at real strength once a hinge is nearly at rest', () => {
+    const p1 = [0, 0, 0], p2 = [1, 0, 0]
+    // Same construction/convention as the test above: foldDeg=176 measures
+    // as a ~4 degree angle — a small residual error, the common case once
+    // a garment has mostly settled.
+    const foldRad = (176 * Math.PI) / 180
+    const p3 = [0.5, 0, 1]
+    const p4 = [0.5, Math.sin(foldRad), Math.cos(foldRad)]
+    const restRad = 0
+    const stiffness = FABRIC_PRESETS.leather.bendStiff
+
+    const withCap = dihedralBendCorrection(p1, p2, p3, p4, restRad, stiffness, DIHEDRAL_MAX_DELTA)
+    const withoutCap = dihedralBendCorrection(p1, p2, p3, p4, restRad, stiffness) // maxDelta = PI, effectively unclamped
+    // Identical result — the cap only bites on errors large enough that
+    // stiffness*error would exceed it; a small residual error stays well
+    // under it, so this fabric's real stiffness governs convergence speed,
+    // exactly the "actually sharpens folds" property the third fix restores.
+    expect(withCap.p3).toEqual(withoutCap.p3)
+    expect(withCap.p4).toEqual(withoutCap.p4)
   })
 })

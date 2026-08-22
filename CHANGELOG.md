@@ -6,6 +6,51 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Third pass: dihedral bend is now stable AND actually visible
+
+User report right after the 0.12 clamp shipped: "better but still
+useless." Right again — live A/B compared the High tier against the
+default tier at the same fabric/measurements/pose and confirmed the 0.12
+clamp's drape was visually indistinguishable from the default tier's own
+distance-based bend. Stable, but pointless: the "true dihedral-angle"
+constraint this whole opt-in tier exists for never got to actually do
+anything before the garment settled.
+
+### Fixed
+- **Both previous fixes clamped `stiffness` — the wrong knob.** Stiffness
+  only matters for how FAST a hinge closes its angle error; the
+  instability was never really about speed, it was about how FAR a
+  single substep's rotation could swing a shared vertex on the large
+  initial errors every fresh drape starts with. Any stiffness low enough
+  to survive that worst case is also too weak to meaningfully sharpen the
+  common case (a small residual error on an already-mostly-settled
+  hinge) — those two cases needed different treatment, not one shared
+  number.
+  Replaced the stiffness clamp with a direct cap on the rotation itself:
+  `dihedralBendCorrection()` (`dihedralBend.js`) and
+  `dihedralBendDelta()` (`DIHEDRAL_BEND_GLSL`) now take a `maxDelta`
+  (radians) that bounds a single call's rotation independent of
+  `stiffness`/error size — a new `uDihedralMaxDelta` uniform on the GPU
+  side. `dihedralStiffFor()` now returns each fabric's real `bendStiff`
+  **uncapped** again; the new `DIHEDRAL_MAX_DELTA = 0.12` (radians) does
+  the actual stability work instead.
+  Live-verified with Denim and Leather (`bendStiff` 0.80 and 0.92, the
+  two stiffest real presets) on the High tier: stable over 20+ seconds on
+  a fresh reload, same as the previous fix — but now visibly, clearly
+  crisper and more defined fold lines than the default tier at the exact
+  same measurements/pose, an A/B comparison the previous fix's drape
+  couldn't pass. Chiffon (the softest real preset, `bendStiff` 0.10)
+  checked too, confirmed unaffected — its stiffness*error rarely
+  approaches the cap in the first place.
+- Rewrote `dihedralStiffFor.test.js` for the new mechanism: confirms
+  `dihedralStiffFor()` is genuinely uncapped again (non-vacuous —
+  leather's real `bendStiff` exceeds both retired clamps), confirms
+  `DIHEDRAL_MAX_DELTA` actually bounds a huge-error correction at
+  leather's full stiffness, and confirms the cap does NOT engage for a
+  small residual error — the property that makes this fix different from
+  a fourth "same idea, different constant" clamp. Verified: all 193
+  `cloth-lab` tests pass (192 + 1 new), `oxlint` clean.
+
 ## Follow-up: the previous dihedral-stiffness fix (0.5 clamp) wasn't enough
 
 User report right after that fix shipped: "still crazy." Live-tested this

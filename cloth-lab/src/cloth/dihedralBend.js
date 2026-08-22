@@ -109,7 +109,25 @@ function rotateAroundAxis(point, axisOrigin, axisDir, angle) {
 // null (no correction) for a degenerate hinge — same bail-out
 // `dihedralAngle` already defined, checked once here so callers don't
 // duplicate the degeneracy test.
-export function dihedralBendCorrection(p1, p2, p3, p4, restAngle, stiffness = 0.5) {
+//
+// `maxDelta` (radians, default PI = effectively unclamped) caps how far a
+// SINGLE call rotates the wing vertex, independent of `stiffness`. Real bug
+// fix, second pass — see ClothSimulation.js's dihedralStiffFor() for the
+// full story: capping `stiffness` alone (first pass at this fix) traded
+// "explodes" for "too weak to visibly do anything" — a real garment's
+// hinges share vertices and correct in parallel every substep, so ANY
+// stiffness large enough to noticeably sharpen a fold ALSO produces large
+// per-substep rotations on the initial big errors every drape starts with,
+// and those are what compound into the coupled-system instability, not the
+// small residual corrections stiffness alone controls. Clamping the ROTATION
+// itself directly bounds the worst case regardless of how large the error
+// or how high `stiffness` is, which is what actually lets stiffness go back
+// up to a value that reads as a real, visible improvement over the default
+// tier's distance-based bend rather than converging to the exact same
+// drape. Small residual errors near rest (the common case once a garment
+// has settled) stay well under this clamp and are unaffected — this only
+// engages for the large initial excursions a fresh drape produces.
+export function dihedralBendCorrection(p1, p2, p3, p4, restAngle, stiffness = 0.5, maxDelta = Math.PI) {
   const angle = dihedralAngle(p1, p2, p3, p4)
   if (angle === null) return null
   const edge = sub(p2, p1)
@@ -128,7 +146,9 @@ export function dihedralBendCorrection(p1, p2, p3, p4, restAngle, stiffness = 0.
   // toward restAngle — confirmed for both folding directions and for
   // hinges starting already past rest, not asserted from an unverified
   // hand derivation.
-  const delta = stiffness * error
+  let delta = stiffness * error
+  if (delta > maxDelta) delta = maxDelta
+  if (delta < -maxDelta) delta = -maxDelta
   const p3New = rotateAroundAxis(p3, p1, e, delta)
   const p4New = rotateAroundAxis(p4, p1, e, -delta)
   return { p3: p3New, p4: p4New, angle }

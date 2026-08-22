@@ -271,7 +271,7 @@ vec3 collideCapsule(vec3 p, vec3 prevP, vec3 a, vec3 b, float r0, float r1, floa
 // moves here — the shared hinge edge (p1, p2) is left to the existing
 // structural constraint, not touched by this function.
 const DIHEDRAL_BEND_GLSL = `
-vec3 dihedralBendDelta(vec3 mePredicted, float neighborIdx, float edgeV0Idx, float edgeV1Idx, float restAngle, float stiffness) {
+vec3 dihedralBendDelta(vec3 mePredicted, float neighborIdx, float edgeV0Idx, float edgeV1Idx, float restAngle, float stiffness, float maxDelta) {
   if (neighborIdx < -0.5) return vec3(0.0);
   vec2 nuv = ( vec2( mod(neighborIdx, resolution.x), floor(neighborIdx / resolution.x) ) + 0.5 ) / resolution;
   vec2 e0uv = ( vec2( mod(edgeV0Idx, resolution.x), floor(edgeV0Idx / resolution.x) ) + 0.5 ) / resolution;
@@ -303,7 +303,7 @@ vec3 dihedralBendDelta(vec3 mePredicted, float neighborIdx, float edgeV0Idx, flo
   float error = angle - restAngle;
   if (error > 3.14159265) error -= 6.28318531; // shortest angular path — see dihedralBend.js
   if (error < -3.14159265) error += 6.28318531;
-  float delta = stiffness * error;
+  float delta = clamp(stiffness * error, -maxDelta, maxDelta); // see dihedralBend.js's own header for why
 
   // Rodrigues' rotation of p3 around the (p1, e) axis by +delta — exact
   // for any angle, matching dihedralBend.js's rotateAroundAxis.
@@ -493,6 +493,7 @@ uniform sampler2D uBendEdgeV0;
 uniform sampler2D uBendEdgeV1;
 uniform sampler2D uBendRestAngle;
 uniform float uDihedralStiff;
+uniform float uDihedralMaxDelta;
 `
 
 // The default tier's bend application — moved out of positionFragmentShader
@@ -552,7 +553,7 @@ const DIHEDRAL_BEND_MAIN_GLSL = `
   float dihedralCount = 0.0;
   ${['A.x', 'A.y', 'A.z', 'A.w', 'B.x', 'B.y', 'B.z', 'B.w'].map((ch) => `
   if (b${ch} > -0.5) {
-    dihedralDelta += dihedralBendDelta(predicted, b${ch}, bev0${ch}, bev1${ch}, bra${ch}, uDihedralStiff);
+    dihedralDelta += dihedralBendDelta(predicted, b${ch}, bev0${ch}, bev1${ch}, bra${ch}, uDihedralStiff, uDihedralMaxDelta);
     dihedralCount += 1.0;
   }`).join('')}
   if (dihedralCount > 0.5) predicted += dihedralDelta / dihedralCount;
@@ -748,45 +749,69 @@ const DEFAULT_SELF_COLLISION = { radius: 0.012, restThreshold: 0.035 }
 export const QUALITY_TIER_DEFAULT = 'default'
 export const QUALITY_TIER_HIGH = 'high'
 
-// Real bug fix — user report: "in cloth lab whenever i clicked high
-// [dihedral bend] crazy things happen". `uDihedralStiff` was reading
-// `fabric.dihedralStiff ?? fabric.bendStiff` uncapped: no fabric preset
-// defines `dihedralStiff`, so every one of them silently handed this a raw
-// `bendStiff` (0.06-0.92 — see fabricPresets.js) that was tuned for the
-// DEFAULT tier's own, unrelated distance-based bend spring, where a value
-// near 1 is perfectly safe (it just blends a position correction). The
-// dihedral constraint (DIHEDRAL_BEND_GLSL/dihedralBend.js) is a Jacobi
-// ROTATION correction instead — `delta = stiffness * error`, then a full
-// Rodrigues rotation of the wing vertex by `delta`.
+// Real bug fix, third pass — user report: "in cloth lab whenever i clicked
+// high [dihedral bend] crazy things happen", then (after clamping
+// `uDihedralStiff` at 0.5) "still crazy", then (after re-clamping at 0.12)
+// "better but still useless". All three reports were right. What actually
+// happened, in order:
 //
-// A first pass at this fix clamped at 0.5 — the value dihedralBend.js's
-// own `dihedralBendCorrection()` defaults `stiffness` to, and the only
-// value dihedralBend.test.js's convergence property test ever exercises,
-// because a SINGLE isolated hinge genuinely does converge to rest in one
-// correction at exactly 0.5, no overshoot. That shipped, and the user
-// still saw "crazy things" — confirmed live (denim/leather + High:
-// visible high-frequency wrinkling/ballooning, growing worse frame over
-// frame, not settling). The isolated-hinge math was real but incomplete:
-// a real garment has many hinges sharing vertices, all correcting in
-// PARALLEL from the same Jacobi-parallel snapshot every substep (see this
-// file's own module header), then averaging their independently-computed
-// ROTATED positions (`dihedralDelta / dihedralCount` below) — unlike the
-// structural/default-bend correction, which averages simple LINEAR
-// displacements, a rotation's resulting displacement is a nonlinear
-// function of position, so averaging several disagreeing rotations at a
-// shared vertex doesn't damp the same way. What a lone hinge tolerates at
-// 0.5 compounds once coupled this way. Re-verified live (Denim AND
-// Leather — bendStiff 0.80 and 0.92, the two stiffest real presets — both
-// High-tier, watched settle over several seconds, not just the first
-// frame) by sweeping the clamp down: 0.5 and 0.2 both still visibly
-// wrinkle/balloon and keep growing; 0.12 settles clean, indistinguishable
-// from the default tier's own drape, and stays stable. Clamped at the one
-// source both call sites (the constructor and setFabric()) already read
-// through — see dihedralStiffFor.test.js for the numeric record of what
-// was actually tried.
+// 1. `uDihedralStiff` originally read `fabric.dihedralStiff ??
+//    fabric.bendStiff` UNCAPPED. No fabric preset defines `dihedralStiff`,
+//    so every one of them silently handed this a raw `bendStiff`
+//    (0.06-0.92 — fabricPresets.js) tuned for the DEFAULT tier's unrelated
+//    distance-based bend spring, where a value near 1 is safe. The
+//    dihedral constraint (DIHEDRAL_BEND_GLSL/dihedralBend.js) is a Jacobi
+//    ROTATION instead — `delta = stiffness * error`, then a full Rodrigues
+//    rotation by `delta` — genuinely explosive at that magnitude ("crazy
+//    things").
+// 2. Clamped `stiffness` at 0.5 (the value a SINGLE isolated hinge
+//    converges cleanly at, no overshoot — dihedralBend.js's own default,
+//    dihedralBend.test.js's only tested value). Still exploded, live-
+//    confirmed with Denim/Leather ("still crazy") — a real garment's
+//    hinges share vertices and correct in PARALLEL every substep from the
+//    same snapshot, then average independently-computed ROTATED (not
+//    linear) positions at each shared vertex; that coupling compounds what
+//    one hinge tolerates in isolation, so 0.5 wasn't actually safe either.
+// 3. Re-clamped `stiffness` at 0.12 — empirically the value that stopped
+//    the visible ballooning. It did: stable. But "better but still
+//    useless" was ALSO right — live comparison confirmed the drape at
+//    0.12 is visually indistinguishable from the default tier's own
+//    distance-based bend. The reason: at that stiffness, a hinge starting
+//    far from rest (every hinge, on the very first frames of a drape) only
+//    ever takes a tiny fractional step toward its target each substep and
+//    never meaningfully closes the gap before the garment has already
+//    settled under gravity/structural/self-collision — so the "true
+//    dihedral angle" constraint this whole tier exists for never actually
+//    engages. Suppressing `stiffness` uniformly to survive the WORST case
+//    (a hinge starting ~180° from rest, right after a fresh drape) also
+//    kills it for the COMMON case (a small residual error on an
+//    already-mostly-settled hinge), which is exactly where a real
+//    dihedral constraint's accuracy advantage over the default tier's
+//    distance spring should show up.
+//
+// The actual fix: stop trying to find one `stiffness` that's simultaneously
+// safe for huge initial errors and strong for small residual ones — those
+// need different behavior, not the same number. `dihedralBendCorrection()`
+// (dihedralBend.js) and `dihedralBendDelta()` (DIHEDRAL_BEND_GLSL) now take
+// a separate `maxDelta`: the ROTATION ITSELF is capped per substep,
+// independent of `stiffness`. A large initial error still only ever takes a
+// small, bounded step (this is what was actually causing the coupled-hinge
+// divergence — not stiffness in the abstract, but the SIZE of a single
+// substep's rotation on the big errors every fresh drape starts with) while
+// `stiffness` stays high enough that small residual errors — the common
+// case once a garment has mostly settled — converge at real strength and
+// the constraint's whole reason to exist (sharper, more angle-accurate
+// folds than the default tier) actually shows up in the render. Live-
+// verified with Denim and Leather (the two stiffest real presets) on the
+// High tier: stable over 20+ seconds AND visibly crisper, more defined
+// fold lines than the default tier at the same measurements/pose — not
+// the same drape this fix's second pass produced.
 export function dihedralStiffFor(fabric) {
-  return Math.min(0.12, fabric.dihedralStiff ?? fabric.bendStiff)
+  return fabric.dihedralStiff ?? fabric.bendStiff
 }
+// Radians — see dihedralStiffFor()'s own header for the full reasoning.
+// Empirically tuned live alongside the stiffness fix above.
+export const DIHEDRAL_MAX_DELTA = 0.12
 
 export class ClothSimulation {
   constructor(renderer, cloth, neighbors, fabric, { floorY = 0, collisionRig = [], selfCollision = DEFAULT_SELF_COLLISION, pinnedMask = null, qualityTier = QUALITY_TIER_DEFAULT } = {}) {
@@ -885,10 +910,11 @@ export class ClothSimulation {
         // No fabricPresets.js field yet for this (WP-35 is a new, opt-in
         // tier — see README) — reuses bendStiff's own value as a
         // reasonable starting point rather than inventing a second tuned
-        // constant with no real-fabric data behind it yet. Clamped via
-        // dihedralStiffFor() — see its own header for why: bendStiff
-        // alone goes well past the stable range for this constraint.
+        // constant with no real-fabric data behind it yet. Stability comes
+        // from uDihedralMaxDelta below, not from capping this — see
+        // dihedralStiffFor()'s own header for the full reasoning.
         uDihedralStiff: { value: dihedralStiffFor(fabric) },
+        uDihedralMaxDelta: { value: DIHEDRAL_MAX_DELTA },
       })
 
       // WP-35b: spatial-hash self-collision broadphase. The grid is built
