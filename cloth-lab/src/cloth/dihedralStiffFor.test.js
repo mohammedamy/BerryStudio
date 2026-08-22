@@ -82,10 +82,11 @@ describe('DIHEDRAL_MAX_DELTA', () => {
 
   it('does NOT engage for a small residual error — high stiffness still converges at real strength once a hinge is nearly at rest', () => {
     const p1 = [0, 0, 0], p2 = [1, 0, 0]
-    // Same construction/convention as the test above: foldDeg=176 measures
-    // as a ~4 degree angle — a small residual error, the common case once
-    // a garment has mostly settled.
-    const foldRad = (176 * Math.PI) / 180
+    // Same construction/convention as the test above: foldDeg=178 measures
+    // as a ~2 degree angle — a small residual error, the common case once
+    // a garment has mostly settled, and safely under DIHEDRAL_MAX_DELTA
+    // (0.06 rad ≈ 3.4°) even multiplied by leather's own 0.92 stiffness.
+    const foldRad = (178 * Math.PI) / 180
     const p3 = [0.5, 0, 1]
     const p4 = [0.5, Math.sin(foldRad), Math.cos(foldRad)]
     const restRad = 0
