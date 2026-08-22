@@ -387,6 +387,56 @@ export const View3D = (() => {
   }
   function sphere(r, mat) { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), mat); m.castShadow = true; return m; }
 
+  // One hand — a flattened palm capsule + 4 fingers (the middle two
+  // slightly longer, matching real proportions) + an angled thumb, added
+  // as children of `parentGroup` (an arm's own pivot group) at the wrist
+  // (armLen down from the shoulder). Direct port of
+  // cloth-lab/src/body/Avatar.jsx's own Hand component — same geometry,
+  // expressed as imperative THREE.Mesh construction the way every other
+  // shape in this module already is, instead of JSX. Replaces what used
+  // to be a single flattened capsule blob at the wrist.
+  function addHand(parentGroup, r, armLen, mat) {
+    const fingerR = r * 0.34, fingerLen = r * 3.4, palmLen = r * 1.7;
+    const wristY = -armLen;
+    const palm = capsule(r * 0.92, palmLen * 0.35, mat);
+    palm.scale.set(1.3, 1, 0.6);
+    palm.position.set(0, wristY - palmLen * 0.3 - palmLen * 0.4, 0);
+    parentGroup.add(palm);
+    [-1.7, -0.6, 0.6, 1.7].forEach((fx, i) => {
+      const long = i === 1 || i === 2;
+      const finger = capsule(fingerR, fingerLen * (long ? 0.62 : 0.5), mat);
+      finger.position.set(fx * fingerR * 1.85, wristY - palmLen * 0.3 - palmLen * 0.75 - fingerLen * (long ? 0.34 : 0.28), 0);
+      finger.rotation.z = fx * 0.04;
+      parentGroup.add(finger);
+    });
+    const thumb = capsule(fingerR * 1.2, fingerLen * 0.4, mat);
+    thumb.position.set(r * 1.55, wristY - palmLen * 0.3 - palmLen * 0.15, r * 0.5);
+    thumb.rotation.set(0.25, 0, -0.85);
+    parentGroup.add(thumb);
+  }
+
+  // One foot — a main (heel-to-arch) mass, a rounded heel behind it, and a
+  // tapered toe cap in front, added as children of `parentGroup` (a leg's
+  // own pivot group) at the ankle. Direct port of
+  // cloth-lab/src/body/Avatar.jsx's own Foot component. Replaces what used
+  // to be a single capsule, rotated 90 degrees and stretched, that read as
+  // a blunt cylindrical stump rather than a foot.
+  function addFoot(parentGroup, r, footLen, ankleY, mat) {
+    const baseY = -ankleY - footLen * 0.1;
+    const main = sphere(r * 1.7, mat);
+    main.scale.set(0.82, 0.46, 1.5);
+    main.position.set(0, baseY, footLen * 0.32);
+    parentGroup.add(main);
+    const heel = sphere(r * 1.4, mat);
+    heel.scale.set(0.78, 0.5, 0.62);
+    heel.position.set(0, baseY + footLen * 0.02, footLen * 0.32 - footLen * 0.42);
+    parentGroup.add(heel);
+    const toe = sphere(r * 1.2, mat);
+    toe.scale.set(0.66, 0.36, 0.58);
+    toe.position.set(0, baseY - footLen * 0.06, footLen * 0.32 + footLen * 0.4);
+    parentGroup.add(toe);
+  }
+
   // Per-bundled-avatar landmark overrides — keyed by the GLB's filename
   // stem (see BUNDLED_AVATARS in js/app.js), not by category, since these
   // correct one specific mesh's own proportions, not every avatar sharing
@@ -468,12 +518,23 @@ export const View3D = (() => {
     const { female, kid, H, headH, neckTopY, shoulderY, hipY, chestR, waistR, hipR, shoulderHalf, neckR, span } = d0;
     curH = H;
     const skin = skinMat(category);
-    // torso lathe (round) then flattened front-to-back
+    // torso lathe (round) then flattened front-to-back. A real waist->
+    // ribcage->bust S-curve, not three straight lerped segments — same
+    // pass cloth-lab/src/body/computeBodyDims.js's own torsoProfile() got
+    // (that file's the fuller writeup of why: 2 extra smoothing points,
+    // capped there by a hard collision-capsule budget this file has no
+    // equivalent of, but kept to the same count here for one shared
+    // silhouette language between the two apps). Every anchor Y this
+    // file's OWN buildGarment() below also hardcodes (waist at
+    // hipY+span*0.44, chest at hipY+span*0.76) is unchanged — only the
+    // curve BETWEEN them picked up the 2 new points.
     const torso = lathe([
       [hipR * 0.55, hipY - span * 0.16],
       [hipR * 0.98, hipY],
       [hipR, hipY + span * 0.06],
+      [hipR * 0.94, hipY + span * 0.23], // hip->waist smoothing point
       [waistR, hipY + span * 0.44],
+      [waistR * 1.07, hipY + span * 0.58], // waist->chest smoothing point (ribcage flare)
       [chestR * (female ? 0.98 : 1.02), hipY + span * 0.76],
       [chestR * (female ? 0.9 : 1.06), shoulderY - span * 0.03],
       [neckR * 1.15, shoulderY + span * 0.02],
@@ -512,25 +573,54 @@ export const View3D = (() => {
       bodyGroup.add(d);
     });
 
-    // arms — pivot groups at the shoulder so the walk swings naturally
+    // arms — pivot groups at the shoulder so the walk swings naturally.
+    // A single continuously-tapered lathe (same technique the torso uses,
+    // same profile cloth-lab/src/body/computeBodyDims.js's armProfile()
+    // uses) instead of 3 stacked capsules — that stacking is exactly what
+    // an artist's wooden posing mannequin looks like (cheap articulation,
+    // visible joint seams); one lathe mesh has no seams to read as "toy"
+    // in the first place. Ends in a real hand (addHand below) instead of
+    // a flattened capsule blob.
     const { armLen, upperR } = d0;
     [-1, 1].forEach(s => {
       const g = new THREE.Group(); g.position.set(s * shoulderHalf * 0.95, shoulderY - span * 0.04, 0);
-      const upper = capsule(upperR, armLen * 0.42, skin); upper.position.y = -armLen * 0.26; g.add(upper);
-      const fore = capsule(upperR * 0.72, armLen * 0.4, skin); fore.position.y = -armLen * 0.66; g.add(fore);
-      const hand = capsule(upperR * 0.6, armLen * 0.12, skin); hand.position.y = -armLen * 0.92; hand.scale.z = 0.6; g.add(hand);
+      const arm = lathe([
+        [upperR * 1.4, 0],
+        [upperR * 1.04, -armLen * 0.10], // bicep swell
+        [upperR * 0.98, -armLen * 0.22],
+        [upperR * 0.80, -armLen * 0.38],
+        [upperR * 0.70, -armLen * 0.44], // elbow pinch
+        [upperR * 0.64, -armLen * 0.52],
+        [upperR * 0.54, -armLen * 0.66],
+        [upperR * 0.44, -armLen * 0.82],
+        [upperR * 0.36, -armLen * 0.94],
+        [upperR * 0.32, -armLen * 1.0], // wrist
+      ], skin, 16);
+      g.add(arm);
+      addHand(g, upperR * 0.32, armLen, skin);
       g.rotation.z = s * 0.08;
       bodyGroup.add(g); limbs["arm" + s] = g;
     });
 
-    // legs — pivot groups at the hip
+    // legs — pivot groups at the hip. Same lathe-not-stacked-capsules
+    // technique as the arms above; ends in a real foot (addFoot below)
+    // instead of a capsule rotated 90 degrees and stretched.
     const { legLen, thighR } = d0;
     [-1, 1].forEach(s => {
       const g = new THREE.Group(); g.position.set(s * hipR * 0.5, hipY - span * 0.05, 0);
-      const thigh = capsule(thighR, legLen * 0.4, skin); thigh.position.y = -legLen * 0.24; g.add(thigh);
-      const calf = capsule(thighR * 0.62, legLen * 0.4, skin); calf.position.y = -legLen * 0.66; g.add(calf);
-      const foot = capsule(thighR * 0.5, legLen * 0.12, skin);
-      foot.rotation.x = Math.PI / 2; foot.position.set(0, -legLen * 0.97, legLen * 0.06); foot.scale.set(1, 1.3, 1); g.add(foot);
+      const leg = lathe([
+        [thighR * 1.3, 0],
+        [thighR * 0.98, -legLen * 0.12], // thigh swell
+        [thighR * 0.86, -legLen * 0.28],
+        [thighR * 0.64, -legLen * 0.46],
+        [thighR * 0.56, -legLen * 0.52], // knee pinch
+        [thighR * 0.62, -legLen * 0.60], // calf swell
+        [thighR * 0.54, -legLen * 0.70],
+        [thighR * 0.44, -legLen * 0.83],
+        [thighR * 0.38, -legLen * 0.92], // ankle
+      ], skin, 16);
+      g.add(leg);
+      addFoot(g, thighR * 0.38, thighR * 2.8, legLen * 0.92, skin);
       bodyGroup.add(g); limbs["leg" + s] = g;
     });
 
@@ -563,7 +653,11 @@ export const View3D = (() => {
 
   // ---------- hair ----------
   function addHair(headG, headH, category) {
-    const mat = new THREE.MeshStandardMaterial({ color: HAIR[category] || 0x2a1c14, roughness: 0.5, metalness: 0.05, sheen: 0.6, side: THREE.DoubleSide });
+    // MeshPhysicalMaterial, not Standard — `sheen` isn't a real property of
+    // MeshStandardMaterial (confirmed live in this session's own console:
+    // "THREE.Material: 'sheen' is not a property of THREE.MeshStandardMaterial",
+    // silently ignored rather than erroring). Real bug fix, not a style pass.
+    const mat = new THREE.MeshPhysicalMaterial({ color: HAIR[category] || 0x2a1c14, roughness: 0.5, metalness: 0.05, sheen: 0.6, side: THREE.DoubleSide });
     // crown cap — hairline lifted above the eyes so the face stays visible
     const cap = new THREE.Mesh(new THREE.SphereGeometry(headH * 0.55, 24, 18, 0, Math.PI * 2, 0, Math.PI * 0.46), mat);
     cap.position.y = headH * 0.08; cap.castShadow = true; headG.add(cap);

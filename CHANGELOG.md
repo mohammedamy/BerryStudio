@@ -6,6 +6,103 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Mannequin redesign: a much more human body, in both 3D Preview and Cloth Lab
+
+User feedback on the dihedral-bend/self-collision instability fix above was
+"not solved" — explicitly paused per the user's own request, not resumed
+here. Separately, the user asked for the procedural avatar itself (used by
+both the root app's 3D Preview and Cloth Lab) to look "much more human"
+with "more body features." This entry covers that redesign only.
+
+### Changed
+- **Torso silhouette**: `torsoProfile()` (`cloth-lab/src/body/computeBodyDims.js`)
+  grew from 7 to 9 lathe points, adding a hip→waist and a waist→chest
+  smoothing point — turns three straight lerped segments into a real
+  waist-to-ribcage-to-bust S-curve. The three load-bearing anchor Y-values
+  and radii (waist at `hipY + span*0.44`, chest at `hipY + span*0.76`,
+  shoulder-base at `shoulderY - span*0.03`) are kept byte-for-byte
+  unchanged, since `pattern/placement.js` (4 sites) and
+  `body/collisionRig.js` independently hardcode their own copies of the
+  same three values — only the curve *between* the anchors changed. Capped
+  at 9 points (not more) because `deriveCollisionRig()` builds one
+  collision capsule per consecutive point pair and the existing
+  `MAX_COLLISION_CAPSULES = 16` GLSL uniform-array limit only leaves room
+  for 8 torso segments once the neck/head/shoulder/arm/hip-thigh primitives
+  are accounted for — a first 11-point draft was caught immediately by the
+  pre-existing `collisionRig.test.js` "never exceeds MAX_COLLISION_CAPSULES"
+  test.
+- **Arm/leg silhouette**: `armProfile()`/`legProfile()` grew from 7 to
+  10/9 points respectively, adding a subtle bicep/thigh swell and an
+  elbow/knee pinch (the narrowest point on the limb, where a real joint
+  reads as narrower than the muscle either side of it) — reverses an
+  earlier deliberate "monotonic taper only, no bulge" design decision.
+  Still ends at the exact same wrist/ankle Y and radius the new hand/foot
+  attach to. `computeBodyDims.test.js`'s old strict "every point narrower
+  than the last" assertion no longer holds by design; replaced with tests
+  for "widest at the shoulder/hip, narrowest at the hand/ankle" and "the
+  swell stays subtle — never wider than the attachment point."
+- **New hands and feet**, replacing a bare capsule "hand blob" and a
+  rotated/stretched capsule "foot": a flattened palm plus four fingers
+  (middle two longer) and one angled thumb; a foot built from a main
+  flattened/elongated mass plus a heel sphere behind and a toe-cap sphere
+  in front. Added as `Hand`/`Foot` components in
+  `cloth-lab/src/body/Avatar.jsx`, and as equivalent imperative
+  `addHand()`/`addFoot()` helpers in `js/three-view.js` (that file builds
+  its scene graph directly with `THREE.*` calls, not JSX, so it's a
+  hand-verified parallel port rather than shared code) — both driven by
+  the same wrist/ankle radius so they scale consistently with the rest of
+  the body.
+- **Face, hair, bust, and deltoid shoulders ported into Cloth Lab's
+  `Avatar.jsx`**, which previously had none of them ("facial detail is
+  still intentionally left out" per its own prior comment) — `js/three-view.js`
+  already had this detail; Cloth Lab's avatar is now a real match instead
+  of a plainer stand-in. Includes a `HAIR_COLOR` palette per category
+  (women/men/girls/boys) mirroring `js/three-view.js`'s existing `HAIR`
+  table, and category-appropriate hair styling (long hair + side-locks for
+  women, ponytails for girls, short cap for boys/men).
+- Both arm and leg limbs went from 3 stacked capsules (an artist's wooden
+  posing mannequin's own construction technique, "cheap articulation" —
+  and it reads exactly as toy-like as that sounds) to a single
+  continuously-tapered lathe mesh per limb, removing the visible joint
+  seams entirely.
+
+### Fixed
+- **A real, pre-existing bug**: `js/three-view.js`'s `addHair()` set
+  `sheen`/`sheenColor` on a `THREE.MeshStandardMaterial`, which silently
+  no-ops those fields with a console warning
+  (`THREE.Material: 'sheen' is not a property of THREE.MeshStandardMaterial.`)
+  — `sheen` is only valid on `THREE.MeshPhysicalMaterial`. Confirmed live
+  in this session's own console; fixed by switching to
+  `MeshPhysicalMaterial`. (Caught a second time mid-redesign: an early
+  draft of Cloth Lab's own new `hairMat` copied the same
+  `meshStandardMaterial` + `sheen` pattern verbatim from the file it was
+  ported from — same warning, same fix, before it ever shipped.)
+
+### Verification
+- `npx vitest run` in `cloth-lab/`: 195/195 pass (12 in
+  `computeBodyDims.test.js`, including a new regression test pinning the
+  three cross-file anchor values so a future edit that drifts them fails
+  loudly here instead of silently mis-aligning collision capsules or
+  garment placement against the visible mesh).
+- `node --test "test/**/*.test.js"` at the repo root: 275/275 pass (no
+  test targets `js/three-view.js` directly — confirmed via
+  `grep -rl "three-view" test/`, no matches — so this only confirms no
+  regression elsewhere).
+- `npx oxlint` on every touched file: zero new warnings (checked
+  `js/three-view.js`'s pre-existing warning set against a stash of the
+  unmodified file — identical count and kind, just shifted line numbers).
+- Live-verified in Cloth Lab (Off/body-only debug view) across all 4
+  categories and 5 poses (Standing, T-pose, Seated, Contrapposto, A-pose),
+  plus with an actual garment draped on the new body via the cloth sim —
+  no clipping/z-fighting. Live-verified in the root app's 3D Preview in a
+  real (non-sandboxed) Chrome tab — the sandboxed dev-pane browser used for
+  the rest of this session has a confirmed, unrelated pre-existing WebGL
+  limitation that blocks 3D Preview entirely regardless of code changes
+  (verified via a rigorous git-stash A/B test, old vs. new file, in fresh
+  tabs with `fetch()`-confirmed file content, showing the identical error
+  either way) — real Chrome showed no such error, no console warnings, and
+  the new hand/foot/hair/face detail rendering correctly.
+
 ## Fourth pass: found the real cause — self-collision vs. dihedral bend
 
 User report right after the third pass shipped: "back to crazy again."
