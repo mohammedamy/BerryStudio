@@ -6,6 +6,44 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Follow-up: the previous dihedral-stiffness fix (0.5 clamp) wasn't enough
+
+User report right after that fix shipped: "still crazy." Live-tested this
+time (Denim/Leather + High tier, watched settle over several seconds
+rather than judging from the first frame) instead of trusting the earlier
+fix's isolated-hinge math alone, and confirmed it directly: visible
+wrinkling/ballooning on the garment that kept growing worse, not
+settling, even at the 0.5 clamp.
+
+### Fixed
+- **The previous fix's 0.5 clamp was real (a single isolated hinge does
+  converge to rest in exactly one correction at that value, no
+  overshoot) but incomplete** — it only modeled one hinge in isolation.
+  A real garment has many hinges sharing vertices, all correcting in
+  PARALLEL from the same Jacobi snapshot every substep
+  (`ClothSimulation.js`'s own module header describes this
+  Jacobi-parallel structure), then averaging their independently-
+  computed ROTATED positions at each shared vertex
+  (`dihedralDelta / dihedralCount`) — unlike the structural/default-bend
+  constraints, which average simple linear displacements, a rotation's
+  resulting displacement is a nonlinear function of position, so
+  averaging several disagreeing rotations at a shared vertex doesn't
+  damp the same way a linear average does. What one hinge tolerates at
+  0.5 compounds once coupled this way.
+  Re-verified live by sweeping the clamp down with Denim AND Leather
+  (`bendStiff` 0.80 and 0.92, the two stiffest real presets) on the High
+  tier: 0.5 and 0.2 both still visibly wrinkle/balloon and keep growing;
+  **0.12** settles clean, indistinguishable from the default tier's own
+  drape, and stays stable over 20+ seconds on a fresh reload. Lowered
+  `dihedralStiffFor()`'s clamp from 0.5 to 0.12 — same one function, same
+  two call sites as before.
+  Updated `dihedralStiffFor.test.js` to assert the real 0.12 clamp
+  (confirmed non-vacuous — wool and leather's own `bendStiff` both
+  exceed it) and kept the 0.5-converges-one-isolated-hinge property as a
+  documented record of why that number looked safe the first time and
+  why it wasn't enough on its own. Verified: all 192 `cloth-lab` tests
+  pass, `oxlint` clean.
+
 ## Fix: "High (dihedral bend)" quality tier went unstable on real fabrics
 
 User report: "in cloth lab whenever i clicked high[dihederal bend] crazy
