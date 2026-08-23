@@ -12,6 +12,7 @@ import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, expor
 import './girls-leotards.js'; // side-effect only — adds the 100-pattern Girls' Gymnastics Leotards collection
 import './underwear-library.js'; // side-effect only — adds the 44-pattern Underwear & Bra collection
 import { FancyGen } from './fancy-patterns.js';
+import './reference-patterns.js'; // side-effect only — adds the 12-pattern Phase 2 reference set (docs/plan 4.md)
 import { PatternValidator } from './validate.js';
 import { renderPatternFlat } from './pattern-flat.js';
 import { AIProviders, AI_PROVIDER_IDS, getProvider, loadLocalModelFromFile, restoreLocalModelFromCache, runOnnxTestInference, loadSegmentationModel, runSegmentationOn } from './ai-providers.js';

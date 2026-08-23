@@ -48,16 +48,19 @@ test('every pattern in the library renders a distinct thumbnail, or honestly dec
   if (crashed > 0) throw new Error(`renderPatternFlat threw on ${crashed} pattern(s) — it must always degrade to null, never throw`);
   if (duplicates.length > 0) throw new Error(`identical thumbnail SVG produced for different patterns:\n  ${duplicates.join('\n  ')}`);
 
-  // Baseline measured 2026-08-22 (Phase 1): 254/308 compose a real flat.
-  // The 54 declines are patterns with no core role composePattern
-  // recognizes yet — 34 from the 264-pattern sweep's own documented
-  // roleless pieces (see test/library-roles.test.js), plus ~20 bra
-  // patterns in js/underwear-library.js built from cup/band/strap pieces
-  // with no torso-panel-shaped role at all (that collection also declares
-  // roles outside the 46-value vocabulary entirely — see js/underwear-
-  // library.js; a genuine gap for a later phase, not something this
-  // renderer should paper over by guessing a placement).
-  assert.ok(composed >= 254, `thumbnail composition regressed: ${composed} composed, expected at least 254`);
+  // Baseline measured 2026-08-23 (Phase 2): 288/308 compose a real flat —
+  // up from Phase 1's 254 once composePattern() gained a skirt/hip-only
+  // core fallback and a last-resort name-based "front" fallback (the same
+  // bounded idiom js/validate.js's pairFrontBack and cloth-lab's
+  // classifyLegacy already use) for js/ai.js-derived trouser/skirt pieces
+  // that declare no role at all. The remaining 20 declines are exactly
+  // js/underwear-library.js's bra patterns (wb01-10, gb01-10) — built from
+  // cup/band/strap pieces with no torso-panel-shaped role at all, and that
+  // collection also declares roles outside the 46-value vocabulary
+  // entirely (see js/underwear-library.js) — a genuine gap for a later
+  // phase, not something this renderer should paper over by guessing a
+  // placement.
+  assert.ok(composed >= 288, `thumbnail composition regressed: ${composed} composed, expected at least 288`);
 });
 
 // A stricter unit-level check on a single well-formed pattern: rendering

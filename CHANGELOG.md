@@ -6,6 +6,94 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-51: pattern library rebuild, Phase 2 — 12 reference patterns drafted to the full professional standard
+
+docs/plan 4.md's Phase 2: 3 patterns per category (women/men/girls/boys),
+each spanning a fitted bodice+sleeve, a skirt/trouser, and a multi-piece
+tailored garment — the reference set the plan's own §9 says to stop and
+present for review before extending the idiom to the 100/64/100/44-
+pattern collections in Phases 3-4. New file: `js/reference-patterns.js`
+(registered in `js/app.js`, alongside `js/library.js`/`js/girls-leotards.
+js`/`js/underwear-library.js`) — none of the existing 264/308 registered
+patterns changed.
+
+### Correction to WP-50's shipped mechanism (caught before any pattern
+### adopted it)
+`js/validate.js`'s seam-edge parity upgrade shipped in WP-50 with its own
+new `piece.seamEdges: { key: [fromIdx, toIdx] }` field — drafting the
+first reference pattern immediately surfaced that this duplicated the
+`piece.edges: [{ fromIdx, toIdx, seamId }]` field `js/fancy-patterns.js`
+already populates and cloth-lab already trusts for real 3D seams. Reused
+that instead: `checkSeamLengthParity` now reads a shared `edges[].seamId`
+between a pair, not a second parallel mechanism. Zero-impact — WP-50's
+own commit message notes no pattern had adopted `seamEdges` yet.
+`test/validate.test.js`'s seamEdges coverage updated to match.
+
+### What's in it
+12 new patterns (`ref_w_blouse`, `ref_w_skirt`, `ref_w_shirtdress`,
+`ref_m_tee`, `ref_m_trousers`, `ref_m_shirt`, `ref_g_top`, `ref_g_skirt`,
+`ref_g_shirtdress`, `ref_b_tee`, `ref_b_shorts`, `ref_b_shirt`), each with
+a named drafting basis and stated ease budget in its own file comment,
+real construction pieces (yokes, plackets, collar+stand, two-piece
+sleeves, cuffs, waistbands, pockets), real suppression (bust/waist/
+shoulder darts, princess seams, a raglan seam, box and knife pleats via
+`js/pleats.js`'s real width math — five genuinely different methods
+across the set, not one shared silhouette function), notches at every
+seam needing registration (89.3% piece coverage), `curves` metadata on
+every neckline/armhole/princess/raglan/crotch seam, and `edges[].seamId`
+declarations on the seams that are actually measurable that way (the
+Phase 1 mechanism — see WP-50). No two designs in the same category share
+more than one of piece count / seam architecture / suppression method /
+sleeve construction / neckline construction / closure type.
+
+### Real bugs found and fixed while building these (not fixed at the
+### reporting layer)
+- `js/pattern-flat.js`'s `sharedSeamId`-based placement only handled a
+  princess seam's center/side split; extended it to also flank a skirt's
+  `skirt-side-gore-left`/`-right` panels by their DECLARED role rather
+  than an alternating guess — the previous code would have stacked both
+  gores on the same side once a skirt-only pattern could compose a
+  thumbnail at all (see next point).
+- `composePattern()` had no core-selection fallback for a pattern with no
+  bodice at all (a skirt/trouser-only design) — `sel.core` was simply
+  null and the thumbnail declined. Added a skirt/hip-only fallback (the
+  skirt panel becomes the anchor instead of an accessory stacked below
+  something else) and a bounded, last-resort name-based "front" fallback
+  for `role:'other'`/roleless leg panels — the SAME idiom `js/validate.
+  js`'s `pairFrontBack` and cloth-lab's `classifyLegacy` already use for
+  this identical gap (docs/plan 4.md §4.2: there is no trouser-front role
+  in the 46-value vocabulary). Retroactively improved the LEGACY
+  library's own thumbnail coverage too: 254/308 → 288/308 (measured;
+  `test/library-thumbnails.test.js`'s floor raised to match) — the
+  remaining 20 declines are exactly `js/underwear-library.js`'s bra
+  patterns, a real, separate, already-documented gap.
+- `checkSeamLengthParity`'s real-edge branch (WP-50) is only as honest as
+  the geometry feeding it: three separate off-by-construction bugs
+  surfaced as genuine parity FAILURES while drafting `ref_w_shirtdress`/
+  `ref_m_shirt`/`ref_b_shirt` (a yoked back's underarm-to-hem deltas not
+  actually matching the front's; a men's-shirt back panel's pleat-widened
+  yoke-seam width leaking into the underarm point instead of tapering
+  back down before it; the men's-shirt pleat-fold notches placed at the
+  underarm Y instead of the yoke-seam Y, caught by
+  `test/reference-patterns.test.js`'s own "notch lies on its own outline"
+  check) — all three are exactly the kind of real drafting/authoring
+  error §5.2's honest-parity-check upgrade exists to catch, not
+  something to loosen the check to avoid.
+
+### Verification
+New `test/reference-patterns.test.js` (10 tests) asserts the REAL final
+§8 gates on these 12 (not a regression floor the way the legacy-library
+test files do): zero validator failures with real `bodyChestCm`/
+`offsetPoly`, 100% valid roles, every design has a real construction
+feature, ≥80% notch coverage with every notch actually on its own piece's
+outline, 100% bilingual, 12 distinct composed thumbnails, and clean
+grading (no self-intersection/degeneracy) at XXS/M/6XL × intl/egypt/saudi
+for the adult patterns and across all 7 `KIDS_AGES` bands for the kids
+ones. `npm test`: 299/299 pass. Visually verified all 12 generated
+thumbnails in-browser — every one reads as its own distinct, recognizable
+garment (including the raglan tee's genuinely different silhouette from
+every set-in-sleeve design in the set).
+
 ## WP-50: pattern library rebuild, Phase 0-1 — baseline, seam-edge parity, and a real generated thumbnail per pattern
 
 First two phases of `docs/plan 4.md` (Professional Pattern Library

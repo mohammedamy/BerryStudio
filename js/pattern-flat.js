@@ -161,8 +161,30 @@ function firstNonEmpty(pieces, roles) {
   for (const r of roles) { const found = byRole(pieces, r); if (found.length) return found; }
   return [];
 }
+// Same last-resort "front" name idiom js/validate.js's pairFrontBack and
+// cloth-lab's classifyLegacy both already use for pieces with no
+// placement-relevant role — js/ai.js's buildTrousers/buildSkirt declare
+// none at all, and this generator's own trouser/short leg panels declare
+// role:'other' (honest per docs/plan 4.md §4.2: there is no trouser-front
+// role in the 46-value vocabulary). Used ONLY as a last resort, ONLY for
+// the thumbnail (never for validator pairing/roles), and only among
+// pieces with no useful role already — bounded exactly the way
+// classifyLegacy's own fallback is.
+const FRONT_NAME_RE = /front/i;
 function selectParts(pieces) {
-  const core = firstNonEmpty(pieces, ['bodice-front-center', 'front-panel', 'brief-front', 'shorts-front', 'bodice-front-side']);
+  let core = firstNonEmpty(pieces, ['bodice-front-center', 'front-panel', 'brief-front', 'shorts-front', 'bodice-front-side']);
+  if (!core.length) {
+    // A skirt/hip-only pattern (no bodice at all) — the skirt panel IS
+    // the silhouette, not an accessory stacked below something else.
+    // composePattern() detects sel.lower === sel.core and skips
+    // re-adding it, while still running the side-gore flanking below
+    // against it.
+    core = firstNonEmpty(pieces, ['skirt-front-gore', 'hip-panel-front', 'godet']);
+  }
+  if (!core.length) {
+    const other = pieces.filter((p) => (!p.role || p.role === 'other') && p.name && FRONT_NAME_RE.test(p.name.en || ''));
+    core = other.slice(0, 1);
+  }
   return {
     core: core[0] || null,
     extraCore: core.slice(1),
@@ -254,7 +276,36 @@ function composePattern(pieces) {
   // bilateral pair) flank it the same way bodice side panels flank the
   // center, seam-sharing when the generator declared it.
   let bottomY = coreBox.h;
-  if (sel.lower) {
+  // A skirt/hip-only pattern (selectParts() has no bodice to pick, so it
+  // promotes the skirt panel itself to core) — sel.lower === sel.core
+  // here. It's already been added once as the core; this block only
+  // needs to run far enough to flank it with any side gores, not add it
+  // a second time or shift it below itself.
+  if (sel.lower && sel.lower === sel.core) {
+    const rawToWorld = { dx: coreDx, dy: coreDy };
+    let gRightEdge = coreBox.w / 2, gLeftEdge = -coreBox.w / 2;
+    for (const g of sel.lowerSide) {
+      const isLeft = g.role === 'skirt-side-gore-left';
+      const seamId = sharedSeamId(sel.core, g);
+      let gShape;
+      if (seamId) {
+        gShape = translateShape(shapeOf(g), rawToWorld.dx, rawToWorld.dy);
+        if (isLeft && bboxOf(gShape.outline).minX >= 0) gShape = mirrorShape(gShape);
+        if (!isLeft && bboxOf(gShape.outline).maxX <= 0) gShape = mirrorShape(gShape);
+      } else {
+        const norm = normalize(shapeOf(g));
+        const dx = isLeft
+          ? gLeftEdge + norm.box.w * OVERLAP - norm.box.w / 2
+          : gRightEdge - norm.box.w * OVERLAP - (-norm.box.w / 2);
+        gShape = translateShape(norm.shape, dx, 0);
+      }
+      add(gShape, 'main', 1);
+      const gb = bboxOf(gShape.outline);
+      if (isLeft) gLeftEdge = Math.min(gLeftEdge, gb.minX);
+      else gRightEdge = Math.max(gRightEdge, gb.maxX);
+      bottomY = Math.max(bottomY, gb.maxY);
+    }
+  } else if (sel.lower) {
     const { shape: lowerShape, box: lowerBox, dx: lowerDx, dy: lowerDy } = normalize(shapeOf(sel.lower));
     // The Y-translate actually applied to the (already-normalized)
     // lowerShape — captured once, before bottomY advances, since both
@@ -269,19 +320,34 @@ function composePattern(pieces) {
     // which starts from shapeOf(g)'s RAW (un-normalized) coordinates.
     const rawToWorld = { dx: lowerDx, dy: lowerDy + placementDy };
 
-    let gEdge = bboxOf(placed.outline).maxX;
+    // skirt-side-gore-left/right are two DISTINCT declared pieces (not a
+    // bilateral mirror pair), so which side each renders on comes from
+    // its own declared role, not an alternating guess.
+    let gRightEdge = bboxOf(placed.outline).maxX;
+    let gLeftEdge = -gRightEdge;
     for (const g of sel.lowerSide) {
+      const isLeft = g.role === 'skirt-side-gore-left';
       const seamId = sharedSeamId(sel.lower, g);
       let gShape;
       if (seamId) {
         gShape = translateShape(shapeOf(g), rawToWorld.dx, rawToWorld.dy);
+        // Safety: if this piece's own raw coordinates land on the wrong
+        // side for its declared role (e.g. right/left gores authored
+        // from literally the same symmetric shape), mirror it rather
+        // than render two gores stacked on the same side.
+        if (isLeft && bboxOf(gShape.outline).minX >= 0) gShape = mirrorShape(gShape);
+        if (!isLeft && bboxOf(gShape.outline).maxX <= 0) gShape = mirrorShape(gShape);
       } else {
         const norm = normalize(shapeOf(g));
-        gShape = translateShape(norm.shape, gEdge - norm.box.w * OVERLAP - (-norm.box.w / 2), placementDy);
+        const dx = isLeft
+          ? gLeftEdge + norm.box.w * OVERLAP - norm.box.w / 2
+          : gRightEdge - norm.box.w * OVERLAP - (-norm.box.w / 2);
+        gShape = translateShape(norm.shape, dx, placementDy);
       }
       add(gShape, 'main', 1);
       const gb = bboxOf(gShape.outline);
-      gEdge = Math.max(gEdge, gb.maxX);
+      if (isLeft) gLeftEdge = Math.min(gLeftEdge, gb.minX);
+      else gRightEdge = Math.max(gRightEdge, gb.maxX);
       bottomY = Math.max(bottomY, gb.maxY);
     }
   }
