@@ -412,3 +412,52 @@ export function legPanel(waistW, hipW, hemW, riseLen, inseamLen, isFront) {
   outline.hemInIdx = 3;
   return outline;
 }
+
+// A dramatic wide sleeve wedge (kimono/batwing/cape-sleeve style): a
+// wide curved shoulder-to-underarm edge flaring to a relatively narrow
+// cuff — a genuinely different sleeve construction from a fitted set-in
+// cap or a gathered puff, closer to a flare/godet than a tailored sleeve.
+export function wideSleevePc(shoulderW, sleeveLen, wideF) {
+  wideF = wideF == null ? 1 : wideF;
+  const seg = [[0, 0], [shoulderW * 0.5, -shoulderW * 0.15 * wideF], [shoulderW, 0]];
+  const topPts = qBez(...seg, 6);
+  // The cuff-inner corner is kept a guaranteed minimum distance from the
+  // piece's own x=0 (never closer than 25% of shoulderW) — otherwise, for
+  // some shoulderW/sleeveLen/wideF combinations, it lands close enough to
+  // x=0 that checkFoldSymmetry's heuristic (a real fold detector, not a
+  // guess at THIS piece specifically) mistakes the closing edge for a
+  // candidate fold and correctly reports it as not straight (it isn't —
+  // this piece has no fold at all, it's a bilateral mirrored pair).
+  const cuffInnerX = Math.max(shoulderW * 0.25, shoulderW * 0.4 - sleeveLen * wideF * 0.15);
+  const outline = [[0, 0], ...topPts, [shoulderW * 0.6 + sleeveLen * wideF * 0.5, sleeveLen], [cuffInnerX, sleeveLen]];
+  return withCurves(outline, [{ fromIdx: 0, toIdx: topPts.length, ...qBezToCubic(...seg) }]);
+}
+
+// Mirrors a fold-half outline (produced by plainBodicePanel()/
+// princessPanel() etc., fold edge at x=0) into the FULL symmetric piece
+// it represents — same technique js/pattern-flat.js's unfoldPiece() uses
+// (that file's own header explains the index math this mirrors: the
+// interior points get a reflected-and-reversed copy appended, and any
+// curve gets a matching reflected-and-reversed copy with c1/c2 swapped).
+// Used for an OPEN-front robe/kaftan panel: a full, un-split front with
+// NO center-front seam at all (the wearer leaves it open or ties a sash
+// — a real, common construction, exactly js/data.js's existing abaya
+// front-panel convention) rather than two cut-on-fold halves meeting at
+// a seam.
+export function mirrorHalfToFull(half) {
+  const o = half;
+  const n = o.length;
+  const tail = [];
+  for (let k = n - 2; k >= 1; k--) tail.push([-o[k][0], o[k][1]]);
+  const outline = o.concat(tail);
+  const tailIndexOf = (k) => 2 * n - 2 - k;
+  const remapTail = (k) => (k === 0 || k === n - 1) ? k : tailIndexOf(k);
+  const curves = [];
+  for (const c of (o.curves || [])) {
+    curves.push({ ...c });
+    const ta = remapTail(c.toIdx), tb = remapTail(c.fromIdx);
+    if (ta === c.toIdx && tb === c.fromIdx) continue;
+    curves.push({ fromIdx: ta, toIdx: tb, c1: [-c.c2[0], c.c2[1]], c2: [-c.c1[0], c.c1[1]] });
+  }
+  return withCurves(outline, curves);
+}

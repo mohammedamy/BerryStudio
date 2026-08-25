@@ -37,20 +37,26 @@ const ROLE_VOCABULARY = new Set([
   'godet', 'tier', 'pocket', 'facing', 'lining', 'cuff', 'rib-cuff', 'hem-band', 'other',
 ]);
 
-// Baseline measured 2026-08-22 (Phase 1): 264 patterns / 1867 pieces —
-// 1797 declare a vocabulary role, 68 (34 patterns) declare none at all
-// (js/ai.js's buildTrousers/buildSkirt-derived pieces — see js/validate.
-// js's own header comment: "deliberately have no placement role either"),
-// 2 declare an INVENTED role ('cape-sleeve', js/fancy-patterns.js's
-// capeSleeveL/R — also referenced in js/app.js's own sleeveRoles list, so
-// it's a real, live gap, not dead code). Both gaps are pre-existing and
+// Re-baselined 2026-08-23 (Phase 3, docs/plan 4.md): the 94-pattern core
+// catalogue (js/library.js) was replaced — every generated piece now
+// declares a real role (including trouser/skirt leg panels, which
+// honestly declare 'other' — a real 46-value member — instead of no
+// role at all). Total piece count rose (1867 -> 1951: individually-
+// drafted construction has more real pieces than the old five-scalar
+// AIGen.build() catalogue's 3-5 generic panels per garment) and role
+// coverage rose sharply (1797/1867 -> 1947/1951). The one remaining
+// roleless pattern, `boys_trousers`, is one of the 6 hand-crafted
+// data.js base patterns Phase 3 deliberately left untouched (out of
+// scope — see js/library.js's own header). The one remaining invented
+// role ('cape-sleeve', js/fancy-patterns.js's capeSleeveL/R — also
+// referenced in js/app.js's own sleeveRoles list, so it's a real, live
+// gap, not dead code) is unchanged from Phase 1 and still pre-existing,
 // documented here rather than silently fixed at the reporting layer — a
 // real fix means either adding a genuinely new role everywhere docs/plan
-// 4.md §4.2 requires (roles.js, schema, body-zone.js) or reworking those
-// two generators to reuse an existing one, neither of which is "library
-// content unchanged" infrastructure work.
+// 4.md §4.2 requires (roles.js, schema, body-zone.js) or reworking that
+// generator to reuse an existing one, neither of which is in scope here.
 const KNOWN_INVALID_ROLE_COUNTS = { 'cape-sleeve': 2 };
-const BASELINE = { total: 1867, valid: 1797, none: 68, roleslessPatterns: 34 };
+const BASELINE = { total: 1951, valid: 1947, none: 2, roleslessPatterns: 1 };
 
 test('every declared piece role is in the 46-value vocabulary, except the two documented pre-existing exceptions', () => {
   const ids = Object.keys(PATTERNS);
