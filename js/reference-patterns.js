@@ -33,269 +33,39 @@
    boys' tee uses a raglan seam instead of princess seams at all
    (suppression method AND sleeve construction both differ).
 
-   Curve/geometry helpers below are a local copy of the same qBez/
-   qBezToCubic/withCurves idiom js/fancy-patterns.js and js/underwear-
-   library.js already each keep their own copy of (~20 lines of pure
-   math; fancy-patterns.js's own module boundary only exports `FancyGen`,
-   deliberately — see that file's header) — not reinvented, just
-   relocalized, per the established convention.
+   Construction geometry (curve sampling, princess/raglan/plain bodice
+   panels, trouser legs, gored skirts, collars, sleeves, yokes) lives in
+   js/pattern-builders.js — a real shared module, not a per-file local
+   copy, because Phase 3 (the 100-pattern core catalogue) reuses this
+   exact vocabulary across ~100 more patterns; see that file's own header
+   for why this crosses the line from "cheap to duplicate" (js/fancy-
+   patterns.js's/js/underwear-library.js's own ~20-line curve-math
+   copies) to "should be a real shared module."
 
-   Relies on q(), PATTERNS, LIBRARY from data.js, and the pure
-   pleat-width math in js/pleats.js (computePleats/computeGatherWidth) —
-   reused rather than re-derived, per docs/plan 4.md §10's "read before
-   writing" rule.
+   Relies on q(), PATTERNS, LIBRARY from data.js, and the pure pleat-
+   width math in js/pleats.js (computePleats) — reused rather than
+   re-derived, per docs/plan 4.md §10's "read before writing" rule.
    ============================================================ */
 import { q, PATTERNS, LIBRARY } from './data.js';
-import { computePleats, computeGatherWidth } from './pleats.js';
+import { computePleats } from './pleats.js';
+import {
+  qBez, qBezToCubic, withCurves, hoistCurves,
+  bandPc, pointedCollar, collarStand, setInSleeve,
+  princessCurve, legPanel, princessPanel, gorePanel, sideGorePanel,
+  plainBodicePanel, yokeCurvePc, pocketPatch, sleeveUpperPc, sleeveUnderPc,
+  puffSleevePc, roundCollarPc, raglanBodyPanel, raglanSleevePc,
+} from './pattern-builders.js';
 
 (function () {
   "use strict";
 
-  // ---------------- curve sampling (local copy — see header) ----------------
-  function qBez(p0, c, p1, n) {
-    n = n || 8;
-    const pts = [];
-    for (let i = 1; i <= n; i++) {
-      const t = i / n, u = 1 - t;
-      pts.push([u * u * p0[0] + 2 * u * t * c[0] + t * t * p1[0], u * u * p0[1] + 2 * u * t * c[1] + t * t * p1[1]]);
-    }
-    return pts;
-  }
-  function qBezToCubic(p0, c, p1) {
-    return {
-      c1: [p0[0] + (2 / 3) * (c[0] - p0[0]), p0[1] + (2 / 3) * (c[1] - p0[1])],
-      c2: [p1[0] + (2 / 3) * (c[0] - p1[0]), p1[1] + (2 / 3) * (c[1] - p1[1])],
-    };
-  }
-  // Attaches `.curves` directly to the outline array (same idiom every
-  // other generator file in this codebase uses) so a piece definition can
-  // read `outline: someHelper(...)` and pick up real curve metadata
-  // without a second parallel return value.
-  function withCurves(outline, curves) {
-    if (curves && curves.length) outline.curves = curves;
-    return outline;
-  }
-  // Copies any outline.curves (attached via withCurves above) onto the
-  // piece object itself — called once per pattern after all pieces are
-  // built, same as js/underwear-library.js's hoistCurves().
-  function hoistCurves(pieces) {
-    for (const p of pieces) if (!p.curves && p.outline && p.outline.curves) p.curves = p.outline.curves;
-    return pieces;
-  }
-  function dedupeJoin(a, b) {
-    if (a.length && b.length) {
-      const last = a[a.length - 1], first = b[0];
-      if (last[0] === first[0] && last[1] === first[1]) return a.slice(0, -1);
-    }
-    return a;
-  }
 
-  // ---------------- reusable construction pieces ----------------
-  // A simple 4-notch style rectangular waistband/collar-band/cuff strip —
-  // cut on the straight grain, no curve needed (a real straight strip, not
-  // a stand-in for a curved piece).
-  function bandPc(lengthCm, heightCm) {
-    return [[0, 0], [lengthCm, 0], [lengthCm, heightCm], [0, heightCm]];
-  }
 
-  // Classic two-point shirt collar (fold line at the bottom edge, points at
-  // the two front corners) — a single symmetric piece, cut on the fold,
-  // matching the collar-stand it sits on.
-  // Half collar, cut on the fold at center-back (idx0 and the last point).
-  // Walks: CB neck point -> (curved neckline edge) -> front point base ->
-  // point tip (extends further out AND further down than the neckline) ->
-  // up to the top/outer edge -> back to CB at the top, closing.
-  function pointedCollar(halfNeck, standH, pointDrop) {
-    const neckSeg = [[0, 0], [halfNeck * 0.5, standH * 0.25], [halfNeck, 0]];
-    const neckPts = qBez(...neckSeg, 6);
-    const outline = [
-      [0, 0], ...neckPts,
-      [halfNeck + pointDrop * 0.4, pointDrop],
-      [halfNeck * 0.55, standH],
-      [0, standH],
-    ];
-    withCurves(outline, [{ fromIdx: 0, toIdx: neckPts.length, ...qBezToCubic(...neckSeg) }]);
-    outline.frontIdx = neckPts.length; // front-point base, matches the collar stand's own front end
-    return outline;
-  }
 
-  // Collar stand: a slightly curved standing band that follows the neck
-  // curve rather than a flat rectangle.
-  function collarStand(halfNeck, standH) {
-    const seg = [[0, 0], [halfNeck * 0.5, -standH * 0.35], [halfNeck, 0]];
-    const top = qBez(...seg, 6);
-    const outline = [[0, 0], ...top, [halfNeck, standH], [0, standH]];
-    withCurves(outline, [{ fromIdx: 0, toIdx: top.length, ...qBezToCubic(...seg) }]);
-    outline.shoulderIdx = Math.round(top.length / 2); // roughly the shoulder-seam match point
-    return outline;
-  }
 
-  // Set-in sleeve cap: asymmetric front/back cap curve (the front cap sits
-  // shallower than the back, a real drafting convention — the front
-  // armhole is cut slightly higher than the back so the sleeve cap eases
-  // in correctly) — front gets ONE notch, back gets TWO, matching real
-  // tailoring convention for telling a sleeve's front from its back.
-  // Walks: underarm-front -> (curve) -> cap top -> (curve) -> underarm-back
-  // -> straight down the back edge -> across the cuff -> straight up the
-  // front edge, closing. Front and back cap curves are genuinely
-  // asymmetric (the back sits shallower than the front, matching real
-  // block convention that the back armhole is cut less deep) — front gets
-  // ONE notch partway up its curve, back gets TWO close together,
-  // matching the single/double sleeve-notch convention real patterns use
-  // to mark which half is which without reading a label.
-  function setInSleeve(bicep, sleeveLen, capHeightF) {
-    capHeightF = capHeightF == null ? 1 : capHeightF;
-    const halfBicep = bicep / 2;
-    const capH = halfBicep * 0.62 * capHeightF;
-    const capTop = [halfBicep, -capH];
-    const frontBase = [0, -capH * 0.85];
-    const backBase = [bicep, -capH * 0.72];
-    const frontSeg = [frontBase, [halfBicep * 0.42, -capH * 0.98], capTop];
-    const backSeg = [capTop, [halfBicep * 1.58, -capH * 0.95], backBase];
-    const frontPts = qBez(...frontSeg, 6);
-    const backPts = qBez(...backSeg, 6);
-    const outline = [frontBase, ...frontPts, ...backPts, [bicep, sleeveLen], [0, sleeveLen]];
-    withCurves(outline, [
-      { fromIdx: 0, toIdx: frontPts.length, ...qBezToCubic(...frontSeg) },
-      { fromIdx: frontPts.length, toIdx: frontPts.length + backPts.length, ...qBezToCubic(...backSeg) },
-    ]);
-    outline.frontNotchIdx = 2; // partway up the front cap curve
-    outline.backNotchIdx1 = frontPts.length + 2; // two adjacent points on the back cap curve
-    outline.backNotchIdx2 = frontPts.length + 3;
-    return outline;
-  }
 
-  // Neckline: a single quadratic curve from center-front/back down to the
-  // shoulder point.
-  function necklineCurve(centerY, shoulderX, shoulderY, depthCtrlX, depthCtrlY) {
-    const seg = [[0, centerY], [depthCtrlX, depthCtrlY], [shoulderX, shoulderY]];
-    const pts = qBez(...seg, 7);
-    return { seg, pts };
-  }
 
-  // Princess-seam curve (bust/waist/hip shaping): three quadratic segments
-  // (shoulder->bust, bust->waist, waist->hip) plus a final straight run to
-  // the hem — same construction idiom as js/fancy-patterns.js's own
-  // princessCurve(), a local rebuild rather than an import (that module's
-  // boundary is deliberate). Returns points INCLUDING shoulderPt at index
-  // 0 and hipPt as the last curved point (caller appends the hem point).
-  function princessCurve(shoulderPt, bustX, bustY, waistX, waistY, hipX, hipY) {
-    const seg1 = [shoulderPt, [bustX * 0.75, (shoulderPt[1] + bustY) / 2], [bustX, bustY]];
-    const seg2 = [[bustX, bustY], [(bustX + waistX) / 2, (bustY + waistY) / 2], [waistX, waistY]];
-    const seg3 = [[waistX, waistY], [(waistX + hipX) / 2, (waistY + hipY) / 2], [hipX, hipY]];
-    const p1 = qBez(...seg1, 6), p2 = qBez(...seg2, 5), p3 = qBez(...seg3, 5);
-    const points = [shoulderPt, ...p1, ...p2, ...p3];
-    const curves = [
-      { fromIdx: 0, toIdx: p1.length, ...qBezToCubic(...seg1) },
-      { fromIdx: p1.length, toIdx: p1.length + p2.length, ...qBezToCubic(...seg2) },
-      { fromIdx: p1.length + p2.length, toIdx: p1.length + p2.length + p3.length, ...qBezToCubic(...seg3) },
-    ];
-    return { points, curves };
-  }
 
-  // Trouser/short leg panel with a real curved crotch seam (front curve
-  // shallower/shorter than back, matching real trouser-block convention —
-  // the back crotch extension is always deeper than the front).
-  // One trouser leg panel (a full piece, mirrored L/R as a bilateral
-  // pair — not cut on fold). Walks clockwise: waist (outseam side) ->
-  // down the outseam, flaring slightly at the hip -> across the hem ->
-  // up the inseam -> a curved crotch seam back to the waist (inseam
-  // side). The back panel's crotch curve is real-conventionally deeper
-  // and more extended than the front's (isFront controls this).
-  function legPanel(waistW, hipW, hemW, riseLen, inseamLen, isFront) {
-    // floorY (the hem line) is the SAME for front and back regardless of
-    // crotch shape — a real physical constraint (both legs of the same
-    // trouser end at the same length). Only the crotch curve's own depth
-    // varies front-to-back, independent of leg length.
-    const floorY = riseLen + inseamLen;
-    const crotchDepth = isFront ? riseLen * 0.9 : riseLen * 1.15;
-    const crotchExt = isFront ? hipW * 0.22 : hipW * 0.32;
-    const waistInX = waistW * 0.2;
-    const riseBottom = [waistInX - crotchExt, crotchDepth];
-    const hemInX = riseBottom[0] + hemW * 0.18;
-    const crotchSeg = [[waistInX, 0], [waistInX - crotchExt * 0.75, crotchDepth * 0.55], riseBottom];
-    const crotchPts = qBez(...crotchSeg, 6);
-    const outline = [
-      [waistW, 0],                                     // 0 waist, outseam
-      [waistW + (hipW - waistW), riseLen],              // 1 hip, outseam — slight flare
-      [hemW, floorY],                                   // 2 hem, outseam
-      [hemInX, floorY],                                 // 3 hem, inseam
-      riseBottom,                                        // 4 inseam meets the crotch curve
-      ...crotchPts.slice(0, -1).reverse(),               // 5.. curve back up to the waist (inseam side)
-      [waistInX, 0],                                     // last: waist, inseam — closes near point 0
-    ];
-    withCurves(outline, [{ fromIdx: 4, toIdx: outline.length - 1, c1: qBezToCubic(...crotchSeg).c2, c2: qBezToCubic(...crotchSeg).c1 }]);
-    outline.crotchIdx = 4;
-    outline.hemOutIdx = 2;
-    outline.hemInIdx = 3;
-    return outline;
-  }
-
-  // ---------------- princess-seamed bodice builder ----------------
-  // Shared by the women's blouse and the girls' top (docs/plan 4.md §7.1
-  // differentiation is satisfied by their different necklines and sleeve
-  // constructions, not by re-deriving this math twice). Front and back
-  // center/side pieces are built in ONE shared coordinate space (center's
-  // princess edge and side's princess edge use the literal same
-  // shoulder/bust/waist/hip points) — real, not approximated — which is
-  // also what js/pattern-flat.js's sharedSeamId placement (Phase 1) relies
-  // on to render these as one joined silhouette instead of flanked boxes.
-  //
-  // opts: { chest, waist, hips, backLen, necklineDepth, hemBelowHip }
-  function princessPanel(opts) {
-    const { chest, waist, hips, backLen, necklineDepth, hemBelowHip } = opts;
-    const topY = -1, necklineY = necklineDepth;
-    const bustY = backLen * 0.42, waistY = backLen * 0.98, hipY = waistY + 18, hemY = hipY + hemBelowHip;
-    const shoulderX = chest * 0.24;
-    const fBustX = chest * 0.60, fWaistX = waist * 0.50, fHipX = hips * 0.58;
-    const bBustX = chest * 0.55, bWaistX = waist * 0.47, bHipX = hips * 0.54;
-    const sideX = chest * 1.06;
-
-    function centerPanel(bustX, waistX, hipX, neckDepthY) {
-      const shoulderPt = [shoulderX, topY];
-      const neckSeg = [[0, neckDepthY], [shoulderX * 0.5, neckDepthY - 2], shoulderPt];
-      const neckPts = qBez(...neckSeg, 6);
-      const princess = princessCurve(shoulderPt, bustX, bustY, waistX, waistY, hipX, hipY);
-      const outline = [[0, neckDepthY], ...neckPts.slice(0, -1), ...princess.points, [hipX, hemY], [0, hemY]];
-      const off = 1 + (neckPts.length - 1);
-      const curves = [
-        { fromIdx: 0, toIdx: off, ...qBezToCubic(...neckSeg) },
-        ...princess.curves.map((c) => ({ ...c, fromIdx: c.fromIdx + off, toIdx: c.toIdx + off })),
-      ];
-      withCurves(outline, curves);
-      outline.princessFromIdx = off;
-      outline.princessToIdx = off + princess.points.length - 1;
-      outline.bustNotchIdx = off + 6; // princess.points[6] == bustPt (see princessCurve)
-      outline.waistNotchIdx = off + 11; // princess.points[11] == waistPt
-      return outline;
-    }
-
-    function sidePanel(centerOutline, bustX, waistX, hipX) {
-      const shoulderPt = [shoulderX, topY];
-      const princessFwd = centerOutline.slice(centerOutline.princessFromIdx, centerOutline.princessToIdx + 1);
-      const princessRev = princessFwd.slice().reverse(); // side's own left edge: hip->...->shoulder
-      const underarmPt = [sideX, bustY * 0.52];
-      const armSeg = [shoulderPt, [(shoulderX + sideX) / 2, topY - 1], underarmPt];
-      const armPts = qBez(...armSeg, 6);
-      const sideWaistPt = [sideX * 0.98, waistY], sideHipPt = [sideX * 1.0, hipY];
-      const sideHemPt = [hipX + (sideX * 1.0 - hipX), hemY];
-      const outline = [...princessRev, ...armPts, sideWaistPt, sideHipPt, sideHemPt];
-      const armFromIdx = princessRev.length - 1;
-      withCurves(outline, [{ fromIdx: armFromIdx, toIdx: armFromIdx + armPts.length, ...qBezToCubic(...armSeg) }]);
-      outline.armholeFromIdx = armFromIdx;
-      outline.armholeToIdx = armFromIdx + armPts.length;
-      outline.princessFromIdx = 0;
-      outline.princessToIdx = princessRev.length - 1;
-      void bustX; void waistX; void hipX;
-      return outline;
-    }
-
-    const frontCenter = centerPanel(fBustX, fWaistX, fHipX, necklineY);
-    const frontSide = sidePanel(frontCenter, fBustX, fWaistX, fHipX);
-    const backCenter = centerPanel(bBustX, bWaistX, bHipX, necklineY * 0.45);
-    const backSide = sidePanel(backCenter, bBustX, bWaistX, bHipX);
-    return { frontCenter, frontSide, backCenter, backSide, hemY, sideX, shoulderX };
-  }
 
   // ============================================================
   // 1. WOMEN — Princess-Seam Blouse (bodice + sleeve)
@@ -369,20 +139,6 @@ import { computePleats, computeGatherWidth } from './pleats.js';
   };
   LIBRARY.push({ id: 'ref_w_blouse', cat: 'women', tag: { en: 'Reference · Bodice+Sleeve', ar: 'مرجعي · قصة وكم' }, type: 'top' });
 
-  // A trapezoid gore panel: narrower at the waist, wider at the hem — the
-  // gore's own angled side edges ARE its suppression method (no dart
-  // needed to go from waist to hip circumference), a real, different
-  // technique from the princess seams above and the darts below.
-  function gorePanel(waistHalfW, hipHalfW, hemHalfW, waistToHip, hipToHem) {
-    return [[0, 0], [waistHalfW, 0], [hipHalfW, waistToHip], [hemHalfW, waistToHip + hipToHem], [0, waistToHip + hipToHem]];
-  }
-  // A FULL (not cut-on-fold) gore, symmetric about its own vertical
-  // center — both edges flare outward equally from waist to hem, unlike
-  // gorePanel() above which is a HALF shape (one flat fold edge at x=0).
-  function sideGorePanel(waistW, hipW, hemW, waistToHip, hipToHem) {
-    const hw = waistW / 2, hh = hipW / 2, hm = hemW / 2, hipY = waistToHip, hemY = waistToHip + hipToHem;
-    return [[-hw, 0], [hw, 0], [hh, hipY], [hm, hemY], [-hm, hemY], [-hh, hipY]];
-  }
 
   // ============================================================
   // 2. WOMEN — A-Line Gored Skirt with Waistband (skirt)
@@ -464,44 +220,8 @@ import { computePleats, computeGatherWidth } from './pleats.js';
   };
   LIBRARY.push({ id: 'ref_w_skirt', cat: 'women', tag: { en: 'Reference · Skirt', ar: 'مرجعي · تنورة' }, type: 'skirt' });
 
-  // ---------------- shared tailored-garment pieces ----------------
-  // A plain (non-princess) front/back bodice half: curved neckline +
-  // curved armhole, straight below the underarm to the hem, on the fold.
-  // Suppression comes from a separate waist dart the caller adds — a
-  // genuinely different suppression method from princessPanel() above.
-  function plainBodicePanel(shoulderX, necklineY, chestX, underarmY, waistX, waistY, hipX, hipY, hemX, hemY) {
-    const topY = -1;
-    const shoulderPt = [shoulderX, topY];
-    const neckSeg = [[0, necklineY], [shoulderX * 0.5, necklineY - 2], shoulderPt];
-    const neckPts = qBez(...neckSeg, 5);
-    const underarmPt = [chestX, underarmY];
-    const armSeg = [shoulderPt, [shoulderX + (chestX - shoulderX) * 0.6, topY + underarmY * 0.12], underarmPt];
-    const armPts = qBez(...armSeg, 6);
-    const outline = [[0, necklineY], ...neckPts.slice(0, -1), ...armPts, [waistX, waistY], [hipX, hipY], [hemX, hemY], [0, hemY]];
-    const neckOff = 1 + (neckPts.length - 1);
-    withCurves(outline, [
-      { fromIdx: 0, toIdx: neckOff, ...qBezToCubic(...neckSeg) },
-      { fromIdx: neckOff, toIdx: neckOff + armPts.length, ...qBezToCubic(...armSeg) },
-    ]);
-    outline.waistIdx = neckOff + armPts.length;
-    outline.chestIdx = neckOff + armPts.length - 1; // underarm point, at chest/bust level
-    return outline;
-  }
 
-  // Curved shoulder yoke (front or back), cut on the fold — a gentle
-  // upward curve rather than a straight band.
-  function yokeCurvePc(halfWidth, depth) {
-    const seg = [[0, depth], [halfWidth * 0.5, depth * 0.4], [halfWidth, 0]];
-    const top = qBez(...seg, 6);
-    const outline = [[0, depth], ...top, [halfWidth, depth * 1.6], [0, depth * 1.6]];
-    withCurves(outline, [{ fromIdx: 0, toIdx: top.length, ...qBezToCubic(...seg) }]);
-    outline.shoulderIdx = top.length + 1; // outer shoulder-tip point, where the yoke meets the armhole/sleeve
-    return outline;
-  }
 
-  function pocketPatch(w, h) {
-    return [[0, 0], [w, 0], [w, h], [0, h]];
-  }
 
   // ============================================================
   // 3. WOMEN — Tailored Shirt Dress (multi-piece tailored)
@@ -765,36 +485,6 @@ import { computePleats, computeGatherWidth } from './pleats.js';
   };
   LIBRARY.push({ id: 'ref_m_trousers', cat: 'men', tag: { en: 'Reference · Trouser', ar: 'مرجعي · بنطلون' }, type: 'trousers' });
 
-  // Two-piece sleeve: an outer/upper panel carrying the full (front+back)
-  // cap curve, and a smaller inner/under panel completing the underarm —
-  // a genuinely different sleeve CONSTRUCTION from the one-piece set-in
-  // sleeve used everywhere else in this file (docs/plan 4.md §7.1
-  // differentiation).
-  function sleeveUpperPc(bicep, sleeveLen) {
-    const halfBicep = bicep / 2, capH = halfBicep * 0.6;
-    const capTop = [halfBicep, -capH];
-    const frontBase = [bicep * 0.1, -capH * 0.8];
-    const backBase = [bicep * 0.9, -capH * 0.68];
-    const frontSeg = [frontBase, [halfBicep * 0.42, -capH * 0.95], capTop];
-    const backSeg = [capTop, [halfBicep * 1.58, -capH * 0.92], backBase];
-    const frontPts = qBez(...frontSeg, 6), backPts = qBez(...backSeg, 6);
-    const outline = [frontBase, ...frontPts, ...backPts, [bicep * 0.82, sleeveLen], [bicep * 0.18, sleeveLen]];
-    withCurves(outline, [
-      { fromIdx: 0, toIdx: frontPts.length, ...qBezToCubic(...frontSeg) },
-      { fromIdx: frontPts.length, toIdx: frontPts.length + backPts.length, ...qBezToCubic(...backSeg) },
-    ]);
-    outline.frontNotchIdx = 2;
-    outline.backNotchIdx1 = frontPts.length + 2;
-    outline.backNotchIdx2 = frontPts.length + 3;
-    return outline;
-  }
-  function sleeveUnderPc(bicep, sleeveLen) {
-    const w = bicep * 0.24;
-    const topSeg = [[0, 0], [w * 0.5, -3], [w, 0]];
-    const topPts = qBez(...topSeg, 5);
-    const outline = [[0, 0], ...topPts, [w * 0.85, sleeveLen * 0.85], [w * 0.15, sleeveLen * 0.85]];
-    return withCurves(outline, [{ fromIdx: 0, toIdx: topPts.length, ...qBezToCubic(...topSeg) }]);
-  }
 
   // ============================================================
   // 6. MEN — Classic Dress Shirt (multi-piece tailored)
@@ -936,20 +626,6 @@ import { computePleats, computeGatherWidth } from './pleats.js';
   };
   LIBRARY.push({ id: 'ref_m_shirt', cat: 'men', tag: { en: 'Reference · Tailored', ar: 'مرجعي · تفصيل' }, type: 'shirt' });
 
-  // Gathered puff sleeve: the cap is cut WIDER than the armhole it sews
-  // into (js/pleats.js's computeGatherWidth — reused, not re-derived)
-  // and eased in with gathering stitches, unlike a set-in sleeve's cap
-  // curve which matches the armhole directly.
-  function puffSleevePc(bicep, sleeveLen, gatherRatio) {
-    const rawW = computeGatherWidth(bicep, gatherRatio);
-    const halfW = rawW / 2, capH = halfW * 0.55;
-    const seg = [[0, 0], [halfW, -capH], [rawW, 0]];
-    const capPts = qBez(...seg, 8);
-    const outline = [[0, 0], ...capPts, [rawW * 0.82, sleeveLen], [rawW * 0.18, sleeveLen]];
-    withCurves(outline, [{ fromIdx: 0, toIdx: capPts.length, ...qBezToCubic(...seg) }]);
-    outline.capCenterIdx = Math.round(capPts.length / 2); // gather-center, matches the shoulder seam
-    return outline;
-  }
 
   // ============================================================
   // 7. GIRLS — Puff-Sleeve Princess Top (bodice + sleeve)
@@ -1101,22 +777,6 @@ import { computePleats, computeGatherWidth } from './pleats.js';
   };
   LIBRARY.push({ id: 'ref_g_skirt', cat: 'girls', tag: { en: 'Reference · Skirt', ar: 'مرجعي · تنورة' }, type: 'skirt' });
 
-  // Round (Peter Pan style) collar, no stand — a curved neckline edge and
-  // a rounder curved outer edge, no point. Cut on the fold at CB.
-  function roundCollarPc(halfNeck, width) {
-    const neckSeg = [[0, 0], [halfNeck * 0.5, width * 0.12], [halfNeck, 0]];
-    const neckPts = qBez(...neckSeg, 6);
-    const outerSeg = [[halfNeck, 0], [halfNeck * 0.55, width * 1.15], [0, width]];
-    const outerPts = qBez(...outerSeg, 6);
-    const outline = [[0, 0], ...neckPts.slice(0, -1), ...outerPts];
-    const off = neckPts.length; // = 6, where outerPts' own [halfNeck,0] start lands
-    withCurves(outline, [
-      { fromIdx: 0, toIdx: off, ...qBezToCubic(...neckSeg) },
-      { fromIdx: off, toIdx: off + outerPts.length - 1, ...qBezToCubic(...outerSeg) },
-    ]);
-    outline.frontIdx = off; // where the neckline edge meets the outer edge, at CF
-    return outline;
-  }
 
   // ============================================================
   // 9. GIRLS — Collared Shirtdress (multi-piece tailored)
@@ -1217,60 +877,6 @@ import { computePleats, computeGatherWidth } from './pleats.js';
   };
   LIBRARY.push({ id: 'ref_g_shirtdress', cat: 'girls', tag: { en: 'Reference · Tailored', ar: 'مرجعي · تفصيل' }, type: 'dress' });
 
-  // ---------------- raglan construction ----------------
-  // A raglan seam replaces the separate shoulder-seam + set-in-armhole
-  // system every other design in this file uses: the body panel's
-  // "shoulder" is a diagonal seam running from the neckline straight
-  // down to the underarm, and the sleeve extends UP to meet it — the
-  // sleeve itself absorbs the shoulder shaping, the same role a princess
-  // seam plays for bust suppression (docs/plan 4.md §7.1: "princess
-  // seams that absorb the equivalent suppression" — a raglan seam is the
-  // sleeve-construction equivalent of that idea, not a separate concept).
-  function raglanBodyPanel(neckX, necklineY, chestX, underarmY, waistX, waistY, hipX, hipY, hemX, hemY) {
-    const neckSeg = [[0, necklineY], [neckX * 0.5, necklineY - 1.5], [neckX, 0]];
-    const neckPts = qBez(...neckSeg, 4);
-    const raglanSeg = [[neckX, 0], [neckX + (chestX - neckX) * 0.3, underarmY * 0.5], [chestX, underarmY]];
-    const raglanPts = qBez(...raglanSeg, 6);
-    const outline = [[0, necklineY], ...neckPts.slice(0, -1), ...raglanPts, [waistX, waistY], [hipX, hipY], [hemX, hemY], [0, hemY]];
-    const neckOff = 1 + (neckPts.length - 1);
-    withCurves(outline, [
-      { fromIdx: 0, toIdx: neckOff, ...qBezToCubic(...neckSeg) },
-      { fromIdx: neckOff, toIdx: neckOff + raglanPts.length, ...qBezToCubic(...raglanSeg) },
-    ]);
-    outline.raglanFromIdx = neckOff;
-    outline.raglanToIdx = neckOff + raglanPts.length;
-    outline.chestIdx = outline.raglanToIdx;
-    return outline;
-  }
-  // The matching raglan sleeve: a front raglan edge and a back raglan
-  // edge (built in the SAME shared coordinate frame as the body panels —
-  // see princessPanel()'s own header for why that matters for
-  // js/pattern-flat.js's sharedSeamId placement), meeting at the top near
-  // the neckline, with the ordinary sleeve tube below.
-  function raglanSleevePc(neckX, chestX, underarmY, sleeveLen) {
-    const raglanSeg = [[neckX, 0], [neckX + (chestX - neckX) * 0.3, underarmY * 0.5], [chestX, underarmY]];
-    const raglanPts = qBez(...raglanSeg, 6); // front raglan edge, neckX,0 -> chestX,underarmY
-    const cuffHalf = chestX * 0.32;
-    const backRaglanSeg = raglanSeg.map((p) => [neckX - (p[0] - neckX), p[1]]); // mirrored, for the back edge
-    const backRaglanPts = raglanPts.slice().reverse().map((p) => [neckX - (p[0] - neckX), p[1]]); // walked underarm -> neckX
-    const outline = [
-      [neckX, 0], ...raglanPts,
-      [chestX * 0.62, underarmY + sleeveLen], [chestX * 0.62 - cuffHalf * 2, underarmY + sleeveLen],
-      ...backRaglanPts,
-    ];
-    outline.frontRaglanFromIdx = 0;
-    outline.frontRaglanToIdx = raglanPts.length;
-    outline.backRaglanFromIdx = raglanPts.length + 2;
-    outline.backRaglanToIdx = outline.length - 1;
-    return withCurves(outline, [
-      { fromIdx: 0, toIdx: raglanPts.length, ...qBezToCubic(...raglanSeg) },
-      // backRaglanPts walks underarm->neck (reversed direction relative to
-      // backRaglanSeg, which is defined neck->underarm like the front) —
-      // same c1/c2 swap convention js/pattern-flat.js's unfoldPiece uses
-      // for a reflected-and-reversed curve copy.
-      { fromIdx: outline.backRaglanFromIdx, toIdx: outline.backRaglanToIdx, c1: qBezToCubic(...backRaglanSeg).c2, c2: qBezToCubic(...backRaglanSeg).c1 },
-    ]);
-  }
 
   // ============================================================
   // 10. BOYS — Raglan-Sleeve Tee (bodice + sleeve)
