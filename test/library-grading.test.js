@@ -65,27 +65,19 @@ test('adult patterns (women/men) stay non-degenerate and non-self-intersecting a
   if (failures.length > 0) throw new Error(`grading defects at size/standard extremes:\n  ${failures.slice(0, 20).join('\n  ')}${failures.length > 20 ? `\n  ...and ${failures.length - 20} more` : ''}`);
 });
 
-// Found BY this test (measured 2026-08-22, Phase 1) rather than fixed by
-// it: gf08's "Off-Shoulder Ruffle Band" and gf10's "Cap Sleeve"/princess
-// bodice pieces self-intersect at the smallest (2-3, 4-5) and/or largest
-// (15-16) KIDS_AGES extremes — real grading defects in js/girls-leotards.
-// js's geometry, not a harness artifact (they pass cleanly at every other
-// age band, and the validator itself never throws). Phase 1 doesn't
-// change library content (docs/plan 4.md §9), so this documents the exact
-// known set rather than silently loosening the check or fixing the
-// generator here — a real fix belongs in Phase 4 alongside that
-// collection's broader rebuild. Any self-intersection NOT in this exact
-// set still fails the test.
-const KNOWN_KIDS_SELF_INTERSECTIONS = new Set([
-  'gf08 @ kids:2-3: "Off-Shoulder Ruffle Band" self-intersects',
-  'gf08 @ kids:4-5: "Off-Shoulder Ruffle Band" self-intersects',
-  'gf10 @ kids:2-3: "Cap Sleeve" self-intersects',
-  'gf10 @ kids:4-5: "Cap Sleeve" self-intersects',
-  'gf10 @ kids:15-16: "Bodice Front Center" self-intersects',
-  'gf10 @ kids:15-16: "Bodice Front Side" self-intersects',
-  'gf10 @ kids:15-16: "Bodice Back Center" self-intersects',
-  'gf10 @ kids:15-16: "Bodice Back Side" self-intersects',
-]);
+// Found BY this test (measured 2026-08-22, Phase 1), not fixed by it:
+// gf08's "Off-Shoulder Ruffle Band" and gf10's "Cap Sleeve"/princess-
+// bodice pieces self-intersected at the smallest (2-3, 4-5) and/or
+// largest (15-16) KIDS_AGES extremes — real grading defects in js/fancy-
+// patterns.js's geometry (both are girls' Fancy Collection designs), not
+// a harness artifact. All 8 are now fixed at the source (Phase 4, WP-53
+// — js/fancy-patterns.js's princessCurve()/princessBodice() curvature
+// and sleeve1pc()'s short-sleeve hem clamp), confirmed by this exact
+// test. KNOWN_KIDS_SELF_INTERSECTIONS is kept as an empty set (not
+// deleted outright) so a future regression here reports through the
+// same "note: N previously-known defect(s) no longer reproduce" path
+// rather than silently changing this test's shape again.
+const KNOWN_KIDS_SELF_INTERSECTIONS = new Set([]);
 
 test('kids patterns (girls/boys) stay non-degenerate and non-self-intersecting across all 7 KIDS_AGES bands', () => {
   assert.equal(KIDS_AGES.length, 7, 'KIDS_AGES no longer has 7 bands — update this test deliberately');

@@ -6,6 +6,78 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-53: pattern library rebuild, Phase 4 (part 1) — Fancy Collection: every documented Phase 0 defect fixed at source
+
+docs/plan 4.md Phase 4, first installment — `js/fancy-patterns.js` (the
+64-pattern Fancy Collection). Every geometry defect Phase 0's baseline
+sweep found in this file is now fixed at its actual source, not the
+reporting layer: 16 fold-edge failures, 76 seamAllowance self-
+intersections, and (found along the way) 8 kids-extreme self-
+intersections — all → 0, confirmed by the same checks that found them.
+Girls' Gymnastics Leotards and Underwear & Bra are next.
+
+- **16 fold-edge failures (`foldSymmetry`)**: `peplumPc`/`capePc` drafted
+  a full (non-fold) piece whose closing curve swept back to its own
+  `[0,0]` origin — never declared `cutOnFold` anywhere either is used
+  (18 call sites), but that curved run sat close enough to the piece's
+  own min-X, for enough of its height, to false-trigger the "candidate
+  fold" heuristic. Real fix, not a reshape to dodge the heuristic: both
+  now draft a genuine cut-on-fold half (a peplum/cape flounce really is
+  conventionally symmetric about center front/back) with a real straight
+  fold edge; all 18 call sites now declare `cutOnFold: true`.
+- **76 `seamAllowance` self-intersections** (bodice-front/back-center/
+  side across 19 patterns, docs/plan 4.md §5.1 Phase 0's finding), three
+  compounding root causes in `princessBodice()`/`princessCurve()`, all
+  fixed at source:
+  1. sweetheart/offshoulder/scoop necklines' outline leading point was
+     hardcoded to `[0,necklineY]` while their curve's own p0 sat several
+     cm deeper — a real, documented (WP-27's own comment) straight jog,
+     tight enough to self-overlap under a 1cm offset. Now starts at the
+     curve's own p0 for every variant, and all four (not just "default")
+     get real curve metadata — no jog to withhold metadata for anymore.
+  2. Those same three necklines' control points pulled far enough from
+     the p0→p1 chord that the curve's own minimum radius of curvature
+     dropped under 1cm (confirmed by computing it directly, not guessed)
+     — softened with a comfortable margin.
+  3. `princessCurve`'s waist/hip/hem control points used FIXED cm offsets
+     from each segment's own endpoint — a safe ~15% of a typical 18-23cm
+     shoulder→bust/bust→waist span, but the same fixed offset becomes a
+     dangerously large fraction of a short span. Cropped-bodice designs
+     (skirt/peplum/tiers attached below a short bodice) compress the
+     hip/hem segments to a few cm, and several girls' designs additionally
+     compress waist→hip enough to force the seam's directional reversal
+     (nip in at waist, flare out to hip) into too short a run to curve
+     gently. Fixed with a proportional offset (scales with each segment's
+     own span) plus a real minimum-span floor on `hipY`/`hemY` relative to
+     `waistY` — a princess seam's waist-to-hip reversal shouldn't happen
+     in under ~4cm regardless of where a design's skirt/tier attaches.
+- **8 kids-extreme self-intersections** (`test/library-grading.test.js`'s
+  own `KNOWN_KIDS_SELF_INTERSECTIONS`, found in Phase 1, not fixed then):
+  gf10's 4 princess-bodice pieces resolved as a side effect of the fix
+  above; gf08's ruffle band and gf10's cap sleeve (`sleeve1pc`) fixed
+  separately — a fixed cap-base Y (6) combined with a raw `sleeveLen` hem
+  could invert for a genuinely short sleeve (a ruffle band at the
+  smallest KIDS_AGES extreme), clamped to a safe minimum. Allowlist now
+  empty (kept, not deleted, so a future regression reports through the
+  same "no longer reproduces" path rather than silently changing this
+  test's shape again).
+
+### Verification
+- `npm test`: 299/299. Library-wide validator sweep (`scripts/baseline-
+  report.mjs`): every check except `seamLengthParity` (the pre-existing
+  bounding-box proxy — no `edges[].seamId` declarations in this
+  collection yet, a separate, larger piece of Phase 4 work) at **0
+  failures** — `foldSymmetry`, `seamAllowance`, `selfIntersection`,
+  `closedOutline`, `ease`, `notchAlignment` all clean across the full
+  264-pattern sweep, not just the Fancy Collection.
+- `test/fancy-patterns-curves.test.js` (re-samples every claimed curve
+  against the real flattened outline — would catch a curve claiming an
+  endpoint it doesn't reach) still green.
+- Visual spot-check in-browser across 8 representative designs (ball
+  gowns, peplum, cape, princess-seam party dresses) — real princess
+  seams, sleeves and capes render cleanly, no distortion from the
+  geometry changes.
+
 ## WP-52: pattern library rebuild, Phase 3 — the 100-pattern core catalogue replaced with real construction
 
 docs/plan 4.md Phase 3. Replaces `js/library.js`'s 94-pattern catalogue

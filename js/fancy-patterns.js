@@ -152,15 +152,31 @@ export let FancyGen;
   function princessCurve(topX, topY, bustX, bustY, waistX, waistY, hipX, hipY, hemX, hemY) {
     const points = [[topX, topY]];
     const curves = [];
-    const addSeg = (c1, c2, p1) => {
+    // WP-53 (docs/plan 4.md Phase 4): c2's y-offset from the segment's own
+    // end point is now a FRACTION of that segment's own vertical span
+    // (dyF below), not a fixed cm amount. The original fixed offsets
+    // (bust-3/waist-4/hip-3/hem-2) are safe fractions (~15-17%) for the
+    // typical 18-23cm shoulder->bust/bust->waist spans this curve is
+    // usually built with — but a bodice-only design (peplum/skirt
+    // attached below, so hip and hem sit only a few cm apart) shrinks
+    // that same fixed offset's DENOMINATOR while the offset itself stays
+    // fixed, so it can end up a much larger fraction of a short segment
+    // than intended — tight enough that checkSeamAllowance's 1cm offset
+    // self-intersects there (part of the 76 real failures docs/plan
+    // 4.md §5.1 Phase 0 found). A proportional offset keeps the curve's
+    // shape consistent regardless of how compressed any one segment is.
+    const addSeg = (aX, aY, bX, bY) => {
       const fromIdx = points.length - 1;
-      points.push(...cBez(points[fromIdx], c1, c2, p1, 6));
+      const dy = bY - aY;
+      const c1 = [lerp(aX,bX,0.3), lerp(aY,bY,0.55)];
+      const c2 = [lerp(aX,bX,0.85), bY - dy*0.16];
+      points.push(...cBez(points[fromIdx], c1, c2, [bX, bY], 6));
       curves.push({ fromIdx, toIdx: points.length - 1, c1, c2 });
     };
-    addSeg([lerp(topX,bustX,0.3), lerp(topY,bustY,0.6)], [lerp(topX,bustX,0.85), bustY-3], [bustX, bustY]);
-    addSeg([lerp(bustX,waistX,0.3), lerp(bustY,waistY,0.5)], [lerp(bustX,waistX,0.85), waistY-4], [waistX, waistY]);
-    addSeg([lerp(waistX,hipX,0.3), lerp(waistY,hipY,0.5)], [lerp(waistX,hipX,0.85), hipY-3], [hipX, hipY]);
-    addSeg([lerp(hipX,hemX,0.3), lerp(hipY,hemY,0.5)], [lerp(hipX,hemX,0.85), hemY-2], [hemX, hemY]);
+    addSeg(topX,topY,bustX,bustY);
+    addSeg(bustX,bustY,waistX,waistY);
+    addSeg(waistX,waistY,hipX,hipY);
+    addSeg(hipX,hipY,hemX,hemY);
     return { points, curves };
   }
 
@@ -200,9 +216,18 @@ export let FancyGen;
     const capTop = [bw, -10];
     const seg1 = [[0,6], [bw*0.4,-9], capTop];
     const seg2 = [capTop, [bw*1.6,-8], [bw*2,6]];
+    // WP-53 (docs/plan 4.md Phase 4): the cap's own base sits at y=6 —
+    // for a genuinely short sleeve (e.g. a ruffle band on a small kids'
+    // measurement set, sleeveLen*0.2-ish), a raw `sleeveLen` hem can land
+    // AT or ABOVE that base line, inverting the shape into a real self-
+    // intersection (2 real failures across gf08/gf10 at the smallest
+    // KIDS_AGES extremes, part of docs/plan 4.md §5.1 Phase 0's finding).
+    // Clamped to a safe minimum clearance below the cap base — normal-
+    // length sleeves (sleeveLen already well past 6+6) are unaffected.
+    const hemY = Math.max(sleeveLen, 12);
     const outline = [
       [0,6], ...qBez(...seg1, 6), ...qBez(...seg2, 6),
-      [bw*1.85, sleeveLen], [0.1, sleeveLen-2],
+      [bw*1.85, hemY], [0.1, hemY-2],
     ];
     return withCurves(outline, [
       { fromIdx: 0, toIdx: 6, ...qBezToCubic(...seg1) },
@@ -299,22 +324,35 @@ export let FancyGen;
     const outline = [ [0,0],[shoulderW,0],[shoulderW,depth*0.6], ...qBez(...seg, 8) ];
     return withCurves(outline, [{ fromIdx: 2, toIdx: 10, ...qBezToCubic(...seg) }]);
   }
-  // Flared peplum panel with a gently waved curved hem.
-  function peplumPc(waistW, flareLen) {
+  // Flared peplum panel, cut on the fold at center front/back: a straight
+  // vertical fold edge (waist point down to the hem-center point) on the
+  // left, curving out to the flared hem on the right.
+  //
+  // WP-53 (docs/plan 4.md Phase 4): the PREVIOUS version drafted a full
+  // (non-fold) piece whose closing curve swept back to its own [0,0]
+  // origin — never declared cutOnFold anywhere it's used, but that
+  // curved left-side run sat close enough to the piece's own min-X, for
+  // enough of its height, to false-trigger checkFoldSymmetry's "candidate
+  // fold" heuristic (12 real failures across 6 patterns). The honest fix
+  // isn't reshaping the curve to dodge the heuristic — a peplum flounce
+  // really is conventionally drafted symmetric, on the fold, at center
+  // front/back. `waistHalfW` is HALF the finished waist-edge width; every
+  // call site now declares `cutOnFold: true` to match.
+  function peplumPc(waistHalfW, flareLen) {
     const bulge = flareLen * 0.15;
-    const seg1 = [[waistW,0], [waistW*1.3,flareLen*0.6], [waistW*1.05,flareLen]];
-    const seg2 = [[waistW*1.05,flareLen], [waistW*0.5,flareLen+bulge], [-waistW*0.05,flareLen]];
-    const seg3 = [[-waistW*0.05,flareLen], [-waistW*0.3,flareLen*0.6], [0,0]]; // closes back to the [0,0] start — see dedupeCloseWithCurves
+    const seg1 = [[waistHalfW,0], [waistHalfW*1.3,flareLen*0.6], [waistHalfW*1.05,flareLen]];
+    const seg2 = [[waistHalfW*1.05,flareLen], [waistHalfW*0.5,flareLen+bulge], [0,flareLen]];
     const outline = [
-      [0,0],[waistW,0],
+      [0,0],[waistHalfW,0],
       ...qBez(...seg1, 6),
       ...qBez(...seg2, 6),
-      ...qBez(...seg3, 6),
     ];
-    return dedupeCloseWithCurves(outline, [
+    // seg2's own endpoint is exactly [0,flareLen] — the outline's implicit
+    // wraparound edge (last point back to [0,0]) is the fold itself, a
+    // plain 2-point straight line, guaranteed collinear.
+    return withCurves(outline, [
       { fromIdx: 1, toIdx: 7, ...qBezToCubic(...seg1) },
       { fromIdx: 7, toIdx: 13, ...qBezToCubic(...seg2) },
-      { fromIdx: 13, toIdx: 19, ...qBezToCubic(...seg3) },
     ]);
   }
   function sashPc(width, tailLen) {
@@ -329,20 +367,27 @@ export let FancyGen;
     return withCurves(outline, [{ fromIdx: 2, toIdx: 10, ...qBezToCubic(...seg) }]);
   }
   // Draped cape overlay, curved swooping hem.
-  function capePc(neckW, len) {
-    const seg1 = [[neckW,0], [neckW*1.8,len*0.5], [neckW*1.5,len]];
-    const seg2 = [[neckW*1.5,len], [neckW*0.7,len+6], [0,len*0.85]];
-    const seg3 = [[0,len*0.85], [-neckW*0.1,len*0.4], [0,0]]; // closes back to the [0,0] start — see dedupeCloseWithCurves
+  // WP-53 (docs/plan 4.md Phase 4): same fix, same reason, as peplumPc
+  // just above — a full (non-fold) piece whose closing curve swept back
+  // to its own [0,0] origin false-triggered checkFoldSymmetry on 4 real
+  // instances (cape/cape-overlay). Now a genuine cut-on-fold half:
+  // straight vertical fold edge from the neck point down to the hem-
+  // center point, curving out to the swooping hem on the right.
+  // `neckHalfW` is HALF the finished neckline-edge width; every call
+  // site now declares `cutOnFold: true` to match.
+  function capePc(neckHalfW, len) {
+    const seg1 = [[neckHalfW,0], [neckHalfW*1.8,len*0.5], [neckHalfW*1.5,len]];
+    const seg2 = [[neckHalfW*1.5,len], [neckHalfW*0.7,len+6], [0,len*0.85]];
     const outline = [
-      [0,0],[neckW,0],
+      [0,0],[neckHalfW,0],
       ...qBez(...seg1, 8),
       ...qBez(...seg2, 8),
-      ...qBez(...seg3, 5),
     ];
-    return dedupeCloseWithCurves(outline, [
+    // seg2's own endpoint is exactly [0,len*0.85] — the outline's implicit
+    // wraparound edge (last point back to [0,0]) is the fold itself.
+    return withCurves(outline, [
       { fromIdx: 1, toIdx: 9, ...qBezToCubic(...seg1) },
       { fromIdx: 9, toIdx: 17, ...qBezToCubic(...seg2) },
-      { fromIdx: 17, toIdx: 22, ...qBezToCubic(...seg3) },
     ]);
   }
 
@@ -359,8 +404,24 @@ export let FancyGen;
     const topY = -1;
     const bustY = o.bustY != null ? o.bustY : m.backLen * 0.42;
     const waistY = o.waistY != null ? o.waistY : m.backLen * 0.98;
-    const hipY = o.hipY != null ? o.hipY : waistY + 18;
-    const hemY = o.hemY != null ? o.hemY : hipY + 20;
+    // WP-53 (docs/plan 4.md Phase 4): several cropped-bodice designs
+    // (a short bodice with tiers/peplum/skirt pieces attached below)
+    // pass a `hipY`/`hemY` override only a couple cm past the previous
+    // waypoint — anatomically that's not really "waist to hip" at all,
+    // it's "waist to the skirt-attachment seam". At that compression, the
+    // princess curve's waist-to-hip segment has to reverse direction (the
+    // seam nips in at the waist, then flares back out toward the hip) in
+    // too short a vertical run to stay gentle — tight enough that
+    // checkSeamAllowance's 1cm offset self-intersects there (part of the
+    // 76 real failures docs/plan 4.md §5.1 Phase 0 found, concentrated in
+    // exactly these cropped-bodice girls' designs). A real patternmaker
+    // wouldn't draft a princess seam's waist-to-hip reversal in under
+    // ~4cm regardless of where the skirt actually attaches — MIN_SPAN
+    // enforces that as a floor on the CURVE's own geometry, independent
+    // of where the caller's own hipY/hemY choice puts the actual seam.
+    const MIN_SPAN = 4;
+    const hipY = Math.max(o.hipY != null ? o.hipY : waistY + 18, waistY + MIN_SPAN);
+    const hemY = Math.max(o.hemY != null ? o.hemY : hipY + 20, hipY + MIN_SPAN);
     const bustOutF = o.bustOutF != null ? o.bustOutF : 1.0;
     const waistInF = o.waistInF != null ? o.waistInF : 1.0;
     const hipOutF = o.hipOutF != null ? o.hipOutF : 1.0;
@@ -377,18 +438,28 @@ export let FancyGen;
     // triple so its real curve metadata can be computed the same way
     // every other shape in this file now does, without duplicating the
     // per-neckline control points a second time.
+    // WP-53 (docs/plan 4.md Phase 4): sweetheart/offshoulder/scoop's
+    // control points were pulled far enough from the p0->p1 chord (a
+    // deep, sharp scoop) that the curve's own minimum radius of
+    // curvature dropped below the 1cm seam allowance — a real drafting
+    // problem (checkSeamAllowance's offset self-intersects at exactly
+    // that tight turn, not a heuristic quirk), confirmed by computing
+    // each curve's minimum radius directly. Softened here to keep a
+    // comfortable margin above 1cm; still a genuinely deep neckline for
+    // each style, just not sharp enough to fold a seam allowance over
+    // itself.
     let neckPts, neckSeg;
     switch (o.neckline) {
       case "sweetheart":
-        neckSeg = [[0, necklineY+8], [shoulderX*0.35, necklineY+14], [shoulderX, topY]];
+        neckSeg = [[0, necklineY+8], [shoulderX*0.5, necklineY+8], [shoulderX, topY]];
         neckPts = qBez(...neckSeg, 7);
         break;
       case "offshoulder":
-        neckSeg = [[0, necklineY+10], [shoulderX*0.5, necklineY+13], [shoulderX*1.15, topY+3]];
+        neckSeg = [[0, necklineY+10], [shoulderX*0.55, necklineY+10], [shoulderX*1.15, topY+3]];
         neckPts = qBez(...neckSeg, 7);
         break;
       case "scoop":
-        neckSeg = [[0, necklineY+4], [shoulderX*0.5, necklineY+9], [shoulderX, topY]];
+        neckSeg = [[0, necklineY+4], [shoulderX*0.62, necklineY+5], [shoulderX, topY]];
         neckPts = qBez(...neckSeg, 7);
         break;
       default:
@@ -401,7 +472,21 @@ export let FancyGen;
     // defined to end exactly at the shoulder point ([shoulderX, topY]) —
     // "offshoulder" ends somewhere else on purpose and is left untouched.
     const frontNeck = dedupeJoin(neckPts, frontCurve);
-    const frontCenter = [ [0, necklineY], ...frontNeck, ...frontCurve, [0, hemY] ];
+    // WP-53 (docs/plan 4.md Phase 4): the outline's own leading point is
+    // neckSeg's ACTUAL start (neckSeg[0]) — not a hardcoded [0,necklineY]
+    // — for every variant. Previously only "default" (round) genuinely
+    // started there; sweetheart/offshoulder/scoop's curves start several
+    // cm deeper (necklineY+8/+10/+4), so the outline had a real straight
+    // jog from [0,necklineY] to the curve's first sample (documented
+    // below at frontNeckCurve, which used to withhold curve metadata for
+    // exactly this reason). That jog is a tight concave notch — sharp
+    // enough that a 1cm seam-allowance offset self-intersects there (76
+    // real checkSeamAllowance failures across bodice-front-center/side
+    // and bodice-back-center/side on 19 patterns, docs/plan 4.md §5.1
+    // Phase 0's finding). Starting the outline at the curve's own p0
+    // removes the jog outright — a real geometry fix, not new metadata
+    // draped over an unchanged shape.
+    const frontCenter = [ neckSeg[0], ...frontNeck, ...frontCurve, [0, hemY] ];
     // WP-26+WP-27 integration: the neckline curve's real endpoint (p1,
     // computed once in neckSeg) lives at ONE of two different indices in
     // frontCenter depending on whether dedupeJoin actually fired above —
@@ -481,21 +566,14 @@ export let FancyGen;
     // (attached to the array itself via withCurves() above) is threaded
     // through here too.
     //
-    // The neckline segment is only valid metadata when the qBez() call
-    // that built neckPts actually started AT frontCenter's own leading
-    // point [0,necklineY] — true for the "default" (round) neckline, but
-    // NOT for sweetheart/offshoulder/scoop: those three deliberately open
-    // deeper, so their curve's own p0 sits several cm below [0,necklineY]
-    // — the flattened outline already has a real (pre-existing, unrelated
-    // to this WP — geometry is unchanged, confirmed by comparing every
-    // outline point against the pre-WP-27 source) straight jog from
-    // [0,necklineY] to the curve's first sample there, not a continuous
-    // curve starting at index 0. Caught by verifying every emitted
-    // {fromIdx,toIdx,c1,c2} actually reproduces the real flattened points
-    // in `outline` — claiming a curve starts at a point it doesn't would
-    // be exactly the kind of guessed metadata this file's honesty
-    // convention exists to avoid, so those three variants get no neckline
-    // curve entry (their princess-seam curve is still real and present).
+    // WP-53 (docs/plan 4.md Phase 4): frontCenter's leading point is now
+    // literally neckSeg[0] (see the frontCenter assignment above) for
+    // every variant, not just "default" — so the neckline curve genuinely
+    // starts at index 0 for all four, and all four get real curve
+    // metadata. (Previously sweetheart/offshoulder/scoop were withheld
+    // here specifically because the outline DIDN'T start there — a real
+    // jog, not a metadata gap — fixed at the source above, not papered
+    // over with metadata that would have been a guess before this WP.)
     //
     // WP-26 integration: the curve's toIdx is NOT reliably frontNeck.length
     // (that was this integration's first attempt, and it's wrong — caught
@@ -509,8 +587,7 @@ export let FancyGen;
     // than assuming it always does. Same reasoning for backNeck/backCurve
     // on the back side (in practice backNeckCurve's dedupe always fires:
     // backNeckSeg's own p1 unconditionally matches backCurve[0]).
-    const neckStartsAtOrigin = neckSeg[0][0] === 0 && neckSeg[0][1] === necklineY;
-    const frontNeckCurve = neckStartsAtOrigin ? [{ fromIdx: 0, toIdx: neckCurveToIdx(frontNeck, frontCurve, neckSeg[2]), ...qBezToCubic(...neckSeg) }] : [];
+    const frontNeckCurve = [{ fromIdx: 0, toIdx: neckCurveToIdx(frontNeck, frontCurve, neckSeg[2]), ...qBezToCubic(...neckSeg) }];
     const meta = {
       frontCenter: { role: 'bodice-front-center', cutOnFold: true, princessSeamId: 'princessFront', curves: [...frontNeckCurve, ...offsetCurves(frontCurveCurves, frontCurveOffset)], edges: [frontCenterEdge] },
       frontSide: { role: 'bodice-front-side', bilateral: true, curves: frontSide.curves || [], edges: [{ fromIdx: 0, toIdx: frontCurve.length - 1, seamId: 'princessFront' }] },
@@ -788,7 +865,7 @@ export let FancyGen;
         { key:"bodiceFS", name:{en:"Bodice Front Side",ar:"جانب الصدرية الأمامي"}, desc:{en:"Curved side panel.",ar:"لوحة جانبية منحنية."}, ...b.meta.frontSide, outline:b.frontSide, grain:[[4,10],[4,b.hemY-4]] },
         { key:"bodiceBC", name:{en:"Bodice Back Center",ar:"خلفية الصدرية الوسطى"}, desc:{en:"Center back panel.",ar:"لوحة الخلفية الوسطى."}, ...b.meta.backCenter, outline:b.backCenter, grain:[[2,10],[2,b.hemY-4]] },
         { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel.",ar:"لوحة جانبية خلفية منحنية."}, ...b.meta.backSide, outline:b.backSide, grain:[[4,10],[4,b.hemY-4]] },
-        { key:"cape", name:{en:"Draped Cape Overlay",ar:"طبقة الكاب المنسدلة"}, desc:{en:"Sweeping curved cape draping from the shoulders.",ar:"كاب منحنٍ ينسدل من الكتفين."}, role:"cape-overlay", outline:capePc(q(m.shoulder)*0.9, 55), grain:[[6,6],[6,40]] },
+        { key:"cape", name:{en:"Draped Cape Overlay",ar:"طبقة الكاب المنسدلة"}, desc:{en:"Sweeping curved cape draping from the shoulders.",ar:"كاب منحنٍ ينسدل من الكتفين."}, role:"cape-overlay", cutOnFold:true, outline:capePc(q(m.shoulder)*0.9, 55), grain:[[6,6],[6,40]] },
         { key:"skirtF", name:{en:"Skirt Front Gore",ar:"مروحة التنورة الأمامية"}, desc:{en:"Front gore.",ar:"مروحة أمامية."}, role:"skirt-front-gore", outline:gorePanel(waistW*0.55, hemW*0.3, hemLen, 5), grain:[[4,10],[4,hemLen-10]] },
         { key:"skirtB", name:{en:"Skirt Back Gore",ar:"مروحة التنورة الخلفية"}, desc:{en:"Back gore.",ar:"مروحة خلفية."}, role:"skirt-back-gore", outline:gorePanel(waistW*0.55, hemW*0.32, hemLen, 5), grain:[[4,10],[4,hemLen-10]] },
         { key:"skirtSL", name:{en:"Skirt Side Gore Left",ar:"مروحة التنورة الجانبية اليسرى"}, desc:{en:"Side gore.",ar:"مروحة جانبية."}, role:"skirt-side-gore-left", outline:gorePanel(waistW*0.45, hemW*0.3, hemLen, 7), grain:[[4,10],[4,hemLen-10]] },
@@ -811,8 +888,8 @@ export let FancyGen;
         { key:"facing", name:{en:"Front Facing",ar:"بطانة المقدمة"}, desc:{en:"Curved lapel facing.",ar:"بطانة صدر منحنية."}, role:"lapel-facing", outline:lapelFacing(m.neck, m.backLen*0.5), grain:[[4,4],[4,m.backLen*0.3]] },
         { key:"sleeveU", name:{en:"Sleeve Upper",ar:"الكم العلوي"}, desc:{en:"Outer sleeve panel.",ar:"اللوحة الخارجية للكم."}, role:"sleeve-upper", bilateral:true, outline:sl.upper, grain:[[q(m.bicep)*0.5,4],[q(m.bicep)*0.5,m.sleeve*0.5]] },
         { key:"sleeveD", name:{en:"Sleeve Under",ar:"الكم السفلي"}, desc:{en:"Inner sleeve panel.",ar:"اللوحة الداخلية للكم."}, role:"sleeve-under", bilateral:true, outline:sl.under, grain:[[q(m.bicep)*0.3,4],[q(m.bicep)*0.3,m.sleeve*0.5]] },
-        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum flounce at the front waist.",ar:"كشكش بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", outline:peplumPc(waistW*0.55, 22), grain:[[6,4],[6,16]] },
-        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum flounce at the back waist.",ar:"كشكش بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", outline:peplumPc(waistW*0.5, 20), grain:[[6,4],[6,15]] },
+        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum flounce at the front waist.",ar:"كشكش بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", cutOnFold:true, outline:peplumPc(waistW*0.55, 22), grain:[[6,4],[6,16]] },
+        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum flounce at the back waist.",ar:"كشكش بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", cutOnFold:true, outline:peplumPc(waistW*0.5, 20), grain:[[6,4],[6,15]] },
         { key:"pocket", name:{en:"Welt Pocket",ar:"جيب مطوي"}, desc:{en:"Curved welt pocket.",ar:"جيب مطوي منحني."}, role:"pocket", outline:pocketPc(11,4), grain:[[5,1],[5,3]] },
       ];
     });
@@ -1006,7 +1083,7 @@ export let FancyGen;
         { key:"bodiceFS", name:{en:"Bodice Front Side",ar:"جانب الصدرية الأمامي"}, desc:{en:"Curved side panel.",ar:"لوحة جانبية منحنية."}, ...b.meta.frontSide, outline:b.frontSide, grain:[[3,8],[3,b.hemY-3]] },
         { key:"bodiceBC", name:{en:"Bodice Back Center",ar:"خلفية الصدرية الوسطى"}, desc:{en:"Center back panel.",ar:"لوحة الخلفية الوسطى."}, ...b.meta.backCenter, outline:b.backCenter, grain:[[2,8],[2,b.hemY-3]] },
         { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel.",ar:"لوحة جانبية خلفية منحنية."}, ...b.meta.backSide, outline:b.backSide, grain:[[3,8],[3,b.hemY-3]] },
-        { key:"cape", name:{en:"Attached Cape",ar:"كاب متصل"}, desc:{en:"Sweeping cape draping from the shoulders.",ar:"كاب منسدل من الكتفين."}, role:"cape", outline:capePc(q(m.shoulder)*0.85, 42), grain:[[5,5],[5,30]] },
+        { key:"cape", name:{en:"Attached Cape",ar:"كاب متصل"}, desc:{en:"Sweeping cape draping from the shoulders.",ar:"كاب منسدل من الكتفين."}, role:"cape", cutOnFold:true, outline:capePc(q(m.shoulder)*0.85, 42), grain:[[5,5],[5,30]] },
         { key:"skirtF", name:{en:"Skirt Front Gore",ar:"مروحة التنورة الأمامية"}, desc:{en:"Front gore.",ar:"مروحة أمامية."}, role:"skirt-front-gore", outline:gorePanel(waistW*0.55, hemW*0.3, hemLen, 5), grain:[[3,8],[3,hemLen-8]] },
         { key:"skirtB", name:{en:"Skirt Back Gore",ar:"مروحة التنورة الخلفية"}, desc:{en:"Back gore.",ar:"مروحة خلفية."}, role:"skirt-back-gore", outline:gorePanel(waistW*0.55, hemW*0.32, hemLen, 5), grain:[[3,8],[3,hemLen-8]] },
         { key:"skirtSL", name:{en:"Skirt Side Gore Left",ar:"مروحة التنورة الجانبية اليسرى"}, desc:{en:"Side gore.",ar:"مروحة جانبية."}, role:"skirt-side-gore-left", outline:gorePanel(waistW*0.45, hemW*0.3, hemLen, 6), grain:[[3,8],[3,hemLen-8]] },
@@ -1050,8 +1127,8 @@ export let FancyGen;
         { key:"back", name:{en:"Back Panel",ar:"لوحة الظهر"}, desc:{en:"Curved back panel.",ar:"لوحة ظهر منحنية."}, role:"back-panel", cutOnFold:true, outline:jacketFrontBack(m, len, {hemFlareF:1.0}).back, grain:[[3,8],[3,len*0.6]] },
         { key:"sleeve", name:{en:"Sleeve",ar:"الكم"}, desc:{en:"Curved-cap sleeve.",ar:"كم برأس منحنٍ."}, role:"sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.85), grain:[[q(m.bicep)*0.5,4],[q(m.bicep)*0.5,m.sleeve*0.7]] },
         { key:"collar", name:{en:"Velvet Collar",ar:"ياقة مخملية"}, desc:{en:"Contrast velvet collar piece.",ar:"قطعة ياقة مخملية متباينة."}, role:"collar", outline:shawlCollar(m.neck, 12), grain:[[3,3],[3,9]] },
-        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum at the front waist.",ar:"بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", outline:peplumPc(qw*0.5, 16), grain:[[5,3],[5,11]] },
-        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum at the back waist.",ar:"بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", outline:peplumPc(qw*0.48, 15), grain:[[5,3],[5,10]] },
+        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum at the front waist.",ar:"بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", cutOnFold:true, outline:peplumPc(qw*0.5, 16), grain:[[5,3],[5,11]] },
+        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum at the back waist.",ar:"بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", cutOnFold:true, outline:peplumPc(qw*0.48, 15), grain:[[5,3],[5,10]] },
         { key:"pocket", name:{en:"Patch Pocket",ar:"جيب ملصق"}, desc:{en:"Curved patch pocket.",ar:"جيب ملصق منحني."}, role:"pocket", outline:pocketPc(9,3.5), grain:[[4,1],[4,2.5]] },
       ];
     });
@@ -1314,8 +1391,8 @@ export let FancyGen;
         { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel.",ar:"لوحة جانبية خلفية منحنية."}, ...b.meta.backSide, outline:b.backSide, grain:[[4,10],[4,b.hemY-4]] },
         { key:"sleeve", name:{en:"Puff Sleeve",ar:"كم منتفخ"}, desc:{en:"Full statement puff sleeve gathered at the cuff.",ar:"كم منتفخ لافت مجمّع عند الأسورة."}, role:"puff-sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.4, 1.7), grain:[[q(m.bicep)*0.6,4],[q(m.bicep)*0.6,m.sleeve*0.32]] },
         { key:"cuff", name:{en:"Sleeve Cuff",ar:"أسورة الكم"}, desc:{en:"Fitted band gathering the puff sleeve.",ar:"شريط ضيق يجمع الكم المنتفخ."}, role:"cuff", outline:cuffPc(q(m.bicep)*0.55), grain:[[3,1],[3,4]] },
-        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum flounce at the front waist.",ar:"كشكش بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", outline:peplumPc(waistW*0.55, 20), grain:[[6,4],[6,15]] },
-        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum flounce at the back waist.",ar:"كشكش بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", outline:peplumPc(waistW*0.5, 18), grain:[[6,4],[6,14]] },
+        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum flounce at the front waist.",ar:"كشكش بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", cutOnFold:true, outline:peplumPc(waistW*0.55, 20), grain:[[6,4],[6,15]] },
+        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum flounce at the back waist.",ar:"كشكش بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", cutOnFold:true, outline:peplumPc(waistW*0.5, 18), grain:[[6,4],[6,14]] },
         { key:"skirtF", name:{en:"Skirt Front Gore",ar:"مروحة التنورة الأمامية"}, desc:{en:"Straight midi-length front gore.",ar:"مروحة أمامية بطول ميدي مستقيم."}, role:"skirt-front-gore", outline:gorePanel(waistW*0.55, hemW*0.3, hemLen, 3), grain:[[4,10],[4,hemLen-10]] },
         { key:"skirtB", name:{en:"Skirt Back Gore",ar:"مروحة التنورة الخلفية"}, desc:{en:"Straight midi-length back gore.",ar:"مروحة خلفية بطول ميدي مستقيم."}, role:"skirt-back-gore", outline:gorePanel(waistW*0.55, hemW*0.32, hemLen, 3), grain:[[4,10],[4,hemLen-10]] },
         { key:"belt", name:{en:"Waist Tie",ar:"رباط الخصر"}, desc:{en:"Thin tie finishing the peplum seam.",ar:"رباط رفيع يُنهي خط البيبلوم."}, role:"sash", outline:sashPc(waistW*0.3, 30), grain:[[5,1.5],[20,1.5]] },
@@ -1379,7 +1456,7 @@ export let FancyGen;
         { key:"front", name:{en:"Bodice Front",ar:"مقدمة الصدرية"}, desc:{en:"Fitted halter-adjacent front bodice.",ar:"صدرية أمامية ضيقة قريبة من طراز الحلق."}, role:"front-panel", outline:jb.front, grain:[[3,8],[3,m.backLen*0.4]] },
         { key:"back", name:{en:"Bodice Back",ar:"خلفية الصدرية"}, desc:{en:"Low back panel anchoring the cape.",ar:"لوحة ظهر مكشوفة تُثبّت الكاب."}, role:"back-panel", cutOnFold:true, outline:jb.back, grain:[[3,8],[3,m.backLen*0.4]] },
         { key:"collar", name:{en:"Standing Collar",ar:"ياقة واقفة"}, desc:{en:"Structured standing collar band.",ar:"شريط ياقة واقف مهيكل."}, role:"collar-stand", outline:cs.stand, grain:[[3,1],[m.neck/2,1]] },
-        { key:"cape", name:{en:"Draped Back Cape",ar:"كاب خلفي منسدل"}, desc:{en:"Sweeping cape attached at the shoulder seam.",ar:"كاب منسدل مثبّت عند خط الكتف."}, role:"cape-overlay", outline:capePc(q(m.shoulder)*0.95, 60), grain:[[6,6],[6,42]] },
+        { key:"cape", name:{en:"Draped Back Cape",ar:"كاب خلفي منسدل"}, desc:{en:"Sweeping cape attached at the shoulder seam.",ar:"كاب منسدل مثبّت عند خط الكتف."}, role:"cape-overlay", cutOnFold:true, outline:capePc(q(m.shoulder)*0.95, 60), grain:[[6,6],[6,42]] },
         { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Wide palazzo-leg front panel.",ar:"لوحة ساق أمامية واسعة بطراز البالاتزو."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam*1.1, true), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
         { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Wide palazzo-leg back panel.",ar:"لوحة ساق خلفية واسعة بطراز البالاتزو."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam*1.1, false), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
         { key:"sash", name:{en:"Waist Sash",ar:"حزام الخصر"}, desc:{en:"Tie sash defining the waist.",ar:"حزام يُربط ويبرز الخصر."}, role:"sash", outline:sashPc(qw*0.4, 45), grain:[[8,2],[30,2]] },
@@ -1615,7 +1692,7 @@ export let FancyGen;
         { key:"collar", name:{en:"Standing Collar",ar:"ياقة واقفة"}, desc:{en:"Structured standing collar band.",ar:"شريط ياقة واقف مهيكل."}, role:"collar-stand", outline:cs.stand, grain:[[3,1],[m.neck/2,1]] },
         { key:"facing", name:{en:"Front Facing",ar:"بطانة المقدمة"}, desc:{en:"Curved facing along the front placket.",ar:"بطانة منحنية على فتحة المقدمة."}, role:"lapel-facing", outline:lapelFacing(m.neck*0.6, len*0.3), grain:[[3,3],[3,len*0.18]] },
         { key:"cuff", name:{en:"Sleeve Cuff",ar:"أسورة الكم"}, desc:{en:"Finishing band at the sleeve hem.",ar:"شريط تشطيب عند نهاية الكم."}, role:"cuff", outline:cuffPc(q(m.bicep)*0.7), grain:[[3,1],[3,4]] },
-        { key:"cape", name:{en:"Draped Back Cape",ar:"كاب خلفي منسدل"}, desc:{en:"Ceremonial cape draping from the shoulders.",ar:"كاب احتفالي ينسدل من الكتفين."}, role:"cape-overlay", outline:capePc(q(m.shoulder)*0.9, 50), grain:[[6,6],[6,36]] },
+        { key:"cape", name:{en:"Draped Back Cape",ar:"كاب خلفي منسدل"}, desc:{en:"Ceremonial cape draping from the shoulders.",ar:"كاب احتفالي ينسدل من الكتفين."}, role:"cape-overlay", cutOnFold:true, outline:capePc(q(m.shoulder)*0.9, 50), grain:[[6,6],[6,36]] },
         { key:"pocket", name:{en:"Side Seam Pocket",ar:"جيب الخط الجانبي"}, desc:{en:"Hidden pocket set into the side seam.",ar:"جيب مخفي داخل الخط الجانبي."}, role:"pocket", outline:pocketPc(10,14), grain:[[4,4],[4,10]] },
         { key:"sash", name:{en:"Ceremonial Waist Cord",ar:"حزام خصر احتفالي"}, desc:{en:"Decorative tie cord accenting the waist.",ar:"حزام زخرفي يُربط ويبرز الخصر."}, role:"sash", outline:sashPc(q(m.waist)*0.3, 35), grain:[[6,2],[22,2]] },
       ];
@@ -1766,8 +1843,8 @@ export let FancyGen;
         { key:"bodiceFS", name:{en:"Bodice Front Side",ar:"جانب الصدرية الأمامي"}, desc:{en:"Curved side panel.",ar:"لوحة جانبية منحنية."}, ...b.meta.frontSide, outline:b.frontSide, grain:[[3,7],[3,b.hemY-3]] },
         { key:"bodiceBC", name:{en:"Bodice Back Center",ar:"خلفية الصدرية الوسطى"}, desc:{en:"Center back panel.",ar:"لوحة الخلفية الوسطى."}, ...b.meta.backCenter, outline:b.backCenter, grain:[[2,7],[2,b.hemY-3]] },
         { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel.",ar:"لوحة جانبية خلفية منحنية."}, ...b.meta.backSide, outline:b.backSide, grain:[[3,7],[3,b.hemY-3]] },
-        { key:"capeSleeveL", name:{en:"Cape Sleeve Left",ar:"كم الكاب الأيسر"}, desc:{en:"Curved cape-style sleeve panel.",ar:"لوحة كم بطراز الكاب منحنية."}, role:"cape-sleeve", outline:capePc(q(m.shoulder)*0.32, 20), grain:[[3,3],[3,14]] },
-        { key:"capeSleeveR", name:{en:"Cape Sleeve Right",ar:"كم الكاب الأيمن"}, desc:{en:"Curved cape-style sleeve panel.",ar:"لوحة كم بطراز الكاب منحنية."}, role:"cape-sleeve", outline:capePc(q(m.shoulder)*0.32, 20), grain:[[3,3],[3,14]] },
+        { key:"capeSleeveL", name:{en:"Cape Sleeve Left",ar:"كم الكاب الأيسر"}, desc:{en:"Curved cape-style sleeve panel.",ar:"لوحة كم بطراز الكاب منحنية."}, role:"cape-sleeve", cutOnFold:true, outline:capePc(q(m.shoulder)*0.32, 20), grain:[[3,3],[3,14]] },
+        { key:"capeSleeveR", name:{en:"Cape Sleeve Right",ar:"كم الكاب الأيمن"}, desc:{en:"Curved cape-style sleeve panel.",ar:"لوحة كم بطراز الكاب منحنية."}, role:"cape-sleeve", cutOnFold:true, outline:capePc(q(m.shoulder)*0.32, 20), grain:[[3,3],[3,14]] },
         { key:"facing", name:{en:"Neckline Facing",ar:"بطانة خط الرقبة"}, desc:{en:"Curved facing finishing the neckline.",ar:"بطانة منحنية لتشطيب خط الرقبة."}, role:"lapel-facing", outline:[[0,0],...qBez([0,0],[m.neck*0.28,3],[m.neck*0.49,1],6),[m.neck*0.49,5],[0,5]], grain:[[3,2],[m.neck*0.28,2]] },
         { key:"skirtF", name:{en:"Skirt Front Gore",ar:"مروحة التنورة الأمامية"}, desc:{en:"Front gore.",ar:"مروحة أمامية."}, role:"skirt-front-gore", outline:gorePanel(waistW*0.55, hemW*0.3, hemLen, 5), grain:[[3,8],[3,hemLen-8]] },
         { key:"skirtB", name:{en:"Skirt Back Gore",ar:"مروحة التنورة الخلفية"}, desc:{en:"Back gore.",ar:"مروحة خلفية."}, role:"skirt-back-gore", outline:gorePanel(waistW*0.55, hemW*0.32, hemLen, 5), grain:[[3,8],[3,hemLen-8]] },
@@ -1810,8 +1887,8 @@ export let FancyGen;
         { key:"back", name:{en:"Bodice Back",ar:"خلفية الصدرية"}, desc:{en:"Fitted back bodice panel.",ar:"لوحة خلفية ضيقة."}, role:"back-panel", cutOnFold:true, outline:jb.back, grain:[[3,7],[3,m.backLen*0.35]] },
         { key:"collar", name:{en:"Peter Pan Collar",ar:"ياقة بيتر بان"}, desc:{en:"Rounded curved collar.",ar:"ياقة مدورة منحنية."}, role:"collar", outline:collarStand(m.neck).collar, grain:[[3,2],[3,5]] },
         { key:"facing", name:{en:"Neckline Facing",ar:"بطانة خط الرقبة"}, desc:{en:"Curved facing finishing the collar seam.",ar:"بطانة منحنية لتشطيب خط الياقة."}, role:"lapel-facing", outline:[[0,0],...qBez([0,0],[m.neck*0.24,3],[m.neck*0.42,1],6),[m.neck*0.42,5],[0,5]], grain:[[3,2],[m.neck*0.24,2]] },
-        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum flounce at the front waist.",ar:"كشكش بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", outline:peplumPc(qw*0.5, 16), grain:[[5,3],[5,11]] },
-        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum flounce at the back waist.",ar:"كشكش بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", outline:peplumPc(qw*0.48, 15), grain:[[5,3],[5,10]] },
+        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum flounce at the front waist.",ar:"كشكش بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", cutOnFold:true, outline:peplumPc(qw*0.5, 16), grain:[[5,3],[5,11]] },
+        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum flounce at the back waist.",ar:"كشكش بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", cutOnFold:true, outline:peplumPc(qw*0.48, 15), grain:[[5,3],[5,10]] },
         { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Wide-leg front panel.",ar:"لوحة ساق أمامية واسعة."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
         { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Wide-leg back panel.",ar:"لوحة ساق خلفية واسعة."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
         { key:"sash", name:{en:"Waist Tie",ar:"رباط الخصر"}, desc:{en:"Thin tie finishing the peplum seam.",ar:"رباط رفيع يُنهي خط البيبلوم."}, role:"sash", outline:sashPc(qw*0.3, 26), grain:[[4,1.5],[16,1.5]] },
@@ -1833,8 +1910,8 @@ export let FancyGen;
         { key:"sleeve", name:{en:"Sleeve",ar:"الكم"}, desc:{en:"Curved-cap sleeve.",ar:"كم برأس منحنٍ."}, role:"sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.8), grain:[[q(m.bicep)*0.5,3],[q(m.bicep)*0.5,m.sleeve*0.65]] },
         { key:"collar", name:{en:"Wide Collar",ar:"ياقة عريضة"}, desc:{en:"Wide rounded collar piece.",ar:"قطعة ياقة عريضة مدورة."}, role:"collar", outline:cs.collar, grain:[[3,2],[3,5]] },
         { key:"facing", name:{en:"Front Facing",ar:"بطانة المقدمة"}, desc:{en:"Curved facing along the front closure.",ar:"بطانة منحنية على حافة الإغلاق الأمامية."}, role:"lapel-facing", outline:lapelFacing(m.neck, len*0.4), grain:[[3,3],[3,len*0.25]] },
-        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum at the front waist.",ar:"بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", outline:peplumPc(qw*0.5, 15), grain:[[4,3],[4,10]] },
-        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum at the back waist.",ar:"بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", outline:peplumPc(qw*0.48, 14), grain:[[4,3],[4,9]] },
+        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum at the front waist.",ar:"بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", cutOnFold:true, outline:peplumPc(qw*0.5, 15), grain:[[4,3],[4,10]] },
+        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum at the back waist.",ar:"بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", cutOnFold:true, outline:peplumPc(qw*0.48, 14), grain:[[4,3],[4,9]] },
         { key:"pocketL", name:{en:"Patch Pocket Left",ar:"الجيب الملصق الأيسر"}, desc:{en:"Curved patch pocket.",ar:"جيب ملصق منحنٍ."}, role:"pocket", outline:pocketPc(8,7), grain:[[3,2],[3,5]] },
         { key:"pocketR", name:{en:"Patch Pocket Right",ar:"الجيب الملصق الأيمن"}, desc:{en:"Curved patch pocket.",ar:"جيب ملصق منحنٍ."}, role:"pocket", outline:pocketPc(8,7), grain:[[3,2],[3,5]] },
       ];
@@ -1876,8 +1953,8 @@ export let FancyGen;
         { key:"facing", name:{en:"Front Facing",ar:"بطانة المقدمة"}, desc:{en:"Curved lapel facing.",ar:"بطانة صدر منحنية."}, role:"lapel-facing", outline:lapelFacing(m.neck, m.backLen*0.4), grain:[[3,3],[3,m.backLen*0.25]] },
         { key:"sleeveU", name:{en:"Sleeve Upper",ar:"الكم العلوي"}, desc:{en:"Outer sleeve panel.",ar:"اللوحة الخارجية للكم."}, role:"sleeve-upper", bilateral:true, outline:sleeve2pc(m.bicep, m.sleeve).upper, grain:[[q(m.bicep)*0.5,3],[q(m.bicep)*0.5,m.sleeve*0.5]] },
         { key:"sleeveD", name:{en:"Sleeve Under",ar:"الكم السفلي"}, desc:{en:"Inner sleeve panel.",ar:"اللوحة الداخلية للكم."}, role:"sleeve-under", bilateral:true, outline:sleeve2pc(m.bicep, m.sleeve).under, grain:[[q(m.bicep)*0.3,3],[q(m.bicep)*0.3,m.sleeve*0.5]] },
-        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum flounce at the front waist.",ar:"كشكش بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", outline:peplumPc(waistW*0.55, 18), grain:[[5,3],[5,13]] },
-        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum flounce at the back waist.",ar:"كشكش بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", outline:peplumPc(waistW*0.5, 16), grain:[[5,3],[5,12]] },
+        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum flounce at the front waist.",ar:"كشكش بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", cutOnFold:true, outline:peplumPc(waistW*0.55, 18), grain:[[5,3],[5,13]] },
+        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum flounce at the back waist.",ar:"كشكش بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", cutOnFold:true, outline:peplumPc(waistW*0.5, 16), grain:[[5,3],[5,12]] },
         { key:"pocket", name:{en:"Welt Pocket",ar:"جيب مطوي"}, desc:{en:"Curved welt pocket.",ar:"جيب مطوي منحني."}, role:"pocket", outline:pocketPc(8,3.5), grain:[[3,1],[3,2.5]] },
         { key:"belt", name:{en:"Waist Tie",ar:"رباط الخصر"}, desc:{en:"Thin tie finishing the peplum seam.",ar:"رباط رفيع يُنهي خط البيبلوم."}, role:"sash", outline:sashPc(waistW*0.3, 26), grain:[[4,1.5],[16,1.5]] },
       ];
