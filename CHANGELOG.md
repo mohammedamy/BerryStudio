@@ -6,6 +6,49 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-54: pattern library rebuild, Phase 4 (part 2) — 5 new roles close the underwear-library.js vocabulary gap
+
+docs/plan 4.md Phase 4, second installment. `js/underwear-library.js`
+(44 patterns, 129 pieces) declared `cup`/`band`/`strap`/`elastic-band`/
+`gusset` roles from day one — real, necessary anatomical distinctions a
+bra/brief's pieces genuinely need — but none were ever added to the
+shared role vocabulary. `resolveSchemaRole()` returned `null` for all
+five, so cloth-lab's importer silently fell back to `classifyLegacy`'s
+name-based guess for every bra/brief piece using them: exactly the
+"invented role" problem docs/plan 4.md §4.2's vocabulary exists to
+prevent, confirmed by direct inspection, not assumed.
+
+Per §4.2's own instructions for a genuinely new role (checked against
+"prefer reusing an existing role" first — none of the 46 fit a bra
+cup/band/strap or a brief's elastic-band/gusset without being
+misleading):
+
+- `cloth-lab/src/pattern/roles.js`: 5 new `SCHEMA_ROLE_INFO` entries,
+  placement chosen from the closest existing precedent (cup/band/gusset
+  → `attachBody`, matching facing/cuff/pocket's own "near chest height"
+  small-accessory placement; strap → `attachNeck`, matching collar/
+  epaulette; elastic-band → `attachHem`, matching its most common leg-
+  opening use in this collection) — same "reasonable attachment, not
+  seam-perfect" bar every other accessory role in that file already
+  sets, not a new placement algorithm.
+- `schema/pattern-spec.v1.json`: same 5 roles added to the `role` enum;
+  regenerated `js/vendor/pattern-spec-validate.generated.js` (the
+  CSP-safe standalone validator schema changes don't take effect without
+  regenerating).
+- `test/library-roles.test.js`: now also imports `js/underwear-
+  library.js` (previously not swept here at all) and its `ROLE_VOCABULARY`
+  copy grows from 46 to 51 entries to match. Role coverage across the
+  full 308-pattern library: 2166/2170 valid (up from an un-measured
+  129-piece gap), only 2 roleless (`boys_trousers`, out of scope) and 2
+  invalid (`cape-sleeve`, a separate pre-existing gap, unchanged).
+
+### Verification
+- `npm test`: 299/299.
+- `cd cloth-lab && npm test`: 215/215 (all 20 test files) — confirms the
+  roles.js/schema changes don't regress cloth-lab's own suite.
+- Directly confirmed all 5 roles now resolve to a real placement (not
+  `null`) via `resolveSchemaRole()`.
+
 ## WP-53: pattern library rebuild, Phase 4 (part 1) — Fancy Collection: every documented Phase 0 defect fixed at source
 
 docs/plan 4.md Phase 4, first installment — `js/fancy-patterns.js` (the
