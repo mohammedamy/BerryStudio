@@ -36,6 +36,7 @@ function toPayloadPiece(p, i) {
     bilateral: p.bilateral, edges: p.edges, grainline: p.grainline,
     princessSeamId: p.princessSeamId,
     necklineEndIdx: p.necklineEndIdx,
+    sideEndIdx: p.sideEndIdx,
     color: p.color,
   }
 }

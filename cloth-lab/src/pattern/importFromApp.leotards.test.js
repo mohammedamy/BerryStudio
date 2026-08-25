@@ -26,6 +26,7 @@ function toPayloadPiece(p, i) {
     bilateral: p.bilateral, edges: p.edges, grainline: p.grainline,
     princessSeamId: p.princessSeamId,
     necklineEndIdx: p.necklineEndIdx,
+    sideEndIdx: p.sideEndIdx,
     color: p.color,
   }
 }
@@ -97,5 +98,27 @@ describe.each(NECKBAND_IDS)('%s neckline binding', (id) => {
     const hasSeamId = (id) => pieces.some((p) => p.name?.en !== 'Neckline Binding' && (p.edges || []).some((e) => e.seamId === id))
     const expected = (hasSeamId('leotardNeckFront') ? 1 : 0) + (hasSeamId('leotardNeckBack') ? 1 : 0)
     expect(involves(bindingId).length, `${bindingId} should have ${expected} real seam(s)`).toBe(expected)
+  })
+})
+
+// WP-61 (continued): every leotard has a real leg opening (unlike the
+// neckline, whose exact curve varies by style) — "Leg Opening Binding"
+// should ALWAYS get a real seam to both the front's and the back's own
+// hip-to-gusset curve, on BOTH its bilateral R and L copies (the two leg
+// openings), no degenerate-curve exception needed here.
+describe.each(LEOTARD_IDS)('%s leg opening binding', (id) => {
+  test('both R and L copies get a real seam to both the front AND back leg-opening curve', () => {
+    const entry = PATTERNS[id]
+    const category = entry.category
+    const m = SAMPLE_MEASUREMENTS[category]
+    const payload = { pieces: entry.pieces(m).map(toPayloadPiece), measurements: m, category, fabricId: null, avatarGLB: {} }
+    const result = convertAppPattern(payload)
+
+    const bindingIds = result.recognized.filter((r) => r.label.startsWith('Leg Opening Binding')).map((r) => r.id)
+    expect(bindingIds.length, 'Leg Opening Binding should have 2 recognized copies (R and L)').toBe(2)
+    const involves = (pid) => result.seamInstructions.filter((s) => s.a.piece === pid || s.b.piece === pid)
+    for (const pid of bindingIds) {
+      expect(involves(pid).length, `${pid} should have exactly 2 real seams (front + back leg opening)`).toBe(2)
+    }
   })
 })

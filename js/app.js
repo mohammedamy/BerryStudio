@@ -3728,6 +3728,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         // reproduces today's behavior exactly. See importFromApp.js's
         // own WP-61 comment for the full reasoning and index-math.
         necklineEndIdx: p.necklineEndIdx,
+        // WP-61 code-review fix: `necklineEndIdx` alone only narrows
+        // where the geometric side-seam claim STARTS — its far end still
+        // ran all the way to the natural hem regardless, silently
+        // swallowing a leotard's whole leg-opening curve the exact same
+        // way. `sideEndIdx` is the symmetric counterpart, narrowing
+        // where it ENDS. See importFromApp.js's own comment for the
+        // full reasoning and index-math (identical convention to
+        // necklineEndIdx).
+        sideEndIdx: p.sideEndIdx,
         // WP-49: explicit upper/lower-body override (js/body-zone.js) —
         // cloth-lab/src/pattern/importFromApp.js's classifyLegacy path
         // consults this to correct a wrong name-based guess for pieces

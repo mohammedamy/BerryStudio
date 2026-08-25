@@ -165,7 +165,18 @@ function mirrorEdgeIndices(edges, n) {
 // point k = mirror(original[n_orig-2-k]), placed at unfolded index
 // n_orig+k; solving for i = n_orig-2-k gives unfolded index
 // 2*n_orig-2-i = unfoldedLen-i).
-function deriveTorsoEdgeInstructions(outline, { includeTop, necklineEndIdx } = {}) {
+// WP-61 code-review fix: `necklineEndIdx` alone only narrows where the
+// side-seam claim STARTS — its far end (`rightHemIdx`/`leftHemIdx`, the
+// geometric hem search) still ran all the way to the natural hem/fold
+// point regardless, so it still swallowed a leotard's ENTIRE hip-to-leg-
+// to-gusset region as part of "the side seam," same collision problem
+// necklineEndIdx was built to solve, just at the other end — confirmed
+// by direct reproduction (a leg-opening-binding seam declared exactly
+// this way still silently never formed). `sideEndIdx` is the symmetric
+// counterpart: narrows where the claim ENDS, same optional/opt-in
+// contract, same coordinate space, same zero-regression guarantee when
+// omitted (`rightSide`'s end stays `rightHemIdx`, unchanged).
+function deriveTorsoEdgeInstructions(outline, { includeTop, necklineEndIdx, sideEndIdx } = {}) {
   const n = outline.length
   const half = Math.floor(n / 2) // unfoldPiece is symmetric: n = 2*(orig-1)
   let rightHemIdx = 1, rightHemY = -Infinity
@@ -175,6 +186,8 @@ function deriveTorsoEdgeInstructions(outline, { includeTop, necklineEndIdx } = {
 
   const rightNeckEnd = necklineEndIdx != null ? necklineEndIdx : 1
   const leftNeckEnd = necklineEndIdx != null ? n - necklineEndIdx : n - 1
+  const rightSideEnd = sideEndIdx != null ? sideEndIdx : rightHemIdx
+  const leftSideStart = sideEndIdx != null ? n - sideEndIdx : leftHemIdx
 
   // Deliberately does NOT push a 'rightNeckline'/'leftNeckline' NAMED
   // edge of its own here — only narrows where 'rightSide'/'leftSide'
@@ -201,9 +214,9 @@ function deriveTorsoEdgeInstructions(outline, { includeTop, necklineEndIdx } = {
   // this was already reachable on the plain, pre-WP-61 formula too.
   const out = []
   if (includeTop) out.push({ name: 'rightTop', from: 0, to: 1 })
-  if (rightNeckEnd !== rightHemIdx) out.push({ name: 'rightSide', from: rightNeckEnd, to: rightHemIdx })
+  if (rightNeckEnd !== rightSideEnd) out.push({ name: 'rightSide', from: rightNeckEnd, to: rightSideEnd })
   if (includeTop) out.push({ name: 'leftTop', from: n - 1, to: 0 })
-  if (leftHemIdx !== leftNeckEnd) out.push({ name: 'leftSide', from: leftHemIdx, to: leftNeckEnd })
+  if (leftSideStart !== leftNeckEnd) out.push({ name: 'leftSide', from: leftSideStart, to: leftNeckEnd })
   return out
 }
 
@@ -393,6 +406,7 @@ export function convertAppPattern(payload) {
     const bilateral = p.bilateral ?? resolved.bilateral
     const edges = p.edges
     const necklineEndIdx = p.necklineEndIdx
+    const sideEndIdx = p.sideEndIdx
     const princessSeamId = p.princessSeamId
     const local = relocalize(p.outline)
 
@@ -462,7 +476,7 @@ export function convertAppPattern(payload) {
         // own declared `edges` now always goes through pushSeamIdEdges,
         // regardless of which placement it has.
         if (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack') {
-          const geo = deriveTorsoEdgeInstructions(outline, { includeTop: placement === 'frontPanel' || placement === 'backPanel', necklineEndIdx })
+          const geo = deriveTorsoEdgeInstructions(outline, { includeTop: placement === 'frontPanel' || placement === 'backPanel', necklineEndIdx, sideEndIdx })
           // Code-review fix: a genuinely tiny outline can leave
           // deriveTorsoEdgeInstructions unable to produce a real,
           // non-degenerate rightSide/leftSide (see that function's own

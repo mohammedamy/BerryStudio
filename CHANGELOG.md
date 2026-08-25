@@ -6,6 +6,55 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-62: pattern library rebuild, Phase 5 continued — the leg-opening binding, and a real gap in WP-61's own fix found by trying to reuse it
+
+Direct follow-up to WP-61, extending the same real-seam treatment from
+the neckline binding to "Leg Opening Binding" (100 leotard patterns,
+bilateral — one piece, two leg openings). Trying to reuse WP-61's own
+`necklineEndIdx` mechanism here surfaced a real gap in it, caught by
+direct reproduction before assuming it worked: `necklineEndIdx` only
+narrows where the geometric side-seam claim STARTS — its far end still
+ran all the way to the natural hem/fold point regardless, so the
+hip-to-gusset leg-opening curve stayed swallowed by `rightSide`/
+`leftSide` exactly the same way the neckline curve used to be (the
+neckline fix itself wasn't wrong — the curve it frees sits at the
+START of the claimed range, so the missing end-narrowing never
+mattered there; it only surfaces once something needs to be freed near
+the END instead).
+
+- **`sideEndIdx`** (new, symmetric counterpart to `necklineEndIdx`,
+  same opt-in contract, same coordinate space, same zero-regression
+  guarantee when omitted): narrows where the claim ENDS. Threaded
+  through the same places `necklineEndIdx` was (`importFromApp.js`,
+  `js/app.js`'s payload builder, all 3 cloth-lab test-file mirrors).
+- `js/ai.js`'s leotard Front/Back Body: `leotardSide` narrowed to
+  shoulder-through-hip (was shoulder-through-gusset); the hip-to-gusset
+  tail now belongs to new `leotardLegFront_R`/`_L` /
+  `leotardLegBack_R`/`_L` edges (front/back Body is a single already-
+  doubled cutOnFold piece, not a bilateral pair, so its own hip-to-
+  gusset curve needs both a right-side declaration AND — via a new,
+  directly-verified `foldMirrorEdge()` helper — its correctly-computed
+  mirrored left-side one, each carrying an already-`_R`/`_L`-suffixed
+  literal seamId string so it lands in the same bucket the bilateral
+  binding's own auto-suffixing produces). A new `leotardLegParity` edge
+  keeps WP-55's original front/back length check alive over that same
+  span — a real, separate relationship from the binding attachment,
+  not the same edge doing double duty.
+- "Leg Opening Binding": same front-half/back-half midpoint split as
+  "Neckline Binding," each half seamed to the matching real curve.
+
+### Verification
+- Direct reproduction caught the `sideEndIdx` gap BEFORE claiming the
+  fix worked (first attempt: 0 seams on either bilateral copy) and
+  confirmed the fix after (both copies: exactly 2 real seams each,
+  front + back).
+- `npm test`: 299/299 — the validator's own WP-55 seamLengthParity
+  check on the leg-opening span (now via `leotardLegParity` instead of
+  the wider `leotardSide`) stayed green throughout.
+- `cloth-lab` vitest: **634/634** (was 534 — 100 new, one per leotard
+  pattern, checking both bilateral copies get exactly 2 real seams
+  each).
+
 ## WP-61: pattern library rebuild, Phase 5 continued — real neckline-accessory seaming, a shared-geometry rework, and another latent crash found and fixed
 
 Direct follow-up to WP-59/60, user-directed to build real (not partial)
