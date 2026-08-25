@@ -729,18 +729,29 @@ export const AIGen = (() => {
   function leotardFrontPieces(style, chestW, waistW, hipW, bod, splitY) {
     const p = leotardFrontPts(style, chestW, waistW, hipW, bod);
     const gLen = p.fold[1];
+    // WP-55 (docs/plan 4.md Phase 4): the leotard's real side seam —
+    // shoulder/yoke-split point down through waistIn/waist/hip/leg to the
+    // gusset — is a genuine shared edge with leotardBackPieces' own
+    // equivalent (matched to within ~2.5mm across all 100 patterns,
+    // confirmed by direct measurement, after aligning the two functions'
+    // hipDrop/legW/crotchY/waist/hip values above). Declaring it lets
+    // checkSeamLengthParity measure that real edge instead of the
+    // bounding-box proxy.
     if (!splitY) {
+      const outline = [...p.neck, p.shoulder, p.waistIn, p.waist, p.hip, p.leg, p.gusset, p.fold];
       return [{
         name: { en: "Front Body", ar: "مقدمة الجسم" },
         desc: { en: "Continuous front panel from the neckline straight through to the high-cut leg opening — no waist seam, matching real leotard construction.",
                 ar: "لوحة أمامية متصلة من فتحة الرقبة حتى فتحة الساق العالية — بدون خط خصر، كما في تفصيل الليوتارد الحقيقي." },
-        outline: [...p.neck, p.shoulder, p.waistIn, p.waist, p.hip, p.leg, p.gusset, p.fold],
+        outline,
         role: "bodice-front-center", cutOnFold: true,
         grain: [[chestW * 0.4, 8], [chestW * 0.4, gLen - 8]],
+        edges: [{ fromIdx: p.neck.length, toIdx: p.neck.length + 5, seamId: "leotardSide" }],
       }];
     }
     const { y1, y2 } = splitY;
     const diag = style.colorBlock === "diagonal";
+    const lowerOutline = [[0, y1], [chestW * 0.85, y2], p.waistIn, p.waist, p.hip, p.leg, p.gusset, p.fold];
     return [
       { name: { en: diag ? "Diagonal Colour-Block Yoke" : "Front Colour-Block Yoke",
                 ar: diag ? "كوة صدر بقصة مائلة متباينة اللون" : "كوة صدر متباينة اللون" },
@@ -750,9 +761,10 @@ export const AIGen = (() => {
         grain: [[chestW * 0.35, 3], [chestW * 0.35, Math.max(y1, y2) - 3]] },
       { name: { en: "Front Body", ar: "مقدمة الجسم" },
         desc: { en: "Lower front panel seamed to the yoke, continuing straight to the high-cut leg opening.", ar: "لوحة أمامية سفلية متصلة بالكوة، تمتد حتى فتحة الساق العالية." },
-        outline: [[0, y1], [chestW * 0.85, y2], p.waistIn, p.waist, p.hip, p.leg, p.gusset, p.fold],
+        outline: lowerOutline,
         role: "bodice-front-center", cutOnFold: true,
-        grain: [[chestW * 0.4, Math.min(y1, y2) + 6], [chestW * 0.4, gLen - 8]] },
+        grain: [[chestW * 0.4, Math.min(y1, y2) + 6], [chestW * 0.4, gLen - 8]],
+        edges: [{ fromIdx: 1, toIdx: 6, seamId: "leotardSide" }] },
     ];
   }
   function leotardBackTopPts(style, chestW, bod) {
@@ -779,10 +791,27 @@ export const AIGen = (() => {
   // top-to-bottom than a full, unsplit back would be.
   function leotardBackPieces(style, chestW, waistW, hipW, bod, splitY) {
     const leg = LEOTARD_LEG[style.legHeight] || LEOTARD_LEG.classic;
-    const hipDrop = 9.5, legY = bod + hipDrop + leg.rise, legW = hipW * leg.legWFactor + 1, crotchY = legY + leg.crotch + 1;
+    // WP-55 (docs/plan 4.md Phase 4): hipDrop/legW/crotchY used to run
+    // +0.5/+1/+1 ahead of the front's own — real "back seat ease" intent,
+    // but it also meant the side seam (shoulder/armhole through waist/
+    // hip/leg to the gusset) genuinely came out ~1cm longer on the back
+    // than the front — not a proxy artifact, a real un-sewable seam on a
+    // fixed-length edge. Matched to the front's own values here (the
+    // WIDTH-only offsets below — chest/waist/hip's own X — still give the
+    // back its fractional extra room without touching this edge's length).
+    const hipDrop = 9, legY = bod + hipDrop + leg.rise, legW = hipW * leg.legWFactor, crotchY = legY + leg.crotch;
     const top = leotardBackTopPts(style, chestW, bod);
-    const armhole = [chestW + 1, 3.5], waistIn = [chestW * 0.94, bod * 0.58], waist = [waistW + 0.5, bod];
-    const hip = [hipW + 0.5, bod + hipDrop], legPt = [legW, legY], gusset = [leg.gusset + 0.4, crotchY], fold = [0, crotchY];
+    // WP-55: waist/hip/gusset's own small "+0.5/+0.4" ease offsets (same
+    // reasoning as hipDrop/legW/crotchY above) also sat directly on this
+    // side-seam edge, adding to the front/back length mismatch — matched
+    // to the front's own values. `armhole`'s own offset is a genuinely
+    // different point from the front's `shoulder` (back's top construction
+    // isn't the same shape as front's neckline), so rather than match it
+    // exactly, it's tuned (+2, up from the original +1) so the two edges'
+    // TOTAL lengths land within the 3mm tolerance across all 100 patterns
+    // (confirmed by direct measurement — max 2.5mm, not just a guess).
+    const armhole = [chestW + 2, 3.5], waistIn = [chestW * 0.94, bod * 0.58], waist = [waistW, bod];
+    const hip = [hipW, bod + hipDrop], legPt = [legW, legY], gusset = [leg.gusset, crotchY], fold = [0, crotchY];
     const pieces = [];
     if (!splitY) {
       pieces.push({
@@ -791,6 +820,8 @@ export const AIGen = (() => {
         outline: [...top, armhole, waistIn, waist, hip, legPt, gusset, fold],
         role: "bodice-back-center", cutOnFold: true,
         grain: [[2, 8], [2, crotchY - 8]],
+        // matches leotardFrontPieces' own 'leotardSide' edge declaration
+        edges: [{ fromIdx: top.length, toIdx: top.length + 5, seamId: "leotardSide" }],
       });
     } else {
       const { y1, y2 } = splitY;
@@ -806,7 +837,8 @@ export const AIGen = (() => {
           desc: { en: "Lower back panel seamed to the back yoke, continuing straight to the high-cut leg opening.", ar: "لوحة خلفية سفلية متصلة بكوة الظهر، تمتد حتى فتحة الساق العالية." },
           outline: [[0, y1], [chestW * 0.87, y2], waistIn, waist, hip, legPt, gusset, fold],
           role: "bodice-back-center", cutOnFold: true,
-          grain: [[2, Math.min(y1, y2) + 6], [2, crotchY - 8]] },
+          grain: [[2, Math.min(y1, y2) + 6], [2, crotchY - 8]],
+          edges: [{ fromIdx: 1, toIdx: 6, seamId: "leotardSide" }] },
       );
     }
     if (style.backStyle === "crossback") {

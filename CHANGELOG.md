@@ -6,6 +6,46 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-55: pattern library rebuild, Phase 4 (part 3) — real seam-edge parity for all 100 Girls' Gymnastics Leotards
+
+docs/plan 4.md Phase 4, third installment. `js/ai.js`'s `buildLeotard()`
+(the shared builder behind every one of `js/girls-leotards.js`'s 100
+patterns) declared a real `edges[].seamId` on its front/back "Body" side
+seam for the first time — closing 96 of the library's 181
+`seamLengthParity` proxy failures with one function-level fix, per docs/
+plan 4.md §5.2's own prescription ("introduce explicit seam-edge pairing
+... extend checkSeamLengthParity to measure the actual paired edge
+polyline lengths").
+
+Declaring the edge surfaced a REAL mismatch first, not a proxy artifact:
+`leotardBackPieces`' `hipDrop`/`legW`/`crotchY`/`waist`/`hip`/`gusset` ran
+consistently `+0.5`/`+1`/`+0.4` ahead of `leotardFrontPieces`' own values
+— a deliberate "back seat ease" choice, but one that also fell directly
+on the side seam those two functions share, so front and back genuinely
+came out ~1cm different in length: a real un-sewable seam on a fixed-
+length stretch-fabric edge, not a bounding-box heuristic being unfair to
+correct patternmaking. Matched the two functions' shared-edge values
+(keeping the width-only ease elsewhere); the `armhole` start point (a
+genuinely different point from the front's own `shoulder`) is tuned so
+the two total edge lengths land within tolerance rather than forced to
+match exactly. Confirmed by direct measurement across all 100 patterns
+(max 2.5mm, well under the 3mm tolerance), not assumed from one sample.
+
+The remaining 85 `seamLengthParity` failures are spread across many
+individually-authored Fancy Collection builders (jacket/coat/vest/parka/
+kandura/trouser constructions, no single shared function to fix at
+once) — real follow-up work, not folded into this pass.
+
+### Verification
+- `npm test`: 299/299 — including grading extremes (XXS/M/6XL ×
+  intl/egypt/saudi, all 7 KIDS_AGES bands), confirming the buildLeotard
+  formula changes hold across the full grading range, not just size M.
+- Library-wide sweep: `seamLengthParity` 181 → 85 failures; every other
+  check still at 0.
+- Visual spot-check across 4 leotard styles (V-neck, halter+skirt,
+  mesh-back long-sleeve, yoke+cap-sleeve) — clean silhouettes, no
+  distortion from the geometry changes.
+
 ## WP-54: pattern library rebuild, Phase 4 (part 2) — 5 new roles close the underwear-library.js vocabulary gap
 
 docs/plan 4.md Phase 4, second installment. `js/underwear-library.js`
