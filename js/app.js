@@ -3707,6 +3707,16 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         // — see cloth-lab/src/pattern/importFromApp.js and roles.js.
         role: p.role, cutOnFold: p.cutOnFold, foldEdgeIndex: p.foldEdgeIndex,
         bilateral: p.bilateral, edges: p.edges, grainline: p.grainline,
+        // WP-59 code-review fix: `princessSeamId` (js/fancy-patterns.js's
+        // princessBodice() sets it on the front/back-CENTER pieces) was
+        // never forwarded here at all — cloth-lab's importer had no way
+        // to ever see it, so every princess-seamed pattern's actual
+        // princess seam silently never formed in 3D regardless of what
+        // the importer itself did with it. See cloth-lab/src/pattern/
+        // importFromApp.js's own WP-59 comment for the other half of
+        // this (the importer-side destructure bug that made this field
+        // a no-op even when present).
+        princessSeamId: p.princessSeamId,
         // WP-49: explicit upper/lower-body override (js/body-zone.js) —
         // cloth-lab/src/pattern/importFromApp.js's classifyLegacy path
         // consults this to correct a wrong name-based guess for pieces

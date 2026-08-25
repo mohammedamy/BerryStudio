@@ -195,6 +195,29 @@ export function convertAppPattern(payload) {
     edgeInstructions.push({ pieceId, edgeName, fromIdx: from, toIdx: to })
   }
 
+  // WP-59: a piece's own declared `edges[].seamId` used to only ever get
+  // consumed inside the `bilateral` branch below — every OTHER branch
+  // (cutOnFold's non-princess else, the skirt-gore branch, the plain
+  // single-piece branch) silently dropped it. That made a declared
+  // seamId a coin flip depending on which branch a piece's placement
+  // family happened to route through, not something a generator could
+  // rely on — real declared seams (js/fancy-patterns.js's `briefSide`,
+  // `goreSide`, `wrapCoatSide`, and any future one) went unconsumed on
+  // whichever side of that split they landed on. One shared helper, one
+  // seamIdEdges collection, called from every branch that has real
+  // per-piece edges — a declared seamId now means the same thing
+  // regardless of the piece's placement family. Unsuffixed (unlike the
+  // bilateral branch's own `_R`/`_L` — a non-bilateral piece has no
+  // left/right copy to disambiguate between).
+  function pushSeamIdEdges(pieceId, edgesArr) {
+    if (!edgesArr) return
+    for (const e of edgesArr) {
+      if (!e || !e.seamId) continue
+      pushEdge(pieceId, `seamId_${e.seamId}`, e.fromIdx, e.toIdx)
+      ;(seamIdEdges[e.seamId] ||= []).push({ pieceId, fromIdx: e.fromIdx, toIdx: e.toIdx })
+    }
+  }
+
   for (const p of payload.pieces || []) {
     const label = (p.label && p.label.en) || p.id
     const resolved = resolveSchemaRole(p.role)
@@ -230,7 +253,32 @@ export function convertAppPattern(payload) {
     }
 
     // ---------- WP-6 metadata path: thin structural validation, trust the declared role ----------
-    const { role: schemaRole, placement: declaredPlacement, cutOnFold, bilateral, edges, princessSeamId } = resolved
+    // WP-59 code-review fix: `edges` and `princessSeamId` are PER-PIECE
+    // instance data (a princess seam's own fromIdx/toIdx, which curve a
+    // particular pattern's princess split actually is) — they can never
+    // live on `resolved` (resolveSchemaRole() only ever takes the ROLE
+    // STRING as input, so it can only return role-level facts:
+    // placement/zone/cutOnFold/bilateral/seamFamily). Destructuring them
+    // from `resolved` here silently read `undefined` for every piece,
+    // every pattern, always — confirmed by direct reproduction: a real
+    // princess-seamed dress (wf01) imported with its bodice-front-side/
+    // bodice-back-side pieces recognized and PLACED but never seamed to
+    // anything (no princess seam, no seamId-based seam of any kind ever
+    // fired) — exactly the "user has to fix the seam by hand" failure
+    // mode, on every one of the 21+ princess-seamed Fancy Collection
+    // patterns, plus any other bilateral piece anywhere in the library
+    // that declares `edges` (this was never a princess-only bug — it's
+    // this whole mechanism). `cutOnFold`/`bilateral` ARE genuinely
+    // role-level facts (SCHEMA_ROLE_INFO declares them per role, e.g.
+    // 'bodice-front-center': cutOnFold:true) so those two correctly stay
+    // sourced from `resolved` — a piece-level override still wins if a
+    // generator ever sets one explicitly (defensive, matches how a piece
+    // already CAN also declare its own cutOnFold/bilateral directly).
+    const { role: schemaRole, placement: declaredPlacement } = resolved
+    const cutOnFold = p.cutOnFold ?? resolved.cutOnFold
+    const bilateral = p.bilateral ?? resolved.bilateral
+    const edges = p.edges
+    const princessSeamId = p.princessSeamId
     const local = relocalize(p.outline)
 
     // Code-review fix (WP-49 follow-up): an explicit p.bodyZone override
@@ -263,6 +311,7 @@ export function convertAppPattern(payload) {
       const internalRole = { 'skirt-front-gore': 'goreFront', 'skirt-back-gore': 'goreBack', 'skirt-side-gore-left': 'goreSideLeft', 'skirt-side-gore-right': 'goreSideRight' }[schemaRole]
       rawPieces.push({ id: p.id, label: p.label, outline: local, color: p.color })
       roles[p.id] = internalRole
+      pushSeamIdEdges(p.id, edges)
       recognized.push({ id: p.id, label })
       continue
     }
@@ -283,9 +332,26 @@ export function convertAppPattern(payload) {
         pushEdge(p.id, left.name, left.from, left.to)
         ;(seamIdEdges[princessSeamId + '_R'] ||= []).push({ pieceId: p.id, fromIdx: right.from, toIdx: right.to })
         ;(seamIdEdges[princessSeamId + '_L'] ||= []).push({ pieceId: p.id, fromIdx: left.from, toIdx: left.to })
-      } else {
+      } else if (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack') {
+        // One of the 4 bySlot slots (e.g. a brief's cutOnFold front/back
+        // panel) already gets a real front-to-back seam from the
+        // geometric bySlot mechanism below (proven, in production use
+        // since WP-6) — NOT also running its own declared `edges` through
+        // pushSeamIdEdges here, so a piece doesn't end up double-seamed
+        // to the same counterpart by two different mechanisms at once.
         bySlot[placement].push({ id: p.id, label })
         for (const e of deriveTorsoEdgeInstructions(outline, { includeTop: placement === 'frontPanel' || placement === 'backPanel' })) pushEdge(p.id, e.name, e.from, e.to)
+      } else {
+        // A cutOnFold accessory whose placement ISN'T one of the 4 body
+        // panels (e.g. a peplum or cape drafted on the fold) — no
+        // geometric bySlot counterpart to auto-seam against, but its own
+        // declared `edges` still goes through the SAME pushSeamIdEdges
+        // every other branch uses (code-review fix alongside the
+        // `edges`/`princessSeamId` destructure bug above: this branch
+        // used to unconditionally assume placement was always one of the
+        // 4 bySlot keys and threw on any other cutOnFold accessory once
+        // that destructure fix let one actually reach here).
+        pushSeamIdEdges(p.id, edges)
       }
       recognized.push({ id: p.id, label })
       continue
@@ -299,16 +365,26 @@ export function convertAppPattern(payload) {
       roles[rId] = placement
       roles[lId] = placement
       if (edges && edges.length && !UNSEAMED_BILATERAL_ROLES.has(schemaRole)) {
+        const mirrored = mirrorEdgeIndices(edges, n)
         edges.forEach((e, i) => {
           const edgeName = `seam${i}`
           pushEdge(rId, edgeName, e.fromIdx, e.toIdx)
-          ;(seamIdEdges[e.seamId + '_R'] ||= []).push({ pieceId: rId, fromIdx: e.fromIdx, toIdx: e.toIdx })
-        })
-        const mirrored = mirrorEdgeIndices(edges, n)
-        mirrored.forEach((e, i) => {
-          const edgeName = `seam${i}`
-          pushEdge(lId, edgeName, e.fromIdx, e.toIdx)
-          ;(seamIdEdges[edges[i].seamId + '_L'] ||= []).push({ pieceId: lId, fromIdx: e.fromIdx, toIdx: e.toIdx })
+          pushEdge(lId, edgeName, mirrored[i].fromIdx, mirrored[i].toIdx)
+          if (e.mirrorSelf) {
+            // WP-59: a piece whose own bilateral R/L copies meet each
+            // other directly (a trouser leg's inseam forming the crotch
+            // seam, front-left-leg to front-right-leg — not a seam to a
+            // DIFFERENT declared piece, which is what seamId cross-
+            // matching below is for). Wired directly rather than routed
+            // through seamIdEdges — that dict pairs contributors from
+            // two DIFFERENT calls to convertAppPattern's per-piece loop;
+            // an R/L pair from the SAME piece never needs a second
+            // declared edge anywhere else to pair against.
+            seamInstructions.push({ id: `${p.id}_mirror${i}`, a: { piece: rId, edge: edgeName }, b: { piece: lId, edge: edgeName }, reverse: true })
+          } else if (e.seamId) {
+            ;(seamIdEdges[e.seamId + '_R'] ||= []).push({ pieceId: rId, fromIdx: e.fromIdx, toIdx: e.toIdx })
+            ;(seamIdEdges[e.seamId + '_L'] ||= []).push({ pieceId: lId, fromIdx: mirrored[i].fromIdx, toIdx: mirrored[i].toIdx })
+          }
         })
       }
       recognized.push({ id: rId, label: label + ' (R)' })
@@ -319,12 +395,20 @@ export function convertAppPattern(payload) {
     // Plain single piece — front-panel/back-panel/hip-panel-* not on fold
     // (e.g. an asymmetric jacket front), or a decorative attach-only role
     // (collar/cuff/pocket/facing/waistband/sash/yoke/peplum/tier/cape/lining/
-    // other) — placed via its role's placement family, not auto-seamed.
+    // other). The 4 bySlot placements get a real geometric front-to-back
+    // seam below, same as every other branch above — a declared `edges`
+    // seamId on ANY of the rest (an attach-only accessory to its real
+    // attachment point on a body panel — WP-59's whole point) now goes
+    // through the SAME pushSeamIdEdges every other branch uses, instead
+    // of unconditionally "not auto-seamed" the way this comment used to
+    // read before that piece could actually declare a real one.
     rawPieces.push({ id: p.id, label: p.label, outline: local, color: p.color })
     roles[p.id] = placement
     if (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack') {
       bySlot[placement].push({ id: p.id, label })
       for (const e of deriveTorsoEdgeInstructions(local, { includeTop: placement === 'frontPanel' || placement === 'backPanel' })) pushEdge(p.id, e.name, e.from, e.to)
+    } else {
+      pushSeamIdEdges(p.id, edges)
     }
     recognized.push({ id: p.id, label })
   }

@@ -112,6 +112,7 @@
               "waistband", "cuff", "rib-cuff", "hem-band",
               "lining", "godet", "tier", "cape", "cape-overlay",
               "cup", "band", "strap", "elastic-band", "gusset",
+              "trouser-front", "trouser-back",
               "other"
             ]
           },

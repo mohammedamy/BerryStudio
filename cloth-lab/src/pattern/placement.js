@@ -71,6 +71,36 @@ export function placeHipPanel(positions2D, dims, { zSign, easeFactor = 1.15, ang
   })
 }
 
+// WP-59: a trouser leg panel — half-tube wrap like placeTorsoPanel/
+// placeHipPanel, but centered on the LEG's own axis (offset to its own
+// side of the centerline, side * hipR * 0.55 — legs sit side-by-side, not
+// stacked on the body centerline the way a torso/hip panel does) and
+// tapered down the thigh (thighR at the waist down to thighR*0.4 at the
+// hem) instead of following the body's own torso/hip radius profile.
+// `js/fancy-patterns.js`'s trouserPanel() drafts ONE leg (from the waist
+// down through the crotch-adjacent rise to the hem) meant to be cut 2,
+// mirrored — the SAME "cut 2" convention placeSleeve's single arm shape
+// already gets via bilateral duplication, reused here rather than
+// inventing a second mechanism. Not the full legProfile() lathe curve
+// (bicep/calf swell, knee pinch) — same reasoning placeSleeve gives for
+// its own simplified linear taper: placement only needs to be close,
+// non-self-intersecting and outward-facing, constraint relaxation does
+// the rest once the sim is running.
+export function placeLegPanel(positions2D, dims, { side, zSign, easeFactor = 1.15, angleSpan = Math.PI * 0.98 } = {}) {
+  const waistWorldY = dims.hipY + dims.span * 0.44
+  const waistWorldX = side * dims.hipR * 0.55
+  const legPatternLen = dims.legLen + dims.span * 0.2 // rise (waist-to-crotch) + inseam, close enough for placement
+  return positions2D.map(([xCm, yCm]) => {
+    const alongLeg = cm(yCm)
+    const t = Math.min(1, Math.max(0, alongLeg / legPatternLen))
+    const r = lerp(dims.thighR, dims.thighR * 0.4, t) * easeFactor
+    const halfCirc = Math.PI * r
+    const theta = (cm(xCm) / halfCirc) * angleSpan
+    const worldY = waistWorldY - alongLeg
+    return [waistWorldX + r * Math.sin(theta), worldY, zSign * r * Math.cos(theta)]
+  })
+}
+
 // Sleeves: roll into a tube around the arm's long axis, hanging from the
 // shoulder point at a slight outward lean (a fixed, simple rest pose). Radius
 // TAPERS along the arm (upperR at the shoulder down to upperR*0.55 at the
@@ -219,6 +249,8 @@ export function placePiece(triangulated, dims) {
   if (role === 'sleeve') return placeSleeve(positions2D, dims, side)
   if (role === 'hipPanelFront') return placeHipPanel(positions2D, dims, { zSign: 1, easeFactor: 1.15 + siblingEase })
   if (role === 'hipPanelBack') return placeHipPanel(positions2D, dims, { zSign: -1, easeFactor: 1.15 + siblingEase })
+  if (role === 'legFront') return placeLegPanel(positions2D, dims, { side, zSign: 1, easeFactor: 1.15 })
+  if (role === 'legBack') return placeLegPanel(positions2D, dims, { side, zSign: -1, easeFactor: 1.2 })
   if (role === 'goreFront') return placeGorePanel(positions2D, dims, 0)
   if (role === 'goreBack') return placeGorePanel(positions2D, dims, Math.PI)
   if (role === 'goreSideLeft') return placeGorePanel(positions2D, dims, -Math.PI / 2)

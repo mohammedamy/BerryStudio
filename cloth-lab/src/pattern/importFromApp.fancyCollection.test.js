@@ -36,7 +36,11 @@ const SAMPLE_MEASUREMENTS = {
   boys: { chest: 68, waist: 60, hips: 70, shoulder: 31, backLen: 31, sleeve: 46, neck: 29, bicep: 21, inseam: 58, thigh: 42, height: 132 },
 }
 
-// Mirrors js/app.js's buildClothLabPayload() field selection exactly.
+// Mirrors js/app.js's buildClothLabPayload() field selection exactly —
+// WP-59 added `princessSeamId` there (it was silently never forwarded at
+// all before that fix, so a princess seam could never form regardless of
+// what convertAppPattern did with it) — kept in sync here too, same
+// "field selection exactly" promise this comment already made.
 function toPayloadPiece(p, i) {
   return {
     id: (p.key || 'piece') + '_' + i,
@@ -45,6 +49,7 @@ function toPayloadPiece(p, i) {
     darts: p.darts, notches: p.notches, grain: p.grain,
     role: p.role, cutOnFold: p.cutOnFold, foldEdgeIndex: p.foldEdgeIndex,
     bilateral: p.bilateral, edges: p.edges, grainline: p.grainline,
+    princessSeamId: p.princessSeamId,
     color: p.color,
   }
 }
@@ -79,5 +84,42 @@ describe.each(FANCY_IDS)('%s', (id) => {
       const triangulated = triangulateAll(finalPieces, result.seamInstructions)
       assembleCloth(triangulated, dims, result.seamInstructions)
     }).not.toThrow()
+  })
+})
+
+// WP-59: "doesn't throw" alone doesn't catch a piece that imported,
+// placed, and simulated fine while sitting completely unseamed (exactly
+// what role:"other" trouser panels did for every one of these 12
+// patterns before this WP — a real defect this whole describe.each above
+// would never have caught). Locks in the actual outcome: every trouser
+// panel gets BOTH its outseam (to the opposite front/back panel) and its
+// inseam (its own bilateral mirror, forming the crotch seam) — 4 real
+// seams per trousers, not a placed-but-floating patch.
+const TROUSER_IDS = FANCY_IDS.filter((id) => {
+  const m = SAMPLE_MEASUREMENTS[PATTERNS[id].category]
+  return PATTERNS[id].pieces(m).some((p) => p.role === 'trouser-front')
+})
+
+test('every trouser-containing Fancy Collection pattern is discovered (sanity check)', () => {
+  expect(TROUSER_IDS.length).toBeGreaterThan(0)
+})
+
+describe.each(TROUSER_IDS)('%s trousers', (id) => {
+  test('both legs get a real outseam AND a real inseam seam — nothing left for the user to fix by hand', () => {
+    const entry = PATTERNS[id]
+    const category = entry.category
+    const m = SAMPLE_MEASUREMENTS[category]
+    const payload = { pieces: entry.pieces(m).map(toPayloadPiece), measurements: m, category, fabricId: null, avatarGLB: {} }
+    const result = convertAppPattern(payload)
+
+    const legPieceIds = Object.entries(result.roles)
+      .filter(([, role]) => role === 'legFront' || role === 'legBack')
+      .map(([id]) => id)
+    expect(legPieceIds.length).toBe(4) // front_r, front_l, back_r, back_l
+
+    const involves = (pid) => result.seamInstructions.filter((s) => s.a.piece === pid || s.b.piece === pid)
+    for (const pid of legPieceIds) {
+      expect(involves(pid).length, `${pid} should have exactly 1 outseam + 1 inseam seam`).toBe(2)
+    }
   })
 })

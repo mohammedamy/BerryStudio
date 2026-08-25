@@ -815,7 +815,23 @@ export let FancyGen;
       [0, crotchDrop * 0.55],
     ];
     withCurves(outline, [{ fromIdx: 2, toIdx: 8, ...qBezToCubic(...outSeg) }]);
-    outline.edges = [{ fromIdx: 2, toIdx: 8, seamId: 'trouserOutseam' }];
+    // WP-59 (docs/plan 4.md Phase 5, cloth-lab compatibility pass): the
+    // SECOND real seam every trouser leg panel has — hem-inner (9) up
+    // through the crotch point (10) and the rise (11) back to the waist
+    // center (0, wrapping) — is the INSEAM, sewn to this SAME piece's
+    // own mirrored copy (front-left's inseam to front-right's inseam
+    // forms the crotch seam; likewise for back). `mirrorSelf: true`
+    // (cloth-lab's importFromApp.js) is exactly this relationship: a
+    // bilateral piece's own R/L copies seamed to each other, not to a
+    // different declared piece. Every call site below now declares
+    // `role: "trouser-front"/"trouser-back"` and `bilateral: true`
+    // instead of the old `role: "other"`, which left every trouser
+    // panel placed as a small misplaced accessory patch, never seamed,
+    // in Cloth Lab.
+    outline.edges = [
+      { fromIdx: 2, toIdx: 8, seamId: 'trouserOutseam' },
+      { fromIdx: 9, toIdx: 0, mirrorSelf: true },
+    ];
     return outline;
   }
 
@@ -896,8 +912,8 @@ export let FancyGen;
       { key:"facing", name:{en:"Jacket Facing",ar:"بطانة الجاكيت"}, desc:{en:"Curved front facing.",ar:"بطانة أمامية منحنية."}, role:"lapel-facing", outline: lapelFacing(m.neck, jLen*0.5) },
       { key:"vestFront", name:{en:"Vest Front",ar:"مقدمة الصدرية"}, desc:{en:"Fitted sleeveless vest front.",ar:"مقدمة صدرية ضيقة بلا أكمام."}, role:"front-panel", outline: vb.front },
       { key:"vestBack", name:{en:"Vest Back",ar:"خلفية الصدرية"}, desc:{en:"Vest back panel.",ar:"لوحة خلفية الصدرية."}, role:"back-panel", cutOnFold:true, outline: vb.back },
-      { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"other", outline: trouserPanel(qw, qh, m.thigh, m.inseam, true) },
-      { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد."}, role:"other", outline: trouserPanel(qw, qh, m.thigh, m.inseam, false) },
+      { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"trouser-front", bilateral:true, outline: trouserPanel(qw, qh, m.thigh, m.inseam, true) },
+      { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد."}, role:"trouser-back", bilateral:true, outline: trouserPanel(qw, qh, m.thigh, m.inseam, false) },
     ];
   }
 
@@ -1160,8 +1176,8 @@ export let FancyGen;
         { key:"facing", name:{en:"Jacket Facing",ar:"بطانة الجاكيت"}, desc:{en:"Curved front facing.",ar:"بطانة أمامية منحنية."}, role:"lapel-facing", outline:lapelFacing(m.neck, jLen*0.5), grain:[[4,4],[4,jLen*0.3]] },
         { key:"vestFront", name:{en:"Vest Front",ar:"مقدمة الصدرية"}, desc:{en:"Fitted sleeveless vest front.",ar:"مقدمة صدرية ضيقة بلا أكمام."}, role:"front-panel", outline:vb.front, grain:[[3,8],[3,vLen*0.6]] },
         { key:"vestBack", name:{en:"Vest Back",ar:"خلفية الصدرية"}, desc:{en:"Vest back, often cut in lining fabric.",ar:"خلفية الصدرية، تُقص عادة من قماش البطانة."}, role:"back-panel", cutOnFold:true, outline:vb.back, grain:[[3,8],[3,vLen*0.6]] },
-        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
-        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a deeper curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد أعمق."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"trouser-front", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a deeper curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد أعمق."}, role:"trouser-back", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
       ];
     });
 
@@ -1398,8 +1414,8 @@ export let FancyGen;
         { key:"facing", name:{en:"Jacket Facing",ar:"بطانة الجاكيت"}, desc:{en:"Curved front facing.",ar:"بطانة أمامية منحنية."}, role:"lapel-facing", outline:lapelFacing(m.neck, jLen*0.5), grain:[[3,3],[3,jLen*0.3]] },
         { key:"vestFront", name:{en:"Vest Front",ar:"مقدمة الصدرية"}, desc:{en:"Fitted sleeveless vest front.",ar:"مقدمة صدرية ضيقة بلا أكمام."}, role:"front-panel", outline:vb.front, grain:[[2,6],[2,vLen*0.6]] },
         { key:"vestBack", name:{en:"Vest Back",ar:"خلفية الصدرية"}, desc:{en:"Vest back panel.",ar:"لوحة خلفية الصدرية."}, role:"back-panel", cutOnFold:true, outline:vb.back, grain:[[2,6],[2,vLen*0.6]] },
-        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,8],[qw*0.3,m.inseam*0.6]] },
-        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,8],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"trouser-front", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,8],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد."}, role:"trouser-back", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,8],[qw*0.3,m.inseam*0.6]] },
       ];
     });
 
@@ -1483,8 +1499,8 @@ export let FancyGen;
         { key:"facing", name:{en:"Lapel Facing",ar:"بطانة الصدر"}, desc:{en:"Curved facing along the lapel roll-line.",ar:"بطانة منحنية على خط انثناء الصدر."}, role:"lapel-facing", outline:lapelFacing(m.neck, m.backLen*0.55), grain:[[4,4],[4,m.backLen*0.35]] },
         { key:"sleeveU", name:{en:"Sleeve Upper",ar:"الكم العلوي"}, desc:{en:"Outer sleeve panel.",ar:"اللوحة الخارجية للكم."}, role:"sleeve-upper", bilateral:true, outline:sleeve2pc(m.bicep, m.sleeve).upper, grain:[[q(m.bicep)*0.5,4],[q(m.bicep)*0.5,m.sleeve*0.5]] },
         { key:"sleeveD", name:{en:"Sleeve Under",ar:"الكم السفلي"}, desc:{en:"Inner sleeve panel.",ar:"اللوحة الداخلية للكم."}, role:"sleeve-under", bilateral:true, outline:sleeve2pc(m.bicep, m.sleeve).under, grain:[[q(m.bicep)*0.3,4],[q(m.bicep)*0.3,m.sleeve*0.5]] },
-        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Wide-leg front panel with a curved crotch seam.",ar:"لوحة ساق أمامية واسعة بخط تفصيل منحنٍ."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
-        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Wide-leg back panel with a curved seat curve.",ar:"لوحة ساق خلفية واسعة بمنحنى مقعد."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Wide-leg front panel with a curved crotch seam.",ar:"لوحة ساق أمامية واسعة بخط تفصيل منحنٍ."}, role:"trouser-front", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Wide-leg back panel with a curved seat curve.",ar:"لوحة ساق خلفية واسعة بمنحنى مقعد."}, role:"trouser-back", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
         { key:"belt", name:{en:"Waist Belt",ar:"حزام الخصر"}, desc:{en:"Fitted belt cinching the waist seam.",ar:"حزام مضبوط يجمع خط الخصر."}, role:"belt", outline:waistbandPc(qw*0.85, 6), grain:[[6,2],[6,4]] },
         { key:"pocketL", name:{en:"Hip Pocket Left",ar:"جيب الورك الأيسر"}, desc:{en:"Curved welt pocket at the left hip.",ar:"جيب مطوي منحنٍ عند الورك الأيسر."}, role:"pocket", outline:pocketPc(11,4.5), grain:[[5,1],[5,3]] },
         { key:"pocketR", name:{en:"Hip Pocket Right",ar:"جيب الورك الأيمن"}, desc:{en:"Curved welt pocket at the right hip.",ar:"جيب مطوي منحنٍ عند الورك الأيمن."}, role:"pocket", outline:pocketPc(11,4.5), grain:[[5,1],[5,3]] },
@@ -1616,8 +1632,8 @@ export let FancyGen;
         { key:"back", name:{en:"Bodice Back",ar:"خلفية الصدرية"}, desc:{en:"Low back panel anchoring the cape.",ar:"لوحة ظهر مكشوفة تُثبّت الكاب."}, role:"back-panel", cutOnFold:true, outline:jb.back, grain:[[3,8],[3,m.backLen*0.4]] },
         { key:"collar", name:{en:"Standing Collar",ar:"ياقة واقفة"}, desc:{en:"Structured standing collar band.",ar:"شريط ياقة واقف مهيكل."}, role:"collar-stand", outline:cs.stand, grain:[[3,1],[m.neck/2,1]] },
         { key:"cape", name:{en:"Draped Back Cape",ar:"كاب خلفي منسدل"}, desc:{en:"Sweeping cape attached at the shoulder seam.",ar:"كاب منسدل مثبّت عند خط الكتف."}, role:"cape-overlay", cutOnFold:true, outline:capePc(q(m.shoulder)*0.95, 60), grain:[[6,6],[6,42]] },
-        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Wide palazzo-leg front panel.",ar:"لوحة ساق أمامية واسعة بطراز البالاتزو."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam*1.1, true), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
-        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Wide palazzo-leg back panel.",ar:"لوحة ساق خلفية واسعة بطراز البالاتزو."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam*1.1, false), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Wide palazzo-leg front panel.",ar:"لوحة ساق أمامية واسعة بطراز البالاتزو."}, role:"trouser-front", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam*1.1, true), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Wide palazzo-leg back panel.",ar:"لوحة ساق خلفية واسعة بطراز البالاتزو."}, role:"trouser-back", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam*1.1, false), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
         { key:"sash", name:{en:"Waist Sash",ar:"حزام الخصر"}, desc:{en:"Tie sash defining the waist.",ar:"حزام يُربط ويبرز الخصر."}, role:"sash", outline:sashPc(qw*0.4, 45), grain:[[8,2],[30,2]] },
         { key:"pocketL", name:{en:"Side Pocket Left",ar:"الجيب الجانبي الأيسر"}, desc:{en:"Hidden side-seam pocket.",ar:"جيب مخفي داخل الخط الجانبي."}, role:"pocket", outline:pocketPc(10,13), grain:[[4,4],[4,9]] },
         { key:"pocketR", name:{en:"Side Pocket Right",ar:"الجيب الجانبي الأيمن"}, desc:{en:"Hidden side-seam pocket.",ar:"جيب مخفي داخل الخط الجانبي."}, role:"pocket", outline:pocketPc(10,13), grain:[[4,4],[4,9]] },
@@ -1664,8 +1680,8 @@ export let FancyGen;
         { key:"sleeveU", name:{en:"Sleeve Upper",ar:"الكم العلوي"}, desc:{en:"Outer sleeve panel.",ar:"اللوحة الخارجية للكم."}, role:"sleeve-upper", bilateral:true, outline:sl.upper, grain:[[q(m.bicep)*0.5,4],[q(m.bicep)*0.5,m.sleeve*0.5]] },
         { key:"sleeveD", name:{en:"Sleeve Under",ar:"الكم السفلي"}, desc:{en:"Inner sleeve panel.",ar:"اللوحة الداخلية للكم."}, role:"sleeve-under", bilateral:true, outline:sl.under, grain:[[q(m.bicep)*0.3,4],[q(m.bicep)*0.3,m.sleeve*0.5]] },
         { key:"backLining", name:{en:"Jacket Back Lining",ar:"بطانة ظهر الجاكيت"}, desc:{en:"Full back body lining.",ar:"بطانة كاملة لظهر الجاكيت."}, role:"lining", outline:jb.back, grain:[[4,8],[4,len*0.6]] },
-        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Straight-leg front panel with a curved crotch seam.",ar:"لوحة ساق أمامية مستقيمة بخط تفصيل منحنٍ."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
-        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Straight-leg back panel with a curved seat curve.",ar:"لوحة ساق خلفية مستقيمة بمنحنى مقعد."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Straight-leg front panel with a curved crotch seam.",ar:"لوحة ساق أمامية مستقيمة بخط تفصيل منحنٍ."}, role:"trouser-front", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Straight-leg back panel with a curved seat curve.",ar:"لوحة ساق خلفية مستقيمة بمنحنى مقعد."}, role:"trouser-back", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
         { key:"waistband", name:{en:"Trouser Waistband",ar:"حزام خصر البنطلون"}, desc:{en:"Fitted waistband finishing the trouser top.",ar:"حزام خصر مضبوط يُنهي أعلى البنطلون."}, role:"waistband", outline:waistbandPc(qw*0.95, 6), grain:[[6,2],[6,4]] },
         { key:"pocket", name:{en:"Jacket Welt Pocket",ar:"جيب مطوي في الجاكيت"}, desc:{en:"Curved welt pocket at the jacket hip.",ar:"جيب مطوي منحنٍ عند ورك الجاكيت."}, role:"pocket", outline:pocketPc(12,4.5), grain:[[5,1],[5,3]] },
       ];
@@ -1805,8 +1821,8 @@ export let FancyGen;
         { key:"facing", name:{en:"Jacket Facing",ar:"بطانة الجاكيت"}, desc:{en:"Curved front facing.",ar:"بطانة أمامية منحنية."}, role:"lapel-facing", outline:lapelFacing(m.neck, jLen*0.5), grain:[[4,4],[4,jLen*0.3]] },
         { key:"vestFront", name:{en:"Vest Front",ar:"مقدمة الصدرية"}, desc:{en:"Fitted sleeveless vest front.",ar:"مقدمة صدرية ضيقة بلا أكمام."}, role:"front-panel", outline:vb.front, grain:[[2,6],[2,vLen*0.6]] },
         { key:"vestBack", name:{en:"Vest Back",ar:"خلفية الصدرية"}, desc:{en:"Vest back panel.",ar:"لوحة خلفية الصدرية."}, role:"back-panel", cutOnFold:true, outline:vb.back, grain:[[2,6],[2,vLen*0.6]] },
-        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,8],[qw*0.3,m.inseam*0.6]] },
-        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,8],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"trouser-front", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,8],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد."}, role:"trouser-back", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,8],[qw*0.3,m.inseam*0.6]] },
         { key:"waistband", name:{en:"Trouser Waistband",ar:"حزام خصر البنطلون"}, desc:{en:"Fitted waistband finishing the trouser top.",ar:"حزام خصر مضبوط يُنهي أعلى البنطلون."}, role:"waistband", outline:waistbandPc(qw*0.95, 6), grain:[[6,2],[6,4]] },
       ];
     });
@@ -2048,8 +2064,8 @@ export let FancyGen;
         { key:"facing", name:{en:"Neckline Facing",ar:"بطانة خط الرقبة"}, desc:{en:"Curved facing finishing the collar seam.",ar:"بطانة منحنية لتشطيب خط الياقة."}, role:"lapel-facing", outline:[[0,0],...qBez([0,0],[m.neck*0.24,3],[m.neck*0.42,1],6),[m.neck*0.42,5],[0,5]], grain:[[3,2],[m.neck*0.24,2]] },
         { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum flounce at the front waist.",ar:"كشكش بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", cutOnFold:true, outline:peplumPc(qw*0.5, 16), grain:[[5,3],[5,11]] },
         { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum flounce at the back waist.",ar:"كشكش بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", cutOnFold:true, outline:peplumPc(qw*0.5, 16), grain:[[5,3],[5,10]] },
-        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Wide-leg front panel.",ar:"لوحة ساق أمامية واسعة."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
-        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Wide-leg back panel.",ar:"لوحة ساق خلفية واسعة."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
+        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Wide-leg front panel.",ar:"لوحة ساق أمامية واسعة."}, role:"trouser-front", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
+        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Wide-leg back panel.",ar:"لوحة ساق خلفية واسعة."}, role:"trouser-back", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
         { key:"sash", name:{en:"Waist Tie",ar:"رباط الخصر"}, desc:{en:"Thin tie finishing the peplum seam.",ar:"رباط رفيع يُنهي خط البيبلوم."}, role:"sash", outline:sashPc(qw*0.3, 26), grain:[[4,1.5],[16,1.5]] },
         { key:"pocket", name:{en:"Side Pocket",ar:"الجيب الجانبي"}, desc:{en:"Hidden side-seam pocket on the trouser.",ar:"جيب مخفي داخل الخط الجانبي للبنطلون."}, role:"pocket", outline:pocketPc(8,10), grain:[[3,3],[3,7]] },
       ];
@@ -2138,8 +2154,8 @@ export let FancyGen;
         { key:"collarStandPc", name:{en:"Collar Stand",ar:"قاعدة الياقة"}, desc:{en:"Standing band beneath the collar.",ar:"شريط واقف أسفل الياقة."}, role:"collar-stand", outline:cs.stand, grain:[[3,1],[m.neck/2,1]] },
         { key:"facing", name:{en:"Vest Facing",ar:"بطانة الصدرية"}, desc:{en:"Curved facing along the vest opening.",ar:"بطانة منحنية على فتحة الصدرية."}, role:"lapel-facing", outline:lapelFacing(m.neck*0.7, vLen*0.5), grain:[[2,3],[2,vLen*0.3]] },
         { key:"pocket", name:{en:"Welt Pocket",ar:"جيب مطوي"}, desc:{en:"Curved welt pocket at the vest hem.",ar:"جيب مطوي منحنٍ عند حاشية الصدرية."}, role:"pocket", outline:pocketPc(7,2.5), grain:[[3,1],[3,2]] },
-        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
-        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
+        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"trouser-front", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
+        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد."}, role:"trouser-back", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
         { key:"waistband", name:{en:"Trouser Waistband",ar:"حزام خصر البنطلون"}, desc:{en:"Fitted waistband finishing the trouser top.",ar:"حزام خصر مضبوط يُنهي أعلى البنطلون."}, role:"waistband", outline:waistbandPc(qw*0.95, 5), grain:[[5,2],[5,3]] },
       ];
     });
@@ -2251,8 +2267,8 @@ export let FancyGen;
         { key:"collar", name:{en:"Jacket Collar",ar:"ياقة الجاكيت"}, desc:{en:"Notch-ready jacket collar.",ar:"ياقة جاكيت جاهزة للفتحة."}, role:"collar", outline:shawlCollar(m.neck, 14), grain:[[3,3],[3,10]] },
         { key:"facing", name:{en:"Jacket Facing",ar:"بطانة الجاكيت"}, desc:{en:"Curved front facing.",ar:"بطانة أمامية منحنية."}, role:"lapel-facing", outline:lapelFacing(m.neck, len*0.5), grain:[[3,3],[3,len*0.3]] },
         { key:"pocket", name:{en:"Welt Pocket",ar:"جيب مطوي"}, desc:{en:"Curved welt pocket.",ar:"جيب مطوي منحنٍ."}, role:"pocket", outline:pocketPc(8,3), grain:[[3,1],[3,2]] },
-        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
-        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
+        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"trouser-front", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
+        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد."}, role:"trouser-back", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
         { key:"waistband", name:{en:"Trouser Waistband",ar:"حزام خصر البنطلون"}, desc:{en:"Fitted waistband finishing the trouser top.",ar:"حزام خصر مضبوط يُنهي أعلى البنطلون."}, role:"waistband", outline:waistbandPc(qw*0.95, 5), grain:[[5,2],[5,3]] },
       ];
     });
@@ -2321,8 +2337,8 @@ export let FancyGen;
         { key:"sleeveD", name:{en:"Sleeve Under",ar:"الكم السفلي"}, desc:{en:"Inner sleeve panel.",ar:"اللوحة الداخلية للكم."}, role:"sleeve-under", bilateral:true, outline:sl.under, grain:[[q(m.bicep)*0.3,3],[q(m.bicep)*0.3,m.sleeve*0.4]] },
         { key:"collarBand", name:{en:"Rib Collar Band",ar:"شريط ياقة ريب"}, desc:{en:"Stretch ribbed collar band.",ar:"شريط ياقة مطاطي من الريب."}, role:"collar-band", outline:cs.stand, grain:[[3,1],[m.neck/2,1]] },
         { key:"cuff", name:{en:"Rib Cuff",ar:"أسورة ريب"}, desc:{en:"Ribbed cuff at the sleeve hem.",ar:"أسورة ريب عند نهاية الكم."}, role:"rib-cuff", outline:cuffPc(q(m.bicep)*0.8), grain:[[3,1],[3,4]] },
-        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
-        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
+        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"trouser-front", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
+        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد."}, role:"trouser-back", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
         { key:"cargoPocketL", name:{en:"Cargo Pocket Left",ar:"جيب الكارجو الأيسر"}, desc:{en:"Wide flapped cargo pocket on the trouser leg.",ar:"جيب كارجو عريض بغطاء على ساق البنطلون."}, role:"pocket", outline:pocketPc(9,8), grain:[[4,2],[4,6]] },
         { key:"cargoPocketR", name:{en:"Cargo Pocket Right",ar:"جيب الكارجو الأيمن"}, desc:{en:"Wide flapped cargo pocket on the trouser leg.",ar:"جيب كارجو عريض بغطاء على ساق البنطلون."}, role:"pocket", outline:pocketPc(9,8), grain:[[4,2],[4,6]] },
         { key:"waistband", name:{en:"Trouser Waistband",ar:"حزام خصر البنطلون"}, desc:{en:"Elasticated waistband finishing the trouser top.",ar:"حزام خصر مطاطي يُنهي أعلى البنطلون."}, role:"waistband", outline:waistbandPc(qw*0.9, 5), grain:[[5,2],[5,3]] },
@@ -2347,8 +2363,8 @@ export let FancyGen;
         { key:"collar", name:{en:"Nehru Collar",ar:"ياقة نهرو"}, desc:{en:"Standing Nehru-style collar band.",ar:"ياقة واقفة بطراز نهرو."}, role:"collar-stand", outline:cs.stand, grain:[[3,1],[m.neck/2,1]] },
         { key:"facing", name:{en:"Front Facing",ar:"بطانة المقدمة"}, desc:{en:"Curved facing along the closure edge.",ar:"بطانة منحنية على حافة الإغلاق."}, role:"lapel-facing", outline:lapelFacing(m.neck, len*0.4), grain:[[3,3],[3,len*0.25]] },
         { key:"pocket", name:{en:"Welt Pocket",ar:"جيب مطوي"}, desc:{en:"Curved welt pocket at the hip.",ar:"جيب مطوي منحنٍ عند الورك."}, role:"pocket", outline:pocketPc(8,3), grain:[[3,1],[3,2]] },
-        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Straight-leg front panel with a curved crotch seam.",ar:"لوحة ساق أمامية مستقيمة بخط تفصيل منحنٍ."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
-        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Straight-leg back panel with a curved seat curve.",ar:"لوحة ساق خلفية مستقيمة بمنحنى مقعد."}, role:"other", outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
+        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Straight-leg front panel with a curved crotch seam.",ar:"لوحة ساق أمامية مستقيمة بخط تفصيل منحنٍ."}, role:"trouser-front", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, true), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
+        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Straight-leg back panel with a curved seat curve.",ar:"لوحة ساق خلفية مستقيمة بمنحنى مقعد."}, role:"trouser-back", bilateral:true, outline:trouserPanel(qw, qh, m.thigh, m.inseam, false), grain:[[qw*0.3,6],[qw*0.3,m.inseam*0.5]] },
       ];
     });
 

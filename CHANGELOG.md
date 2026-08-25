@@ -6,6 +6,99 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-59: pattern library rebuild, Phase 5 continued — Cloth Lab compatibility pass, part 1: a critical princess-seam auto-seam bug, and real 3D trouser support
+
+User-directed: every pattern must import into Cloth Lab and simulate with
+no error and no seam the user has to fix by hand — including accessory
+pieces, not just the main front/back shell. First installment.
+
+**Critical, pre-existing bug found and fixed**: `importFromApp.js`'s
+metadata path destructured `edges` and `princessSeamId` from
+`resolved` (the return of `resolveSchemaRole(p.role)`, which can only
+ever carry ROLE-level facts — placement/zone/cutOnFold/bilateral — since
+it only ever receives the role STRING as input). `edges` and
+`princessSeamId` are per-PIECE instance data (a specific pattern's own
+princess-curve indices), so this destructure silently read `undefined`
+for every piece, every pattern, always. Confirmed by direct
+reproduction: a real princess-seamed dress (wf01) imported with its
+bodice-front-side/bodice-back-side pieces recognized and PLACED but
+never seamed to anything — no princess seam ever formed, on any of the
+21+ princess-seamed Fancy Collection patterns, since this mechanism
+shipped. A second, compounding bug: `js/app.js`'s `buildClothLabPayload`
+never forwarded `princessSeamId` onto the payload piece at all — so even
+with the importer fixed, the real app's payload never carried the value
+in the first place. Both fixed; `cutOnFold`/`bilateral` (genuinely
+role-level) correctly stay sourced from `resolved`, piece-level values
+still winning if a generator ever sets one directly.
+
+While in there, generalized `edges[].seamId` consumption: it used to
+only ever get read inside the `bilateral` branch — every other branch
+(cutOnFold's non-princess else, the skirt-gore branch, the plain
+single-piece/accessory branch) silently dropped a piece's own declared
+seamId depending on which branch its placement family happened to route
+through. One shared `pushSeamIdEdges()` helper, called from every
+branch that has real per-piece edges, means a declared seamId now means
+the same thing regardless of role family — the foundation the rest of
+this pass (and future accessory-seam work) builds on. Also fixed a
+real crash this surfaced: the cutOnFold-else branch unconditionally
+assumed a cutOnFold piece's placement was always one of the 4
+`bySlot` panel slots, and threw on any other cutOnFold accessory (e.g.
+`peplum-front`, itself `cutOnFold:true`) the moment the destructure fix
+let one actually reach that branch for the first time.
+
+**Real 3D trouser support** (`js/fancy-patterns.js`'s `trouserPanel()`,
+~24 pieces / 12 Fancy Collection patterns): previously declared
+`role:"other"`, cloth-lab's small-accessory placement (a
+pocket/cuff-sized flat patch near the hip) — never auto-seamed, exactly
+the "user has to fix the seam" failure this pass targets.
+`classifyLegacy()`'s own comment has said "trousers/leg pieces aren't
+supported in 3D yet" since before this role vocabulary existed; no
+longer true:
+- New roles `trouser-front`/`trouser-back` (role vocabulary now 53
+  values), `bilateral: true` — a trouser panel drafts ONE leg (cut 2,
+  mirrored), same convention `placeSleeve`'s single arm shape already
+  uses.
+- New `placeLegPanel()` (`placement.js`): a half-tube wrap down the
+  thigh (tapered `thighR` → `thighR*0.4`), offset to its own side of
+  the centerline — real new placement geometry, not a repurposed
+  existing family.
+- New `mirrorSelf` edge kind (`importFromApp.js`): a bilateral piece's
+  own R/L copies seamed directly to each other — the real relationship
+  a trouser's inseam has (front-left's inseam to front-right's inseam
+  forms the crotch seam), distinct from `seamId` cross-piece matching.
+  `trouserPanel()` declares it on the hem-inner→crotch→rise edge;
+  the existing `trouserOutseam` seamId (WP-58) handles the other real
+  seam, front-to-back, through the same generalized `pushSeamIdEdges`.
+- `js/body-zone.js` (cloth-lab-independent zone classifier, hand-kept in
+  sync per its own header) and `schema/pattern-spec.v1.json` +
+  regenerated ajv validator updated for the 2 new roles.
+
+### Verification
+- `npm test`: 299/299. `cloth-lab` vitest: 227/227 (was 215 — 12 new,
+  including a dedicated regression: every trouser leg gets exactly 2
+  real seams — its outseam AND its inseam — not a placed-but-unseamed
+  patch).
+- Direct reproduction script confirmed the princess-seam fix: wf01's
+  `bodice_front_side`/`bodice_back_side` now show real seamInstructions
+  to `bodice_front_center`/`bodice_back_center`, on both sides, where
+  before the fix none existed at all.
+- Direct reproduction confirmed trousers: 4 leg pieces placed via
+  `legFront`/`legBack`, 4 real seams (2 outseam via seamId, 2 inseam via
+  mirrorSelf) — a fully closed, sewable pair of legs.
+- Full end-to-end pipeline (`convertAppPattern` → seam editor draft →
+  `triangulateAll` → `assembleCloth`) exercised for all 64 Fancy
+  Collection patterns, zero exceptions — this is the same pipeline
+  "Simulate This Garment" runs in the real app, not just placement math.
+
+Part 2 of this pass (still open, not started): the remaining attach-only
+roles (collar, cuff, pocket, waistband, sash, peplum, tier, godet, cup,
+band, gusset, lining, facing, yoke, hood, cape, epaulette, strap,
+elastic-band, ...) still place but don't auto-seam to their real
+attachment point on the body — the same class of defect trousers had,
+now with a proven engine (`pushSeamIdEdges`/`mirrorSelf`) to build on,
+but each one needs its own real attach-edge identified and declared,
+same as trousers did.
+
 ## WP-58: pattern library rebuild, Phase 5 continued — redesigned every remaining seamLengthParity failure at the source, 0 fails left library-wide
 
 Direct follow-up to WP-57, per explicit direction to replace every
