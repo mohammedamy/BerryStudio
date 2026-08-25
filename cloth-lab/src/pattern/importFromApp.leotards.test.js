@@ -122,3 +122,22 @@ describe.each(LEOTARD_IDS)('%s leg opening binding', (id) => {
     }
   })
 })
+
+// WP-61 (continued): the crotch gusset's 4 real edges (front-right,
+// back-right, back-left, front-left) each seam to a real curve on the
+// front or back body — freed up by the same sideEndIdx mechanism as the
+// leg-opening binding, right where the leg-opening curve ends.
+describe.each(LEOTARD_IDS)('%s crotch gusset', (id) => {
+  test('gusset gets all 4 real seams — front-R, front-L, back-R, back-L', () => {
+    const entry = PATTERNS[id]
+    const category = entry.category
+    const m = SAMPLE_MEASUREMENTS[category]
+    const payload = { pieces: entry.pieces(m).map(toPayloadPiece), measurements: m, category, fabricId: null, avatarGLB: {} }
+    const result = convertAppPattern(payload)
+
+    const gusset = result.recognized.find((r) => r.label === 'Crotch Gusset')
+    expect(gusset, 'Crotch Gusset piece should be recognized, not skipped').toBeTruthy()
+    const involves = (pid) => result.seamInstructions.filter((s) => s.a.piece === pid || s.b.piece === pid)
+    expect(involves(gusset.id).length, `${gusset.id} should have exactly 4 real seams`).toBe(4)
+  })
+})

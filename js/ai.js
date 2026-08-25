@@ -821,6 +821,11 @@ export const AIGen = (() => {
           { fromIdx: nl, toIdx: nl + 3, seamId: "leotardSide" },
           ...leotardLegEdges("leotardLegFront", outline.length, nl + 3, nl + 5),
           { fromIdx: nl + 3, toIdx: nl + 5, seamId: "leotardLegParity" },
+          // The short gusset(nl+5)-to-fold(nl+6) tail was never claimed
+          // by anything above (leotardLegFront_R/_L stop AT the gusset
+          // point) — genuinely free, real estate "Crotch Gusset" itself
+          // attaches to.
+          ...leotardLegEdges("leotardGussetFront", outline.length, nl + 5, nl + 6),
           ...leotardNeckEdge("leotardNeckFront", p.neck.length),
         ],
       }];
@@ -857,6 +862,7 @@ export const AIGen = (() => {
           { fromIdx: 1, toIdx: 4, seamId: "leotardSide" },
           ...leotardLegEdges("leotardLegFront", lowerOutline.length, 4, 6),
           { fromIdx: 4, toIdx: 6, seamId: "leotardLegParity" },
+          ...leotardLegEdges("leotardGussetFront", lowerOutline.length, 6, 7),
         ] },
     ];
   }
@@ -934,6 +940,7 @@ export const AIGen = (() => {
           { fromIdx: top.length, toIdx: top.length + 3, seamId: "leotardSide" },
           ...leotardLegEdges("leotardLegBack", top.length + 7, top.length + 3, top.length + 5),
           { fromIdx: top.length + 3, toIdx: top.length + 5, seamId: "leotardLegParity" },
+          ...leotardLegEdges("leotardGussetBack", top.length + 7, top.length + 5, top.length + 6),
           ...leotardNeckEdge("leotardNeckBack", top.length),
         ],
       });
@@ -962,6 +969,7 @@ export const AIGen = (() => {
             { fromIdx: 1, toIdx: 4, seamId: "leotardSide" },
             ...leotardLegEdges("leotardLegBack", 8, 4, 6),
             { fromIdx: 4, toIdx: 6, seamId: "leotardLegParity" },
+            ...leotardLegEdges("leotardGussetBack", 8, 6, 7),
           ] },
       );
     }
@@ -1064,10 +1072,30 @@ export const AIGen = (() => {
       ] });
 
     pieces.push(
+      // WP-61 (continued): the diamond's 4 corners are front-tip(0,0),
+      // right-tip(3.6,4.5), back-tip(0,9), left-tip(-3.6,4.5) — its 4
+      // edges each attach to a real, distinct curve: front-tip-to-
+      // right-tip meets the front body's own right-side gusset-to-fold
+      // tail, right-tip-to-back-tip meets the back's right-side one,
+      // and the other two edges meet their LEFT-mirrored counterparts
+      // (leotardFrontPieces'/leotardBackPieces' own
+      // `leotardGussetFront_R/L`/`leotardGussetBack_R/L`, freed up by
+      // `sideEndIdx` the same way the leg-opening curve was). Not
+      // bilateral (a genuinely symmetric single piece, unlike "Leg
+      // Opening Binding"), so its own edges use the already-`_R`/`_L`-
+      // suffixed literal seamId strings directly, matching Body's own
+      // convention, rather than relying on bilateral auto-suffixing
+      // (which only fires for a `bilateral: true` piece).
       { name: { en: "Crotch Gusset", ar: "دكة الجسم" },
         desc: { en: "Diamond gusset seamed into the crotch for stretch and coverage.", ar: "دكة ماسية تُخاط عند خط الجسم للمرونة والتغطية." },
         role: "other",
-        outline: [[0, 0], [3.6, 4.5], [0, 9], [-3.6, 4.5]], grain: [[0, 2], [0, 7]] },
+        outline: [[0, 0], [3.6, 4.5], [0, 9], [-3.6, 4.5]], grain: [[0, 2], [0, 7]],
+        edges: [
+          { fromIdx: 0, toIdx: 1, seamId: "leotardGussetFront_R" },
+          { fromIdx: 1, toIdx: 2, seamId: "leotardGussetBack_R" },
+          { fromIdx: 2, toIdx: 3, seamId: "leotardGussetBack_L" },
+          { fromIdx: 3, toIdx: 0, seamId: "leotardGussetFront_L" },
+        ] },
       { name: { en: "Gusset Lining", ar: "بطانة الدكة" },
         desc: { en: "Second gusset layer for opacity and comfort.", ar: "طبقة ثانية للدكة لمزيد من التغطية والراحة." },
         role: "lining",

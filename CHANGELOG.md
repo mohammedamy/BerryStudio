@@ -6,6 +6,51 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-63: pattern library rebuild, Phase 5 continued — the crotch gusset's real 4-edge seam
+
+Direct follow-up to WP-62. Once `sideEndIdx` freed the leg-opening curve
+up (hip-to-gusset), a short, previously-untouched tail remained free too
+right after it: gusset-to-fold — exactly where "Crotch Gusset" (and its
+own lining layer) genuinely attaches. Wired up the gusset's real 4-edge
+topology on `js/ai.js`'s leotard Front/Back Body:
+
+- The diamond's 4 corners are front-tip, right-tip, back-tip, left-tip;
+  its 4 edges each meet a real, distinct curve — front-tip-to-right-tip
+  meets the front body's own right-side gusset-to-fold tail, right-tip-
+  to-back-tip meets the back's right-side one, and the other two edges
+  meet their LEFT-mirrored counterparts (reusing WP-62's own
+  `leotardLegEdges()`/`foldMirrorEdge()` helpers verbatim — no new
+  geometry math needed, just a new pair of indices).
+- The gusset piece itself isn't bilateral (a genuinely symmetric single
+  piece, unlike the leg-opening binding), so its 4 edges use the
+  already-`_R`/`_L`-suffixed literal seamId strings directly, matching
+  Body's own convention.
+- "Gusset Lining" (the second layer behind the gusset) stays honestly
+  unseamed this pass — real leotard construction usually bonds it
+  directly to the gusset rather than seaming it independently into the
+  crotch, and forcing an independent 4-edge declaration for it too
+  wasn't a clear enough real relationship to declare with confidence,
+  the same "don't guess" standard this whole pass has held to.
+
+### Verification
+- Direct reproduction: all 4 gusset seams form correctly (front-R,
+  front-L, back-R, back-L), confirmed by inspecting the actual
+  `seamInstructions` before trusting it.
+- `npm test`: 299/299.
+- `cloth-lab` vitest: **734/734** (was 634 — 100 new, one per leotard
+  pattern, checking the gusset gets all 4 real seams).
+
+With this, girls-leotards.js's 100 patterns now have real, working
+seams for their entire core construction — body, neckline binding,
+leg-opening binding, AND the crotch gusset. Still open in this
+collection: the gusset lining (deliberately deferred, above), plus the
+handful of style-specific extras (Cross-Back Strap, Keyhole Binding,
+Mesh Back Panel, Side Mesh Insert, Armhole Binding) that only appear
+on some styles. Beyond leotards, the ~15 other accessory role families
+across the rest of the library (collar, cuff, pocket, waistband, sash,
+tier, godet, cup, band, hood, cape, epaulette) remain open, each still
+needing its own real attach-edge identified the same way.
+
 ## WP-62: pattern library rebuild, Phase 5 continued — the leg-opening binding, and a real gap in WP-61's own fix found by trying to reuse it
 
 Direct follow-up to WP-61, extending the same real-seam treatment from
