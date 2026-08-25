@@ -6,6 +6,112 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-58: pattern library rebuild, Phase 5 continued — redesigned every remaining seamLengthParity failure at the source, 0 fails left library-wide
+
+Direct follow-up to WP-57, per explicit direction to replace every
+remaining failing item with a real, from-scratch equivalent that
+actually passes, rather than continuing to leave categories
+documented-but-deferred. Investigated each of the 93 remaining
+`seamLengthParity` failures by CONSTRUCTION, not by pattern-matching the
+symptom, and found genuine, fixable defects behind almost all of them —
+WP-56's read of `jacketFrontBack` as "compensated by a separate facing
+piece" turned out to be wrong once `lapelFacing()` was actually
+inspected (it's sized from `neck`, never touches hem width, and folds
+along the center-front opening, not the side) — it was a real,
+uncompensated ~38%-narrower front hem with no seam-based justification.
+
+- **`jacketFrontBack()`** (~50 call sites — every jacket/coat/vest/parka/
+  kandura in the Fancy/Men's/Boys' collections): redrafted so the front's
+  side-seam curve is the back's side-seam curve shifted by one constant
+  `sideInset` — a pure horizontal translation, which cannot change arc
+  length, so front and back match EXACTLY by construction, not by
+  tuning control points until a script says "close enough." Both panels
+  declare the real edge (`edges[].seamId: 'jacketSide'`); `hoistCurves()`
+  extended to also hoist `.edges` (the same mechanism `.curves` already
+  uses) so one change reached every call site for free.
+- **`trouserPanel()`** (~17 call sites): separated the OUTSEAM (waist-
+  outer to hem-outer — must match front/back for the leg to sew flat)
+  from the RISE (front shallower / back deeper through the seat — a
+  real, standard difference that has no business reshaping the
+  outseam). The outseam is now `crotchDrop`-independent and a pure
+  translation between front/back (`seamId: 'trouserOutseam'`); the real
+  rise difference still lives entirely on the undeclared center-front/
+  back seam, where it belongs.
+- **`briefPanel()`** (`js/underwear-library.js`, 24 patterns): the real
+  brief side seam is the short corner edge from the waist curve's own
+  end to the leg curve's own start — it was landing at a different real
+  length front vs back because `hipX`/`legTopY` each had independent
+  front/back formulas that happened to feed the same corner. Now that
+  corner is `waistX + (sideDX, sideDY)`, one fixed vector shared by
+  front and back, so the edge matches by construction regardless of
+  `waistX` (`seamId: 'briefSide'`). The "back covers more" real design
+  intent this simplified away from `legTopY` still lives on in
+  `crotchY`'s existing back-only `+2`. Also caught and fixed a fresh
+  `grainline` regression this surfaced: the brief grain's old fixed-cm
+  margin (`y:4` to `frontLen-4`) landed inverted on the shortest real
+  style combo (low-rise + bikini cut) once corner geometry changed —
+  made proportional to the piece's own length instead, same fix class
+  as WP-57's Center Bridge.
+- **`wrapPanel()`+ new `wrapCoatBack()`** (asymmetric wrap/sherwani
+  closures, ~9 call sites across coats AND wrap dresses): the wrap
+  front's real sewn seam is only its underarm-to-taper curve — below
+  the taper point it curves inward as the closure overlap, a free edge
+  sewn to nothing. The old back panel (reused generic
+  `jacketFrontBack().back`) had no relationship to that curve at all.
+  `wrapCoatBack()` now drafts its own side seam as the LITERAL SAME
+  curve (`seamId: 'wrapCoatSide'`, same arguments, not just a similar
+  shape) before continuing on its own to a real hem — the train/wrap-
+  dress bodice variant reuses the identical function.
+- **`peplumPc()`** (4 call-site pairs): several patterns gave the front
+  and back peplum halves slightly different `waistHalfW`/`flareLen`
+  values with no construction reason behind the difference (unlike the
+  real, kept differences elsewhere) — every pair now passes matching
+  parameters, so the two cut-on-fold halves are the same size by
+  construction, a common, legitimate real peplum-ring construction.
+- **`gorePanel()` + new `gorePanelWithTrain()`**: a bridal train is
+  supposed to be dramatically longer than the front — the old
+  construction ran one curve from waist straight to the full train
+  length, so the check was comparing the front's real hem-length side
+  against the back's much longer train, never a real like-for-like
+  comparison. `gorePanelWithTrain()` now shares the front's own gore
+  curve verbatim (`seamId: 'goreSide'`) for the portion that's actually
+  sewn to the front, then continues as a genuinely separate,
+  undeclared train extension beyond it.
+- **`pairByRole()`** (`js/validate.js`, shared infrastructure): a real
+  bilateral Left/Right front pair (e.g. `wrapPanel`'s two sides) both
+  genuinely meet the SAME single back panel at its two mirrored side
+  seams — not an ambiguous 2-vs-1 role collision. Recognizing that
+  specific, narrow case (both front labels differ only by a Left/Right
+  marker) fixed a real mispairing bug: the blind "any unused back"
+  fallback in `pairFrontBack()` was grabbing whatever back-labeled piece
+  was left over in array order once the correct one was already
+  claimed — on 3 multi-component patterns (a coat+trousers set, two
+  coat+peplum dresses) that meant a front literally being checked
+  against an unrelated garment's back panel. Cross-piece "Verified"
+  pairing went from 295→313 (59.1%→62.7%) as a side effect of pairing
+  these correctly instead of falling through to a heuristic guess.
+
+Every fix above is a real construction change (most use exact
+translation/shared-curve tricks that make the match provable, not
+approximate), verified by direct arc-length measurement before relying
+on the validator, then confirmed against the full suite.
+
+### Verification
+- `npm test`: 299/299. `cloth-lab` (vitest): 215/215.
+- Full 308-pattern / 2,170-piece sweep: **`closedOutline`,
+  `selfIntersection`, `grainline`, `seamAllowance`, `foldSymmetry`, AND
+  `seamLengthParity` are now all 0 fails** — every §5 check that can
+  report "fail" is clean library-wide. (`ease`/`notchAlignment` remain
+  `deferred`/`warn` only — no fails, and closing THOSE gaps is
+  authoring-scale work, not a defect fix; see WP-57's own honest
+  breakdown, still accurate for the gates this WP didn't touch: notch
+  coverage 14.9%, ease-deferred 94.8%, still §8 targets ≥80%/≤20%.)
+- Spot-verified redesigned pieces visually (rendered raw outlines via
+  `js/pattern-flat.js`'s `_renderUncached`, `qlmanage -t` to PNG) across
+  jacket, trouser, brief, wrap-coat, train-skirt and mispairing-fix
+  patterns — every shape reads as a real, plausible garment piece, not
+  a passing-but-degenerate shape.
+
 ## WP-57: pattern library rebuild, Phase 5 — full §8 sweep, underwear-library fixes, and an honest status of what's left
 
 docs/plan 4.md Phase 5, its own "Full §8 sweep" description. Widened the

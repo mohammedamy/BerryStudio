@@ -245,6 +245,28 @@ const ROLE_PAIR = {
   'skirt-front-gore': 'skirt-back-gore',
 };
 
+// WP-58 (docs/plan 4.md Phase 5): TWO pieces sharing a role are usually
+// genuinely ambiguous ("no single unambiguous pairing" below) — but a
+// real, common exception is a bilateral pair whose labels differ ONLY by
+// "Left"/"Right" (an asymmetric wrap/sherwani closure's two front
+// panels, e.g. "Front Left"/"Front Right" or "Coat Front Left"/"Coat
+// Front Right"): those aren't two unrelated fronts guessing at a shared
+// back, they're real mirror-image counterparts that both, genuinely,
+// meet the SAME single back panel at its two (mirrored) side seams. Not
+// pairing them left every such front to fall through to pairFrontBack()'s
+// blind "any unused back" fallback, which had no way to tell a real
+// counterpart from a same-pattern's unrelated peplum/trouser back it
+// just happened to grab next — a real mispairing, not a proxy artifact.
+function isBilateralLR(a, b) {
+  const LR = /\b(left|right)\b|يسرى|يمنى|يسار|يمين/gi;
+  const stripped = (s) => pieceLabel(s).toLowerCase().replace(LR, '').replace(/\s+/g, ' ').trim();
+  const hasLR = (s) => LR.test(pieceLabel(s));
+  LR.lastIndex = 0;
+  const aHas = hasLR(a); LR.lastIndex = 0;
+  const bHas = hasLR(b); LR.lastIndex = 0;
+  return aHas && bHas && stripped(a) === stripped(b);
+}
+
 function pairByRole(pieces) {
   const byRole = {};
   for (const p of pieces) if (p.role) (byRole[p.role] = byRole[p.role] || []).push(p);
@@ -255,10 +277,17 @@ function pairByRole(pieces) {
     // Only pair when there's exactly one of each role in this piece set —
     // 2+ pieces sharing a role (e.g. a wrap design's two independent front
     // panels) has no single unambiguous pairing; same "never guess"
-    // principle cloth-lab's importFromApp.js already applies.
+    // principle cloth-lab's importFromApp.js already applies. The one
+    // documented exception is a real bilateral Left/Right pair (see
+    // isBilateralLR() above) against a single back — both genuinely
+    // pair with it, not a guess.
     if (fronts.length === 1 && backs.length === 1) {
       pairs.push({ front: fronts[0], back: backs[0], verified: true });
       used.add(fronts[0]); used.add(backs[0]);
+    } else if (fronts.length === 2 && backs.length === 1 && isBilateralLR(fronts[0], fronts[1])) {
+      pairs.push({ front: fronts[0], back: backs[0], verified: true });
+      pairs.push({ front: fronts[1], back: backs[0], verified: true });
+      used.add(fronts[0]); used.add(fronts[1]); used.add(backs[0]);
     }
   }
   const remaining = pieces.filter((p) => !used.has(p));

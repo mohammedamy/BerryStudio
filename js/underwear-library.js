@@ -123,8 +123,25 @@ import { q, PATTERNS, LIBRARY } from './data.js';
   // segments through the same hip/leg/gusset waypoints — this samples an
   // actual bezier through them instead, per the user's own "precise, nice
   // curves" request). `front` toggles the front/back asymmetry every real
-  // brief block has: the back rises higher and drops slightly deeper than
-  // the front, for seat coverage.
+  // brief block has: the back drops slightly deeper than the front (more
+  // seat coverage) and sits a touch wider at the waist.
+  //
+  // WP-58 (docs/plan 4.md Phase 5, full-sweep redesign): the real side
+  // seam a brief's front and back panel are sewn together at is the
+  // short straight corner edge from the waist curve's own end to the leg
+  // curve's own start — physically a few cm, not the whole panel height
+  // the old bounding-box proxy compared. That corner used to be placed
+  // independently front vs back (`hipX`/`legTopY` each had their own
+  // front/back formula), so the edge itself came out a different real
+  // length on each side — not by design, just two unrelated formulas
+  // that happened to both feed the same corner. Redrafted so that corner
+  // is now `waistX + (sideDX, sideDY)` — ONE fixed vector, shared by
+  // front and back — so the edge is the same real length by
+  // construction regardless of `waistX` (which still differs front/back,
+  // it just translates the corner rather than resizing the seam). The
+  // "back covers more" difference this removed from `legTopY` still
+  // lives on in `crotchY`'s existing `+2` for back, and in the leg
+  // curve's own shape beyond this corner (undeclared, free to differ).
   const RISE_CM = { low: 7, mid: 12, high: 18 };
   const LEG_F = { bikini: 0.58, hipster: 0.70, full: 0.85, boyshort: 1.05 };
   function briefPanel(qw, qh, front, opts) {
@@ -134,26 +151,30 @@ import { q, PATTERNS, LIBRARY } from './data.js';
     const legLength = opts.legLength || 0; // >0 = boxer-brief/trunk hem extension down the thigh
 
     const waistX = (front ? qw * 0.52 : qw * 0.56);
+    const sideDX = rise * 0.35, sideDY = rise * 0.42; // shared side-seam vector, front == back
+    const cornerX = waistX + sideDX, cornerY = 1.2 + sideDY;
     const hipX = (front ? qh * 0.58 : qh * 0.64) * coverage;
-    const legTopY = (front ? rise * 0.75 : rise);
     const crotchDepth = qh * 0.32 * legF + legLength;
-    const crotchY = legTopY + crotchDepth + (front ? 0 : 2);
+    const crotchY = cornerY + crotchDepth + (front ? 0 : 2);
     const crotchX = qh * 0.13;
 
     const waistSeg = [[0, 0], [waistX * 0.55, -1.4], [waistX, 1.2]];
-    const legSeg = [[hipX, legTopY], [hipX * 0.5, crotchY * 0.68], [crotchX, crotchY]];
+    const legSeg = [[hipX, cornerY], [hipX * 0.5, crotchY * 0.68], [crotchX, crotchY]];
 
     const outline = [
       [0, 0],
       ...qBez(...waistSeg, 6),
-      [hipX, legTopY],
+      [cornerX, cornerY],
+      [hipX, cornerY],
       ...qBez(...legSeg, 7),
       [0, crotchY],
     ];
-    return withCurves(outline, [
+    withCurves(outline, [
       { fromIdx: 0, toIdx: 6, ...qBezToCubic(...waistSeg) },
-      { fromIdx: 7, toIdx: 14, ...qBezToCubic(...legSeg) },
+      { fromIdx: 8, toIdx: 15, ...qBezToCubic(...legSeg) },
     ]);
+    outline.edges = [{ fromIdx: 6, toIdx: 7, seamId: 'briefSide' }];
+    return outline;
   }
   function briefPieces(m, opts) {
     const qw = q(m.waist), qh = q(m.hips);
@@ -166,14 +187,21 @@ import { q, PATTERNS, LIBRARY } from './data.js';
     const legCirc = (qh * 0.62 * (LEG_F[opts.legCut] || LEG_F.full) + legLength) * 2.3;
 
     const pieces = [
+      // WP-58: grain used to be fixed cm points (y:4 to y:frontLen-4) —
+      // for the shortest real style combination (low rise + bikini leg
+      // cut, e.g. gu03), `frontLen` itself comes out under 8cm, so the
+      // 2nd point landed ABOVE the 1st — the exact same "reads as 180°,
+      // not 0°" symptom WP-57 already fixed on the bra Center Bridge
+      // piece, same fix: proportional to the piece's own length instead
+      // of a fixed cm margin.
       { key: "front", name: { en: "Front Panel", ar: "القطعة الأمامية" },
         desc: { en: "Front panel with a curved waist edge and a curved leg opening.", ar: "قطعة أمامية بحافة خصر منحنية وفتحة ساق منحنية." },
-        outline: front, role: "brief-front", cutOnFold: true,
-        grain: [[qw * 0.15, 4], [qw * 0.15, frontLen - 4]] },
+        outline: front, role: "brief-front", cutOnFold: true, edges: front.edges,
+        grain: [[qw * 0.15, frontLen * 0.2], [qw * 0.15, frontLen * 0.85]] },
       { key: "back", name: { en: "Back Panel", ar: "القطعة الخلفية" },
         desc: { en: "Back panel, cut higher at the waist and deeper at the crotch than the front for real seat coverage.", ar: "قطعة خلفية أعلى عند الخصر وأعمق عند خط الجسم من الأمامية لتغطية حقيقية للمقعد." },
-        outline: back, role: "brief-back", cutOnFold: true,
-        grain: [[qw * 0.15, 4], [qw * 0.15, backLen - 4]] },
+        outline: back, role: "brief-back", cutOnFold: true, edges: back.edges,
+        grain: [[qw * 0.15, backLen * 0.2], [qw * 0.15, backLen * 0.85]] },
       { key: "gusset", name: { en: "Crotch Gusset", ar: "دكة الجسم" },
         desc: { en: "Curved cotton-lining gusset seamed into the crotch, cut on the fold.", ar: "دكة قطنية منحنية تُخاط عند خط الجسم، تُقص على الطية." },
         outline: gussetOval(gW, gH), role: "gusset", cutOnFold: true,
