@@ -50,6 +50,7 @@ function toPayloadPiece(p, i) {
     role: p.role, cutOnFold: p.cutOnFold, foldEdgeIndex: p.foldEdgeIndex,
     bilateral: p.bilateral, edges: p.edges, grainline: p.grainline,
     princessSeamId: p.princessSeamId,
+    necklineEndIdx: p.necklineEndIdx,
     color: p.color,
   }
 }

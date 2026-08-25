@@ -681,6 +681,15 @@ export const AIGen = (() => {
   // splits the front (or adds a back mesh insert / side panels) into real,
   // separately-cut pieces for genuine construction variety — not a recolor.
   // style.skirt adds an attached gathered ballet skirt at the hip seam.
+  // WP-61: real edge from index 1 (right after the fold-line's own point
+  // 0) to the neck curve's own last point — the range "Neckline Binding"
+  // seams to. Guarded (returns []) when the curve is only 2 points
+  // (index 0 and 1) — some neckline/backStyle combinations really are
+  // that simple, and index 1 to index 1 is a degenerate zero-length
+  // edge, not a real one to declare.
+  function leotardNeckEdge(seamId, curveLen) {
+    return curveLen > 2 ? [{ fromIdx: 1, toIdx: curveLen - 1, seamId }] : [];
+  }
   const LEOTARD_LEG = {
     // rise = how far above the natural waist the leg's highest side point
     // sits; legWFactor = how much narrower than the hip that point is
@@ -737,6 +746,15 @@ export const AIGen = (() => {
     // hipDrop/legW/crotchY/waist/hip values above). Declaring it lets
     // checkSeamLengthParity measure that real edge instead of the
     // bounding-box proxy.
+    // WP-61 (docs/plan 4.md Phase 5, cloth-lab compatibility pass): the
+    // neckline curve (p.neck) is a real, separately-seamable edge — the
+    // "Neckline Binding" piece below is genuinely sewn to it — but
+    // cloth-lab's own front-to-back side-seam derivation used to claim
+    // every point from index 1 onward (including this whole curve) as
+    // part of "the side seam," leaving nothing for the binding to attach
+    // to. `necklineEndIdx` tells that derivation where the neckline
+    // curve actually ends, freeing it up; the matching `leotardNeckFront`
+    // seamId edge right below is what actually claims and seams it.
     if (!splitY) {
       const outline = [...p.neck, p.shoulder, p.waistIn, p.waist, p.hip, p.leg, p.gusset, p.fold];
       return [{
@@ -746,7 +764,11 @@ export const AIGen = (() => {
         outline,
         role: "bodice-front-center", cutOnFold: true,
         grain: [[chestW * 0.4, 8], [chestW * 0.4, gLen - 8]],
-        edges: [{ fromIdx: p.neck.length, toIdx: p.neck.length + 5, seamId: "leotardSide" }],
+        necklineEndIdx: p.neck.length - 1,
+        edges: [
+          { fromIdx: p.neck.length, toIdx: p.neck.length + 5, seamId: "leotardSide" },
+          ...leotardNeckEdge("leotardNeckFront", p.neck.length),
+        ],
       }];
     }
     const { y1, y2 } = splitY;
@@ -763,7 +785,14 @@ export const AIGen = (() => {
         // leotardBackPieces' equivalent yoke edge — matches within ~1mm
         // already (confirmed across all colour-block styles), no
         // geometry change needed here, just the declaration.
-        edges: [{ fromIdx: p.neck.length, toIdx: p.neck.length + 1, seamId: "leotardYokeSide" }] },
+        // WP-61: role "yoke" isn't a bySlot/cutOnFold-princess placement
+        // (attachNeck), so it never gets the geometric side-seam claim
+        // at all — no necklineEndIdx needed here, its neckline range was
+        // already free.
+        edges: [
+          { fromIdx: p.neck.length, toIdx: p.neck.length + 1, seamId: "leotardYokeSide" },
+          ...leotardNeckEdge("leotardNeckFront", p.neck.length),
+        ] },
       { name: { en: "Front Body", ar: "مقدمة الجسم" },
         desc: { en: "Lower front panel seamed to the yoke, continuing straight to the high-cut leg opening.", ar: "لوحة أمامية سفلية متصلة بالكوة، تمتد حتى فتحة الساق العالية." },
         outline: lowerOutline,
@@ -818,6 +847,12 @@ export const AIGen = (() => {
     const armhole = [chestW + 2, 3.5], waistIn = [chestW * 0.94, bod * 0.58], waist = [waistW, bod];
     const hip = [hipW, bod + hipDrop], legPt = [legW, legY], gusset = [leg.gusset, crotchY], fold = [0, crotchY];
     const pieces = [];
+    // WP-61: same neckline-binding attach mechanism as leotardFrontPieces
+    // above — `top`'s own curve is a real, separately-seamable edge
+    // (`leotardNeckBack`), freed from the geometric side-seam claim via
+    // `necklineEndIdx` on the bySlot-placed "Back Body" piece; the "Back
+    // Colour-Block Yoke" piece (role "yoke", not bySlot) needs no
+    // necklineEndIdx — its whole range was already free.
     if (!splitY) {
       pieces.push({
         name: { en: "Back Body", ar: "خلفية الجسم" },
@@ -825,8 +860,12 @@ export const AIGen = (() => {
         outline: [...top, armhole, waistIn, waist, hip, legPt, gusset, fold],
         role: "bodice-back-center", cutOnFold: true,
         grain: [[2, 8], [2, crotchY - 8]],
+        necklineEndIdx: top.length - 1,
         // matches leotardFrontPieces' own 'leotardSide' edge declaration
-        edges: [{ fromIdx: top.length, toIdx: top.length + 5, seamId: "leotardSide" }],
+        edges: [
+          { fromIdx: top.length, toIdx: top.length + 5, seamId: "leotardSide" },
+          ...leotardNeckEdge("leotardNeckBack", top.length),
+        ],
       });
     } else {
       const { y1, y2 } = splitY;
@@ -839,7 +878,10 @@ export const AIGen = (() => {
           role: "yoke", cutOnFold: true,
           grain: [[chestW * 0.35, 3], [chestW * 0.35, Math.max(y1, y2) - 3]],
           // matches leotardFrontPieces' own 'leotardYokeSide' declaration
-          edges: [{ fromIdx: top.length, toIdx: top.length + 1, seamId: "leotardYokeSide" }] },
+          edges: [
+            { fromIdx: top.length, toIdx: top.length + 1, seamId: "leotardYokeSide" },
+            ...leotardNeckEdge("leotardNeckBack", top.length),
+          ] },
         { name: { en: "Back Body", ar: "خلفية الجسم" },
           desc: { en: "Lower back panel seamed to the back yoke, continuing straight to the high-cut leg opening.", ar: "لوحة خلفية سفلية متصلة بكوة الظهر، تمتد حتى فتحة الساق العالية." },
           outline: [[0, y1], [chestW * 0.87, y2], waistIn, waist, hip, legPt, gusset, fold],
@@ -907,10 +949,25 @@ export const AIGen = (() => {
         role: "collar-stand" });
     } else {
       const neckCirc = m.neck * 0.95;
+      // WP-61: one continuous strip long enough to go all the way around
+      // (real bias-binding construction), split at its own midpoint into
+      // a front half and a back half so each can genuinely seam to the
+      // matching real curve it finishes (leotardFrontPieces'/
+      // leotardBackPieces' own `leotardNeckFront`/`leotardNeckBack`
+      // edges) — a 50/50 split is an approximation (front and back
+      // necklines aren't always equal length), acceptable the same way
+      // an elastic binding is DESIGNED to stretch/ease to fit the edge
+      // it's sewn to, not the same way a structural seam needs an exact
+      // length match.
       pieces.push({ name: { en: "Neckline Binding", ar: "تحبيك فتحة الرقبة" },
-        desc: { en: "Elastic binding strip finishing the neckline edge.", ar: "شريط أستك يُنهي حافة فتحة الرقبة." },
+        desc: { en: "Elastic binding strip finishing the neckline edge, front half and back half seamed to the body.", ar: "شريط أستك يُنهي حافة فتحة الرقبة، بنصفيه الأمامي والخلفي مخيطين إلى الجسم." },
         role: "other",
-        outline: [[0, 0], [neckCirc, 0], [neckCirc, 1.8], [0, 1.8]], grain: [[neckCirc * 0.5, 0.4], [neckCirc * 0.5, 1.4]] });
+        outline: [[0, 0], [neckCirc * 0.5, 0], [neckCirc, 0], [neckCirc, 1.8], [neckCirc * 0.5, 1.8], [0, 1.8]],
+        grain: [[neckCirc * 0.5, 0.4], [neckCirc * 0.5, 1.4]],
+        edges: [
+          { fromIdx: 0, toIdx: 1, seamId: "leotardNeckFront" },
+          { fromIdx: 1, toIdx: 2, seamId: "leotardNeckBack" },
+        ] });
     }
 
     const legCirc = hipW * 1.7;

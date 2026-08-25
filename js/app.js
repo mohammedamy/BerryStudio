@@ -3717,6 +3717,17 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         // this (the importer-side destructure bug that made this field
         // a no-op even when present).
         princessSeamId: p.princessSeamId,
+        // WP-61: an optional index (into this piece's own pre-unfold
+        // outline) marking where a cutOnFold piece's neckline/top curve
+        // ends — lets cloth-lab's importer carve that curve out as its
+        // own seamable `rightNeckline`/`leftNeckline` region instead of
+        // it being silently swallowed into the generic front-to-back
+        // side seam, where an accessory (a collar, a leotard's neckline
+        // binding) could never reach it. Omitted entirely (undefined) on
+        // every piece that doesn't declare it — cloth-lab's own default
+        // reproduces today's behavior exactly. See importFromApp.js's
+        // own WP-61 comment for the full reasoning and index-math.
+        necklineEndIdx: p.necklineEndIdx,
         // WP-49: explicit upper/lower-body override (js/body-zone.js) —
         // cloth-lab/src/pattern/importFromApp.js's classifyLegacy path
         // consults this to correct a wrong name-based guess for pieces

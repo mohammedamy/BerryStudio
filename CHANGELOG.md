@@ -6,6 +6,91 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-61: pattern library rebuild, Phase 5 continued — real neckline-accessory seaming, a shared-geometry rework, and another latent crash found and fixed
+
+Direct follow-up to WP-59/60, user-directed to build real (not partial)
+seaming for accessories that attach to more than one body edge at once
+(a leotard's neckline binding strip, sewn to both the front AND back
+neckline). Investigating that surfaced a deeper, more fundamental gap
+first: cloth-lab's shared front-to-back seam derivation
+(`deriveTorsoEdgeInstructions`, used by ~200+ patterns' existing,
+working seams) claims almost the ENTIRE panel perimeter as one
+undifferentiated "side" — there was no separate "neckline" region at
+all, so ANY accessory wanting to seam to just a panel's neckline
+(collar, leotard binding, anything alike) collided with that existing
+claim. Real fix, not a workaround:
+
+- **`necklineEndIdx`** (new, fully optional, per-piece): tells
+  `deriveTorsoEdgeInstructions` where a piece's own neckline/top curve
+  ends, narrowing where its geometric side-seam claim starts — freeing
+  that curve up for the piece's own `edges[].seamId` declaration to
+  claim instead (via the existing `pushSeamIdEdges`, generalized in
+  WP-59). Never geometrically guessed — only ever set when a generator
+  declares it. Omitted (the default for every piece that doesn't set
+  it — everything before this WP), reproduces the exact prior behavior
+  byte-for-byte: zero regression risk for the ~200+ patterns that don't
+  use it. Threaded through `js/app.js`'s payload builder the same way
+  `princessSeamId` was in WP-59.
+- Relaxed WP-58/59's own "bySlot seam XOR seamId seam" exclusivity — a
+  panel legitimately needs BOTH at once now (its ordinary front-to-back
+  seam, and a separate accessory attaching to a different one of its
+  edges). To keep this safe, added real overlap detection
+  (`pushClaimedEdge`/the `claimedIndices` tracking) so a seamId edge
+  that DOES genuinely overlap an already-claimed geometric edge (e.g.
+  `jacketSide`/`trouserOutseam`, always redundant with the bySlot seam
+  for those placements — WP-58/59's own original reasoning) is silently
+  skipped instead of reaching `seamAuthoring.js`'s `addEdge()`, which
+  throws on a real overlap.
+- **A second real, pre-existing latent crash found**, unrelated to any
+  of the above: `deriveTorsoEdgeInstructions` could already produce a
+  degenerate (`from === to`) `rightSide`/`leftSide` for a genuinely
+  tiny outline (a 4-point panel, e.g. girls-leotards.js's own attached
+  "Ballet Skirt Front/Back") — reproducible with the EXACT prior
+  formula, `necklineEndIdx` never involved. `addEdge()` throws on this;
+  nothing had ever caught it because no test exercised a 4-point
+  hip-panel piece through this path before this WP's own new test file.
+  Fixed at both call sites (metadata path and the legacy classifyLegacy
+  path): a piece this small no longer gets registered for the
+  automatic front-to-back seam at all (placed, not auto-seamed — the
+  same honest outcome an accessory role gets) instead of crashing.
+- **`js/ai.js`'s `leotardFrontPieces()`/`leotardBackPieces()`**: Front/
+  Back Body (and their colour-block Yoke variants) now declare
+  `necklineEndIdx` + a real `leotardNeckFront`/`leotardNeckBack` seamId
+  edge on their own neckline curve. Guarded (`leotardNeckEdge()`) for
+  the handful of backStyle/neckline combinations that really do reduce
+  to a 2-point (degenerate) curve — no real edge to declare there,
+  honestly, not a bug.
+- **"Neckline Binding"**: redrawn with a real midpoint vertex, split
+  into a front half and a back half, each with the matching seamId — a
+  50/50 split (an approximation; front/back necklines aren't always
+  equal length) is acceptable the same way elastic binding is DESIGNED
+  to stretch/ease to fit the edge it's sewn to, unlike a structural
+  seam that needs an exact length match.
+- **New `importFromApp.leotards.test.js`**: `js/girls-leotards.js`'s
+  100 patterns had ZERO cloth-lab end-to-end coverage before this WP
+  (the same class of gap WP-60 closed for `js/library.js`) — now fully
+  covered, plus a dedicated check that the binding gets a real seam to
+  every neckline curve that actually has one to offer (1 or 2,
+  depending on style — not a flat assumption either way).
+
+### Verification
+- `npm test`: 299/299.
+- `cloth-lab` vitest: **534/534** (was 347 — 187 new from the leotard
+  test file alone, plus regression coverage across every existing
+  suite for the shared-geometry rework).
+- Direct reproduction confirmed both real bugs found this pass (the
+  neckline-collision architecture gap, and the degenerate-edge crash)
+  before fixing either, and confirmed the fix afterward.
+
+Still open: leg-opening binding (needs the same per-side neckline-style
+treatment, doubled for bilateral L/R), the crotch gusset's 4 real
+attach edges, and the ~15 remaining accessory role families (collar,
+cuff, pocket, waistband, sash, tier, godet, cup, band, hood, cape,
+epaulette, mesh inserts, cross-back strap, keyhole binding) — each now
+has a proven mechanism (`necklineEndIdx` + seamId, or plain seamId
+where no bySlot collision exists) to build on, not a new architecture
+each time, but each still needs its own real attach-edge identified.
+
 ## WP-60: pattern library rebuild, Phase 5 continued — the SECOND trouser bug, and closing a real cloth-lab test-coverage gap for js/library.js entirely
 
 Direct follow-up to WP-59. A role/piece-name sweep across the whole
