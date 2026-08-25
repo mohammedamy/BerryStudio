@@ -92,20 +92,28 @@ import { q, PATTERNS, LIBRARY } from './data.js';
   // WP-26 dedupeClose()/dedupeCloseWithCurves() document for this identical
   // situation elsewhere in the codebase; its curve entry is omitted rather
   // than claiming a toIdx the trimmed array no longer has.
+  // WP-57 (docs/plan 4.md Phase 4/5): previously drafted the FULL oval
+  // (4 curve segments closing back to its own [0,0] origin) — never
+  // declared cutOnFold anywhere it's used, but the closing curve's own
+  // samples sat close enough to the piece's own min-X, for enough of its
+  // height, to false-trigger checkFoldSymmetry's fold heuristic (48 real
+  // failures across both call sites, Crotch Gusset and Gusset Lining, on
+  // all 24 brief patterns). Real fix, same as peplumPc/capePc's WP-53
+  // one: a crotch gusset really is conventionally symmetric, cut on the
+  // fold — now a genuine cut-on-fold half with a real straight fold edge,
+  // not a reshape to dodge the heuristic. `w` stays the FULL finished
+  // width (unchanged call-site meaning); every call site now declares
+  // `cutOnFold: true`.
   function gussetOval(w, h) {
-    const rx = w / 2;
-    const top = [rx, 0], right = [w, h / 2], bottom = [rx, h], left = [0, h / 2];
-    const seg1 = [top, [w, 0], right];
-    const seg2 = [right, [w, h], bottom];
-    const seg3 = [bottom, [0, h], left];
-    const seg4 = [left, [0, 0], top];
-    const s1 = qBez(...seg1, 6), s2 = qBez(...seg2, 6), s3 = qBez(...seg3, 6), s4 = qBez(...seg4, 6);
-    s4.pop(); // last sample == `top` == outline[0] — see header comment
-    const outline = [top, ...s1, ...s2, ...s3, ...s4];
+    const halfW = w / 2;
+    const seg1 = [[0, 0], [halfW, 0], [halfW, h / 2]];
+    const seg2 = [[halfW, h / 2], [halfW, h], [0, h]];
+    const outline = [[0, 0], ...qBez(...seg1, 6), ...qBez(...seg2, 6)];
+    // seg2's own endpoint is exactly [0,h] — the outline's implicit
+    // wraparound edge (last point back to [0,0]) is the fold itself.
     return withCurves(outline, [
       { fromIdx: 0, toIdx: 6, ...qBezToCubic(...seg1) },
       { fromIdx: 6, toIdx: 12, ...qBezToCubic(...seg2) },
-      { fromIdx: 12, toIdx: 18, ...qBezToCubic(...seg3) },
     ]);
   }
 
@@ -167,13 +175,13 @@ import { q, PATTERNS, LIBRARY } from './data.js';
         outline: back, role: "brief-back", cutOnFold: true,
         grain: [[qw * 0.15, 4], [qw * 0.15, backLen - 4]] },
       { key: "gusset", name: { en: "Crotch Gusset", ar: "دكة الجسم" },
-        desc: { en: "Curved cotton-lining gusset seamed into the crotch.", ar: "دكة قطنية منحنية تُخاط عند خط الجسم." },
-        outline: gussetOval(gW, gH), role: "gusset",
-        grain: [[gW / 2, 2], [gW / 2, gH - 2]] },
+        desc: { en: "Curved cotton-lining gusset seamed into the crotch, cut on the fold.", ar: "دكة قطنية منحنية تُخاط عند خط الجسم، تُقص على الطية." },
+        outline: gussetOval(gW, gH), role: "gusset", cutOnFold: true,
+        grain: [[gW / 4, 2], [gW / 4, gH - 2]] },
       { key: "gussetLining", name: { en: "Gusset Lining", ar: "بطانة الدكة" },
-        desc: { en: "Second gusset layer for opacity and comfort.", ar: "طبقة ثانية للدكة لمزيد من التغطية والراحة." },
-        outline: gussetOval(gW, gH), role: "lining",
-        grain: [[gW / 2, 2], [gW / 2, gH - 2]] },
+        desc: { en: "Second gusset layer for opacity and comfort, cut on the fold.", ar: "طبقة ثانية للدكة لمزيد من التغطية والراحة، تُقص على الطية." },
+        outline: gussetOval(gW, gH), role: "lining", cutOnFold: true,
+        grain: [[gW / 4, 2], [gW / 4, gH - 2]] },
       { key: "waistElastic", name: { en: "Waist Elastic", ar: "أستك الخصر" },
         desc: { en: "Soft knit elastic stitched to the waist edge.", ar: "أستك ناعم يُخاط على حافة الخصر." },
         outline: elasticStrip(waistCirc), role: "elastic-band",
@@ -248,7 +256,22 @@ import { q, PATTERNS, LIBRARY } from './data.js';
       { key: "bridge", name: { en: "Center Bridge", ar: "الجسر الأوسط" },
         desc: { en: "Narrow center-front panel joining the two cups.", ar: "قطعة ضيقة في مقدمة الوسط تصل بين الكأسين." },
         outline: curvedBandPc(bridgeW, cupD * 0.55, cupD * 0.04), role: "other", cutOnFold: true,
-        grain: [[bridgeW / 2, 2], [bridgeW / 2, cupD * 0.4]] },
+        // WP-57 (docs/plan 4.md Phase 5): both grain points used to be
+        // fixed cm values (y:2 and y:cupD*0.4) sized for a full-depth
+        // adult cup. This piece's own height is `cupD * 0.55`, which for
+        // six real shallow-cup patterns (cupDepthF <= ~0.7 — wb08,
+        // gb01/02/05/06/10, mostly girls' training styles) is itself
+        // BELOW 2cm — so the 1st point already sat outside the piece,
+        // and for some of those six the 2nd point (cupD*0.4) landed
+        // above the 1st, which checkGrainline's atan2 reads as 180°
+        // rather than 0° (same vertical axis, but direction isn't
+        // normalized) — the reported "90° off cardinal" symptom. Real
+        // fix is proportional to this piece's own height, like the cup
+        // piece just above already does, not another fixed-cm patch —
+        // guarantees both points stay inside the piece and p2.y > p1.y
+        // (matching every other grain declaration in this file) at any
+        // size.
+        grain: [[bridgeW / 2, cupD * 0.55 * 0.2], [bridgeW / 2, cupD * 0.55 * 0.8]] },
       { key: "band", name: { en: opts.longline ? "Longline Band" : "Band", ar: opts.longline ? "حزام ممتد" : "الحزام" },
         desc: { en: "Band/wing panel from the cup side around to the center back, with a curved top edge following the underbust.", ar: "قطعة الحزام/الجانب من جانب الكأس حتى وسط الظهر، بحافة علوية منحنية تتبع أسفل الصدر." },
         outline: curvedBandPc(bandW, bandH), role: "band", bilateral: true,

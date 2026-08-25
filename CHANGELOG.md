@@ -6,6 +6,115 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-57: pattern library rebuild, Phase 5 — full §8 sweep, underwear-library fixes, and an honest status of what's left
+
+docs/plan 4.md Phase 5, its own "Full §8 sweep" description. Widened the
+validator sweep to cover `js/underwear-library.js`'s 44 patterns for the
+first time in this rebuild — every prior sweep (`scripts/baseline-
+report.mjs`, `test/validate-library.test.js`) only ever covered
+`library.js` + `girls-leotards.js` + `fancy-patterns.js` (264 patterns).
+That widened sweep surfaced two real, previously-invisible defect
+classes:
+
+- **`foldSymmetry`, 48 fails** — `gussetOval()`'s "Crotch Gusset"/"Gusset
+  Lining" pieces (24 patterns × 2) were drafted as a FULL oval (4 curve
+  segments closing back on themselves), never declared `cutOnFold`
+  anywhere they're used. The closing curve's own samples sat close
+  enough to the piece's own min-X, for enough of its height, to
+  false-trigger `checkFoldSymmetry`'s fold heuristic — the exact same bug
+  class WP-53 already fixed twice (`peplumPc`, `capePc`). Real fix, not a
+  reshape to dodge the heuristic: a crotch gusset genuinely is
+  conventionally symmetric and cut on the fold, so `gussetOval()` is now
+  a real cut-on-fold half (two curves, one implicit straight fold edge),
+  and both call sites declare `cutOnFold: true`.
+- **`grainline`, 6 fails** — `braPieces()`'s "Center Bridge" piece used a
+  fixed-cm grain (`y:2` to `y:cupD*0.4`) sized for a full-depth adult cup.
+  For six real shallow-cup patterns (`wb08`, `gb01/02/05/06/10` — mostly
+  girls' training styles), the piece's own height (`cupD * 0.55`) is
+  itself under 2cm, so the first grain point already sat outside the
+  piece, and for some of the six the second point landed ABOVE the
+  first — read by `checkGrainline`'s `atan2` as 180° rather than 0° (same
+  vertical axis, but the check never normalizes direction), producing
+  the reported "90° off cardinal" symptom. Fixed at the source: both
+  grain points are now proportional to the piece's own height (`0.2h` /
+  `0.8h`), matching how the "Cup" piece right above it already does it —
+  guaranteed inside the piece and consistently downward-pointing at any
+  size, not another fixed-cm patch.
+
+With those two fixed, a full sweep of all 308 patterns / 2,170 pieces
+now shows **`closedOutline`, `selfIntersection`, `grainline`,
+`seamAllowance`, and `foldSymmetry` all at zero fails, library-wide** —
+5 of the 8 §5 checks are completely clean across every pattern this
+rebuild ships.
+
+### What's still open, honestly
+- **`seamLengthParity`: 93 fails**, all "bounding-box proxy — no
+  declared seam edge." Spot-checked several categories, not all 93
+  individually:
+  - The 24 briefs/trunks (`wu`/`mu`/`gu`/`bu`01–06) are a real,
+    documented, intentional construction difference — `briefPanel()`'s
+    own header comment says the back "rises higher and drops slightly
+    deeper than the front, for seat coverage." The bounding-box proxy
+    measures full panel height, not the actual sewn side-seam edge (a
+    single corner vertex in this construction, not an extended edge) —
+    declaring a synthetic `seamId` here would compare the wrong thing,
+    same judgment WP-56 already reached for `jacketFrontBack`.
+  - `wf10`/`wf15`'s ~290–530mm outliers are bridal skirts with a train —
+    the back is SUPPOSED to be dramatically longer than the front; not
+    a defect, an extreme case of the same "proxy can't see intent"
+    limitation §5.2 already documents.
+  - `gf05`/`gf14`/`bf16`'s 166–251mm outliers look like a different,
+    real bug: the unverified name-matching fallback (`pairFrontBack`)
+    cross-pairing pieces from DIFFERENT garment components in the same
+    multi-piece pattern (e.g. a coat's "Front Right" against a
+    separate trousers' "Back Panel") rather than a true seam mismatch.
+    Already reported as "Heuristic," not "Verified," so the system
+    isn't claiming false confidence — but the pairing itself is wrong.
+    Not fixed this pass — a `pairFrontBack` component-grouping fix is
+    shared validator infrastructure touching every pattern, not a
+    single-file change, and deserves its own scoped pass rather than a
+    rushed edit at the end of this one.
+  - The remaining ~60 (jacket/coat/vest/parka/kandura/trouser/bodice
+    across `js/fancy-patterns.js`) were not individually investigated
+    this pass — each needs the same construction-specific judgment
+    `jacketFrontBack` got in WP-56, not a mechanical sweep.
+- **Notch coverage: 324/2,170 pieces (14.9%), §8 target ≥80%.** Adding
+  real notches to ~1,700 more pieces across every builder is Phase
+  3/4-scale authoring work, not a Phase 5 fix — not attempted this pass.
+- **Ease: 2,058/2,170 pieces (94.8%) deferred, §8 target ≤20%.**
+  `checkEase` needs a declared `chestEdgeIndices` hint per piece; most
+  pieces don't carry one. Same scale of gap as notch coverage, same
+  reason not attempted here.
+- **Cross-piece pairing: 295 verified / 114 heuristic / 90 unmatched
+  (59.1% verified), §8 target ≥95%.** Closing this means extending
+  `ROLE_PAIR` coverage and/or declaring more per-piece roles across the
+  same builders notch coverage touches — same scale, same reason.
+- Browser-based verification (2D/3D/Cloth Lab console-error-free load,
+  Cloth Lab simulate-without-exploding, export round-trips across
+  SVG/DXF/HPGL/tiled-PDF, the `window.BerryStudio` API surface, and a
+  library-grid performance check) — §9's Phase 5 description and §11's
+  deliverable 5 — not run this pass either.
+
+This WP closes the two concrete, source-level defects the widened
+sweep surfaced and reports every other §8 gate's real, current number
+rather than either declaring the phase done or silently guessing at
+fixes for gaps this size. Per the plan's own working rule: "A
+documented deferral is acceptable; a silent guess is not."
+
+### Verification
+- `npm test`: 299/299, no regressions.
+- Targeted sweep confirming all 48 `foldSymmetry` fails and all 6
+  `grainline` fails resolved with zero new fails introduced (24
+  gusset/lining pieces + 6 Center Bridge pieces, individually
+  re-checked).
+- Full 308-pattern / 2,170-piece sweep (first time including
+  `underwear-library.js`): `closedOutline`/`selfIntersection`/
+  `grainline` (was 6 fails, now 0)/`seamAllowance`/`foldSymmetry` (was
+  48 fails, now 0) all clean; `seamLengthParity` unchanged at 93 fails
+  — this WP's two fixes were in the fold/grain checks only, not seam
+  parity — see "what's still open" above for that gate's own honest
+  breakdown.
+
 ## WP-56: pattern library rebuild, Phase 4 (part 4) — leotard yoke seam parity, and why the rest stays honestly deferred
 
 docs/plan 4.md Phase 4, fourth installment. `js/ai.js`'s `buildLeotard()`
