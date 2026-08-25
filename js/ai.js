@@ -715,8 +715,19 @@ export const AIGen = (() => {
   // against unfoldPiece()'s own doubling convention (appended point k =
   // mirror(original[n-2-k])): solving for where original index i lands
   // gives unfolded index 2n-2-i.
+  // Code-review fix (js/pattern-builders.js carries the same fix in its
+  // own exported copy): the raw formula only holds for an INTERIOR point
+  // (1 <= i <= nOrig-2) — index 0/nOrig-1 are the fold-line's own two
+  // shared endpoints (never duplicated by unfoldPiece()), which mirror
+  // to themselves, not to an out-of-bounds computed index. Every
+  // leotard call site so far used interior indices only (hip/leg/
+  // gusset/fold-adjacent), so this never mattered until a fold-line
+  // point itself needed an edge.
+  function foldMirrorIdx(i, nOrig) {
+    return (i === 0 || i === nOrig - 1) ? i : 2 * nOrig - 2 - i;
+  }
   function foldMirrorEdge(nOrig, fromIdx, toIdx) {
-    return { fromIdx: 2 * nOrig - 2 - toIdx, toIdx: 2 * nOrig - 2 - fromIdx };
+    return { fromIdx: foldMirrorIdx(toIdx, nOrig), toIdx: foldMirrorIdx(fromIdx, nOrig) };
   }
   function leotardLegEdges(seamId, nOrig, hipIdx, gussetIdx) {
     const left = foldMirrorEdge(nOrig, hipIdx, gussetIdx);

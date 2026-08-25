@@ -48,7 +48,7 @@ import {
   bandPc, pointedCollar, collarStand, setInSleeve,
   princessPanel, gorePanel, sideGorePanel,
   plainBodicePanel, yokeCurvePc, pocketPatch, sleeveUpperPc,
-  puffSleevePc, legPanel, wideSleevePc, mirrorHalfToFull,
+  puffSleevePc, legPanel, wideSleevePc, mirrorHalfToFull, foldMirrorEdge,
 } from './pattern-builders.js';
 
 void BASE; // reserved — categories index off computeMeasurements' own m, not BASE directly
@@ -267,9 +267,18 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         // piece's own bilateral L/R copies meeting each other (the
         // crotch seam), not a seam to a different declared piece.
         grain: [[qt * 0.6, riseLen + 10], [qt * 0.6, riseLen + legLen - 10]], role: 'trouser-front', bilateral: true,
+        // WP-63 (docs/plan 4.md Phase 5, cloth-lab compatibility pass):
+        // the waist edge is the implicit closing edge — the panel's own
+        // last point (waist, inseam side) back to its first (waist,
+        // outseam side) — never claimed by anything else here, and
+        // exactly where "Waistband" genuinely attaches. Plain
+        // (unsuffixed) seamId: this panel is bilateral, so its own R/L
+        // duplication auto-suffixes it — no foldMirrorEdge needed here,
+        // that's only for a cutOnFold piece like Waistband itself.
         edges: [
           { fromIdx: 0, toIdx: front.hemOutIdx, seamId: `${opts.id}Outseam` },
           { fromIdx: front.hemInIdx, toIdx: front.length - 1, mirrorSelf: true },
+          { fromIdx: front.length - 1, toIdx: 0, seamId: `${opts.id}WaistFront` },
         ] },
       { key: 'back', name: { en: `${opts.nameEn} Back`, ar: `خلفية ${opts.nameAr}` }, desc: { en: 'Back leg panel with a deeper curved crotch seam, per real block convention.', ar: 'لوحة الساق الخلفية بخط تفصيل منحنٍ أعمق، حسب القاعدة الحقيقية.' },
         outline: back, darts: [], notches: [[back[back.crotchIdx][0], back[back.crotchIdx][1]], [back[back.hemOutIdx][0], back[back.hemOutIdx][1]]],
@@ -277,9 +286,35 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         edges: [
           { fromIdx: 0, toIdx: back.hemOutIdx, seamId: `${opts.id}Outseam` },
           { fromIdx: back.hemInIdx, toIdx: back.length - 1, mirrorSelf: true },
+          { fromIdx: back.length - 1, toIdx: 0, seamId: `${opts.id}WaistBack` },
         ] },
-      { key: 'waistband', name: { en: 'Waistband', ar: 'حزام الخصر' }, desc: { en: tailored ? 'Straight tailored waistband.' : 'Soft waistband, gathered for an elastic finish.', ar: tailored ? 'حزام خصر مستقيم مفصّل.' : 'حزام خصر ناعم، مجمّع لتشطيب مطاطي.' },
-        outline: bandPc(qw * 2 + 4, tailored ? 4 : 5), darts: [], notches: [[qw + 2, 0]], grain: [[2, 1.5], [qw * 2 + 2, 1.5]], role: 'waistband', cutOnFold: true },
+      // WP-63: the previous plain-rectangle `bandPc()` outline gave
+      // "Waistband" a single top edge with nowhere to declare a real
+      // seam that didn't span the whole thing at once — real
+      // construction is 4 real relationships (front-right, back-right,
+      // and their mirrored left counterparts, since this piece is
+      // cutOnFold — one half, doubled). Added a real midpoint vertex (the
+      // side seam, where front-attach hands off to back-attach) so each
+      // half of the top edge can declare its own seam — front's own
+      // `${opts.id}WaistFront`/`WaistBack` (declared above, unsuffixed
+      // since THOSE panels are bilateral and auto-suffix) match this
+      // piece's own already-`_R`/`_L`-suffixed literal strings, computed
+      // via `foldMirrorEdge()` for the left half the same way
+      // leotardLegEdges()/js/ai.js already established this pattern.
+      (() => {
+        const waistLen = qw * 2 + 4, h = tailored ? 4 : 5, mid = waistLen * 0.5;
+        const outline = [[0, 0], [mid, 0], [waistLen, 0], [waistLen, h], [mid, h], [0, h]];
+        const frontLeft = foldMirrorEdge(outline.length, 0, 1);
+        const backLeft = foldMirrorEdge(outline.length, 1, 2);
+        return { key: 'waistband', name: { en: 'Waistband', ar: 'حزام الخصر' }, desc: { en: tailored ? 'Straight tailored waistband, seamed to both the front and back waist.' : 'Soft waistband, gathered for an elastic finish, seamed to both the front and back waist.', ar: tailored ? 'حزام خصر مستقيم مفصّل، مخيط بمقدمة الخصر وخلفيته.' : 'حزام خصر ناعم، مجمّع لتشطيب مطاطي، مخيط بمقدمة الخصر وخلفيته.' },
+          outline, darts: [], notches: [[qw + 2, 0]], grain: [[2, 1.5], [qw * 2 + 2, 1.5]], role: 'waistband', cutOnFold: true,
+          edges: [
+            { fromIdx: 0, toIdx: 1, seamId: `${opts.id}WaistFront_R` },
+            { fromIdx: 1, toIdx: 2, seamId: `${opts.id}WaistBack_R` },
+            { fromIdx: frontLeft.fromIdx, toIdx: frontLeft.toIdx, seamId: `${opts.id}WaistFront_L` },
+            { fromIdx: backLeft.fromIdx, toIdx: backLeft.toIdx, seamId: `${opts.id}WaistBack_L` },
+          ] };
+      })(),
     ];
     if (tailored) {
       pieces.push({ key: 'fly', name: { en: 'Fly Placket Facing', ar: 'بطانة سحاب الفتحة الأمامية' }, desc: { en: 'Facing strip behind the front fly zip.', ar: 'شريط بطانة خلف سحاب الفتحة الأمامية.' },

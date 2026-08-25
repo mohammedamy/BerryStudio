@@ -6,6 +6,56 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-64: pattern library rebuild, Phase 5 continued — trouser waistband seaming, and a second real gap in `foldMirrorEdge` found before it shipped broken
+
+Direct follow-up to WP-63, moving the same real-seam treatment to
+`js/library.js`'s trouserFamily() waistband (44 patterns) — the first
+category outside girls-leotards.js to reuse WP-62's `foldMirrorEdge()`
+helper, promoted from a local copy in `js/ai.js` into the shared
+`js/pattern-builders.js` module so `js/library.js` could use it too.
+
+Reusing it on a genuinely different shape caught a real bug in the
+helper itself before trusting it on 44 patterns: `foldMirrorEdge`'s raw
+formula only holds for an INTERIOR point of the piece's own outline —
+index 0 and the last index are the fold-line's own two shared
+endpoints (never duplicated by `unfoldPiece()`), and mirroring them
+with the interior formula computes a nonexistent, out-of-bounds index
+(confirmed: index 10 on a 10-point unfolded array, valid indices
+0-9). Every leotard call site so far happened to use interior indices
+only (hip/leg/gusset/fold-adjacent), so this was latent, not yet hit —
+the waistband's own front-attach edge starts exactly AT the fold point,
+which is what surfaced it. Fixed in both copies (the shared export and
+`js/ai.js`'s own, kept in sync) — index 0/last now correctly map to
+themselves rather than a computed mirror.
+
+- `trouserFamily()`'s leg panels: added a third real edge — the waist
+  (the panel's own implicit closing edge, waist-inseam-point back to
+  waist-outseam-point, never claimed by anything else) — where
+  "Waistband" genuinely attaches. Plain (unsuffixed) seamId: these
+  panels are bilateral, so their own R/L duplication auto-suffixes it.
+- "Waistband" itself: the previous plain-rectangle outline had nowhere
+  to declare a real seam that didn't span the whole thing — added a
+  real midpoint vertex (the side seam, where front-attach hands off to
+  back-attach), giving 4 real relationships (front-right, back-right,
+  and their `foldMirrorEdge()`-computed left counterparts, since this
+  piece is cutOnFold — one half, doubled).
+
+### Verification
+- Direct reproduction caught the `foldMirrorEdge` fold-point bug BEFORE
+  it shipped on 44 patterns (first attempt would have produced an
+  invalid, out-of-bounds edge index) and confirmed all 4 waistband
+  seams form correctly after the fix.
+- `npm test`: 299/299.
+- `cloth-lab` vitest: **758/758** (was 734 after WP-63's own gusset
+  work). Includes updated per-leg-panel seam-count assertions (2→3, the
+  new waist seam) and a new dedicated waistband-seam-count check, one
+  per trouser pattern.
+
+`js/fancy-patterns.js`'s own separate `trouserPanel()` (the Fancy
+Collection's trouser construction) does NOT have this waistband fix
+yet — a real, current difference between the two trouser
+constructions, not an oversight; scoped for a future installment.
+
 ## WP-63: pattern library rebuild, Phase 5 continued — the crotch gusset's real 4-edge seam
 
 Direct follow-up to WP-62. Once `sideEndIdx` freed the leg-opening curve

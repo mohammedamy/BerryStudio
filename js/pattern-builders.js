@@ -69,6 +69,33 @@ export function dedupeJoin(a, b) {
 
 // ---------------- reusable construction pieces ----------------
 
+// WP-61/63 (docs/plan 4.md Phase 5, cloth-lab compatibility pass): given
+// an edge [fromIdx,toIdx] within a cutOnFold piece's OWN original
+// (pre-unfold) outline of length `nOrig`, returns the matching edge on
+// that SAME piece's own mirrored-interior half (see
+// cloth-lab/src/pattern/importFromApp.js's unfoldPiece(): appended
+// mirror point k = mirror(original[nOrig-2-k]), placed at unfolded
+// index nOrig+k — solving for i = nOrig-2-k gives unfolded index
+// 2*nOrig-2-i). A cutOnFold piece is a single already-doubled shape,
+// not a bilateral pair, so its own hip-to-gusset/waist-to-side curve
+// needs both a right-side declaration (walked as-authored) AND this
+// correctly-computed left-side one — verified against a direct
+// reproduction of unfoldPiece() before ever being trusted (see
+// js/ai.js's own copy, added first, for that verification).
+// Code-review fix, caught by direct reproduction before trusting a new
+// call site: the raw `2*nOrig-2-i` formula only holds for an INTERIOR
+// point (1 <= i <= nOrig-2) — index 0 and index nOrig-1 are the
+// fold-line's own two shared endpoints, kept as themselves (never
+// duplicated) by unfoldPiece(), so mirroring produces a nonexistent,
+// out-of-bounds index for them (confirmed: 2*6-2-0=10 on a 10-point
+// unfolded array, indices 0..9). Those two endpoints map to themselves.
+function foldMirrorIndex(i, nOrig) {
+  return (i === 0 || i === nOrig - 1) ? i : 2 * nOrig - 2 - i;
+}
+export function foldMirrorEdge(nOrig, fromIdx, toIdx) {
+  return { fromIdx: foldMirrorIndex(toIdx, nOrig), toIdx: foldMirrorIndex(fromIdx, nOrig) };
+}
+
 // A simple 4-corner rectangular waistband/collar-band/cuff strip — cut on
 // the straight grain, no curve needed (a real straight strip, not a
 // stand-in for a curved piece).

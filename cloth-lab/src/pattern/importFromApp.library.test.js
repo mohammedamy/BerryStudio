@@ -75,8 +75,13 @@ describe.each(LIBRARY_IDS)('%s', (id) => {
 
 // WP-59: same "doesn't throw != actually seamed" gap the Fancy Collection
 // trouser test closes — locks in that trouserFamily()'s leg panels get
-// both real seams (outseam to the opposite front/back panel, inseam to
-// their own bilateral mirror), not placed-but-floating.
+// real seams (outseam to the opposite front/back panel, inseam to their
+// own bilateral mirror), not placed-but-floating.
+// WP-63: plus a THIRD real seam per leg panel now — the waist edge to
+// "Waistband" (js/fancy-patterns.js's own trouserPanel() doesn't have
+// this yet, which is why importFromApp.fancyCollection.test.js's own
+// matching check stays at 2, not 3 — a real, current difference between
+// the two trouser constructions, not a typo).
 const TROUSER_IDS = LIBRARY_IDS.filter((id) => {
   const m = SAMPLE_MEASUREMENTS[PATTERNS[id].category]
   return PATTERNS[id].pieces(m).some((p) => p.role === 'trouser-front')
@@ -87,7 +92,7 @@ test('every trouser/shorts js/library.js pattern is discovered (sanity check)', 
 })
 
 describe.each(TROUSER_IDS)('%s trousers', (id) => {
-  test('both legs get a real outseam AND a real inseam seam — nothing left for the user to fix by hand', () => {
+  test('both legs get a real outseam, inseam, AND waist seam — nothing left for the user to fix by hand', () => {
     const entry = PATTERNS[id]
     const category = entry.category
     const m = SAMPLE_MEASUREMENTS[category]
@@ -101,7 +106,25 @@ describe.each(TROUSER_IDS)('%s trousers', (id) => {
 
     const involves = (pid) => result.seamInstructions.filter((s) => s.a.piece === pid || s.b.piece === pid)
     for (const pid of legPieceIds) {
-      expect(involves(pid).length, `${pid} should have exactly 1 outseam + 1 inseam seam`).toBe(2)
+      expect(involves(pid).length, `${pid} should have exactly 3 real seams (outseam + inseam + waist)`).toBe(3)
     }
+  })
+})
+
+// WP-63: "Waistband" (cutOnFold, one piece) should get all 4 real seams
+// — front-right, front-left, back-right, back-left — matching the 4
+// leg-panel-side waist edges above.
+describe.each(TROUSER_IDS)('%s waistband', (id) => {
+  test('waistband gets all 4 real seams — front-R, front-L, back-R, back-L', () => {
+    const entry = PATTERNS[id]
+    const category = entry.category
+    const m = SAMPLE_MEASUREMENTS[category]
+    const payload = { pieces: entry.pieces(m).map(toPayloadPiece), measurements: m, category, fabricId: null, avatarGLB: {} }
+    const result = convertAppPattern(payload)
+
+    const waistband = result.recognized.find((r) => r.label === 'Waistband')
+    expect(waistband, 'Waistband piece should be recognized, not skipped').toBeTruthy()
+    const involves = (pid) => result.seamInstructions.filter((s) => s.a.piece === pid || s.b.piece === pid)
+    expect(involves(waistband.id).length, `${waistband.id} should have exactly 4 real seams`).toBe(4)
   })
 })
