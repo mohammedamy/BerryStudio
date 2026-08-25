@@ -6,6 +6,67 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-60: pattern library rebuild, Phase 5 continued — the SECOND trouser bug, and closing a real cloth-lab test-coverage gap for js/library.js entirely
+
+Direct follow-up to WP-59. A role/piece-name sweep across the whole
+library (looking for what else `role:"other"` was hiding before
+declaring the trouser fix "done") turned up a second, separate trouser
+construction with the exact same defect: `js/library.js`'s
+`trouserFamily()` (~25 patterns — every "Trousers"/"Shorts"/"Chinos"/
+"Jeans"/"Palazzo"/"Culottes"/"Joggers" entry in the family-builder
+catalogue) also declared `role:"other"` on its leg panels. Unlike
+`js/fancy-patterns.js`'s version, this one already HAD real seam-edge
+infrastructure (a declared `edges[].seamId` outseam, unique per
+pattern) — it just had nowhere to go, the same way WP-59's other fixes
+gave existing infrastructure a real consumer. Fixed identically to
+WP-59: `role: "trouser-front"/"trouser-back"`, and a new `mirrorSelf`
+inseam edge (`legPanel()`'s own `hemInIdx` through its last point,
+already exposed on the outline — no new geometry needed, just a missing
+declaration).
+
+Fixing the role broke something else it happened to be propping up:
+`js/pattern-flat.js`'s thumbnail composer had a documented fallback
+("there is no trouser-front role in the 46-value vocabulary") that
+picked up role:"other" pieces by NAME ("front") when nothing better was
+found — the exact mechanism these leg panels were relying on for their
+thumbnail to render at all. Now that they declare a real role, they no
+longer match that fallback's `!p.role || p.role === 'other'` guard —
+added `trouser-front` to `selectParts()`'s real core/lower selection
+(same bucket `skirt-front-gore`/`hip-panel-front`/`godet` already use:
+"no bodice, the leg/hip panel IS the silhouette") instead of leaving it
+to guess by name. `test/library-thumbnails.test.js` caught this
+immediately (composed count regressed 288→264) — exactly the kind of
+regression that test exists to catch.
+
+**New test-coverage gap closed**: `js/library.js`'s 94 family-builder
+patterns had ZERO cloth-lab end-to-end coverage before this WP — only
+`js/fancy-patterns.js`'s 64 designs were ever exercised through
+`convertAppPattern` → triangulate → assemble. New
+`importFromApp.library.test.js` (mirrors `importFromApp.fancyCollection.
+test.js`'s structure) closes that gap for good, not just for this WP's
+own fix — every future change to this file's 94 patterns now gets the
+same "imports and simulates with zero exceptions" guarantee the Fancy
+Collection has had since WP-6.
+
+### Verification
+- `npm test`: 299/299 (was failing before the pattern-flat.js fix —
+  `test/library-thumbnails.test.js`'s regression check caught the real
+  side effect described above).
+- `cloth-lab` vitest: 347/347 (was 227 — 120 new: 94 import/simulate +
+  1 sanity + ~25×1 trouser-seam-count checks, covering js/library.js's
+  entire catalogue for the first time).
+
+Part 2 (the ~20 remaining attach-only accessory roles — collar, cuff,
+pocket, waistband, sash, peplum, tier, godet, cup, band, gusset,
+lining, facing, yoke, hood, cape, epaulette, strap, elastic-band —
+still place but don't auto-seam to their real attachment point) is
+still open. A role-frequency sweep across the full library also
+surfaced further real, undeclared "other"-role accessory content
+(girls-leotards.js's binding/gusset/mesh/strap pieces — ~380 pieces
+across the 100-leotard collection; underwear-library.js's bra "Center
+Bridge," 18 patterns) not yet investigated — scoped for a future
+installment of this pass, not attempted here.
+
 ## WP-59: pattern library rebuild, Phase 5 continued — Cloth Lab compatibility pass, part 1: a critical princess-seam auto-seam bug, and real 3D trouser support
 
 User-directed: every pattern must import into Cloth Lab and simulate with

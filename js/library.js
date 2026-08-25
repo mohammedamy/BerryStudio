@@ -252,12 +252,32 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
       { key: 'front', name: { en: `${opts.nameEn} Front`, ar: `مقدمة ${opts.nameAr}` }, desc: { en: tailored ? 'Front leg panel with a curved crotch seam and a waist dart.' : 'Front leg panel with a curved crotch seam, deliberately un-darted for ease of movement.', ar: tailored ? 'لوحة الساق الأمامية بخط تفصيل منحنٍ وبنسة خصر.' : 'لوحة الساق الأمامية بخط تفصيل منحنٍ، بدون بنسة عمدًا لسهولة الحركة.' },
         outline: front, darts: tailored ? [[[qw * 0.3, 1], [qw * 0.3 - 1.5, 9], [qw * 0.3 + 1.5, 9]]] : [],
         notches: [[front[front.crotchIdx][0], front[front.crotchIdx][1]], [front[front.hemOutIdx][0], front[front.hemOutIdx][1]]],
-        grain: [[qt * 0.6, riseLen + 10], [qt * 0.6, riseLen + legLen - 10]], role: 'other', bilateral: true,
-        edges: [{ fromIdx: 0, toIdx: front.hemOutIdx, seamId: `${opts.id}Outseam` }] },
+        // WP-59 (docs/plan 4.md Phase 5, cloth-lab compatibility pass):
+        // was role:"other" — the small-accessory placement, never
+        // auto-seamed, so every one of this family's ~25 trouser/short
+        // patterns placed both leg panels as a misplaced flat patch near
+        // the hip in Cloth Lab, seamed to nothing. `trouser-front`/
+        // `trouser-back` (roles.js) get real leg-tube placement AND
+        // auto-seaming: the outseam edge below was ALREADY correctly
+        // declared (this family had real seamId infrastructure from the
+        // start, just no role/placement able to use it) — added the
+        // second real seam, the inseam (hem-inseam through the crotch
+        // curve back to waist-inseam — `legPanel`'s own hemInIdx through
+        // its last point), `mirrorSelf: true` since that's this SAME
+        // piece's own bilateral L/R copies meeting each other (the
+        // crotch seam), not a seam to a different declared piece.
+        grain: [[qt * 0.6, riseLen + 10], [qt * 0.6, riseLen + legLen - 10]], role: 'trouser-front', bilateral: true,
+        edges: [
+          { fromIdx: 0, toIdx: front.hemOutIdx, seamId: `${opts.id}Outseam` },
+          { fromIdx: front.hemInIdx, toIdx: front.length - 1, mirrorSelf: true },
+        ] },
       { key: 'back', name: { en: `${opts.nameEn} Back`, ar: `خلفية ${opts.nameAr}` }, desc: { en: 'Back leg panel with a deeper curved crotch seam, per real block convention.', ar: 'لوحة الساق الخلفية بخط تفصيل منحنٍ أعمق، حسب القاعدة الحقيقية.' },
         outline: back, darts: [], notches: [[back[back.crotchIdx][0], back[back.crotchIdx][1]], [back[back.hemOutIdx][0], back[back.hemOutIdx][1]]],
-        grain: [[qt * 0.6, riseLen + 10], [qt * 0.6, riseLen + legLen - 10]], role: 'other', bilateral: true,
-        edges: [{ fromIdx: 0, toIdx: back.hemOutIdx, seamId: `${opts.id}Outseam` }] },
+        grain: [[qt * 0.6, riseLen + 10], [qt * 0.6, riseLen + legLen - 10]], role: 'trouser-back', bilateral: true,
+        edges: [
+          { fromIdx: 0, toIdx: back.hemOutIdx, seamId: `${opts.id}Outseam` },
+          { fromIdx: back.hemInIdx, toIdx: back.length - 1, mirrorSelf: true },
+        ] },
       { key: 'waistband', name: { en: 'Waistband', ar: 'حزام الخصر' }, desc: { en: tailored ? 'Straight tailored waistband.' : 'Soft waistband, gathered for an elastic finish.', ar: tailored ? 'حزام خصر مستقيم مفصّل.' : 'حزام خصر ناعم، مجمّع لتشطيب مطاطي.' },
         outline: bandPc(qw * 2 + 4, tailored ? 4 : 5), darts: [], notches: [[qw + 2, 0]], grain: [[2, 1.5], [qw * 2 + 2, 1.5]], role: 'waistband', cutOnFold: true },
     ];
