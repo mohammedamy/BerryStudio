@@ -758,7 +758,12 @@ export const AIGen = (() => {
         desc: { en: "Contrast-colour chest yoke, seamed to the body panel below.", ar: "كوة صدر بلون متباين، متصلة بلوحة الجسم أسفلها بخياطة." },
         outline: [...p.neck, p.shoulder, [chestW * 0.85, y2], [0, y1]],
         role: "yoke", cutOnFold: true,
-        grain: [[chestW * 0.35, 3], [chestW * 0.35, Math.max(y1, y2) - 3]] },
+        grain: [[chestW * 0.35, 3], [chestW * 0.35, Math.max(y1, y2) - 3]],
+        // WP-55: shoulder-to-y2 is the yoke's own side seam, shared with
+        // leotardBackPieces' equivalent yoke edge — matches within ~1mm
+        // already (confirmed across all colour-block styles), no
+        // geometry change needed here, just the declaration.
+        edges: [{ fromIdx: p.neck.length, toIdx: p.neck.length + 1, seamId: "leotardYokeSide" }] },
       { name: { en: "Front Body", ar: "مقدمة الجسم" },
         desc: { en: "Lower front panel seamed to the yoke, continuing straight to the high-cut leg opening.", ar: "لوحة أمامية سفلية متصلة بالكوة، تمتد حتى فتحة الساق العالية." },
         outline: lowerOutline,
@@ -832,7 +837,9 @@ export const AIGen = (() => {
           desc: { en: "Contrast-colour back yoke, seamed to the back body below — wraps around from the front yoke.", ar: "كوة ظهر بلون متباين، متصلة بخلفية الجسم أسفلها — تلتف من كوة المقدمة." },
           outline: [...top, armhole, [chestW * 0.87, y2], [0, y1]],
           role: "yoke", cutOnFold: true,
-          grain: [[chestW * 0.35, 3], [chestW * 0.35, Math.max(y1, y2) - 3]] },
+          grain: [[chestW * 0.35, 3], [chestW * 0.35, Math.max(y1, y2) - 3]],
+          // matches leotardFrontPieces' own 'leotardYokeSide' declaration
+          edges: [{ fromIdx: top.length, toIdx: top.length + 1, seamId: "leotardYokeSide" }] },
         { name: { en: "Back Body", ar: "خلفية الجسم" },
           desc: { en: "Lower back panel seamed to the back yoke, continuing straight to the high-cut leg opening.", ar: "لوحة خلفية سفلية متصلة بكوة الظهر، تمتد حتى فتحة الساق العالية." },
           outline: [[0, y1], [chestW * 0.87, y2], waistIn, waist, hip, legPt, gusset, fold],
