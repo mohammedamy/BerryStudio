@@ -4,6 +4,7 @@ import { PATTERNS, computeMeasurements } from '../js/data.js';
 import '../js/library.js';
 import '../js/girls-leotards.js';
 import { FancyGen } from '../js/fancy-patterns.js';
+import '../js/underwear-library.js';
 
 void FancyGen; // side-effect import only
 
@@ -17,14 +18,26 @@ void FancyGen; // side-effect import only
 // than silently loosening the vocabulary or guessing a role for a piece
 // that doesn't declare one.
 //
-// This is the exact 46-value list from cloth-lab/src/pattern/roles.js /
+// This is the exact 51-value list from cloth-lab/src/pattern/roles.js /
 // schema/pattern-spec.v1.json's live-piece equivalent (docs/plan 4.md
-// §4.2) — kept as a literal copy, not an import, because cloth-lab is a
-// separate build-based package the build-free root app cannot import from
-// (same reasoning as js/pattern-flat.js's unfoldPiece). If this list and
+// §4.2's original 46, plus 5 added in Phase 4/WP-53 — see below) — kept
+// as a literal copy, not an import, because cloth-lab is a separate
+// build-based package the build-free root app cannot import from (same
+// reasoning as js/pattern-flat.js's unfoldPiece). If this list and
 // cloth-lab/src/pattern/roles.js's own vocabulary ever diverge, that's a
 // real bug this test can't see — cloth-lab/src/pattern/roles.test.js is
 // the source of truth on the cloth-lab side.
+//
+// Phase 4 (WP-53) added cup/band/strap/elastic-band/gusset: js/underwear-
+// library.js declared these 5 roles from day one, but none were ever
+// added to the vocabulary — a real, confirmed gap (resolveSchemaRole()
+// returned null for all 5, so cloth-lab's importer silently fell back to
+// classifyLegacy's name-based guess for every bra/brief piece using
+// them). §4.2 says "prefer reusing an existing role," but none of the 46
+// fit a bra cup/band/strap or a brief's elastic-band/gusset — added
+// properly instead (roles.js + schema/pattern-spec.v1.json, per §4.2's
+// own instructions for a genuinely new role), not remapped to a
+// misleading existing name.
 const ROLE_VOCABULARY = new Set([
   'front-panel', 'back-panel', 'hip-panel-front', 'hip-panel-back', 'sleeve',
   'brief-front', 'brief-back',
@@ -34,31 +47,30 @@ const ROLE_VOCABULARY = new Set([
   'collar', 'undercollar', 'collar-stand', 'collar-band', 'lapel-facing', 'placket-facing',
   'hood', 'cape', 'cape-overlay', 'yoke', 'epaulette',
   'peplum-front', 'peplum-back', 'sash', 'wrap-tie', 'belt', 'waistband',
-  'godet', 'tier', 'pocket', 'facing', 'lining', 'cuff', 'rib-cuff', 'hem-band', 'other',
+  'godet', 'tier', 'pocket', 'facing', 'lining', 'cuff', 'rib-cuff', 'hem-band',
+  'cup', 'band', 'strap', 'elastic-band', 'gusset',
+  'other',
 ]);
 
-// Re-baselined 2026-08-23 (Phase 3, docs/plan 4.md): the 94-pattern core
-// catalogue (js/library.js) was replaced — every generated piece now
-// declares a real role (including trouser/skirt leg panels, which
-// honestly declare 'other' — a real 46-value member — instead of no
-// role at all). Total piece count rose (1867 -> 1951: individually-
-// drafted construction has more real pieces than the old five-scalar
-// AIGen.build() catalogue's 3-5 generic panels per garment) and role
-// coverage rose sharply (1797/1867 -> 1947/1951). The one remaining
-// roleless pattern, `boys_trousers`, is one of the 6 hand-crafted
-// data.js base patterns Phase 3 deliberately left untouched (out of
-// scope — see js/library.js's own header). The one remaining invented
-// role ('cape-sleeve', js/fancy-patterns.js's capeSleeveL/R — also
-// referenced in js/app.js's own sleeveRoles list, so it's a real, live
-// gap, not dead code) is unchanged from Phase 1 and still pre-existing,
-// documented here rather than silently fixed at the reporting layer — a
-// real fix means either adding a genuinely new role everywhere docs/plan
-// 4.md §4.2 requires (roles.js, schema, body-zone.js) or reworking that
-// generator to reuse an existing one, neither of which is in scope here.
+// Re-baselined 2026-08-23 (Phase 4, docs/plan 4.md, WP-53): this sweep
+// now also covers js/underwear-library.js's 44 patterns (previously not
+// imported here at all — its cup/band/strap/elastic-band/gusset roles
+// weren't even in the vocabulary to check against). Those 5 roles are now
+// real vocabulary members (cloth-lab/src/pattern/roles.js + schema/
+// pattern-spec.v1.json — see ROLE_VOCABULARY's own comment), so this
+// collection's 129 previously-invalid-role pieces are all valid now:
+// 308 patterns / 2170 pieces, 2166 valid, only 2 roleless (`boys_trousers`,
+// one of the 6 hand-crafted data.js base patterns deliberately out of
+// scope — see js/library.js's own header) and 2 invalid ('cape-sleeve',
+// js/fancy-patterns.js's capeSleeveL/R — also referenced in js/app.js's
+// own sleeveRoles list, so it's a real, live gap, not dead code — still
+// pre-existing and undocumented no further this phase; a real fix means
+// either adding it as a genuinely new role too or reworking that
+// generator to reuse an existing one, neither in scope here).
 const KNOWN_INVALID_ROLE_COUNTS = { 'cape-sleeve': 2 };
-const BASELINE = { total: 1951, valid: 1947, none: 2, roleslessPatterns: 1 };
+const BASELINE = { total: 2170, valid: 2166, none: 2, roleslessPatterns: 1 };
 
-test('every declared piece role is in the 46-value vocabulary, except the two documented pre-existing exceptions', () => {
+test('every declared piece role is in the 51-value vocabulary, except the two documented pre-existing exceptions', () => {
   const ids = Object.keys(PATTERNS);
   let total = 0, valid = 0, none = 0;
   const rolelessPatterns = new Set();
