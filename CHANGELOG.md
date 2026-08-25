@@ -6,6 +6,41 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-56: pattern library rebuild, Phase 4 (part 4) — leotard yoke seam parity, and why the rest stays honestly deferred
+
+docs/plan 4.md Phase 4, fourth installment. `js/ai.js`'s `buildLeotard()`
+colour-block yoke pieces (16 of `js/girls-leotards.js`'s 100 patterns)
+get the same `edges[].seamId` treatment WP-55 gave the leotard body —
+the yoke's own shoulder-to-y2 edge already matched within ~1mm across
+every colour-block style (confirmed by direct measurement, not
+assumed), so this is a pure declaration, no geometry change needed.
+`seamLengthParity`: 85 → 69.
+
+The remaining 69 are spread across `js/fancy-patterns.js`'s individually-
+authored jacket/coat/vest/parka/kandura/trouser/wrap/peplum/bodice
+constructions. Investigated the largest single category (`jacketFrontBack`,
+16 patterns) before deciding whether to keep going the same way WP-55
+did: the front panel's hem point sits at `hemW*0.62` while the back's
+sits at the full `hemW` — a real, deliberate width difference, not a
+control-point bug, because the front panel's missing width is provided
+by a SEPARATE piece (`jacketFrontBack`'s callers all also emit a "Lapel
+Facing"). Declaring the front/back outer edges as one shared seam here
+would be comparing the wrong things, not fixing a real defect —
+confirmed by inspecting one jacket pattern's actual piece list, not
+guessed. Left honestly on the bounding-box proxy rather than forced
+through a declaration that doesn't hold, or a geometry change made
+without being sure it's actually a bug. The other categories weren't
+individually investigated this pass — real, scoped follow-up work, each
+needing the same kind of construction-specific judgment call, not a
+mechanical sweep.
+
+### Verification
+- `npm test`: 299/299, including grading extremes.
+- `test/fancy-patterns-curves.test.js` (curve-honesty re-sampling) still
+  green.
+- Library-wide sweep: `seamLengthParity` 85 → 69; every other check
+  still at 0.
+
 ## WP-55: pattern library rebuild, Phase 4 (part 3) — real seam-edge parity for all 100 Girls' Gymnastics Leotards
 
 docs/plan 4.md Phase 4, third installment. `js/ai.js`'s `buildLeotard()`
