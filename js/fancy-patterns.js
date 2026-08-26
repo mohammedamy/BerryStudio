@@ -610,10 +610,22 @@ export let FancyGen;
     // on the back side (in practice backNeckCurve's dedupe always fires:
     // backNeckSeg's own p1 unconditionally matches backCurve[0]).
     const frontNeckCurve = [{ fromIdx: 0, toIdx: neckCurveToIdx(frontNeck, frontCurve, neckSeg[2]), ...qBezToCubic(...neckSeg) }];
+    // WP-65 (docs/plan 4.md Phase 5, cloth-lab compatibility pass):
+    // `necklineEndIdx` tells cloth-lab's princessSeamId branch exactly
+    // where the neckline curve ends and the real princess curve begins
+    // — fixes a real 3D seam-length mismatch (confirmed by direct
+    // reproduction: without this, cloth-lab's own geometric princess-
+    // seam extraction started right after the fold point, pulling the
+    // neckline curve into the princess seam on the frontCenter/backCenter
+    // side only, not on frontSide/backSide's own matching edge) and
+    // frees the neckline range up for a real declared seamId of its own
+    // (`princessFrontNeck`/`princessBackNeck`), which a collar/collar-
+    // stand/lapel-facing piece can now seam to instead of floating
+    // unattached near the neck.
     const meta = {
-      frontCenter: { role: 'bodice-front-center', cutOnFold: true, princessSeamId: 'princessFront', curves: [...frontNeckCurve, ...offsetCurves(frontCurveCurves, frontCurveOffset)], edges: [frontCenterEdge] },
+      frontCenter: { role: 'bodice-front-center', cutOnFold: true, princessSeamId: 'princessFront', necklineEndIdx: frontCurveOffset, curves: [...frontNeckCurve, ...offsetCurves(frontCurveCurves, frontCurveOffset)], edges: [frontCenterEdge, { fromIdx: 0, toIdx: frontCurveOffset, seamId: 'princessFrontNeck' }] },
       frontSide: { role: 'bodice-front-side', bilateral: true, curves: frontSide.curves || [], edges: [{ fromIdx: 0, toIdx: frontCurve.length - 1, seamId: 'princessFront' }] },
-      backCenter: { role: 'bodice-back-center', cutOnFold: true, princessSeamId: 'princessBack', curves: [{ fromIdx: 0, toIdx: neckCurveToIdx(backNeck, backCurve, backNeckSeg[2]), ...qBezToCubic(...backNeckSeg) }, ...offsetCurves(backCurveCurves, backCurveOffset)], edges: [backCenterEdge] },
+      backCenter: { role: 'bodice-back-center', cutOnFold: true, princessSeamId: 'princessBack', necklineEndIdx: backCurveOffset, curves: [{ fromIdx: 0, toIdx: neckCurveToIdx(backNeck, backCurve, backNeckSeg[2]), ...qBezToCubic(...backNeckSeg) }, ...offsetCurves(backCurveCurves, backCurveOffset)], edges: [backCenterEdge, { fromIdx: 0, toIdx: backCurveOffset, seamId: 'princessBackNeck' }] },
       backSide: { role: 'bodice-back-side', bilateral: true, curves: backSide.curves || [], edges: [{ fromIdx: 0, toIdx: backCurve.length - 1, seamId: 'princessBack' }] },
     };
     return { frontCenter, frontSide, backCenter, backSide, hemY, sideX, meta };

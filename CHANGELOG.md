@@ -6,6 +6,61 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-65: pattern library rebuild, Phase 5 continued — a real princess-seam length mismatch in cloth-lab's own 3D construction, found while trying to add collar seaming
+
+Started as "seam a collar to the neckline" (the next accessory category
+after WP-64's waistband) and surfaced something more important: a
+genuine, pre-existing 3D construction bug on every one of 19 princess-
+seamed Fancy Collection patterns.
+
+`princessBodice()`'s `frontCenter`/`backCenter` never passed
+`necklineEndIdx` into cloth-lab's `princessSeamId` branch (a separate
+code path from the bySlot branch WP-61's own `necklineEndIdx` already
+covers) — so its geometric princess-seam extraction started right after
+the fold point regardless, pulling the piece's own neckline curve into
+"the princess seam" on the `*Center` side only. Confirmed by direct
+reproduction before touching anything: `frontCenter`'s real 3D seam
+came out **30 segments long** while `frontSide`'s own declared edge for
+the identical seamId was **24** — cloth-lab has been sewing a real
+length-mismatched seam into every princess-seamed pattern's simulation,
+not merely missing an accessory attachment. This was never caught
+before because no test compared the two sides' REAL edge lengths against
+each other, only that a seam formed at all.
+
+- Passed `necklineEndIdx` into the `princessSeamId` branch (same
+  parameter, same contract WP-61 already established elsewhere).
+- `princessBodice()` now declares it (`frontCurveOffset`/
+  `backCurveOffset` — exactly where its own neckline curve already ends
+  and the real princess curve begins, values it already computed for
+  other reasons) — this alone closed the mismatch.
+- The freed-up neckline range is also now a real, declared edge
+  (`princessFrontNeck`/`princessBackNeck`) a future collar/collar-stand/
+  lapel-facing piece can seam to — the `princessSeamId` branch never
+  ran a piece's own declared `edges` through `pushSeamIdEdges` at all
+  before this (only the princess-seam-specific extraction), fixed
+  alongside the main bug since both needed the same missing plumbing.
+
+Collar-to-neckline attachment itself (the ~35 patterns using
+`shawlCollar()`/`collarStand()`) is NOT wired up yet — the length-
+mismatch bug this surfaced was the more urgent, more valuable fix, and
+each collar construction needs its own real attach-edge identified
+with the same care every other category in this phase has gotten,
+not a rushed pass across 35 call sites late in a long session.
+
+### Verification
+- Direct reproduction: confirmed the 30-vs-24 mismatch BEFORE fixing,
+  confirmed 24-vs-24 exact match AFTER — not assumed from reading the
+  code.
+- Swept all 19 princess-seamed patterns directly (both women's/men's/
+  girls'/boys' Fancy Collection designs with `princessSeamId`): 0
+  skipped pieces, 0 seam-length mismatches over 3mm, real neckline edge
+  present on every one.
+- `npm test`: 299/299.
+- `cloth-lab` vitest: **778/778** (was 758) — new dedicated princess-
+  seam-length-match test, one per princess-seamed pattern (19 new),
+  locking in the exact-match fix and the real neckline edge's presence
+  so this can't silently regress.
+
 ## WP-64: pattern library rebuild, Phase 5 continued — trouser waistband seaming, and a second real gap in `foldMirrorEdge` found before it shipped broken
 
 Direct follow-up to WP-63, moving the same real-seam treatment to

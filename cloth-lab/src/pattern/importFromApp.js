@@ -456,11 +456,33 @@ export function convertAppPattern(payload) {
         // Post-unfold, the shape's own rightSide/leftSide split (found the
         // same value-based way deriveTorsoEdgeInstructions always has) IS
         // the two halves of the (now-doubled) princess curve.
-        const [right, left] = deriveTorsoEdgeInstructions(outline, { includeTop: false })
-        pushEdge(p.id, right.name, right.from, right.to)
-        pushEdge(p.id, left.name, left.from, left.to)
+        //
+        // Code-review fix (WP-65, docs/plan 4.md Phase 5): this call never
+        // passed `necklineEndIdx`, so — same swallowing bug WP-61 fixed
+        // for the bySlot branch below — the geometric claim started right
+        // after the fold point (index 1) regardless, pulling the piece's
+        // OWN neckline curve into "the princess seam" along with the real
+        // princess curve. Confirmed by direct reproduction: frontCenter's
+        // actual 3D seam came out [1,31] (30 segments) while frontSide's
+        // own declared edge for the SAME seamId was [0,24] (24 segments)
+        // — a real length mismatch cloth-lab was sewing on every princess-
+        // seamed pattern, not merely a missing feature. `necklineEndIdx`
+        // (already declared by princessBodice() to mark exactly where its
+        // own neckline curve ends) fixes the mismatch AND frees the
+        // neckline range up for an accessory (a collar) the same way it
+        // already does on the bySlot branch.
+        const [right, left] = deriveTorsoEdgeInstructions(outline, { includeTop: false, necklineEndIdx })
+        pushClaimedEdge(p.id, right.name, right.from, right.to, outline.length)
+        pushClaimedEdge(p.id, left.name, left.from, left.to, outline.length)
         ;(seamIdEdges[princessSeamId + '_R'] ||= []).push({ pieceId: p.id, fromIdx: right.from, toIdx: right.to })
         ;(seamIdEdges[princessSeamId + '_L'] ||= []).push({ pieceId: p.id, fromIdx: left.from, toIdx: left.to })
+        // WP-65: this piece's own declared `edges` (e.g. the neckline's
+        // `princessFrontNeck`/`princessBackNeck` seamId, freed up by
+        // `necklineEndIdx` above) now also goes through pushSeamIdEdges,
+        // same "both relationships, not an either/or" reasoning the
+        // non-princess branch below already documents for its own
+        // `edges` handling.
+        pushSeamIdEdges(p.id, edges, outline.length)
       } else {
         // WP-61 code-review fix: this used to be an EITHER/OR — a piece
         // in one of the 4 bySlot slots got only the geometric front-to-
