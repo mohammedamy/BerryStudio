@@ -6,6 +6,659 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-65: pattern library rebuild, Phase 5 continued — a real princess-seam length mismatch in cloth-lab's own 3D construction, found while trying to add collar seaming
+
+Started as "seam a collar to the neckline" (the next accessory category
+after WP-64's waistband) and surfaced something more important: a
+genuine, pre-existing 3D construction bug on every one of 19 princess-
+seamed Fancy Collection patterns.
+
+`princessBodice()`'s `frontCenter`/`backCenter` never passed
+`necklineEndIdx` into cloth-lab's `princessSeamId` branch (a separate
+code path from the bySlot branch WP-61's own `necklineEndIdx` already
+covers) — so its geometric princess-seam extraction started right after
+the fold point regardless, pulling the piece's own neckline curve into
+"the princess seam" on the `*Center` side only. Confirmed by direct
+reproduction before touching anything: `frontCenter`'s real 3D seam
+came out **30 segments long** while `frontSide`'s own declared edge for
+the identical seamId was **24** — cloth-lab has been sewing a real
+length-mismatched seam into every princess-seamed pattern's simulation,
+not merely missing an accessory attachment. This was never caught
+before because no test compared the two sides' REAL edge lengths against
+each other, only that a seam formed at all.
+
+- Passed `necklineEndIdx` into the `princessSeamId` branch (same
+  parameter, same contract WP-61 already established elsewhere).
+- `princessBodice()` now declares it (`frontCurveOffset`/
+  `backCurveOffset` — exactly where its own neckline curve already ends
+  and the real princess curve begins, values it already computed for
+  other reasons) — this alone closed the mismatch.
+- The freed-up neckline range is also now a real, declared edge
+  (`princessFrontNeck`/`princessBackNeck`) a future collar/collar-stand/
+  lapel-facing piece can seam to — the `princessSeamId` branch never
+  ran a piece's own declared `edges` through `pushSeamIdEdges` at all
+  before this (only the princess-seam-specific extraction), fixed
+  alongside the main bug since both needed the same missing plumbing.
+
+Collar-to-neckline attachment itself (the ~35 patterns using
+`shawlCollar()`/`collarStand()`) is NOT wired up yet — the length-
+mismatch bug this surfaced was the more urgent, more valuable fix, and
+each collar construction needs its own real attach-edge identified
+with the same care every other category in this phase has gotten,
+not a rushed pass across 35 call sites late in a long session.
+
+### Verification
+- Direct reproduction: confirmed the 30-vs-24 mismatch BEFORE fixing,
+  confirmed 24-vs-24 exact match AFTER — not assumed from reading the
+  code.
+- Swept all 19 princess-seamed patterns directly (both women's/men's/
+  girls'/boys' Fancy Collection designs with `princessSeamId`): 0
+  skipped pieces, 0 seam-length mismatches over 3mm, real neckline edge
+  present on every one.
+- `npm test`: 299/299.
+- `cloth-lab` vitest: **778/778** (was 758) — new dedicated princess-
+  seam-length-match test, one per princess-seamed pattern (19 new),
+  locking in the exact-match fix and the real neckline edge's presence
+  so this can't silently regress.
+
+## WP-64: pattern library rebuild, Phase 5 continued — trouser waistband seaming, and a second real gap in `foldMirrorEdge` found before it shipped broken
+
+Direct follow-up to WP-63, moving the same real-seam treatment to
+`js/library.js`'s trouserFamily() waistband (44 patterns) — the first
+category outside girls-leotards.js to reuse WP-62's `foldMirrorEdge()`
+helper, promoted from a local copy in `js/ai.js` into the shared
+`js/pattern-builders.js` module so `js/library.js` could use it too.
+
+Reusing it on a genuinely different shape caught a real bug in the
+helper itself before trusting it on 44 patterns: `foldMirrorEdge`'s raw
+formula only holds for an INTERIOR point of the piece's own outline —
+index 0 and the last index are the fold-line's own two shared
+endpoints (never duplicated by `unfoldPiece()`), and mirroring them
+with the interior formula computes a nonexistent, out-of-bounds index
+(confirmed: index 10 on a 10-point unfolded array, valid indices
+0-9). Every leotard call site so far happened to use interior indices
+only (hip/leg/gusset/fold-adjacent), so this was latent, not yet hit —
+the waistband's own front-attach edge starts exactly AT the fold point,
+which is what surfaced it. Fixed in both copies (the shared export and
+`js/ai.js`'s own, kept in sync) — index 0/last now correctly map to
+themselves rather than a computed mirror.
+
+- `trouserFamily()`'s leg panels: added a third real edge — the waist
+  (the panel's own implicit closing edge, waist-inseam-point back to
+  waist-outseam-point, never claimed by anything else) — where
+  "Waistband" genuinely attaches. Plain (unsuffixed) seamId: these
+  panels are bilateral, so their own R/L duplication auto-suffixes it.
+- "Waistband" itself: the previous plain-rectangle outline had nowhere
+  to declare a real seam that didn't span the whole thing — added a
+  real midpoint vertex (the side seam, where front-attach hands off to
+  back-attach), giving 4 real relationships (front-right, back-right,
+  and their `foldMirrorEdge()`-computed left counterparts, since this
+  piece is cutOnFold — one half, doubled).
+
+### Verification
+- Direct reproduction caught the `foldMirrorEdge` fold-point bug BEFORE
+  it shipped on 44 patterns (first attempt would have produced an
+  invalid, out-of-bounds edge index) and confirmed all 4 waistband
+  seams form correctly after the fix.
+- `npm test`: 299/299.
+- `cloth-lab` vitest: **758/758** (was 734 after WP-63's own gusset
+  work). Includes updated per-leg-panel seam-count assertions (2→3, the
+  new waist seam) and a new dedicated waistband-seam-count check, one
+  per trouser pattern.
+
+`js/fancy-patterns.js`'s own separate `trouserPanel()` (the Fancy
+Collection's trouser construction) does NOT have this waistband fix
+yet — a real, current difference between the two trouser
+constructions, not an oversight; scoped for a future installment.
+
+## WP-63: pattern library rebuild, Phase 5 continued — the crotch gusset's real 4-edge seam
+
+Direct follow-up to WP-62. Once `sideEndIdx` freed the leg-opening curve
+up (hip-to-gusset), a short, previously-untouched tail remained free too
+right after it: gusset-to-fold — exactly where "Crotch Gusset" (and its
+own lining layer) genuinely attaches. Wired up the gusset's real 4-edge
+topology on `js/ai.js`'s leotard Front/Back Body:
+
+- The diamond's 4 corners are front-tip, right-tip, back-tip, left-tip;
+  its 4 edges each meet a real, distinct curve — front-tip-to-right-tip
+  meets the front body's own right-side gusset-to-fold tail, right-tip-
+  to-back-tip meets the back's right-side one, and the other two edges
+  meet their LEFT-mirrored counterparts (reusing WP-62's own
+  `leotardLegEdges()`/`foldMirrorEdge()` helpers verbatim — no new
+  geometry math needed, just a new pair of indices).
+- The gusset piece itself isn't bilateral (a genuinely symmetric single
+  piece, unlike the leg-opening binding), so its 4 edges use the
+  already-`_R`/`_L`-suffixed literal seamId strings directly, matching
+  Body's own convention.
+- "Gusset Lining" (the second layer behind the gusset) stays honestly
+  unseamed this pass — real leotard construction usually bonds it
+  directly to the gusset rather than seaming it independently into the
+  crotch, and forcing an independent 4-edge declaration for it too
+  wasn't a clear enough real relationship to declare with confidence,
+  the same "don't guess" standard this whole pass has held to.
+
+### Verification
+- Direct reproduction: all 4 gusset seams form correctly (front-R,
+  front-L, back-R, back-L), confirmed by inspecting the actual
+  `seamInstructions` before trusting it.
+- `npm test`: 299/299.
+- `cloth-lab` vitest: **734/734** (was 634 — 100 new, one per leotard
+  pattern, checking the gusset gets all 4 real seams).
+
+With this, girls-leotards.js's 100 patterns now have real, working
+seams for their entire core construction — body, neckline binding,
+leg-opening binding, AND the crotch gusset. Still open in this
+collection: the gusset lining (deliberately deferred, above), plus the
+handful of style-specific extras (Cross-Back Strap, Keyhole Binding,
+Mesh Back Panel, Side Mesh Insert, Armhole Binding) that only appear
+on some styles. Beyond leotards, the ~15 other accessory role families
+across the rest of the library (collar, cuff, pocket, waistband, sash,
+tier, godet, cup, band, hood, cape, epaulette) remain open, each still
+needing its own real attach-edge identified the same way.
+
+## WP-62: pattern library rebuild, Phase 5 continued — the leg-opening binding, and a real gap in WP-61's own fix found by trying to reuse it
+
+Direct follow-up to WP-61, extending the same real-seam treatment from
+the neckline binding to "Leg Opening Binding" (100 leotard patterns,
+bilateral — one piece, two leg openings). Trying to reuse WP-61's own
+`necklineEndIdx` mechanism here surfaced a real gap in it, caught by
+direct reproduction before assuming it worked: `necklineEndIdx` only
+narrows where the geometric side-seam claim STARTS — its far end still
+ran all the way to the natural hem/fold point regardless, so the
+hip-to-gusset leg-opening curve stayed swallowed by `rightSide`/
+`leftSide` exactly the same way the neckline curve used to be (the
+neckline fix itself wasn't wrong — the curve it frees sits at the
+START of the claimed range, so the missing end-narrowing never
+mattered there; it only surfaces once something needs to be freed near
+the END instead).
+
+- **`sideEndIdx`** (new, symmetric counterpart to `necklineEndIdx`,
+  same opt-in contract, same coordinate space, same zero-regression
+  guarantee when omitted): narrows where the claim ENDS. Threaded
+  through the same places `necklineEndIdx` was (`importFromApp.js`,
+  `js/app.js`'s payload builder, all 3 cloth-lab test-file mirrors).
+- `js/ai.js`'s leotard Front/Back Body: `leotardSide` narrowed to
+  shoulder-through-hip (was shoulder-through-gusset); the hip-to-gusset
+  tail now belongs to new `leotardLegFront_R`/`_L` /
+  `leotardLegBack_R`/`_L` edges (front/back Body is a single already-
+  doubled cutOnFold piece, not a bilateral pair, so its own hip-to-
+  gusset curve needs both a right-side declaration AND — via a new,
+  directly-verified `foldMirrorEdge()` helper — its correctly-computed
+  mirrored left-side one, each carrying an already-`_R`/`_L`-suffixed
+  literal seamId string so it lands in the same bucket the bilateral
+  binding's own auto-suffixing produces). A new `leotardLegParity` edge
+  keeps WP-55's original front/back length check alive over that same
+  span — a real, separate relationship from the binding attachment,
+  not the same edge doing double duty.
+- "Leg Opening Binding": same front-half/back-half midpoint split as
+  "Neckline Binding," each half seamed to the matching real curve.
+
+### Verification
+- Direct reproduction caught the `sideEndIdx` gap BEFORE claiming the
+  fix worked (first attempt: 0 seams on either bilateral copy) and
+  confirmed the fix after (both copies: exactly 2 real seams each,
+  front + back).
+- `npm test`: 299/299 — the validator's own WP-55 seamLengthParity
+  check on the leg-opening span (now via `leotardLegParity` instead of
+  the wider `leotardSide`) stayed green throughout.
+- `cloth-lab` vitest: **634/634** (was 534 — 100 new, one per leotard
+  pattern, checking both bilateral copies get exactly 2 real seams
+  each).
+
+## WP-61: pattern library rebuild, Phase 5 continued — real neckline-accessory seaming, a shared-geometry rework, and another latent crash found and fixed
+
+Direct follow-up to WP-59/60, user-directed to build real (not partial)
+seaming for accessories that attach to more than one body edge at once
+(a leotard's neckline binding strip, sewn to both the front AND back
+neckline). Investigating that surfaced a deeper, more fundamental gap
+first: cloth-lab's shared front-to-back seam derivation
+(`deriveTorsoEdgeInstructions`, used by ~200+ patterns' existing,
+working seams) claims almost the ENTIRE panel perimeter as one
+undifferentiated "side" — there was no separate "neckline" region at
+all, so ANY accessory wanting to seam to just a panel's neckline
+(collar, leotard binding, anything alike) collided with that existing
+claim. Real fix, not a workaround:
+
+- **`necklineEndIdx`** (new, fully optional, per-piece): tells
+  `deriveTorsoEdgeInstructions` where a piece's own neckline/top curve
+  ends, narrowing where its geometric side-seam claim starts — freeing
+  that curve up for the piece's own `edges[].seamId` declaration to
+  claim instead (via the existing `pushSeamIdEdges`, generalized in
+  WP-59). Never geometrically guessed — only ever set when a generator
+  declares it. Omitted (the default for every piece that doesn't set
+  it — everything before this WP), reproduces the exact prior behavior
+  byte-for-byte: zero regression risk for the ~200+ patterns that don't
+  use it. Threaded through `js/app.js`'s payload builder the same way
+  `princessSeamId` was in WP-59.
+- Relaxed WP-58/59's own "bySlot seam XOR seamId seam" exclusivity — a
+  panel legitimately needs BOTH at once now (its ordinary front-to-back
+  seam, and a separate accessory attaching to a different one of its
+  edges). To keep this safe, added real overlap detection
+  (`pushClaimedEdge`/the `claimedIndices` tracking) so a seamId edge
+  that DOES genuinely overlap an already-claimed geometric edge (e.g.
+  `jacketSide`/`trouserOutseam`, always redundant with the bySlot seam
+  for those placements — WP-58/59's own original reasoning) is silently
+  skipped instead of reaching `seamAuthoring.js`'s `addEdge()`, which
+  throws on a real overlap.
+- **A second real, pre-existing latent crash found**, unrelated to any
+  of the above: `deriveTorsoEdgeInstructions` could already produce a
+  degenerate (`from === to`) `rightSide`/`leftSide` for a genuinely
+  tiny outline (a 4-point panel, e.g. girls-leotards.js's own attached
+  "Ballet Skirt Front/Back") — reproducible with the EXACT prior
+  formula, `necklineEndIdx` never involved. `addEdge()` throws on this;
+  nothing had ever caught it because no test exercised a 4-point
+  hip-panel piece through this path before this WP's own new test file.
+  Fixed at both call sites (metadata path and the legacy classifyLegacy
+  path): a piece this small no longer gets registered for the
+  automatic front-to-back seam at all (placed, not auto-seamed — the
+  same honest outcome an accessory role gets) instead of crashing.
+- **`js/ai.js`'s `leotardFrontPieces()`/`leotardBackPieces()`**: Front/
+  Back Body (and their colour-block Yoke variants) now declare
+  `necklineEndIdx` + a real `leotardNeckFront`/`leotardNeckBack` seamId
+  edge on their own neckline curve. Guarded (`leotardNeckEdge()`) for
+  the handful of backStyle/neckline combinations that really do reduce
+  to a 2-point (degenerate) curve — no real edge to declare there,
+  honestly, not a bug.
+- **"Neckline Binding"**: redrawn with a real midpoint vertex, split
+  into a front half and a back half, each with the matching seamId — a
+  50/50 split (an approximation; front/back necklines aren't always
+  equal length) is acceptable the same way elastic binding is DESIGNED
+  to stretch/ease to fit the edge it's sewn to, unlike a structural
+  seam that needs an exact length match.
+- **New `importFromApp.leotards.test.js`**: `js/girls-leotards.js`'s
+  100 patterns had ZERO cloth-lab end-to-end coverage before this WP
+  (the same class of gap WP-60 closed for `js/library.js`) — now fully
+  covered, plus a dedicated check that the binding gets a real seam to
+  every neckline curve that actually has one to offer (1 or 2,
+  depending on style — not a flat assumption either way).
+
+### Verification
+- `npm test`: 299/299.
+- `cloth-lab` vitest: **534/534** (was 347 — 187 new from the leotard
+  test file alone, plus regression coverage across every existing
+  suite for the shared-geometry rework).
+- Direct reproduction confirmed both real bugs found this pass (the
+  neckline-collision architecture gap, and the degenerate-edge crash)
+  before fixing either, and confirmed the fix afterward.
+
+Still open: leg-opening binding (needs the same per-side neckline-style
+treatment, doubled for bilateral L/R), the crotch gusset's 4 real
+attach edges, and the ~15 remaining accessory role families (collar,
+cuff, pocket, waistband, sash, tier, godet, cup, band, hood, cape,
+epaulette, mesh inserts, cross-back strap, keyhole binding) — each now
+has a proven mechanism (`necklineEndIdx` + seamId, or plain seamId
+where no bySlot collision exists) to build on, not a new architecture
+each time, but each still needs its own real attach-edge identified.
+
+## WP-60: pattern library rebuild, Phase 5 continued — the SECOND trouser bug, and closing a real cloth-lab test-coverage gap for js/library.js entirely
+
+Direct follow-up to WP-59. A role/piece-name sweep across the whole
+library (looking for what else `role:"other"` was hiding before
+declaring the trouser fix "done") turned up a second, separate trouser
+construction with the exact same defect: `js/library.js`'s
+`trouserFamily()` (~25 patterns — every "Trousers"/"Shorts"/"Chinos"/
+"Jeans"/"Palazzo"/"Culottes"/"Joggers" entry in the family-builder
+catalogue) also declared `role:"other"` on its leg panels. Unlike
+`js/fancy-patterns.js`'s version, this one already HAD real seam-edge
+infrastructure (a declared `edges[].seamId` outseam, unique per
+pattern) — it just had nowhere to go, the same way WP-59's other fixes
+gave existing infrastructure a real consumer. Fixed identically to
+WP-59: `role: "trouser-front"/"trouser-back"`, and a new `mirrorSelf`
+inseam edge (`legPanel()`'s own `hemInIdx` through its last point,
+already exposed on the outline — no new geometry needed, just a missing
+declaration).
+
+Fixing the role broke something else it happened to be propping up:
+`js/pattern-flat.js`'s thumbnail composer had a documented fallback
+("there is no trouser-front role in the 46-value vocabulary") that
+picked up role:"other" pieces by NAME ("front") when nothing better was
+found — the exact mechanism these leg panels were relying on for their
+thumbnail to render at all. Now that they declare a real role, they no
+longer match that fallback's `!p.role || p.role === 'other'` guard —
+added `trouser-front` to `selectParts()`'s real core/lower selection
+(same bucket `skirt-front-gore`/`hip-panel-front`/`godet` already use:
+"no bodice, the leg/hip panel IS the silhouette") instead of leaving it
+to guess by name. `test/library-thumbnails.test.js` caught this
+immediately (composed count regressed 288→264) — exactly the kind of
+regression that test exists to catch.
+
+**New test-coverage gap closed**: `js/library.js`'s 94 family-builder
+patterns had ZERO cloth-lab end-to-end coverage before this WP — only
+`js/fancy-patterns.js`'s 64 designs were ever exercised through
+`convertAppPattern` → triangulate → assemble. New
+`importFromApp.library.test.js` (mirrors `importFromApp.fancyCollection.
+test.js`'s structure) closes that gap for good, not just for this WP's
+own fix — every future change to this file's 94 patterns now gets the
+same "imports and simulates with zero exceptions" guarantee the Fancy
+Collection has had since WP-6.
+
+### Verification
+- `npm test`: 299/299 (was failing before the pattern-flat.js fix —
+  `test/library-thumbnails.test.js`'s regression check caught the real
+  side effect described above).
+- `cloth-lab` vitest: 347/347 (was 227 — 120 new: 94 import/simulate +
+  1 sanity + ~25×1 trouser-seam-count checks, covering js/library.js's
+  entire catalogue for the first time).
+
+Part 2 (the ~20 remaining attach-only accessory roles — collar, cuff,
+pocket, waistband, sash, peplum, tier, godet, cup, band, gusset,
+lining, facing, yoke, hood, cape, epaulette, strap, elastic-band —
+still place but don't auto-seam to their real attachment point) is
+still open. A role-frequency sweep across the full library also
+surfaced further real, undeclared "other"-role accessory content
+(girls-leotards.js's binding/gusset/mesh/strap pieces — ~380 pieces
+across the 100-leotard collection; underwear-library.js's bra "Center
+Bridge," 18 patterns) not yet investigated — scoped for a future
+installment of this pass, not attempted here.
+
+## WP-59: pattern library rebuild, Phase 5 continued — Cloth Lab compatibility pass, part 1: a critical princess-seam auto-seam bug, and real 3D trouser support
+
+User-directed: every pattern must import into Cloth Lab and simulate with
+no error and no seam the user has to fix by hand — including accessory
+pieces, not just the main front/back shell. First installment.
+
+**Critical, pre-existing bug found and fixed**: `importFromApp.js`'s
+metadata path destructured `edges` and `princessSeamId` from
+`resolved` (the return of `resolveSchemaRole(p.role)`, which can only
+ever carry ROLE-level facts — placement/zone/cutOnFold/bilateral — since
+it only ever receives the role STRING as input). `edges` and
+`princessSeamId` are per-PIECE instance data (a specific pattern's own
+princess-curve indices), so this destructure silently read `undefined`
+for every piece, every pattern, always. Confirmed by direct
+reproduction: a real princess-seamed dress (wf01) imported with its
+bodice-front-side/bodice-back-side pieces recognized and PLACED but
+never seamed to anything — no princess seam ever formed, on any of the
+21+ princess-seamed Fancy Collection patterns, since this mechanism
+shipped. A second, compounding bug: `js/app.js`'s `buildClothLabPayload`
+never forwarded `princessSeamId` onto the payload piece at all — so even
+with the importer fixed, the real app's payload never carried the value
+in the first place. Both fixed; `cutOnFold`/`bilateral` (genuinely
+role-level) correctly stay sourced from `resolved`, piece-level values
+still winning if a generator ever sets one directly.
+
+While in there, generalized `edges[].seamId` consumption: it used to
+only ever get read inside the `bilateral` branch — every other branch
+(cutOnFold's non-princess else, the skirt-gore branch, the plain
+single-piece/accessory branch) silently dropped a piece's own declared
+seamId depending on which branch its placement family happened to route
+through. One shared `pushSeamIdEdges()` helper, called from every
+branch that has real per-piece edges, means a declared seamId now means
+the same thing regardless of role family — the foundation the rest of
+this pass (and future accessory-seam work) builds on. Also fixed a
+real crash this surfaced: the cutOnFold-else branch unconditionally
+assumed a cutOnFold piece's placement was always one of the 4
+`bySlot` panel slots, and threw on any other cutOnFold accessory (e.g.
+`peplum-front`, itself `cutOnFold:true`) the moment the destructure fix
+let one actually reach that branch for the first time.
+
+**Real 3D trouser support** (`js/fancy-patterns.js`'s `trouserPanel()`,
+~24 pieces / 12 Fancy Collection patterns): previously declared
+`role:"other"`, cloth-lab's small-accessory placement (a
+pocket/cuff-sized flat patch near the hip) — never auto-seamed, exactly
+the "user has to fix the seam" failure this pass targets.
+`classifyLegacy()`'s own comment has said "trousers/leg pieces aren't
+supported in 3D yet" since before this role vocabulary existed; no
+longer true:
+- New roles `trouser-front`/`trouser-back` (role vocabulary now 53
+  values), `bilateral: true` — a trouser panel drafts ONE leg (cut 2,
+  mirrored), same convention `placeSleeve`'s single arm shape already
+  uses.
+- New `placeLegPanel()` (`placement.js`): a half-tube wrap down the
+  thigh (tapered `thighR` → `thighR*0.4`), offset to its own side of
+  the centerline — real new placement geometry, not a repurposed
+  existing family.
+- New `mirrorSelf` edge kind (`importFromApp.js`): a bilateral piece's
+  own R/L copies seamed directly to each other — the real relationship
+  a trouser's inseam has (front-left's inseam to front-right's inseam
+  forms the crotch seam), distinct from `seamId` cross-piece matching.
+  `trouserPanel()` declares it on the hem-inner→crotch→rise edge;
+  the existing `trouserOutseam` seamId (WP-58) handles the other real
+  seam, front-to-back, through the same generalized `pushSeamIdEdges`.
+- `js/body-zone.js` (cloth-lab-independent zone classifier, hand-kept in
+  sync per its own header) and `schema/pattern-spec.v1.json` +
+  regenerated ajv validator updated for the 2 new roles.
+
+### Verification
+- `npm test`: 299/299. `cloth-lab` vitest: 227/227 (was 215 — 12 new,
+  including a dedicated regression: every trouser leg gets exactly 2
+  real seams — its outseam AND its inseam — not a placed-but-unseamed
+  patch).
+- Direct reproduction script confirmed the princess-seam fix: wf01's
+  `bodice_front_side`/`bodice_back_side` now show real seamInstructions
+  to `bodice_front_center`/`bodice_back_center`, on both sides, where
+  before the fix none existed at all.
+- Direct reproduction confirmed trousers: 4 leg pieces placed via
+  `legFront`/`legBack`, 4 real seams (2 outseam via seamId, 2 inseam via
+  mirrorSelf) — a fully closed, sewable pair of legs.
+- Full end-to-end pipeline (`convertAppPattern` → seam editor draft →
+  `triangulateAll` → `assembleCloth`) exercised for all 64 Fancy
+  Collection patterns, zero exceptions — this is the same pipeline
+  "Simulate This Garment" runs in the real app, not just placement math.
+
+Part 2 of this pass (still open, not started): the remaining attach-only
+roles (collar, cuff, pocket, waistband, sash, peplum, tier, godet, cup,
+band, gusset, lining, facing, yoke, hood, cape, epaulette, strap,
+elastic-band, ...) still place but don't auto-seam to their real
+attachment point on the body — the same class of defect trousers had,
+now with a proven engine (`pushSeamIdEdges`/`mirrorSelf`) to build on,
+but each one needs its own real attach-edge identified and declared,
+same as trousers did.
+
+## WP-58: pattern library rebuild, Phase 5 continued — redesigned every remaining seamLengthParity failure at the source, 0 fails left library-wide
+
+Direct follow-up to WP-57, per explicit direction to replace every
+remaining failing item with a real, from-scratch equivalent that
+actually passes, rather than continuing to leave categories
+documented-but-deferred. Investigated each of the 93 remaining
+`seamLengthParity` failures by CONSTRUCTION, not by pattern-matching the
+symptom, and found genuine, fixable defects behind almost all of them —
+WP-56's read of `jacketFrontBack` as "compensated by a separate facing
+piece" turned out to be wrong once `lapelFacing()` was actually
+inspected (it's sized from `neck`, never touches hem width, and folds
+along the center-front opening, not the side) — it was a real,
+uncompensated ~38%-narrower front hem with no seam-based justification.
+
+- **`jacketFrontBack()`** (~50 call sites — every jacket/coat/vest/parka/
+  kandura in the Fancy/Men's/Boys' collections): redrafted so the front's
+  side-seam curve is the back's side-seam curve shifted by one constant
+  `sideInset` — a pure horizontal translation, which cannot change arc
+  length, so front and back match EXACTLY by construction, not by
+  tuning control points until a script says "close enough." Both panels
+  declare the real edge (`edges[].seamId: 'jacketSide'`); `hoistCurves()`
+  extended to also hoist `.edges` (the same mechanism `.curves` already
+  uses) so one change reached every call site for free.
+- **`trouserPanel()`** (~17 call sites): separated the OUTSEAM (waist-
+  outer to hem-outer — must match front/back for the leg to sew flat)
+  from the RISE (front shallower / back deeper through the seat — a
+  real, standard difference that has no business reshaping the
+  outseam). The outseam is now `crotchDrop`-independent and a pure
+  translation between front/back (`seamId: 'trouserOutseam'`); the real
+  rise difference still lives entirely on the undeclared center-front/
+  back seam, where it belongs.
+- **`briefPanel()`** (`js/underwear-library.js`, 24 patterns): the real
+  brief side seam is the short corner edge from the waist curve's own
+  end to the leg curve's own start — it was landing at a different real
+  length front vs back because `hipX`/`legTopY` each had independent
+  front/back formulas that happened to feed the same corner. Now that
+  corner is `waistX + (sideDX, sideDY)`, one fixed vector shared by
+  front and back, so the edge matches by construction regardless of
+  `waistX` (`seamId: 'briefSide'`). The "back covers more" real design
+  intent this simplified away from `legTopY` still lives on in
+  `crotchY`'s existing back-only `+2`. Also caught and fixed a fresh
+  `grainline` regression this surfaced: the brief grain's old fixed-cm
+  margin (`y:4` to `frontLen-4`) landed inverted on the shortest real
+  style combo (low-rise + bikini cut) once corner geometry changed —
+  made proportional to the piece's own length instead, same fix class
+  as WP-57's Center Bridge.
+- **`wrapPanel()`+ new `wrapCoatBack()`** (asymmetric wrap/sherwani
+  closures, ~9 call sites across coats AND wrap dresses): the wrap
+  front's real sewn seam is only its underarm-to-taper curve — below
+  the taper point it curves inward as the closure overlap, a free edge
+  sewn to nothing. The old back panel (reused generic
+  `jacketFrontBack().back`) had no relationship to that curve at all.
+  `wrapCoatBack()` now drafts its own side seam as the LITERAL SAME
+  curve (`seamId: 'wrapCoatSide'`, same arguments, not just a similar
+  shape) before continuing on its own to a real hem — the train/wrap-
+  dress bodice variant reuses the identical function.
+- **`peplumPc()`** (4 call-site pairs): several patterns gave the front
+  and back peplum halves slightly different `waistHalfW`/`flareLen`
+  values with no construction reason behind the difference (unlike the
+  real, kept differences elsewhere) — every pair now passes matching
+  parameters, so the two cut-on-fold halves are the same size by
+  construction, a common, legitimate real peplum-ring construction.
+- **`gorePanel()` + new `gorePanelWithTrain()`**: a bridal train is
+  supposed to be dramatically longer than the front — the old
+  construction ran one curve from waist straight to the full train
+  length, so the check was comparing the front's real hem-length side
+  against the back's much longer train, never a real like-for-like
+  comparison. `gorePanelWithTrain()` now shares the front's own gore
+  curve verbatim (`seamId: 'goreSide'`) for the portion that's actually
+  sewn to the front, then continues as a genuinely separate,
+  undeclared train extension beyond it.
+- **`pairByRole()`** (`js/validate.js`, shared infrastructure): a real
+  bilateral Left/Right front pair (e.g. `wrapPanel`'s two sides) both
+  genuinely meet the SAME single back panel at its two mirrored side
+  seams — not an ambiguous 2-vs-1 role collision. Recognizing that
+  specific, narrow case (both front labels differ only by a Left/Right
+  marker) fixed a real mispairing bug: the blind "any unused back"
+  fallback in `pairFrontBack()` was grabbing whatever back-labeled piece
+  was left over in array order once the correct one was already
+  claimed — on 3 multi-component patterns (a coat+trousers set, two
+  coat+peplum dresses) that meant a front literally being checked
+  against an unrelated garment's back panel. Cross-piece "Verified"
+  pairing went from 295→313 (59.1%→62.7%) as a side effect of pairing
+  these correctly instead of falling through to a heuristic guess.
+
+Every fix above is a real construction change (most use exact
+translation/shared-curve tricks that make the match provable, not
+approximate), verified by direct arc-length measurement before relying
+on the validator, then confirmed against the full suite.
+
+### Verification
+- `npm test`: 299/299. `cloth-lab` (vitest): 215/215.
+- Full 308-pattern / 2,170-piece sweep: **`closedOutline`,
+  `selfIntersection`, `grainline`, `seamAllowance`, `foldSymmetry`, AND
+  `seamLengthParity` are now all 0 fails** — every §5 check that can
+  report "fail" is clean library-wide. (`ease`/`notchAlignment` remain
+  `deferred`/`warn` only — no fails, and closing THOSE gaps is
+  authoring-scale work, not a defect fix; see WP-57's own honest
+  breakdown, still accurate for the gates this WP didn't touch: notch
+  coverage 14.9%, ease-deferred 94.8%, still §8 targets ≥80%/≤20%.)
+- Spot-verified redesigned pieces visually (rendered raw outlines via
+  `js/pattern-flat.js`'s `_renderUncached`, `qlmanage -t` to PNG) across
+  jacket, trouser, brief, wrap-coat, train-skirt and mispairing-fix
+  patterns — every shape reads as a real, plausible garment piece, not
+  a passing-but-degenerate shape.
+
+## WP-57: pattern library rebuild, Phase 5 — full §8 sweep, underwear-library fixes, and an honest status of what's left
+
+docs/plan 4.md Phase 5, its own "Full §8 sweep" description. Widened the
+validator sweep to cover `js/underwear-library.js`'s 44 patterns for the
+first time in this rebuild — every prior sweep (`scripts/baseline-
+report.mjs`, `test/validate-library.test.js`) only ever covered
+`library.js` + `girls-leotards.js` + `fancy-patterns.js` (264 patterns).
+That widened sweep surfaced two real, previously-invisible defect
+classes:
+
+- **`foldSymmetry`, 48 fails** — `gussetOval()`'s "Crotch Gusset"/"Gusset
+  Lining" pieces (24 patterns × 2) were drafted as a FULL oval (4 curve
+  segments closing back on themselves), never declared `cutOnFold`
+  anywhere they're used. The closing curve's own samples sat close
+  enough to the piece's own min-X, for enough of its height, to
+  false-trigger `checkFoldSymmetry`'s fold heuristic — the exact same bug
+  class WP-53 already fixed twice (`peplumPc`, `capePc`). Real fix, not a
+  reshape to dodge the heuristic: a crotch gusset genuinely is
+  conventionally symmetric and cut on the fold, so `gussetOval()` is now
+  a real cut-on-fold half (two curves, one implicit straight fold edge),
+  and both call sites declare `cutOnFold: true`.
+- **`grainline`, 6 fails** — `braPieces()`'s "Center Bridge" piece used a
+  fixed-cm grain (`y:2` to `y:cupD*0.4`) sized for a full-depth adult cup.
+  For six real shallow-cup patterns (`wb08`, `gb01/02/05/06/10` — mostly
+  girls' training styles), the piece's own height (`cupD * 0.55`) is
+  itself under 2cm, so the first grain point already sat outside the
+  piece, and for some of the six the second point landed ABOVE the
+  first — read by `checkGrainline`'s `atan2` as 180° rather than 0° (same
+  vertical axis, but the check never normalizes direction), producing
+  the reported "90° off cardinal" symptom. Fixed at the source: both
+  grain points are now proportional to the piece's own height (`0.2h` /
+  `0.8h`), matching how the "Cup" piece right above it already does it —
+  guaranteed inside the piece and consistently downward-pointing at any
+  size, not another fixed-cm patch.
+
+With those two fixed, a full sweep of all 308 patterns / 2,170 pieces
+now shows **`closedOutline`, `selfIntersection`, `grainline`,
+`seamAllowance`, and `foldSymmetry` all at zero fails, library-wide** —
+5 of the 8 §5 checks are completely clean across every pattern this
+rebuild ships.
+
+### What's still open, honestly
+- **`seamLengthParity`: 93 fails**, all "bounding-box proxy — no
+  declared seam edge." Spot-checked several categories, not all 93
+  individually:
+  - The 24 briefs/trunks (`wu`/`mu`/`gu`/`bu`01–06) are a real,
+    documented, intentional construction difference — `briefPanel()`'s
+    own header comment says the back "rises higher and drops slightly
+    deeper than the front, for seat coverage." The bounding-box proxy
+    measures full panel height, not the actual sewn side-seam edge (a
+    single corner vertex in this construction, not an extended edge) —
+    declaring a synthetic `seamId` here would compare the wrong thing,
+    same judgment WP-56 already reached for `jacketFrontBack`.
+  - `wf10`/`wf15`'s ~290–530mm outliers are bridal skirts with a train —
+    the back is SUPPOSED to be dramatically longer than the front; not
+    a defect, an extreme case of the same "proxy can't see intent"
+    limitation §5.2 already documents.
+  - `gf05`/`gf14`/`bf16`'s 166–251mm outliers look like a different,
+    real bug: the unverified name-matching fallback (`pairFrontBack`)
+    cross-pairing pieces from DIFFERENT garment components in the same
+    multi-piece pattern (e.g. a coat's "Front Right" against a
+    separate trousers' "Back Panel") rather than a true seam mismatch.
+    Already reported as "Heuristic," not "Verified," so the system
+    isn't claiming false confidence — but the pairing itself is wrong.
+    Not fixed this pass — a `pairFrontBack` component-grouping fix is
+    shared validator infrastructure touching every pattern, not a
+    single-file change, and deserves its own scoped pass rather than a
+    rushed edit at the end of this one.
+  - The remaining ~60 (jacket/coat/vest/parka/kandura/trouser/bodice
+    across `js/fancy-patterns.js`) were not individually investigated
+    this pass — each needs the same construction-specific judgment
+    `jacketFrontBack` got in WP-56, not a mechanical sweep.
+- **Notch coverage: 324/2,170 pieces (14.9%), §8 target ≥80%.** Adding
+  real notches to ~1,700 more pieces across every builder is Phase
+  3/4-scale authoring work, not a Phase 5 fix — not attempted this pass.
+- **Ease: 2,058/2,170 pieces (94.8%) deferred, §8 target ≤20%.**
+  `checkEase` needs a declared `chestEdgeIndices` hint per piece; most
+  pieces don't carry one. Same scale of gap as notch coverage, same
+  reason not attempted here.
+- **Cross-piece pairing: 295 verified / 114 heuristic / 90 unmatched
+  (59.1% verified), §8 target ≥95%.** Closing this means extending
+  `ROLE_PAIR` coverage and/or declaring more per-piece roles across the
+  same builders notch coverage touches — same scale, same reason.
+- Browser-based verification (2D/3D/Cloth Lab console-error-free load,
+  Cloth Lab simulate-without-exploding, export round-trips across
+  SVG/DXF/HPGL/tiled-PDF, the `window.BerryStudio` API surface, and a
+  library-grid performance check) — §9's Phase 5 description and §11's
+  deliverable 5 — not run this pass either.
+
+This WP closes the two concrete, source-level defects the widened
+sweep surfaced and reports every other §8 gate's real, current number
+rather than either declaring the phase done or silently guessing at
+fixes for gaps this size. Per the plan's own working rule: "A
+documented deferral is acceptable; a silent guess is not."
+
+### Verification
+- `npm test`: 299/299, no regressions.
+- Targeted sweep confirming all 48 `foldSymmetry` fails and all 6
+  `grainline` fails resolved with zero new fails introduced (24
+  gusset/lining pieces + 6 Center Bridge pieces, individually
+  re-checked).
+- Full 308-pattern / 2,170-piece sweep (first time including
+  `underwear-library.js`): `closedOutline`/`selfIntersection`/
+  `grainline` (was 6 fails, now 0)/`seamAllowance`/`foldSymmetry` (was
+  48 fails, now 0) all clean; `seamLengthParity` unchanged at 93 fails
+  — this WP's two fixes were in the fold/grain checks only, not seam
+  parity — see "what's still open" above for that gate's own honest
+  breakdown.
+
 ## WP-56: pattern library rebuild, Phase 4 (part 4) — leotard yoke seam parity, and why the rest stays honestly deferred
 
 docs/plan 4.md Phase 4, fourth installment. `js/ai.js`'s `buildLeotard()`

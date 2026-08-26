@@ -36,7 +36,11 @@ const SAMPLE_MEASUREMENTS = {
   boys: { chest: 68, waist: 60, hips: 70, shoulder: 31, backLen: 31, sleeve: 46, neck: 29, bicep: 21, inseam: 58, thigh: 42, height: 132 },
 }
 
-// Mirrors js/app.js's buildClothLabPayload() field selection exactly.
+// Mirrors js/app.js's buildClothLabPayload() field selection exactly —
+// WP-59 added `princessSeamId` there (it was silently never forwarded at
+// all before that fix, so a princess seam could never form regardless of
+// what convertAppPattern did with it) — kept in sync here too, same
+// "field selection exactly" promise this comment already made.
 function toPayloadPiece(p, i) {
   return {
     id: (p.key || 'piece') + '_' + i,
@@ -45,6 +49,9 @@ function toPayloadPiece(p, i) {
     darts: p.darts, notches: p.notches, grain: p.grain,
     role: p.role, cutOnFold: p.cutOnFold, foldEdgeIndex: p.foldEdgeIndex,
     bilateral: p.bilateral, edges: p.edges, grainline: p.grainline,
+    princessSeamId: p.princessSeamId,
+    necklineEndIdx: p.necklineEndIdx,
+    sideEndIdx: p.sideEndIdx,
     color: p.color,
   }
 }
@@ -79,5 +86,107 @@ describe.each(FANCY_IDS)('%s', (id) => {
       const triangulated = triangulateAll(finalPieces, result.seamInstructions)
       assembleCloth(triangulated, dims, result.seamInstructions)
     }).not.toThrow()
+  })
+})
+
+// WP-59: "doesn't throw" alone doesn't catch a piece that imported,
+// placed, and simulated fine while sitting completely unseamed (exactly
+// what role:"other" trouser panels did for every one of these 12
+// patterns before this WP — a real defect this whole describe.each above
+// would never have caught). Locks in the actual outcome: every trouser
+// panel gets BOTH its outseam (to the opposite front/back panel) and its
+// inseam (its own bilateral mirror, forming the crotch seam) — 4 real
+// seams per trousers, not a placed-but-floating patch.
+const TROUSER_IDS = FANCY_IDS.filter((id) => {
+  const m = SAMPLE_MEASUREMENTS[PATTERNS[id].category]
+  return PATTERNS[id].pieces(m).some((p) => p.role === 'trouser-front')
+})
+
+test('every trouser-containing Fancy Collection pattern is discovered (sanity check)', () => {
+  expect(TROUSER_IDS.length).toBeGreaterThan(0)
+})
+
+describe.each(TROUSER_IDS)('%s trousers', (id) => {
+  test('both legs get a real outseam AND a real inseam seam — nothing left for the user to fix by hand', () => {
+    const entry = PATTERNS[id]
+    const category = entry.category
+    const m = SAMPLE_MEASUREMENTS[category]
+    const payload = { pieces: entry.pieces(m).map(toPayloadPiece), measurements: m, category, fabricId: null, avatarGLB: {} }
+    const result = convertAppPattern(payload)
+
+    const legPieceIds = Object.entries(result.roles)
+      .filter(([, role]) => role === 'legFront' || role === 'legBack')
+      .map(([id]) => id)
+    expect(legPieceIds.length).toBe(4) // front_r, front_l, back_r, back_l
+
+    const involves = (pid) => result.seamInstructions.filter((s) => s.a.piece === pid || s.b.piece === pid)
+    for (const pid of legPieceIds) {
+      expect(involves(pid).length, `${pid} should have exactly 1 outseam + 1 inseam seam`).toBe(2)
+    }
+  })
+})
+
+// WP-65 (docs/plan 4.md Phase 5): princessBodice()'s frontCenter/
+// backCenter never passed `necklineEndIdx` into cloth-lab's princessSeamId
+// branch, so its own geometric princess-seam extraction started right
+// after the fold point regardless — pulling the piece's neckline curve
+// into "the princess seam" on the *Center side only, not on the matching
+// *Side piece's own edge. Confirmed by direct reproduction before fixing:
+// frontCenter's real 3D seam came out 30 segments long while frontSide's
+// own declared edge for the same seamId was 24 — a real length mismatch
+// cloth-lab was sewing into every princess-seamed pattern's simulation,
+// not merely a missing accessory-seam feature. Locks in that fix (equal
+// real edge length on both sides of the seam) and that the freed-up
+// neckline range is now a real, declared, non-overlapping edge of its own.
+const PRINCESS_IDS = FANCY_IDS.filter((id) => {
+  const m = SAMPLE_MEASUREMENTS[PATTERNS[id].category]
+  return PATTERNS[id].pieces(m).some((p) => p.princessSeamId)
+})
+
+function segLen(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]) }
+function walkLen(outline, from, to) {
+  let i = from, len = 0, guard = 0
+  while (i !== to) {
+    const next = (i + 1) % outline.length
+    len += segLen(outline[i], outline[next])
+    i = next
+    if (++guard > outline.length) return null
+  }
+  return len
+}
+
+test('every princess-seamed Fancy Collection pattern is discovered (sanity check)', () => {
+  expect(PRINCESS_IDS.length).toBeGreaterThan(0)
+})
+
+describe.each(PRINCESS_IDS)('%s princess seam', (id) => {
+  test('the real princess-seam edge is the same length on both the *Center and *Side piece — not padded with the neckline', () => {
+    const entry = PATTERNS[id]
+    const category = entry.category
+    const m = SAMPLE_MEASUREMENTS[category]
+    const payload = { pieces: entry.pieces(m).map(toPayloadPiece), measurements: m, category, fabricId: null, avatarGLB: {} }
+    const result = convertAppPattern(payload)
+    expect(result.skipped, `skipped: ${JSON.stringify(result.skipped)}`).toEqual([])
+
+    const princessSeams = result.seamInstructions.filter((s) => s.id.includes('princessFront_') || s.id.includes('princessBack_'))
+    expect(princessSeams.length).toBeGreaterThan(0)
+    for (const s of princessSeams) {
+      const aPiece = result.rawPieces.find((p) => p.id === s.a.piece)
+      const bPiece = result.rawPieces.find((p) => p.id === s.b.piece)
+      const aEdge = result.edgeInstructions.find((e) => e.pieceId === s.a.piece && e.edgeName === s.a.edge)
+      const bEdge = result.edgeInstructions.find((e) => e.pieceId === s.b.piece && e.edgeName === s.b.edge)
+      const aLen = walkLen(aPiece.outline, aEdge.fromIdx, aEdge.toIdx)
+      const bLen = walkLen(bPiece.outline, bEdge.fromIdx, bEdge.toIdx)
+      expect(Math.abs(aLen - bLen), `${s.id}: ${aLen.toFixed(2)}cm vs ${bLen.toFixed(2)}cm`).toBeLessThan(0.3)
+    }
+
+    // The freed-up neckline range is now a real, own edge (not silently
+    // swallowed by the princess-seam claim) on every *Center piece.
+    const centerIds = Object.entries(result.roles)
+      .filter(([, role]) => role === 'frontPanel' || role === 'backPanel')
+      .map(([pid]) => pid)
+      .filter((pid) => result.rawPieces.some((p) => p.id === pid))
+    const neckEdges = result.edgeInstructions.filter((e) => e.edgeName === 'seamId_princessFrontNeck' || e.edgeName === 'seamId_princessBackNeck')
+    expect(neckEdges.length, 'both frontCenter and backCenter should have their own real neckline edge').toBeGreaterThanOrEqual(2)
   })
 })

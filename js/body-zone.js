@@ -58,6 +58,7 @@ const LOWER_ROLES = new Set([
   "hip-panel-front", "hip-panel-back",
   "skirt-front-gore", "skirt-back-gore", "skirt-side-gore-left", "skirt-side-gore-right",
   "brief-front", "brief-back",
+  "trouser-front", "trouser-back",
 ]);
 // schema/pattern-spec.v1.json's Phase-0 legacy role aliases (see
 // cloth-lab/src/pattern/roles.js's own LEGACY_ROLE_ALIASES) — kept in

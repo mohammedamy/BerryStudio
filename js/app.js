@@ -3707,6 +3707,36 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         // — see cloth-lab/src/pattern/importFromApp.js and roles.js.
         role: p.role, cutOnFold: p.cutOnFold, foldEdgeIndex: p.foldEdgeIndex,
         bilateral: p.bilateral, edges: p.edges, grainline: p.grainline,
+        // WP-59 code-review fix: `princessSeamId` (js/fancy-patterns.js's
+        // princessBodice() sets it on the front/back-CENTER pieces) was
+        // never forwarded here at all — cloth-lab's importer had no way
+        // to ever see it, so every princess-seamed pattern's actual
+        // princess seam silently never formed in 3D regardless of what
+        // the importer itself did with it. See cloth-lab/src/pattern/
+        // importFromApp.js's own WP-59 comment for the other half of
+        // this (the importer-side destructure bug that made this field
+        // a no-op even when present).
+        princessSeamId: p.princessSeamId,
+        // WP-61: an optional index (into this piece's own pre-unfold
+        // outline) marking where a cutOnFold piece's neckline/top curve
+        // ends — lets cloth-lab's importer carve that curve out as its
+        // own seamable `rightNeckline`/`leftNeckline` region instead of
+        // it being silently swallowed into the generic front-to-back
+        // side seam, where an accessory (a collar, a leotard's neckline
+        // binding) could never reach it. Omitted entirely (undefined) on
+        // every piece that doesn't declare it — cloth-lab's own default
+        // reproduces today's behavior exactly. See importFromApp.js's
+        // own WP-61 comment for the full reasoning and index-math.
+        necklineEndIdx: p.necklineEndIdx,
+        // WP-61 code-review fix: `necklineEndIdx` alone only narrows
+        // where the geometric side-seam claim STARTS — its far end still
+        // ran all the way to the natural hem regardless, silently
+        // swallowing a leotard's whole leg-opening curve the exact same
+        // way. `sideEndIdx` is the symmetric counterpart, narrowing
+        // where it ENDS. See importFromApp.js's own comment for the
+        // full reasoning and index-math (identical convention to
+        // necklineEndIdx).
+        sideEndIdx: p.sideEndIdx,
         // WP-49: explicit upper/lower-body override (js/body-zone.js) —
         // cloth-lab/src/pattern/importFromApp.js's classifyLegacy path
         // consults this to correct a wrong name-based guess for pieces

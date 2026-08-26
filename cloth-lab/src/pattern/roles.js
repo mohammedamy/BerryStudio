@@ -141,6 +141,25 @@ export const SCHEMA_ROLE_INFO = {
   'elastic-band': { placement: 'attachHem' },
   gusset: { placement: 'attachBody' },
 
+  // WP-59 (docs/plan 4.md Phase 5, user-directed "make everything
+  // cloth-lab compatible" pass): js/fancy-patterns.js's `trouserPanel()`
+  // (~17 patterns) declared role:"other" — placement 'attachBody' is the
+  // small-accessory placement (a pocket/cuff-sized patch near the hip),
+  // never auto-seamed, so a full trouser leg panel landed as a flat
+  // misplaced patch requiring the user to hand-build the seam every
+  // time. classifyLegacy() above has said "trousers/leg pieces aren't
+  // supported in 3D yet" since before this role vocabulary existed —
+  // real, but no longer true: `legFront`/`legBack` (placement.js) roll
+  // each bilateral-duplicated leg panel into a half-tube down the thigh
+  // (reusing legProfile()'s own taper), offset to its own side of the
+  // centerline; convertAppPattern's new `mirrorSelf` edge kind seams a
+  // bilateral piece's own left/right copies together at the inseam
+  // (forming the crotch/center seam), and the existing seamId mechanism
+  // seams front to back at the outseam — the same, no-new-mechanism path
+  // jacketSide/trouserOutseam/princess seams already use.
+  'trouser-front': { placement: 'legFront', bilateral: true, zone: 'lower' },
+  'trouser-back': { placement: 'legBack', bilateral: true, zone: 'lower' },
+
   other: { placement: 'attachBody' },
 }
 

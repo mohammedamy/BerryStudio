@@ -164,10 +164,12 @@ function firstNonEmpty(pieces, roles) {
 // Same last-resort "front" name idiom js/validate.js's pairFrontBack and
 // cloth-lab's classifyLegacy both already use for pieces with no
 // placement-relevant role — js/ai.js's buildTrousers/buildSkirt declare
-// none at all, and this generator's own trouser/short leg panels declare
-// role:'other' (honest per docs/plan 4.md §4.2: there is no trouser-front
-// role in the 46-value vocabulary). Used ONLY as a last resort, ONLY for
-// the thumbnail (never for validator pairing/roles), and only among
+// none at all. (js/library.js's/js/fancy-patterns.js's own trouser leg
+// panels used to fall through to this same fallback under role:'other',
+// per docs/plan 4.md §4.2's "no trouser-front role existed" — WP-59
+// added a real `trouser-front` role, so those are now selected properly
+// above instead of guessed at here.) Used ONLY as a last resort, ONLY
+// for the thumbnail (never for validator pairing/roles), and only among
 // pieces with no useful role already — bounded exactly the way
 // classifyLegacy's own fallback is.
 const FRONT_NAME_RE = /front/i;
@@ -178,8 +180,11 @@ function selectParts(pieces) {
     // the silhouette, not an accessory stacked below something else.
     // composePattern() detects sel.lower === sel.core and skips
     // re-adding it, while still running the side-gore flanking below
-    // against it.
-    core = firstNonEmpty(pieces, ['skirt-front-gore', 'hip-panel-front', 'godet']);
+    // against it. `trouser-front` (WP-59: a real role now, replacing the
+    // old role:'other' the FRONT_NAME_RE fallback below used to catch
+    // these under) belongs in this same bucket — a trouser/shorts-only
+    // pattern has no bodice either, and the leg panel IS the silhouette.
+    core = firstNonEmpty(pieces, ['skirt-front-gore', 'hip-panel-front', 'godet', 'trouser-front']);
   }
   if (!core.length) {
     const other = pieces.filter((p) => (!p.role || p.role === 'other') && p.name && FRONT_NAME_RE.test(p.name.en || ''));
@@ -189,7 +194,7 @@ function selectParts(pieces) {
     core: core[0] || null,
     extraCore: core.slice(1),
     side: byRole(pieces, 'bodice-front-side').filter((p) => p !== core[0]),
-    lower: firstNonEmpty(pieces, ['hip-panel-front', 'skirt-front-gore', 'godet'])[0] || null,
+    lower: firstNonEmpty(pieces, ['hip-panel-front', 'skirt-front-gore', 'godet', 'trouser-front'])[0] || null,
     lowerSide: [...byRole(pieces, 'skirt-side-gore-left'), ...byRole(pieces, 'skirt-side-gore-right')],
     sleeve: firstNonEmpty(pieces, ['sleeve', 'sleeve-upper', 'cap-sleeve', 'puff-sleeve', 'butterfly-sleeve'])[0] || null,
     hood: byRole(pieces, 'hood')[0] || null,

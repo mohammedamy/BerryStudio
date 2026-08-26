@@ -141,7 +141,42 @@ function mirrorEdgeIndices(edges, n) {
 // Used by BOTH paths: classifyLegacy's simple front/back panels, and the
 // metadata path's princess-center panels (post-unfold, its rightSide/
 // leftSide split IS the princess seam — see convertAppPattern below).
-function deriveTorsoEdgeInstructions(outline, { includeTop }) {
+//
+// WP-61: `necklineEndIdx` (optional, ONLY ever set when a piece declares
+// its own `p.necklineEndIdx` — never geometrically guessed) carves the
+// neckline/waist-top curve out as its own named `rightNeckline`/
+// `leftNeckline` region, instead of it being silently swallowed into
+// `rightSide`/`leftSide` (which used to make a piece's neckline curve
+// unreachable for anything wanting to seam an accessory — a collar, a
+// leotard's neckline binding — to just that curve specifically, since
+// `rightSide` already claimed every point on it as "the side seam,"
+// and two different seams can't legitimately share a point). Omitting
+// it (every caller not yet updated to pass it, and every piece that
+// doesn't declare it) reproduces today's exact behavior byte-for-byte —
+// `rightTop`/`leftTop` stay the tiny 1-segment shoulder-corner edge they
+// always were, `rightSide`/`leftSide` stay unchanged, zero regression
+// risk for the ~200+ patterns that don't use this. When present, it's
+// an index into the piece's OWN original (pre-unfold) outline — same
+// coordinate space `princessSeamId`/`edges` already use, and for the
+// same reason: indices 0..n_orig-1 land at the identical position in
+// the unfolded outline (unfoldPiece() appends the mirrored copy after
+// them, never renumbers the original points) — a mirrored copy is at
+// `unfoldedLen - i` (derived from unfoldPiece's own doubling: appended
+// point k = mirror(original[n_orig-2-k]), placed at unfolded index
+// n_orig+k; solving for i = n_orig-2-k gives unfolded index
+// 2*n_orig-2-i = unfoldedLen-i).
+// WP-61 code-review fix: `necklineEndIdx` alone only narrows where the
+// side-seam claim STARTS — its far end (`rightHemIdx`/`leftHemIdx`, the
+// geometric hem search) still ran all the way to the natural hem/fold
+// point regardless, so it still swallowed a leotard's ENTIRE hip-to-leg-
+// to-gusset region as part of "the side seam," same collision problem
+// necklineEndIdx was built to solve, just at the other end — confirmed
+// by direct reproduction (a leg-opening-binding seam declared exactly
+// this way still silently never formed). `sideEndIdx` is the symmetric
+// counterpart: narrows where the claim ENDS, same optional/opt-in
+// contract, same coordinate space, same zero-regression guarantee when
+// omitted (`rightSide`'s end stays `rightHemIdx`, unchanged).
+function deriveTorsoEdgeInstructions(outline, { includeTop, necklineEndIdx, sideEndIdx } = {}) {
   const n = outline.length
   const half = Math.floor(n / 2) // unfoldPiece is symmetric: n = 2*(orig-1)
   let rightHemIdx = 1, rightHemY = -Infinity
@@ -149,11 +184,39 @@ function deriveTorsoEdgeInstructions(outline, { includeTop }) {
   let leftHemIdx = half + 1, leftHemY = -Infinity
   for (let i = half + 1; i < n; i++) if (outline[i][1] > leftHemY) { leftHemY = outline[i][1]; leftHemIdx = i }
 
+  const rightNeckEnd = necklineEndIdx != null ? necklineEndIdx : 1
+  const leftNeckEnd = necklineEndIdx != null ? n - necklineEndIdx : n - 1
+  const rightSideEnd = sideEndIdx != null ? sideEndIdx : rightHemIdx
+  const leftSideStart = sideEndIdx != null ? n - sideEndIdx : leftHemIdx
+
+  // Deliberately does NOT push a 'rightNeckline'/'leftNeckline' NAMED
+  // edge of its own here — only narrows where 'rightSide'/'leftSide'
+  // start, freeing the [1, rightNeckEnd] / [leftNeckEnd, n-1] ranges up
+  // rather than claiming them itself. A generator that passed
+  // `necklineEndIdx` almost always also declares a matching `seamId` on
+  // that exact range in its own `p.edges` (that's the whole reason to
+  // pass it) — pushSeamIdEdges (called right after this, on the same
+  // piece) is what actually claims and names that freed range, from the
+  // generator's own real edge, not a second guess at the same thing
+  // from two different places.
+  //
+  // Code-review fix: a genuinely tiny outline (a 4-point trapezoid panel
+  // — e.g. a leotard's own attached "Ballet Skirt Front/Back", n=4) can
+  // put `rightHemIdx`/`leftHemIdx` at the SAME point `rightSide`/
+  // `leftSide` would otherwise start from — there's no real interior
+  // point between them at all, not a bug in the search, just nothing
+  // there. Pushing a from===to edge isn't just pointless, it's a real
+  // crash downstream (seamAuthoring.js's addEdge() explicitly rejects
+  // a zero-length edge with a thrown error) — never discovered before
+  // because no test exercised a 4-point hip-panel piece through this
+  // path until girls-leotards.js's own end-to-end coverage did. Guard
+  // applies regardless of whether `necklineEndIdx` was ever passed —
+  // this was already reachable on the plain, pre-WP-61 formula too.
   const out = []
   if (includeTop) out.push({ name: 'rightTop', from: 0, to: 1 })
-  out.push({ name: 'rightSide', from: 1, to: rightHemIdx })
+  if (rightNeckEnd !== rightSideEnd) out.push({ name: 'rightSide', from: rightNeckEnd, to: rightSideEnd })
   if (includeTop) out.push({ name: 'leftTop', from: n - 1, to: 0 })
-  out.push({ name: 'leftSide', from: leftHemIdx, to: n - 1 })
+  if (leftSideStart !== leftNeckEnd) out.push({ name: 'leftSide', from: leftSideStart, to: leftNeckEnd })
   return out
 }
 
@@ -191,8 +254,83 @@ export function convertAppPattern(payload) {
   const sleeves = []
   const seamIdEdges = {} // seamId -> [{pieceId, fromIdx, toIdx}] — resolved into seams after the main loop
 
+  // Per-piece: which outline point indices already belong to a NAMED edge
+  // (walked the same forward/wrapping way seamAuthoring.js's addEdge()
+  // itself walks an edge — same overlap rule that function enforces, kept
+  // in sync deliberately: a real interactive project built from this same
+  // payload goes through that exact function next). Only the geometric
+  // bySlot edges (rightSide/leftSide/rightTop/leftTop) and pushSeamIdEdges
+  // calls populate this — sleeves/bilateral edges never collide with
+  // anything else on the SAME piece, so they don't need to check it.
+  const claimedIndices = {} // pieceId -> Set<pointIdx>
+  function edgeIndexSet(outlineLen, fromIdx, toIdx) {
+    const idxs = new Set()
+    let i = fromIdx, guard = 0
+    while (true) {
+      idxs.add(i)
+      if (i === toIdx) break
+      i = (i + 1) % outlineLen
+      if (++guard > outlineLen) break // malformed — bail rather than loop forever
+    }
+    return idxs
+  }
   function pushEdge(pieceId, edgeName, from, to) {
     edgeInstructions.push({ pieceId, edgeName, fromIdx: from, toIdx: to })
+  }
+  // Claims an edge's indices for a piece (geometric bySlot edges call this
+  // directly — they're authoritative, always win) so pushSeamIdEdges below
+  // can detect a real overlap before it happens instead of after
+  // seamAuthoring.js's addEdge() throws on it downstream.
+  function pushClaimedEdge(pieceId, edgeName, from, to, outlineLen) {
+    pushEdge(pieceId, edgeName, from, to)
+    const set = (claimedIndices[pieceId] ||= new Set())
+    for (const i of edgeIndexSet(outlineLen, from, to)) set.add(i)
+  }
+
+  // WP-59: a piece's own declared `edges[].seamId` used to only ever get
+  // consumed inside the `bilateral` branch below — every OTHER branch
+  // (cutOnFold's non-princess else, the skirt-gore branch, the plain
+  // single-piece branch) silently dropped it. That made a declared
+  // seamId a coin flip depending on which branch a piece's placement
+  // family happened to route through, not something a generator could
+  // rely on — real declared seams (js/fancy-patterns.js's `briefSide`,
+  // `goreSide`, `wrapCoatSide`, and any future one) went unconsumed on
+  // whichever side of that split they landed on. One shared helper, one
+  // seamIdEdges collection, called from every branch that has real
+  // per-piece edges — a declared seamId now means the same thing
+  // regardless of the piece's placement family. Unsuffixed (unlike the
+  // bilateral branch's own `_R`/`_L` — a non-bilateral piece has no
+  // left/right copy to disambiguate between).
+  //
+  // WP-61: a piece can ALSO already have a geometric bySlot edge
+  // (front-to-back) covering the SAME span a declared seamId targets —
+  // e.g. `jacketSide`/`trouserOutseam`/`wrapCoatSide` were always
+  // redundant with the bySlot seam for a front-panel/back-panel piece
+  // (WP-58/59's own reasoning for why those two mechanisms didn't used
+  // to run together). Declaring both used to be harmless because only
+  // one ever ran; now that both can run for the SAME piece (a leotard's
+  // front body needs its ordinary bySlot front-to-back seam AND a
+  // binding-strip seamId elsewhere), an edge that genuinely does
+  // overlap gets silently skipped here — outlineLen lets this check for
+  // real before seamAuthoring.js's addEdge() would throw on it
+  // downstream; the geometric bySlot edge already covers that span, so
+  // the redundant seamId contributes nothing a real seam wasn't already
+  // going to form anyway.
+  function pushSeamIdEdges(pieceId, edgesArr, outlineLen) {
+    if (!edgesArr) return
+    const claimed = claimedIndices[pieceId]
+    for (const e of edgesArr) {
+      if (!e || !e.seamId) continue
+      if (claimed && outlineLen != null) {
+        const want = edgeIndexSet(outlineLen, e.fromIdx, e.toIdx)
+        let overlaps = false
+        for (const i of want) { if (claimed.has(i) && i !== e.fromIdx && i !== e.toIdx) { overlaps = true; break } }
+        if (overlaps) continue
+      }
+      pushEdge(pieceId, `seamId_${e.seamId}`, e.fromIdx, e.toIdx)
+      if (outlineLen != null) { const set = (claimedIndices[pieceId] ||= new Set()); for (const i of edgeIndexSet(outlineLen, e.fromIdx, e.toIdx)) set.add(i) }
+      ;(seamIdEdges[e.seamId] ||= []).push({ pieceId, fromIdx: e.fromIdx, toIdx: e.toIdx })
+    }
   }
 
   for (const p of payload.pieces || []) {
@@ -223,14 +361,53 @@ export function convertAppPattern(payload) {
       const outline = isFoldPiece(local) ? unfoldPiece(local) : local
       rawPieces.push({ id: p.id, label: p.label, outline, color: p.color })
       roles[p.id] = slotKey
-      bySlot[slotKey].push({ id: p.id, label })
-      for (const e of deriveTorsoEdgeInstructions(outline, { includeTop: !isSkirt })) pushEdge(p.id, e.name, e.from, e.to)
+      // Code-review fix: see the metadata path's own matching comment
+      // below — a genuinely tiny outline can leave
+      // deriveTorsoEdgeInstructions unable to produce a real,
+      // non-degenerate rightSide/leftSide; only register into bySlot
+      // (which the "Front/back seams" loop assumes has both) when it
+      // actually got both, so a legacy piece this small is placed, not
+      // auto-seamed, instead of crashing downstream.
+      {
+        const geo = deriveTorsoEdgeInstructions(outline, { includeTop: !isSkirt })
+        if (geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
+          bySlot[slotKey].push({ id: p.id, label })
+          for (const e of geo) pushEdge(p.id, e.name, e.from, e.to)
+        }
+      }
       recognized.push({ id: p.id, label })
       continue
     }
 
     // ---------- WP-6 metadata path: thin structural validation, trust the declared role ----------
-    const { role: schemaRole, placement: declaredPlacement, cutOnFold, bilateral, edges, princessSeamId } = resolved
+    // WP-59 code-review fix: `edges` and `princessSeamId` are PER-PIECE
+    // instance data (a princess seam's own fromIdx/toIdx, which curve a
+    // particular pattern's princess split actually is) — they can never
+    // live on `resolved` (resolveSchemaRole() only ever takes the ROLE
+    // STRING as input, so it can only return role-level facts:
+    // placement/zone/cutOnFold/bilateral/seamFamily). Destructuring them
+    // from `resolved` here silently read `undefined` for every piece,
+    // every pattern, always — confirmed by direct reproduction: a real
+    // princess-seamed dress (wf01) imported with its bodice-front-side/
+    // bodice-back-side pieces recognized and PLACED but never seamed to
+    // anything (no princess seam, no seamId-based seam of any kind ever
+    // fired) — exactly the "user has to fix the seam by hand" failure
+    // mode, on every one of the 21+ princess-seamed Fancy Collection
+    // patterns, plus any other bilateral piece anywhere in the library
+    // that declares `edges` (this was never a princess-only bug — it's
+    // this whole mechanism). `cutOnFold`/`bilateral` ARE genuinely
+    // role-level facts (SCHEMA_ROLE_INFO declares them per role, e.g.
+    // 'bodice-front-center': cutOnFold:true) so those two correctly stay
+    // sourced from `resolved` — a piece-level override still wins if a
+    // generator ever sets one explicitly (defensive, matches how a piece
+    // already CAN also declare its own cutOnFold/bilateral directly).
+    const { role: schemaRole, placement: declaredPlacement } = resolved
+    const cutOnFold = p.cutOnFold ?? resolved.cutOnFold
+    const bilateral = p.bilateral ?? resolved.bilateral
+    const edges = p.edges
+    const necklineEndIdx = p.necklineEndIdx
+    const sideEndIdx = p.sideEndIdx
+    const princessSeamId = p.princessSeamId
     const local = relocalize(p.outline)
 
     // Code-review fix (WP-49 follow-up): an explicit p.bodyZone override
@@ -263,6 +440,7 @@ export function convertAppPattern(payload) {
       const internalRole = { 'skirt-front-gore': 'goreFront', 'skirt-back-gore': 'goreBack', 'skirt-side-gore-left': 'goreSideLeft', 'skirt-side-gore-right': 'goreSideRight' }[schemaRole]
       rawPieces.push({ id: p.id, label: p.label, outline: local, color: p.color })
       roles[p.id] = internalRole
+      pushSeamIdEdges(p.id, edges, local.length)
       recognized.push({ id: p.id, label })
       continue
     }
@@ -278,14 +456,64 @@ export function convertAppPattern(payload) {
         // Post-unfold, the shape's own rightSide/leftSide split (found the
         // same value-based way deriveTorsoEdgeInstructions always has) IS
         // the two halves of the (now-doubled) princess curve.
-        const [right, left] = deriveTorsoEdgeInstructions(outline, { includeTop: false })
-        pushEdge(p.id, right.name, right.from, right.to)
-        pushEdge(p.id, left.name, left.from, left.to)
+        //
+        // Code-review fix (WP-65, docs/plan 4.md Phase 5): this call never
+        // passed `necklineEndIdx`, so — same swallowing bug WP-61 fixed
+        // for the bySlot branch below — the geometric claim started right
+        // after the fold point (index 1) regardless, pulling the piece's
+        // OWN neckline curve into "the princess seam" along with the real
+        // princess curve. Confirmed by direct reproduction: frontCenter's
+        // actual 3D seam came out [1,31] (30 segments) while frontSide's
+        // own declared edge for the SAME seamId was [0,24] (24 segments)
+        // — a real length mismatch cloth-lab was sewing on every princess-
+        // seamed pattern, not merely a missing feature. `necklineEndIdx`
+        // (already declared by princessBodice() to mark exactly where its
+        // own neckline curve ends) fixes the mismatch AND frees the
+        // neckline range up for an accessory (a collar) the same way it
+        // already does on the bySlot branch.
+        const [right, left] = deriveTorsoEdgeInstructions(outline, { includeTop: false, necklineEndIdx })
+        pushClaimedEdge(p.id, right.name, right.from, right.to, outline.length)
+        pushClaimedEdge(p.id, left.name, left.from, left.to, outline.length)
         ;(seamIdEdges[princessSeamId + '_R'] ||= []).push({ pieceId: p.id, fromIdx: right.from, toIdx: right.to })
         ;(seamIdEdges[princessSeamId + '_L'] ||= []).push({ pieceId: p.id, fromIdx: left.from, toIdx: left.to })
+        // WP-65: this piece's own declared `edges` (e.g. the neckline's
+        // `princessFrontNeck`/`princessBackNeck` seamId, freed up by
+        // `necklineEndIdx` above) now also goes through pushSeamIdEdges,
+        // same "both relationships, not an either/or" reasoning the
+        // non-princess branch below already documents for its own
+        // `edges` handling.
+        pushSeamIdEdges(p.id, edges, outline.length)
       } else {
-        bySlot[placement].push({ id: p.id, label })
-        for (const e of deriveTorsoEdgeInstructions(outline, { includeTop: placement === 'frontPanel' || placement === 'backPanel' })) pushEdge(p.id, e.name, e.from, e.to)
+        // WP-61 code-review fix: this used to be an EITHER/OR — a piece
+        // in one of the 4 bySlot slots got only the geometric front-to-
+        // back seam, anything else got only pushSeamIdEdges. But those
+        // are different RELATIONSHIPS, not alternatives for the same
+        // one: a front body panel legitimately needs BOTH its ordinary
+        // front-to-back seam (bySlot, unchanged) AND its own declared
+        // `edges` seams to something else entirely (e.g. a leg-opening
+        // binding strip's own attach edge) — a leotard's front/back body
+        // is exactly this case. Only bySlot placements get the
+        // geometric seam (accessory placements have no bySlot
+        // counterpart to seam against at all); every cutOnFold piece's
+        // own declared `edges` now always goes through pushSeamIdEdges,
+        // regardless of which placement it has.
+        if (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack') {
+          const geo = deriveTorsoEdgeInstructions(outline, { includeTop: placement === 'frontPanel' || placement === 'backPanel', necklineEndIdx, sideEndIdx })
+          // Code-review fix: a genuinely tiny outline can leave
+          // deriveTorsoEdgeInstructions unable to produce a real,
+          // non-degenerate rightSide/leftSide (see that function's own
+          // comment) — only register this piece into bySlot (which the
+          // "Front/back seams" loop below unconditionally assumes has
+          // BOTH real edges to reference) when it actually got both.
+          // Otherwise this piece is simply too small for the geometric
+          // heuristic to seam automatically — placed, not auto-seamed,
+          // same honest outcome an accessory role gets, not a crash.
+          if (geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
+            bySlot[placement].push({ id: p.id, label })
+            for (const e of geo) pushClaimedEdge(p.id, e.name, e.from, e.to, outline.length)
+          }
+        }
+        pushSeamIdEdges(p.id, edges, outline.length)
       }
       recognized.push({ id: p.id, label })
       continue
@@ -299,16 +527,26 @@ export function convertAppPattern(payload) {
       roles[rId] = placement
       roles[lId] = placement
       if (edges && edges.length && !UNSEAMED_BILATERAL_ROLES.has(schemaRole)) {
+        const mirrored = mirrorEdgeIndices(edges, n)
         edges.forEach((e, i) => {
           const edgeName = `seam${i}`
           pushEdge(rId, edgeName, e.fromIdx, e.toIdx)
-          ;(seamIdEdges[e.seamId + '_R'] ||= []).push({ pieceId: rId, fromIdx: e.fromIdx, toIdx: e.toIdx })
-        })
-        const mirrored = mirrorEdgeIndices(edges, n)
-        mirrored.forEach((e, i) => {
-          const edgeName = `seam${i}`
-          pushEdge(lId, edgeName, e.fromIdx, e.toIdx)
-          ;(seamIdEdges[edges[i].seamId + '_L'] ||= []).push({ pieceId: lId, fromIdx: e.fromIdx, toIdx: e.toIdx })
+          pushEdge(lId, edgeName, mirrored[i].fromIdx, mirrored[i].toIdx)
+          if (e.mirrorSelf) {
+            // WP-59: a piece whose own bilateral R/L copies meet each
+            // other directly (a trouser leg's inseam forming the crotch
+            // seam, front-left-leg to front-right-leg — not a seam to a
+            // DIFFERENT declared piece, which is what seamId cross-
+            // matching below is for). Wired directly rather than routed
+            // through seamIdEdges — that dict pairs contributors from
+            // two DIFFERENT calls to convertAppPattern's per-piece loop;
+            // an R/L pair from the SAME piece never needs a second
+            // declared edge anywhere else to pair against.
+            seamInstructions.push({ id: `${p.id}_mirror${i}`, a: { piece: rId, edge: edgeName }, b: { piece: lId, edge: edgeName }, reverse: true })
+          } else if (e.seamId) {
+            ;(seamIdEdges[e.seamId + '_R'] ||= []).push({ pieceId: rId, fromIdx: e.fromIdx, toIdx: e.toIdx })
+            ;(seamIdEdges[e.seamId + '_L'] ||= []).push({ pieceId: lId, fromIdx: mirrored[i].fromIdx, toIdx: mirrored[i].toIdx })
+          }
         })
       }
       recognized.push({ id: rId, label: label + ' (R)' })
@@ -319,13 +557,34 @@ export function convertAppPattern(payload) {
     // Plain single piece — front-panel/back-panel/hip-panel-* not on fold
     // (e.g. an asymmetric jacket front), or a decorative attach-only role
     // (collar/cuff/pocket/facing/waistband/sash/yoke/peplum/tier/cape/lining/
-    // other) — placed via its role's placement family, not auto-seamed.
+    // other). The 4 bySlot placements get a real geometric front-to-back
+    // seam below — same as every other branch above (WP-61: this and the
+    // cutOnFold branch used to treat "gets the bySlot seam" and "consumes
+    // its own declared edges" as mutually exclusive; they're not — a
+    // front/back panel can legitimately need BOTH at once, e.g. its
+    // ordinary front-to-back seam AND a separate accessory (a binding
+    // strip, a gusset) attaching to one of its OTHER edges via seamId).
+    // A declared `edges` seamId on ANY placement (an attach-only
+    // accessory to its real attachment point on a body panel — WP-59's
+    // whole point) now always goes through the SAME pushSeamIdEdges
+    // every other branch uses, instead of unconditionally "not
+    // auto-seamed" the way this comment used to read before that piece
+    // could actually declare a real one.
     rawPieces.push({ id: p.id, label: p.label, outline: local, color: p.color })
     roles[p.id] = placement
     if (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack') {
-      bySlot[placement].push({ id: p.id, label })
-      for (const e of deriveTorsoEdgeInstructions(local, { includeTop: placement === 'frontPanel' || placement === 'backPanel' })) pushEdge(p.id, e.name, e.from, e.to)
+      // See the cutOnFold branch's own matching comment: only register
+      // into bySlot when the geometric derivation actually produced
+      // both a real rightSide and a real leftSide (a genuinely tiny
+      // outline can't always) — never a piece the later seam-forming
+      // loop assumes has an edge that was never pushed.
+      const geo = deriveTorsoEdgeInstructions(local, { includeTop: placement === 'frontPanel' || placement === 'backPanel' })
+      if (geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
+        bySlot[placement].push({ id: p.id, label })
+        for (const e of geo) pushClaimedEdge(p.id, e.name, e.from, e.to, local.length)
+      }
     }
+    pushSeamIdEdges(p.id, edges, local.length)
     recognized.push({ id: p.id, label })
   }
 

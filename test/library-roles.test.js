@@ -18,15 +18,16 @@ void FancyGen; // side-effect import only
 // than silently loosening the vocabulary or guessing a role for a piece
 // that doesn't declare one.
 //
-// This is the exact 51-value list from cloth-lab/src/pattern/roles.js /
+// This is the exact 53-value list from cloth-lab/src/pattern/roles.js /
 // schema/pattern-spec.v1.json's live-piece equivalent (docs/plan 4.md
-// §4.2's original 46, plus 5 added in Phase 4/WP-53 — see below) — kept
-// as a literal copy, not an import, because cloth-lab is a separate
-// build-based package the build-free root app cannot import from (same
-// reasoning as js/pattern-flat.js's unfoldPiece). If this list and
-// cloth-lab/src/pattern/roles.js's own vocabulary ever diverge, that's a
-// real bug this test can't see — cloth-lab/src/pattern/roles.test.js is
-// the source of truth on the cloth-lab side.
+// §4.2's original 46, plus 5 added in Phase 4/WP-53, plus 2 added in
+// Phase 5/WP-59 — see below) — kept as a literal copy, not an import,
+// because cloth-lab is a separate build-based package the build-free
+// root app cannot import from (same reasoning as js/pattern-flat.js's
+// unfoldPiece). If this list and cloth-lab/src/pattern/roles.js's own
+// vocabulary ever diverge, that's a real bug this test can't see —
+// cloth-lab/src/pattern/roles.test.js is the source of truth on the
+// cloth-lab side.
 //
 // Phase 4 (WP-53) added cup/band/strap/elastic-band/gusset: js/underwear-
 // library.js declared these 5 roles from day one, but none were ever
@@ -38,6 +39,15 @@ void FancyGen; // side-effect import only
 // properly instead (roles.js + schema/pattern-spec.v1.json, per §4.2's
 // own instructions for a genuinely new role), not remapped to a
 // misleading existing name.
+//
+// Phase 5 (WP-59) added trouser-front/trouser-back: js/fancy-patterns.js's
+// trouserPanel() (~24 pieces, 12 patterns) declared role:"other" — the
+// small-accessory placement, never auto-seamed — because no role in the
+// 51-value vocabulary meant "a leg panel," and cloth-lab genuinely had no
+// 3D leg-placement logic until this WP added one (placement.js's
+// placeLegPanel(), a real new placement family, not a repurposed
+// existing one — the same "prefer reusing an existing role" test §4.2
+// already failed for cup/band/strap/elastic-band/gusset above).
 const ROLE_VOCABULARY = new Set([
   'front-panel', 'back-panel', 'hip-panel-front', 'hip-panel-back', 'sleeve',
   'brief-front', 'brief-back',
@@ -49,6 +59,7 @@ const ROLE_VOCABULARY = new Set([
   'peplum-front', 'peplum-back', 'sash', 'wrap-tie', 'belt', 'waistband',
   'godet', 'tier', 'pocket', 'facing', 'lining', 'cuff', 'rib-cuff', 'hem-band',
   'cup', 'band', 'strap', 'elastic-band', 'gusset',
+  'trouser-front', 'trouser-back',
   'other',
 ]);
 
@@ -70,7 +81,7 @@ const ROLE_VOCABULARY = new Set([
 const KNOWN_INVALID_ROLE_COUNTS = { 'cape-sleeve': 2 };
 const BASELINE = { total: 2170, valid: 2166, none: 2, roleslessPatterns: 1 };
 
-test('every declared piece role is in the 51-value vocabulary, except the two documented pre-existing exceptions', () => {
+test('every declared piece role is in the 53-value vocabulary, except the two documented pre-existing exceptions', () => {
   const ids = Object.keys(PATTERNS);
   let total = 0, valid = 0, none = 0;
   const rolelessPatterns = new Set();
@@ -93,7 +104,7 @@ test('every declared piece role is in the 51-value vocabulary, except the two do
   console.log(`  role coverage: ${valid}/${total} valid, ${none} roleless (${rolelessPatterns.size} patterns), invalid: ${JSON.stringify([...invalidRoles])}`);
 
   if (unexpectedInvalid.length > 0) {
-    throw new Error(`piece(s) declare a role outside the 46-value vocabulary that isn't one of the documented pre-existing exceptions:\n  ${unexpectedInvalid.join('\n  ')}`);
+    throw new Error(`piece(s) declare a role outside the 53-value vocabulary that isn't one of the documented pre-existing exceptions:\n  ${unexpectedInvalid.join('\n  ')}`);
   }
   for (const [role, expectedCount] of Object.entries(KNOWN_INVALID_ROLE_COUNTS)) {
     const actual = invalidRoles.get(role) || 0;
