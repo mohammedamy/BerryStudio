@@ -6,6 +6,52 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-68: add a lint step to CI — every "zero new oxlint warnings" claim in this project's history had been manual, never enforced
+
+`BerryStudio-Upgrade-Plan-v5.md` WP-68. `.github/workflows/deploy-pages.yml`
+runs the root `node --test` suite and `cloth-lab`'s vitest suite, gating
+deploy — but had no `oxlint` step at all. Every single WP in `CHANGELOG.md`
+that mentions "zero new oxlint warnings" (nearly all of them) was a manual
+`npx oxlint <files>` run by hand, each session, with nothing automated
+backing it up.
+
+### Changed
+- Added `oxlint` (`^1.71.0`, matching `cloth-lab/package.json`'s own pinned
+  version — kept the two independent, not merged into one shared
+  dependency, matching how root and `cloth-lab` already have entirely
+  separate `package.json`/lockfiles/`npm ci` steps for tests) as a root
+  devDependency, with a new `"lint": "oxlint js"` script — root didn't have
+  any lint script or oxlint dependency before this; every prior lint check
+  in this project's history ran via `npx oxlint`'s on-the-fly, unpinned
+  install.
+- Added two CI steps to the existing `test` job: `npm run lint` (root,
+  right after the root unit tests) and `npm run lint` in `cloth-lab/`
+  (right after its own vitest step, reusing its pre-existing `"lint":
+  "oxlint"` script — that one already existed, just was never wired into
+  CI).
+- **Deliberately not failing the build on the 101 pre-existing warnings**
+  (confirmed count, 26 August 2026, across both `js/` and `cloth-lab/src/`
+  — none are `error`-severity, `oxlint`'s own default already only fails
+  the process on those) — cleaning up a backlog that size is its own
+  separate WP, not something to fold silently into "add a CI step." This
+  step passes today as a real, honest reflection of the current codebase,
+  and will only ever fail CI on something genuinely new. Tightening it
+  further (`--deny-warnings`, or a warning-count ratchet) once that backlog
+  is addressed is a real, explicitly-named follow-up, not assumed or done
+  here — matching this project's own "explicit, not silent" convention for
+  exactly this kind of scoping decision.
+
+### Verification
+- `npm run lint` (root): exit 0, 92 pre-existing warnings printed, zero
+  errors.
+- `npm run lint` (cloth-lab): exit 0, 9 pre-existing warnings printed,
+  zero errors.
+- `npm test` (root): 299/299. `cloth-lab` `npx vitest run`: 778/778 — both
+  unaffected by the devDependency/lockfile change.
+- Workflow YAML change only adds steps to the existing, already-passing
+  `test` job — no change to its trigger conditions, permissions, or the
+  downstream `build`/`deploy` jobs.
+
 ## WP-66: wire `js/underwear-library.js` into the permanent validator sweep — 44 real patterns were never actually covered by CI
 
 `BerryStudio-Upgrade-Plan-v5.md`'s own first item: `test/validate-library.test.js`

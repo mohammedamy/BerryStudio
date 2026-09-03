@@ -86,12 +86,32 @@ jobs:
       - name: Root unit tests (node --test)
         run: npm test
 
+      # WP-66/68 (BerryStudio-Upgrade-Plan-v5.md): every "zero new oxlint
+      # warnings" claim across this project's history (see CHANGELOG.md) had
+      # been manual, hand-run diligence with no automated backstop — a
+      # regression could ship silently if a session skipped the habit.
+      # `oxlint`'s own default behaviour only fails the process on
+      # error-severity findings, not warnings — this repo currently carries
+      # 101 pre-existing warnings (confirmed 26 August 2026; none are
+      # errors), so this step passes today without requiring that backlog
+      # cleaned up first, and only ever fails CI on something genuinely new
+      # and more serious than the accepted baseline. Tightening this to also
+      # fail on warnings (oxlint's own `--deny-warnings`, or a warning-count
+      # ratchet) is a real, separate follow-up once that backlog is
+      # addressed — not done here, and deliberately not silently assumed.
+      - name: Lint (root app)
+        run: npm run lint
+
       - name: Install cloth-lab dependencies
         run: npm ci
         working-directory: cloth-lab
 
       - name: cloth-lab unit tests (vitest)
         run: npm test
+        working-directory: cloth-lab
+
+      - name: Lint (cloth-lab)
+        run: npm run lint
         working-directory: cloth-lab
 
       # The Playwright smoke suite serves the repo root directly (no build
