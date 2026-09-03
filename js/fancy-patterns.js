@@ -666,30 +666,127 @@ export let FancyGen;
     const sideBulge = qc * 0.15, sideInset = qc * 0.15;
     const midY = (armY + len) / 2;
 
+    // BerryStudio-Upgrade-Plan-v5.md WP-43 continued: before this, `back`
+    // and `front` both jumped straight from the neck/closure point into
+    // one combined shoulder+armhole curve (backSeg/frontSeg1 below,
+    // unchanged) — there was no distinct neckline curve anywhere in this
+    // construction for a collar/collar-stand/lapel-facing piece to
+    // actually seam to, confirmed by direct measurement: those pieces'
+    // own neck-attaching edges came out 1.8x-2.5x longer than anything
+    // in this function, because there was no real curve to compare them
+    // against in the first place, not a length mismatch to tune away.
+    // Adds a small, real, size-scaled neckline curve ahead of the
+    // existing (unchanged) shoulder+armhole run on both panels — the
+    // necessary first step before a collar can be seamed here at all.
+    // Matching the collar/lapel-facing functions' own neck edge to THESE
+    // new curves by construction (the same "same curve, not just a
+    // similar one" discipline WP-58 used for jacketSide/trouserOutseam)
+    // is real, separate follow-up work — not attempted in this pass; see
+    // this WP's own CHANGELOG entry for why.
+    //
+    // A first draft started this curve directly at the piece's own true
+    // fold point (X=0) — real drafting, but it broke checkFoldSymmetry on
+    // every back panel (and a couple of near-symmetric fronts): that
+    // check flags any point within 2% of the piece's own width of its
+    // min-X whose deviation exceeds a much tighter ~0.5%-of-width
+    // tolerance, and a smooth curve leaving X=0 necessarily passes
+    // through that gap — confirmed directly (the reported ~0.3-0.46cm
+    // deviations matched a hand-derived first-bezier-sample calculation
+    // almost exactly, not a fluke). Real patternmaking already has a
+    // conventional answer for this: a very short straight extension at
+    // the true center point before the neckline curve proper begins —
+    // `neckLeadIn` is exactly that, sized comfortably past the check's
+    // own detection window at every size this function drafts for (it
+    // scales with `qc` the same way the check's own tolerance does, so
+    // the margin holds across sizes, not just the one this was tuned
+    // against) — genuinely curved for the rest of the neckline, not a
+    // straight-line neckline in violation of this rebuild's own §7.1
+    // standard.
+    const neckLeadIn = qc * 0.03;
+
+    const backNeckW = qc * 0.08;
+    const backNeckSeg = [[neckLeadIn, 0.3], [backNeckW * 0.6, -1], [backNeckW, 1.5]];
+    const backNeckPts = qBez(...backNeckSeg, 3);
+    // Shift every downstream index by however many points [0,0] + the
+    // lead-in point + the neck curve itself actually occupy, computed
+    // from the real array lengths rather than a hand-counted literal —
+    // the exact class of mismatch a hand-counted constant already
+    // produced once while this was being tuned (caught by
+    // test/fancy-patterns-curves.test.js re-sampling the claimed curves
+    // against the real outline before this shipped).
+    const backNeckShift = 2 + backNeckPts.length;
+
     const backSeg = [[underarmX, armY], [underarmX + sideBulge, midY], [hemW, len]];
     const back = [
-      [0, 0], [underarmX, armY],
+      [0, 0], [neckLeadIn, 0.3],
+      ...backNeckPts,
+      [underarmX, armY],
       ...qBez(...backSeg, 8),
       [0, len],
     ];
-    withCurves(back, [{ fromIdx: 1, toIdx: 9, ...qBezToCubic(...backSeg) }]);
-    back.edges = [{ fromIdx: 1, toIdx: 9, seamId: 'jacketSide' }];
+    withCurves(back, [
+      { fromIdx: 1, toIdx: backNeckShift - 1, ...qBezToCubic(...backNeckSeg) },
+      { fromIdx: backNeckShift, toIdx: backNeckShift + 8, ...qBezToCubic(...backSeg) },
+    ]);
+    back.edges = [
+      { fromIdx: 0, toIdx: backNeckShift - 1, seamId: 'jacketBackNeck' },
+      { fromIdx: backNeckShift, toIdx: backNeckShift + 8, seamId: 'jacketSide' },
+    ];
+
+    // The front's own neckline curve reuses the EXISTING [closureX, 4]
+    // point as its own endpoint (frontSeg1's own p0, unchanged) rather
+    // than introducing a second, independent size constant — [closureX,
+    // 4] already IS "how far this design's own front opening sits from
+    // center," so the new curve is proportional to each call site's own
+    // existing style (a wider closureX naturally reads as a wider neck
+    // area too) instead of a fixed guess. `neckLeadIn` (qc*0.03) stays
+    // safely under every real closureX this function is ever called with
+    // (the smallest across all 44 call sites is qc*0.05) so there's
+    // always real room for a genuine curve between the lead-in point and
+    // the closure point, not just a duplicate of it.
+    const frontNeckSeg = [[neckLeadIn, 0.3], [closureX * 0.5, 0], [closureX, 4]];
+    const frontNeckPts = qBez(...frontNeckSeg, 3);
+    // Same reasoning as backNeckShift above — derived from the real array
+    // length, not hand-counted.
+    const frontNeckShift = 2 + frontNeckPts.length;
 
     const frontUnderarmX = underarmX - sideInset, frontHemX = hemW - sideInset;
     const frontSeg1 = [[closureX, 4], [qc * 0.42, armY * 0.45], [frontUnderarmX, armY]];
     const frontSeg2 = [[frontUnderarmX, armY], [frontUnderarmX + sideBulge, midY], [frontHemX, len]];
+    // The hem/closing corners were always closureX*0.3, not 0 — a real,
+    // deliberate closure-overlap allowance, unrelated to the neckline
+    // work above. It stayed safe by accident before this pass: it used
+    // to BE the piece's own min-X (checkFoldSymmetry saw only these two
+    // points near the fold, both at the exact same X, trivially
+    // "straight"). Adding a true center point at true 0 above changed
+    // that — for the smallest closureX values this function is called
+    // with (0.05-0.06 * qc, `mf14`/`bf13`'s Kandura and Vest fronts),
+    // closureX*0.3 lands in the same "close to the new min-X but not
+    // exactly on it" gap the neckline curve itself had to route around,
+    // caught the same way (checkFoldSymmetry, not assumed). Floored at
+    // `neckLeadIn` for the same reason it works there: comfortably past
+    // the check's own detection window at every size, while leaving it
+    // completely unchanged for every call site where it was already
+    // safe (the max() only ever raises it, never lowers a value that
+    // was already fine).
+    const closeX = Math.max(closureX * 0.3, neckLeadIn);
     const front = [
-      [closureX, 4],
+      [0, 0], [neckLeadIn, 0.3],
+      ...frontNeckPts,
       ...qBez(...frontSeg1, 7),
       ...qBez(...frontSeg2, 7),
-      [closureX*0.3, len],
-      [closureX*0.3, 8],
+      [closeX, len],
+      [closeX, 8],
     ];
     withCurves(front, [
-      { fromIdx: 0, toIdx: 7, ...qBezToCubic(...frontSeg1) },
-      { fromIdx: 7, toIdx: 14, ...qBezToCubic(...frontSeg2) },
+      { fromIdx: 1, toIdx: frontNeckShift - 1, ...qBezToCubic(...frontNeckSeg) },
+      { fromIdx: frontNeckShift - 1, toIdx: frontNeckShift - 1 + 7, ...qBezToCubic(...frontSeg1) },
+      { fromIdx: frontNeckShift - 1 + 7, toIdx: frontNeckShift - 1 + 14, ...qBezToCubic(...frontSeg2) },
     ]);
-    front.edges = [{ fromIdx: 7, toIdx: 14, seamId: 'jacketSide' }];
+    front.edges = [
+      { fromIdx: 0, toIdx: frontNeckShift - 1, seamId: 'jacketFrontNeck' },
+      { fromIdx: frontNeckShift - 1 + 7, toIdx: frontNeckShift - 1 + 14, seamId: 'jacketSide' },
+    ];
     return { front, back };
   }
   // Simple gore/panel for a paneled or A-line skirt, gently curved side seam.
