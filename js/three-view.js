@@ -427,6 +427,27 @@ export const View3D = (() => {
     dz -= glute.amplitude * bumpWindow(y, glute.centerY, glute.halfWidth) * backWeight;
     return dz;
   }
+  // WP-70 (BerryStudio-Upgrade-Plan-v5.md), direct port of cloth-lab/src/
+  // body/torsoSculpt.js's own maleTorsoSculpt()/maleTorsoZBump() — a
+  // subtler, single-lobe (not two) version of the same asymmetry for
+  // adult male bodies.
+  function maleTorsoSculpt(d) {
+    const { hipY, span, chestR, waistR, hipR } = d;
+    return {
+      chest: { centerY: hipY + span * 0.72, halfWidth: span * 0.13, amplitude: chestR * 0.05, phiHalfWidth: 0.7 },
+      lumbar: { centerY: hipY + span * 0.38, halfWidth: span * 0.12, amplitude: waistR * 0.06 },
+      glute: { centerY: hipY - span * 0.02, halfWidth: span * 0.10, amplitude: hipR * 0.08 },
+    };
+  }
+  function maleTorsoZBump(y, phi, d) {
+    const { chest, lumbar, glute } = maleTorsoSculpt(d);
+    let dz = 0;
+    dz += chest.amplitude * bumpWindow(y, chest.centerY, chest.halfWidth) * bumpWindow(phi, 0, chest.phiHalfWidth);
+    const backWeight = Math.max(0, -Math.cos(phi));
+    dz += lumbar.amplitude * bumpWindow(y, lumbar.centerY, lumbar.halfWidth) * backWeight;
+    dz -= glute.amplitude * bumpWindow(y, glute.centerY, glute.halfWidth) * backWeight;
+    return dz;
+  }
   // Builds the torso the same way lathe() does, then bakes in the Z
   // flatten (instead of leaving it as a mesh-level scale.z) and, for adult
   // female bodies, displaces each vertex by torsoZBump() — see that
@@ -440,7 +461,9 @@ export const View3D = (() => {
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), y = pos.getY(i), zRaw = pos.getZ(i);
       let z = zRaw * zScale;
-      if (female && !kid) z += torsoZBump(y, Math.atan2(x, zRaw), dims);
+      const phi = Math.atan2(x, zRaw);
+      if (female && !kid) z += torsoZBump(y, phi, dims);
+      else if (!female && !kid) z += maleTorsoZBump(y, phi, dims);
       pos.setZ(i, z);
     }
     pos.needsUpdate = true;

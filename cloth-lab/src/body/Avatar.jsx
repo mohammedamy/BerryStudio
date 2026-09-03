@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
 import { torsoProfile, armProfile, legProfile } from './computeBodyDims'
-import { torsoZBump } from './torsoSculpt'
+import { torsoZBump, maleTorsoZBump } from './torsoSculpt'
 
 // A simplified but proportionally-faithful port of the production app's
 // procedural avatar (js/three-view.js buildProcedural): lathed-torso +
@@ -141,6 +141,10 @@ export default function Avatar({ dims, skinColor = '#e3b08c', pose = 'standing' 
   // sculpt's own Z deltas are added in real, already-flattened meters —
   // matching what torsoSculpt.js's femaleTorsoExtraRadius assumes when
   // sizing collisionRig.js's safety margin.
+  // WP-70: adult male bodies get the same treatment, subtler and with a
+  // single chest lobe instead of two (maleTorsoZBump) — kids of either
+  // sex are left exactly as before, same `!kid` gate the female sculpt
+  // already used.
   const torsoGeometry = useMemo(() => {
     const geo = new THREE.LatheGeometry(torsoPts, 32)
     const zScale = female ? 0.72 : 0.78
@@ -151,6 +155,7 @@ export default function Avatar({ dims, skinColor = '#e3b08c', pose = 'standing' 
       const zRaw = pos.getZ(i)
       let z = zRaw * zScale
       if (female && !kid) z += torsoZBump(y, Math.atan2(x, zRaw), dims)
+      else if (!female && !kid) z += maleTorsoZBump(y, Math.atan2(x, zRaw), dims)
       pos.setZ(i, z)
     }
     pos.needsUpdate = true
