@@ -536,6 +536,52 @@ test('window.BerryStudio.export()/generate() are gated — reject when signed ou
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
 
+// BerryStudio-Upgrade-Plan-v5.md WP-45: `docs/plan 4.md` §8 gate #15 asks
+// for real, verified exports across SVG/DXF/HPGL/PNG/tiled-PDF — SVG/DXF/
+// HPGL/PDF all already have direct node --test coverage
+// (test/pattern-export.test.js), but PNG never did, anywhere, before this.
+// `js/canvas.js`'s own exportRaster() comment already explains why it
+// can't be: it needs a real DOM (Image/canvas/Blob), same reason this
+// suite exists at all rather than a pure Node test. Calls
+// `Canvas.exportRaster` directly (not `window.BerryStudio.export('png')`)
+// for the same reason the SVG smoke test above calls `Canvas.exportSVG`
+// directly — WP-42 Stage B gates the BerryStudio facade behind a real
+// entitlement check this unauthenticated suite can't satisfy (see the
+// gating test just above), and that gate is already covered there; this
+// test is about the raster PATH actually producing a real image, not
+// about re-proving the gate.
+test('PNG export (Canvas.exportRaster) produces a real, correctly-sized PNG', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+
+  await page.goto('/index.html');
+  await dismissOnboarding(page);
+  await expect(page.locator('#patternCanvas')).toBeVisible();
+
+  const result = await page.evaluate(async () => {
+    const res = await window.Canvas.exportRaster('png', 72);
+    if (!res) return { ok: false, reason: 'exportRaster returned null (no pieces loaded?)' };
+    const buf = await res.blob.arrayBuffer();
+    const bytes = new Uint8Array(buf).slice(0, 8);
+    // The real PNG file signature (89 50 4E 47 0D 0A 1A 0A) — checked
+    // byte-for-byte, not inferred from the Blob's own self-reported MIME
+    // type, so a mis-encoded raster (the SVG rasterized as something else,
+    // or a truncated/corrupt buffer) fails this test even if `res.blob.
+    // type` still claims "image/png".
+    const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    const signatureMatches = PNG_SIGNATURE.every((b, i) => bytes[i] === b);
+    return { ok: true, type: res.blob.type, size: res.blob.size, dpi: res.dpi, signatureMatches };
+  });
+
+  expect(result.ok, result.reason).toBe(true);
+  expect(result.type).toBe('image/png');
+  expect(result.signatureMatches, 'first 8 bytes are not the real PNG file signature').toBe(true);
+  expect(result.size).toBeGreaterThan(100); // a real rasterized pattern, not an empty/degenerate image
+  expect(result.dpi).toBeGreaterThan(0);
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});
+
 // BerryStudio-Upgrade-Plan WP-17: accessibility & UX. Two independent checks
 // in one test — the canvas's new keyboard operations (cycle/nudge/delete a
 // selected piece), and modal focus management (focus moves in on open,

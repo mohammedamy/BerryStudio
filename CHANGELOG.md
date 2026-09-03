@@ -6,6 +6,87 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-45: verification sweep — closes 4 of 5 items, and finds a real bug along the way
+
+`BerryStudio-Upgrade-Plan-v5.md` WP-45's five-item checklist, none of
+which had ever been run as a real, permanent, automated pass before this.
+
+### Fixed
+- **A real, previously-invisible defect, found by the sweep this WP added
+  (not hypothesized):** `js/underwear-library.js`'s `briefPanel()` declares
+  its own `briefSide` seam edge (WP-58) — but never the matching
+  `sideEndIdx` hint (the mechanism WP-64/65 built specifically to prevent
+  this class of collision elsewhere), so cloth-lab's importer's own
+  auto-derived geometric side seam swallowed the SAME index range,
+  throwing `"seamId_briefSide" overlaps existing edge "rightSide"` on
+  every one of the 24 brief/trunk patterns the instant they were actually
+  run through the real import pipeline for the first time. `sideEndIdx: 6`
+  added to both the front and back brief panel (a structural constant —
+  the waist curve is always exactly 6 `qBez` samples regardless of any
+  call site's own options) fixes it at the source.
+
+### Added
+- `cloth-lab/src/pattern/importFromApp.underwear.test.js` and
+  `importFromApp.dataPatterns.test.js`: the same convert→seed→finalize→
+  triangulate→assemble pipeline "Simulate This Garment" runs, applied for
+  the first time to `js/underwear-library.js`'s 44 patterns and
+  `js/data.js`'s own 6 directly-registered patterns (`womens_dress`,
+  `mens_shirt`, `abaya`, `thobe`, `girls_dress`, `boys_trousers`) —
+  neither had ANY cloth-lab test coverage before this, unlike
+  `js/library.js`/`js/fancy-patterns.js`/`js/girls-leotards.js`, which
+  each already had their own sweep. All 308 patterns now import and
+  assemble through the real pipeline without throwing, permanently, in
+  CI — not just validated on paper (WP-66) but confirmed to actually
+  become real cloth-lab geometry.
+- `e2e/smoke.spec.js`: a new PNG export test. SVG/DXF/HPGL/tiled-PDF
+  already had real `node --test` coverage (`test/pattern-export.test.js`);
+  PNG had none anywhere — `js/canvas.js`'s own `exportRaster()` comment
+  already explains why it can't be Node-tested (needs a real DOM/canvas/
+  Blob). Verifies the actual PNG file signature byte-for-byte
+  (`89 50 4E 47 0D 0A 1A 0A`), not just the Blob's self-reported MIME
+  type — a mis-encoded raster would still claim `image/png` and pass a
+  weaker check.
+
+### Verified, not changed (already closed, confirmed by actually running them)
+- `window.BerryStudio`'s 5 documented methods (`generate`/`grade`/`nest`/
+  `export`/`validate`) already have real e2e coverage — confirmed
+  passing, no gaps found.
+- `test/library-thumbnails.test.js` (`docs/plan 4.md` §8 gate #13, "no
+  two patterns produce identical thumbnail SVG") already sweeps all 308
+  patterns and correctly excludes the 20 honestly-declined patterns
+  (shared fallback icon, not a real duplicate) from the comparison —
+  confirmed passing.
+- Thumbnail *generation* performance, measured directly: 32.5ms cold to
+  render all 308 SVG thumbnails from scratch, ~0ms warm (cache hits) —
+  confirms `docs/plan 4.md` §7.3's own caching requirement is both
+  implemented and actually effective. Proposed budget (none existed
+  before): under 50ms cold for the full library; met with real margin.
+
+### Honest gaps this pass leaves open (documented, not silently skipped)
+- **DOM-mount/paint cost of the actual library grid** — the in-app
+  Library panel is now behind the WP-42 entitlement gate; this pass had
+  no real account to measure it live with. Thumbnail generation itself
+  (the specifically-flagged risk) is measured and fast; grid layout/paint
+  cost is not.
+- **"Save Project → Import" JSON round-trip** — `projectPayload()`/
+  `applyProjectPayload()` are private to `js/app.js`'s own closure with
+  no reachable test surface; exercising it for real means a Playwright
+  download/re-upload flow, not attempted this pass.
+- **Cross-browser load** — confirmed clean in Chromium only (the
+  sandboxed dev pane, a real separate Chrome instance, and the full
+  Playwright e2e suite — 17/19 passing, the 2 failures pre-existing
+  documented flakiness per `playwright.config.js`'s own comment,
+  confirmed by re-running both in isolation where they passed). Firefox
+  and Safari are not available in this session's toolset at all.
+
+### Verification
+- `cloth-lab` `npx vitest run`: 830/830 (823 prior + 7 new).
+- `node --test "test/**/*.test.js"`: 301/301, no regressions.
+- `npx playwright test`: 17/19 (2 pre-existing flaky, confirmed
+  independently passing on isolated re-run).
+- `npx oxlint`: zero new warnings on any touched file.
+
+
 ## WP-43 continued: `jacketFrontBack()` gets a real neckline curve — the necessary first step before a collar can seam to it
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-43, the "single biggest remaining

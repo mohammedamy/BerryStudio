@@ -174,6 +174,24 @@ import { q, PATTERNS, LIBRARY } from './data.js';
       { fromIdx: 8, toIdx: 15, ...qBezToCubic(...legSeg) },
     ]);
     outline.edges = [{ fromIdx: 6, toIdx: 7, seamId: 'briefSide' }];
+    // BerryStudio-Upgrade-Plan-v5.md WP-45: cloth-lab's importer, with no
+    // sideEndIdx hint, auto-derives its own geometric 'rightSide'/
+    // 'leftSide' claim running all the way from just past the waist (index
+    // 1) down to the piece's own lowest point (the crotch/leg-opening
+    // corner) — which fully SWALLOWS this outline's own declared
+    // `briefSide` edge (index 6-7) rather than sharing a boundary with it,
+    // confirmed by direct reproduction: cloth-lab/src/pattern/
+    // importFromApp.underwear.test.js threw `"seamId_briefSide" overlaps
+    // existing edge "rightSide" at point 6` on all 24 brief/trunk patterns
+    // before this fix, not a hypothetical. `sideEndIdx` (the same
+    // mechanism WP-64/65 already added for exactly this class of
+    // collision elsewhere) narrows where that auto-derived claim ENDS to
+    // index 6 — exactly where `briefSide` begins — so the two no longer
+    // compete for the same points. Structural, not a per-call value: the
+    // waist curve is always exactly 6 qBez samples regardless of front/
+    // back or any opts, so index 6 is always the real waist-curve/corner
+    // boundary here.
+    outline.sideEndIdx = 6;
     return outline;
   }
   function briefPieces(m, opts) {
@@ -196,11 +214,11 @@ import { q, PATTERNS, LIBRARY } from './data.js';
       // of a fixed cm margin.
       { key: "front", name: { en: "Front Panel", ar: "القطعة الأمامية" },
         desc: { en: "Front panel with a curved waist edge and a curved leg opening.", ar: "قطعة أمامية بحافة خصر منحنية وفتحة ساق منحنية." },
-        outline: front, role: "brief-front", cutOnFold: true, edges: front.edges,
+        outline: front, role: "brief-front", cutOnFold: true, edges: front.edges, sideEndIdx: front.sideEndIdx,
         grain: [[qw * 0.15, frontLen * 0.2], [qw * 0.15, frontLen * 0.85]] },
       { key: "back", name: { en: "Back Panel", ar: "القطعة الخلفية" },
         desc: { en: "Back panel, cut higher at the waist and deeper at the crotch than the front for real seat coverage.", ar: "قطعة خلفية أعلى عند الخصر وأعمق عند خط الجسم من الأمامية لتغطية حقيقية للمقعد." },
-        outline: back, role: "brief-back", cutOnFold: true, edges: back.edges,
+        outline: back, role: "brief-back", cutOnFold: true, edges: back.edges, sideEndIdx: back.sideEndIdx,
         grain: [[qw * 0.15, backLen * 0.2], [qw * 0.15, backLen * 0.85]] },
       { key: "gusset", name: { en: "Crotch Gusset", ar: "دكة الجسم" },
         desc: { en: "Curved cotton-lining gusset seamed into the crotch, cut on the fold.", ar: "دكة قطنية منحنية تُخاط عند خط الجسم، تُقص على الطية." },
