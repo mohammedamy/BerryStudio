@@ -6,6 +6,80 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-43 continued: `shawlCollar()`/`lapelFacing()`/`collarStand()` redrafted so their own neck edge matches `jacketFrontBack()`'s real neckline arc by construction
+
+`BerryStudio-Upgrade-Plan-v5.md` WP-43's own "what's still open" note.
+The prior installment gave `jacketFrontBack()` a real, distinct neckline
+curve on `front`/`back` (`jacketFrontNeck`/`jacketBackNeck`) but
+deliberately stopped there — the ~30 collar/undercollar/collar-stand/
+collar-band/lapel-facing/placket-facing call sites across the Fancy
+Collection kept sizing themselves off `m.neck` (the body's raw neck
+circumference), a value with no real relationship to the curve they
+actually seam to. This closes that gap.
+
+### Changed
+- `js/fancy-patterns.js`:
+  - `jacketFrontBack()` now returns `frontNeckLen`/`backNeckLen` —
+    the real, measured arc length of each declared neckline edge
+    (`polylineArcLength()`, a straight sum of consecutive-point
+    distances — not re-derived from the constants that shaped the
+    curve). One side's `frontNeckLen + backNeckLen` is the real
+    whole-garment neckline arc a half-collar (cut on fold, or two
+    mirrored panels — both give the same total) actually seams to.
+  - `collarStand()`/`shawlCollar()`/`lapelFacing()` now take that real
+    arc length (`neckArc`) instead of `m.neck`, and size their own
+    neck-attaching edge to match it **exactly**: `lapelFacing()`'s
+    straight lead segment and `collarStand()`'s `stand` band both
+    invert in closed form (a straight line's own length has an exact
+    inverse); `shawlCollar()`'s curved neck edge is solved by bisection
+    (`solveArcLengthScale()`, 60 iterations against the curve's own
+    real sampled arc length — not a formula that merely approximates
+    it). `collarStand()`'s own curved `.collar` sub-piece shares the
+    same solved `h` as `.stand` (unchanged relationship) but isn't
+    independently arc-matched — a real, stated scope limit: `.stand`
+    is the piece that actually seams to the body at every call site in
+    this file, `.collar` seams to the top of `.stand` instead.
+  - 36 design blocks across the Fancy Collection — the 3 shared Quick
+    Draft jacket/coat/suit builders plus 33 named designs (`wf06/08/12/
+    14/16`, `mf01/02/03/05/06/07/08/09/11/12/13/14/15`, `gf13/16`,
+    `bf01/02/04/06/07/08/09/10/11/12/13/14/15`), ~68 individual
+    `shawlCollar()`/`lapelFacing()`/`collarStand()` calls in total — now
+    pass the real `frontNeckLen + backNeckLen` (scaled by
+    each design's own existing, unchanged style multiplier — a wider
+    storm collar is still ×1.05-1.15, a narrower placket facing still
+    ×0.5-0.7 — only the *baseline* they scale from changed) instead of
+    `m.neck`. Left unchanged, by design: the 7 patterns whose front
+    isn't built by `jacketFrontBack()` at all (`mf04`/`mf10`/`bf03`/
+    `bf16`'s sherwanis, `gf05`/`gf14`'s wrap-front coat-dresses,
+    `wf09`'s princess-bodice shirt collar) — there's no real neckline
+    curve there yet for these to match against; redrafting `wrapPanel`/
+    `wrapCoatBack`/`princessBodice`'s own neckline is real, separate,
+    future work, not assumed away.
+
+### Verification
+- New tests in `test/jacket-neckline.test.js` (4 new, alongside the 2
+  the prior installment added): `shawlCollar()`/`lapelFacing()`/
+  `collarStand()` each proven, directly against the real function (not
+  a re-derivation), to reproduce `jacketFrontBack()`'s own neckline arc
+  to floating precision across 3 sizes (XXS/M/6XL); a library-wide sweep
+  confirms every registered pattern's own collar/facing piece matches
+  its pattern's real neckline arc (times one of this file's own actual
+  per-design scale factors, never "close to something") — 25+ collar/
+  collar-stand pieces and 15+ lapel-facing/placket-facing pieces
+  checked, correctly skipping both `collarStand()`'s unmatched `.collar`
+  curve and this file's *other*, unrelated inline-literal neckline
+  facings (distinguished by their own fixed, real point count, not a
+  guess).
+- `node --test "test/**/*.test.js"`: 305/305 (301 prior + 4 new), no
+  regressions — the full `validate-library.test.js` sweep (0 fails,
+  313 verified cross-piece pairs) is unaffected, confirming the
+  resized collar/facing/stand pieces don't newly violate any check.
+- `cloth-lab` `npx vitest run`: 835/835, unchanged — this WP touched no
+  cloth-lab code, and the full 308-pattern Cloth Lab import sweep
+  (WP-45) still assembles every affected design without throwing.
+- `npx oxlint js`: zero new warnings on either touched file (confirmed
+  by name, not just an unchanged total).
+
 ## WP-71: a repo-scoped skill for closing out a work package
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-71. Every WP shipped across this
