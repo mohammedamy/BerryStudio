@@ -3,6 +3,7 @@ import { PATTERNS, computeMeasurements } from '../js/data.js';
 import '../js/library.js'; // side effect: adds the 94 catalogue entries to PATTERNS
 import '../js/girls-leotards.js'; // side effect: adds the 100-pattern Girls' Gymnastics Leotards collection
 import { FancyGen } from '../js/fancy-patterns.js'; // side effect: adds the 24 Fancy Collection entries
+import '../js/underwear-library.js'; // side effect: adds the 44-pattern Underwear & Bra Library
 import { run } from '../js/validate.js';
 
 void FancyGen; // imported for its module side effect, not used directly here
@@ -15,11 +16,25 @@ void FancyGen; // imported for its module side effect, not used directly here
 // before that. Deliberately does NOT assert every pattern passes every
 // check — several checks are explicitly heuristic or deferred (see
 // js/validate.js's own module comment) — it asserts the run completes
-// without throwing across all 224 patterns (100 from data.js+library.js
-// + 100 Girls' Gymnastics Leotards + 24 Fancy Collection) and prints an
-// honest summary of what it found. It DID find real things on the first
-// run — see README.md's Honest notes for WP-0.4 rather than treating a
-// clean run as the bar to hit.
+// without throwing across every registered pattern (308 as of WP-66 —
+// js/library.js + js/data.js's own hand-authored entries, the 100-pattern
+// Girls' Gymnastics Leotards collection, the 24-pattern Fancy Collection,
+// and the 44-pattern Underwear & Bra Library) and prints an honest
+// summary of what it found. It DID find real things on the first run —
+// see README.md's Honest notes for WP-0.4 rather than treating a clean
+// run as the bar to hit.
+//
+// WP-66: js/underwear-library.js was never imported here despite being a
+// real, shipped, 44-pattern/219-piece collection — CHANGELOG.md's WP-57/
+// 58 both describe "a full 308-pattern sweep" including it, but that was
+// a one-off script for that session's own reporting, never landed as a
+// change to this file. Added so a future underwear-library.js regression
+// (a bad notch, a dropped role, a self-intersecting curve) is actually
+// caught here instead of silently passing an incomplete sweep. The
+// pattern/piece counts in this comment (previously a stale "224
+// patterns," itself already wrong against the 264 the file actually swept
+// before this fix) were corrected in the same pass rather than left to
+// compound.
 test('validator runs cleanly over every pattern in the library, reports what it finds', () => {
   const ids = Object.keys(PATTERNS);
   console.log(`\n  Sweeping ${ids.length} patterns...`);
@@ -133,10 +148,17 @@ test('front/back pairs with a declared role are reported "Verified", not "Heuris
   if (missingVerification.length > 0) {
     throw new Error(`pattern(s) declare a real front/back role pair but validate.js didn't report it as Verified: ${missingVerification.join(', ')}`);
   }
-  // Confirmed baseline (2026-08-05): 148 verified across the 164-pattern
-  // library. A drop below that is a real regression in pairByRole or in a
-  // generator's declared roles, not noise.
-  if (verified < 148) {
-    throw new Error(`only ${verified} crossPiece pairs verified — expected at least 148 (regression of WP-25)`);
+  // Confirmed baseline (2026-08-05): 148 verified across the then-164-
+  // pattern library. Re-confirmed and raised (WP-66, 26 August 2026): now
+  // that this sweep actually includes js/underwear-library.js (see this
+  // file's own header), the true current baseline across all 308 patterns
+  // is 313 verified — a real, independently re-measured number (a
+  // standalone script mirroring this exact test's own counting logic),
+  // not carried forward from CHANGELOG.md prose. A drop below that is a
+  // real regression in pairByRole or in a generator's declared roles, not
+  // noise — raising this floor is only ever earned by counting a fresh,
+  // real run, never bumped to make a change go green.
+  if (verified < 313) {
+    throw new Error(`only ${verified} crossPiece pairs verified — expected at least 313 (regression of WP-25/WP-66)`);
   }
 });

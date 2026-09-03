@@ -6,6 +6,55 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-66: wire `js/underwear-library.js` into the permanent validator sweep — 44 real patterns were never actually covered by CI
+
+`BerryStudio-Upgrade-Plan-v5.md`'s own first item: `test/validate-library.test.js`
+— the one file `npm test` and CI actually run on every change — only ever
+imported `js/library.js`, `js/girls-leotards.js`, and `js/fancy-patterns.js`
+(264 patterns / 1,951 pieces). `js/underwear-library.js`'s 44 patterns / 219
+pieces were never registered when this test ran, despite this file's own
+prior WP-57/58 CHANGELOG entries both describing "a full 308-pattern /
+2,170-piece sweep" — that wider sweep was real, but it was a one-off script
+run for those sessions' own reporting, never landed as a change to the
+committed test file. A regression in any of the 44 underwear patterns (a
+bad notch, a dropped role, a self-intersecting curve) would have passed
+`npm test` and CI cleanly.
+
+### Fixed
+- `test/validate-library.test.js`: added `import '../js/underwear-library.js'`
+  alongside the other three collection imports — both tests in this file
+  share the same `Object.keys(PATTERNS)` sweep, so this one import line
+  brings the underwear collection into both.
+- The file's own header comment said "224 patterns" (100 + 100 + 24) — already
+  stale against the 264 it actually swept even before this fix (`js/data.js`'s
+  own hand-authored entries plus `js/library.js`'s 94 push the real
+  three-collection count past the comment's own math). Corrected to the real,
+  current counts (308 patterns / 2,170 pieces across all four collections)
+  rather than compounding the drift.
+- The `crossPiece pairs: N verified` regression floor (`front/back pairs...`
+  test) was hard-coded to `148`, confirmed 2026-08-05 against a
+  then-164-pattern library — stale on two counts (pattern count *and* the
+  number itself, since `pairByRole`'s own WP-58 fix already raised the true
+  three-collection baseline to 313 without anyone re-baselining this floor).
+  Re-measured fresh against the real, now-complete 308-pattern sweep
+  (independently, via a standalone script mirroring this test's own counting
+  logic, not by trusting CHANGELOG prose) and raised the floor to match: 313
+  verified, confirmed by this WP's own test run.
+
+### Verification
+- `node --test test/validate-library.test.js`: sweeps all 308 patterns now
+  (was 264) — `Sweeping 308 patterns...`, `crossPiece pairs: 313 verified,
+  105 heuristic, 81 unmatched`, 0 fails on every fail-capable check, both
+  tests pass.
+- `node --test "test/**/*.test.js"`: 299/299, no regressions elsewhere.
+- `npx oxlint test/validate-library.test.js`: zero warnings.
+- Independently re-derived the 308-pattern/313-verified numbers via a
+  standalone script (not committed — a throwaway verification aid) mirroring
+  this test file's own `run(pieces)`/`crossPiece.verified`/
+  `.label.includes('(unmatched)')` logic, to confirm the new regression
+  floor is a real, freshly-measured number and not copied from an older
+  session's own report.
+
 ## WP-65: pattern library rebuild, Phase 5 continued — a real princess-seam length mismatch in cloth-lab's own 3D construction, found while trying to add collar seaming
 
 Started as "seam a collar to the neckline" (the next accessory category
