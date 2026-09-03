@@ -811,6 +811,20 @@ export const AIGen = (() => {
         outline,
         role: "bodice-front-center", cutOnFold: true,
         grain: [[chestW * 0.4, 8], [chestW * 0.4, gLen - 8]],
+        // BerryStudio-Upgrade-Plan-v5.md WP-44: `p.shoulder` is this
+        // panel's own widest point (chestW at y=3, right where the neck
+        // curve ends) — the genuine chest-circumference edge, since the
+        // panel narrows immediately afterward toward `waistIn`. Real
+        // stretch performance fabric (this file's own `fit = 0.90`
+        // negative-ease constant already says so) — `stretchFabric: true`
+        // tells checkEase() to judge this against the real stretch-fabric
+        // floor, not the non-stretch "smaller than body = broken" one.
+        // Notched at chest level (`p.shoulder`) and waist level (`p.waist`)
+        // — the same dual bust/waist convention `princessPanel()` already
+        // established in js/pattern-builders.js.
+        stretchFabric: true,
+        chestEdgeIndices: [nl],
+        notches: [p.shoulder, p.waist],
         necklineEndIdx: p.neck.length - 1,
         // WP-61 (continued): `necklineEndIdx` alone only narrows where
         // cloth-lab's geometric side-seam claim STARTS — its far end
@@ -851,6 +865,13 @@ export const AIGen = (() => {
         outline: [...p.neck, p.shoulder, [chestW * 0.85, y2], [0, y1]],
         role: "yoke", cutOnFold: true,
         grain: [[chestW * 0.35, 3], [chestW * 0.35, Math.max(y1, y2) - 3]],
+        // WP-44: the split colour-block moves the true chestW vertex
+        // (`p.shoulder`) INTO this yoke piece — the lower "Front Body"
+        // piece below only reaches `chestW*0.85` at its own top edge, so
+        // the real chest-circumference hint belongs here, not there.
+        stretchFabric: true,
+        chestEdgeIndices: [p.neck.length],
+        notches: [p.shoulder],
         // WP-55: shoulder-to-y2 is the yoke's own side seam, shared with
         // leotardBackPieces' equivalent yoke edge — matches within ~1mm
         // already (confirmed across all colour-block styles), no
@@ -868,6 +889,13 @@ export const AIGen = (() => {
         outline: lowerOutline,
         role: "bodice-front-center", cutOnFold: true,
         grain: [[chestW * 0.4, Math.min(y1, y2) + 6], [chestW * 0.4, gLen - 8]],
+        // WP-44: no chestEdgeIndices here — the true chest vertex sits in
+        // the yoke piece above the split (see its own comment), and this
+        // panel's own top edge (chestW*0.85) would understate it, not a
+        // vertex worth hinting as "the" chest edge. Still real stretch
+        // fabric, and still worth a waist-level notch.
+        stretchFabric: true,
+        notches: [p.waist],
         sideEndIdx: 4,
         edges: [
           { fromIdx: 1, toIdx: 4, seamId: "leotardSide" },
@@ -936,6 +964,13 @@ export const AIGen = (() => {
         outline: [...top, armhole, waistIn, waist, hip, legPt, gusset, fold],
         role: "bodice-back-center", cutOnFold: true,
         grain: [[2, 8], [2, crotchY - 8]],
+        // WP-44: same reasoning as leotardFrontPieces' own unsplit case —
+        // `armhole` is this panel's own widest point, a real stretch-
+        // fabric chest edge; notched at chest level (`armhole`) and waist
+        // level (`waist`).
+        stretchFabric: true,
+        chestEdgeIndices: [top.length],
+        notches: [armhole, waist],
         necklineEndIdx: top.length - 1,
         // matches leotardFrontPieces' own 'sideEndIdx' reasoning (WP-61):
         // narrows where the geometric side-seam claim ENDS too, not just
@@ -965,6 +1000,12 @@ export const AIGen = (() => {
           outline: [...top, armhole, [chestW * 0.87, y2], [0, y1]],
           role: "yoke", cutOnFold: true,
           grain: [[chestW * 0.35, 3], [chestW * 0.35, Math.max(y1, y2) - 3]],
+          // WP-44: same reasoning as leotardFrontPieces' own split yoke —
+          // the true chest vertex (`armhole`) lives in this yoke piece,
+          // not the lower "Back Body" piece below the split.
+          stretchFabric: true,
+          chestEdgeIndices: [top.length],
+          notches: [armhole],
           // matches leotardFrontPieces' own 'leotardYokeSide' declaration
           edges: [
             { fromIdx: top.length, toIdx: top.length + 1, seamId: "leotardYokeSide" },
@@ -975,6 +1016,12 @@ export const AIGen = (() => {
           outline: [[0, y1], [chestW * 0.87, y2], waistIn, waist, hip, legPt, gusset, fold],
           role: "bodice-back-center", cutOnFold: true,
           grain: [[2, Math.min(y1, y2) + 6], [2, crotchY - 8]],
+          // WP-44: no chestEdgeIndices here, same reasoning as
+          // leotardFrontPieces' own split lower-body piece — the real
+          // chest vertex sits in the yoke above. Still real stretch
+          // fabric, still worth a waist-level notch.
+          stretchFabric: true,
+          notches: [waist],
           sideEndIdx: 4,
           edges: [
             { fromIdx: 1, toIdx: 4, seamId: "leotardSide" },
