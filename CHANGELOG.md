@@ -6,6 +6,57 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-44 (part 4): notch coverage for `underwear-library.js`'s briefs — and an honest architectural non-fit for `chestEdgeIndices` there, documented rather than forced
+
+`js/underwear-library.js` (44 patterns, 219 pieces) had 0% notch coverage
+and 0% `chestEdgeIndices` before this pass — the one collection part 2
+already fixed for cross-piece pairing (0%→92.3%) but hadn't touched for
+notches or ease.
+
+### Added
+- `briefPanel()`/`briefPieces()`: front and back panels (24 brief/trunk
+  patterns, 48 pieces) now declare a notch at `[cornerX, cornerY]` — the
+  far end of the panel's own already-declared `briefSide` seam edge (WP-58's
+  `fromIdx:6, toIdx:7`), the one real seam these two pieces are actually
+  sewn together at. Both notches sit exactly at their own seam's `toIdx`
+  endpoint, so `checkNotchAlignment`'s seam-relative arc position matches
+  by construction regardless of `cornerX` differing slightly front vs back
+  (it's translated by each side's own `waistX`, per the existing WP-58
+  comment on this function).
+
+### Deliberately NOT added: `chestEdgeIndices` on any brief piece
+A brief has no chest dimension at all — it's a waist/hip garment — so
+`checkEase`'s implied-full-chest math has nothing honest to measure on
+these pieces. Every brief piece correctly reports ease as "not
+applicable" rather than a fabricated pass. This is documented in code as
+an architectural non-fit, the same category as the hand-imported/
+princess-seamed/asymmetric-wrap exclusions `checkEase`'s own module
+comment already lists — not a coverage gap left to close later.
+
+### Bra pieces (cup/bridge/band/strap, sport bra) left untouched, on purpose
+Investigated but not changed this slice: a bra's cup/band/bridge pieces
+don't map onto the existing `chestEdgeIndices` convention as cleanly as a
+bodice or jacket panel does (none of them is a simple half-torso panel
+measured at its own fold), and the sport-bra front/back panels share no
+declared seam or arc-length parity check yet — forcing metadata onto
+either without first verifying the underlying geometry risked introducing
+new false positives rather than real coverage. Left as a real, named gap
+for a future slice rather than papered over.
+
+### Verification
+- `/tmp/wp44_failcheck.mjs` (full 308-pattern sweep): 0 fails.
+- `underwear-library.js` alone: notch coverage 0%→21.9% (48/219),
+  `chestEdgeIndices` unchanged at 0% (by design, see above).
+- Library-wide: notch coverage 33.2%→35.4% (720→768 of 2170),
+  `chestEdgeIndices`/pairing unchanged (16.5% / 67.5%) — this slice added
+  no chest hints or pairing metadata.
+- `node --test "test/**/*.test.js"`: 315/315, no regressions (the
+  existing library-wide sweep test already exercises the new notch
+  declarations by construction).
+- `cloth-lab` `npx vitest run`: 835/835, unchanged.
+- `npm run lint`: zero new warnings, zero errors.
+
+
 ## WP-44 (part 3): notch/ease coverage for `fancy-patterns.js`'s princess bodices and jacket fronts/backs — and a second real `checkNotchAlignment` false-positive family, fixed by correcting the metadata, not the checker
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-44's third slice: `js/fancy-patterns.js`
