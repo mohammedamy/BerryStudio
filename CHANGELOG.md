@@ -6,6 +6,106 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-44 (part 1): notch/ease authoring-scale gate closure begins with the single highest-leverage collection — Girls' Gymnastics Leotards — and finds and fixes a real false positive in `checkNotchAlignment` along the way
+
+`BerryStudio-Upgrade-Plan-v5.md` WP-44 — notch coverage ≥80%/ease-deferred
+≤20%/cross-piece-pairing ≥95% authoring-scale gates, explicitly flagged
+in the plan as "its own large, independent effort," not a single-pass
+fix. This installment scopes down to the single most tractable, highest-
+leverage slice: reconnaissance (§3.1-style fresh sweep, broken down per
+collection rather than library-wide) found `js/library.js` already
+reasonably instrumented (68.2% notch / 29.5% chestEdgeIndices) but
+`js/girls-leotards.js` — the single largest collection at 938 of the
+library's 2,170 pieces (43%) — completely uninstrumented (6.9% notch,
+0% chestEdgeIndices, from the Sleeve piece's own pre-existing notch
+alone). Its 100 patterns funnel through exactly two shared builder
+functions in `js/ai.js` (`leotardFrontPieces()`/`leotardBackPieces()`),
+the same "one shared function, many call sites" leverage WP-58 already
+proved out elsewhere — declaring real metadata there reaches all 100
+patterns at once, not 100 individual edits.
+
+### Added
+- `js/validate.js`: `checkEase()` now takes a `stretchFabric: true` hint.
+  `js/ai.js`'s own `fit = 0.90` negative-ease constant already says
+  leotards are drafted in real 4-way stretch performance fabric —
+  declaring `chestEdgeIndices` on those pieces WITHOUT this fix first
+  would have turned every leotard's live "Check Pattern" run into a
+  false FAIL (a finished chest smaller than the body is the correct,
+  intentional negative-ease design for stretch fabric, not the "cannot
+  physically close" defect the existing non-stretch floor correctly
+  flags it as for a woven bodice). `STRETCH_EASE_FLOOR_PCT` (65%) is a
+  real number from dancewear/activewear patternmaking convention — how
+  far real 4-way stretch knit comfortably negative-eases to before it's
+  actually a construction defect, not a style choice.
+- `js/ai.js`: `leotardFrontPieces()`/`leotardBackPieces()` now declare
+  `stretchFabric: true`, `chestEdgeIndices` (on whichever piece — body
+  or, in the colour-blocked case, the yoke above it — actually contains
+  the real full-chestW vertex; never guessed onto a piece that only has
+  a narrower one), and two notches apiece (chest-level + waist-level,
+  the same dual convention `princessPanel()` already established in
+  `js/pattern-builders.js`) across all 100 patterns' front/back/yoke
+  pieces.
+
+### Fixed — a real false positive, found by the sweep this WP's own notches triggered (not hypothesized)
+- Adding those two notches immediately turned up 10 real `fail`s across
+  the library (a leotard front's own neckline and a `lowscoop`/`racerback`-
+  style back's own "top" curve genuinely differ in length by design —
+  completely normal garment construction, e.g. an off-shoulder front
+  paired with a low-scoop-open back). `checkNotchAlignment`'s existing
+  method (a notch's position as a fraction of its OWN piece's whole
+  perimeter) shifts by that same difference for every point downstream
+  of it — including a notch sitting on a seam whose real length matches
+  the back's own to within 2.5mm (`checkSeamLengthParity`'s own already-
+  verified claim), a false positive of the comparison method, not an
+  un-sewable seam. Fixed at the root: `checkNotchAlignment()` now prefers
+  measuring a notch's position ALONG its own declared shared `seamId`
+  edge (`arcPositionWithinEdge()`, reusing `sharedSeamEdge()`/
+  `walkEdgeLength()` — the exact same "a real declared edge beats a
+  proxy" upgrade WP-58 already gave `checkSeamLengthParity`) when one
+  exists and the notch genuinely sits on it, falling back to the
+  original whole-piece fraction only when no matching seam is declared
+  (so every notch declared by an earlier WP, anywhere else in the
+  library, keeps its exact prior verdict, confirmed by the full sweep
+  below).
+
+### Verification
+- New tests: `test/validate.test.js` — 4 for the `stretchFabric` ease
+  branch (pass/warn/fail/deferred) and 6 for `checkNotchAlignment`
+  (`checkNotchAlignment` had NO dedicated test anywhere in this suite
+  before this WP, despite being one of `validate.js`'s own fail-capable
+  checks) — including one that first proves the whole-piece method's own
+  gap really does exceed its 5% tolerance (not a strawman) before
+  proving the seam-aware fix resolves it, and one proving genuinely
+  misaligned notches along the SAME declared seam still correctly fail
+  (the fix isn't toothless).
+- Fresh full-library sweep (a script mirroring `test/validate-library.test.js`'s
+  own counting logic, broken down per collection): `js/girls-leotards.js`
+  alone: notch 6.9%→35.7%, chestEdgeIndices 0%→21.3%. Library-wide:
+  notch 14.9%→27.4%, chestEdgeIndices 5.2%→14.4% (ease-deferred
+  94.8%→85.6%) — real, measured progress toward the §8 gates, still
+  correctly far from closed (this is one collection of four; the
+  remaining slices — `js/fancy-patterns.js` at 633 pieces/0% and
+  `js/underwear-library.js` at 219 pieces/0% notch+chestEdgeIndices, plus
+  cross-piece pairing generally — are real, separate, explicitly
+  deferred future work, not silently folded in). 0 fails, matching the
+  pre-existing library-wide baseline exactly (confirmed the 10
+  newly-introduced fails were fixed, not hidden — pass count rose by
+  the same 10 the fail count dropped by).
+- `node --test "test/**/*.test.js"`: 315/315 (305 prior + 10 new), no
+  regressions.
+- `cloth-lab` `npx vitest run`: 835/835, unchanged — this WP touched no
+  cloth-lab code, and the leotard construction's own dart/seam geometry
+  is byte-for-byte unchanged (only new metadata fields added).
+- `npx oxlint js`: zero new warnings on any touched file.
+
+### Honest limitation, stated rather than assumed away
+`underwear-library.js` reported 0% cross-piece pairing VERIFIED in the
+same reconnaissance sweep that scoped this WP — a real, separate anomaly
+(not a notch/ease gap) worth its own dedicated look, flagged here for a
+future installment rather than folded into this one's already-distinct
+scope.
+
+
 ## WP-43 continued: `shawlCollar()`/`lapelFacing()`/`collarStand()` redrafted so their own neck edge matches `jacketFrontBack()`'s real neckline arc by construction
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-43's own "what's still open" note.

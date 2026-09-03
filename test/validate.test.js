@@ -176,6 +176,121 @@ test('ease fails when the hinted vertex implies a finished chest smaller than th
   assert.equal(report.perPiece[0].checks.ease.status, 'fail');
 });
 
+// BerryStudio-Upgrade-Plan-v5.md WP-44: `stretchFabric: true` opts a piece
+// into a DIFFERENT, equally real floor — a negative-ease finished chest is
+// the whole point of a stretch performance-fabric garment (leotards,
+// underwear), not the "cannot physically close" defect the non-stretch
+// branch above correctly flags it as.
+test('ease (stretch fabric) fails only when the implied finished chest is beyond what 4-way stretch can comfortably negative-ease to', () => {
+  // half=10 -> implied full chest = 40cm; body chest 70cm -> 40/70 = 57% (below the 65% floor)
+  const hinted = { ...goodSquare, chestEdgeIndices: [1], stretchFabric: true };
+  const report = run([hinted], { bodyChestCm: 70 });
+  assert.equal(report.perPiece[0].checks.ease.status, 'fail');
+});
+
+test('ease (stretch fabric) passes a real negative-ease finished chest within the stretch fabric\'s real range', () => {
+  // half=10 -> implied full chest = 40cm; body chest 50cm -> 40/50 = 80% (a real, intentional negative ease)
+  const hinted = { ...goodSquare, chestEdgeIndices: [1], stretchFabric: true };
+  const report = run([hinted], { bodyChestCm: 50 });
+  assert.equal(report.perPiece[0].checks.ease.status, 'pass');
+});
+
+test('ease (stretch fabric) warns rather than passing/failing when the finished chest is unexpectedly LARGER than the body', () => {
+  // half=10 -> implied full chest = 40cm; body chest 30cm -> 40/30 = 133% (not negative ease at all)
+  const hinted = { ...goodSquare, chestEdgeIndices: [1], stretchFabric: true };
+  const report = run([hinted], { bodyChestCm: 30 });
+  assert.equal(report.perPiece[0].checks.ease.status, 'warn');
+});
+
+test('ease (stretch fabric) still reports "not applicable" without a chestEdgeIndices hint or a body chest measurement, same as the non-stretch branch', () => {
+  const noHint = { ...goodSquare, stretchFabric: true };
+  assert.equal(run([noHint], { bodyChestCm: 50 }).perPiece[0].checks.ease.status, 'deferred');
+  const hintedNoBody = { ...goodSquare, chestEdgeIndices: [1], stretchFabric: true };
+  assert.equal(run([hintedNoBody]).perPiece[0].checks.ease.status, 'deferred');
+});
+
+// BerryStudio-Upgrade-Plan-v5.md WP-44: notchAlignment had NO dedicated
+// test anywhere in this suite before this WP, despite being one of
+// validate.js's own fail-capable checks — added here because this WP's
+// own new leotard notches (js/ai.js) immediately found a real false
+// positive in its whole-piece-perimeter-fraction method (see this WP's
+// CHANGELOG entry) that had to be fixed at the source, in this exact
+// function, not worked around.
+function frontBackPair(front, back) {
+  return run([
+    { name: { en: 'Front' }, role: 'front-panel', grain: [[1, 1], [1, 2]], ...front },
+    { name: { en: 'Back' }, role: 'back-panel', grain: [[1, 1], [1, 2]], ...back },
+  ]).crossPiece[0].checks.notchAlignment;
+}
+
+test('notchAlignment passes when neither piece declares a notch', () => {
+  const flat = { outline: [[0, 0], [10, 0], [10, 10], [0, 10]], notches: [] };
+  assert.equal(frontBackPair(flat, flat).status, 'pass');
+});
+
+test('notchAlignment warns (not fails) when front and back declare a different NUMBER of notches', () => {
+  const square = { outline: [[0, 0], [10, 0], [10, 10], [0, 10]] };
+  const oneNotch = { ...square, notches: [[10, 5]] };
+  const noNotch = { ...square, notches: [] };
+  assert.equal(frontBackPair(oneNotch, noNotch).status, 'warn');
+});
+
+test('notchAlignment (no declared shared seam — whole-piece fallback, unchanged) passes when notches sit at matching perimeter fractions', () => {
+  const square = { outline: [[0, 0], [10, 0], [10, 10], [0, 10]] };
+  // Both squares identical, both notches at the same vertex -> same fraction.
+  const front = { ...square, notches: [[10, 0]] };
+  const back = { ...square, notches: [[10, 0]] };
+  assert.equal(frontBackPair(front, back).status, 'pass');
+});
+
+test('notchAlignment (no declared shared seam — whole-piece fallback, unchanged) fails when notches sit at clearly different perimeter fractions', () => {
+  const square = { outline: [[0, 0], [10, 0], [10, 10], [0, 10]] };
+  const front = { ...square, notches: [[10, 0]] };   // 25% around
+  const back = { ...square, notches: [[10, 10]] };   // 50% around
+  assert.equal(frontBackPair(front, back).status, 'fail');
+});
+
+// The false positive this WP found and fixed: front's own "preamble" (its
+// neckline, say) runs much longer than back's own before either reaches
+// their real shared seam — a completely normal, common garment shape
+// (this project's own leotard front/back pairings, confirmed by direct
+// measurement) — but the seam ITSELF is the same real length on both,
+// with notches at the same real position ALONG that seam.
+const longPreambleFront = {
+  outline: [[0, 0], [0, -40], [0, -90], [0, -100], [10, -100], [10, 0]],
+  // seam: idx1->idx2->idx3, 50 + 10 = 60cm total
+  edges: [{ fromIdx: 1, toIdx: 3, seamId: 'testSeam' }],
+  notches: [[0, -70]], // 30cm into the 60cm seam = 50% along the seam
+};
+const shortPreambleBack = {
+  outline: [[0, 0], [0, -5], [0, -55], [0, -65], [10, -65], [10, 0]],
+  // seam: idx1->idx2->idx3, 50 + 10 = 60cm total (the SAME real length)
+  edges: [{ fromIdx: 1, toIdx: 3, seamId: 'testSeam' }],
+  notches: [[0, -35]], // 30cm into the 60cm seam = 50% along the seam (matches front)
+};
+
+test('notchAlignment (declared shared seam) passes on a real front/back pair whose preambles differ in length but whose shared seam and notch position along it genuinely match — the whole-piece method alone flags this as a false positive', () => {
+  // Confirms the premise: the OLD whole-piece-perimeter-fraction method
+  // really would have failed this pair (front notch at 70/210=33.3% of
+  // its own perimeter, back notch at 35/140=25.0% of its own — an 8.3%
+  // gap, over the 5% tolerance), despite the seam itself matching
+  // exactly — proving this is the false positive being fixed, not a
+  // strawman.
+  const oldStyleDiff = Math.abs(70 / 210 - 35 / 140);
+  assert.ok(oldStyleDiff > 0.05, `expected the whole-piece method's own gap (${(oldStyleDiff * 100).toFixed(1)}%) to exceed its 5% tolerance`);
+  const result = frontBackPair(longPreambleFront, shortPreambleBack);
+  assert.equal(result.status, 'pass');
+  assert.match(result.message, /testSeam/);
+});
+
+test('notchAlignment (declared shared seam) still fails when notches are genuinely misaligned ALONG that same shared seam — the fix isn\'t toothless', () => {
+  const front = { ...longPreambleFront, notches: [[0, -45]] };  // 5cm into the 60cm seam ≈ 8% along
+  const back = { ...shortPreambleBack, notches: [[0, -60]] };   // 55cm into the 60cm seam ≈ 92% along
+  const result = frontBackPair(front, back);
+  assert.equal(result.status, 'fail');
+  assert.match(result.message, /testSeam/);
+});
+
 test('summary tallies match the individual check verdicts', () => {
   const report = run([goodSquare]);
   const total = report.summary.pass + report.summary.warn + report.summary.fail + report.summary.deferred;

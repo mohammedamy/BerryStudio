@@ -370,20 +370,68 @@ function checkSeamLengthParity(pair) {
   return { status: 'fail', message: `front (${hf.toFixed(1)}cm) and back (${hb.toFixed(1)}cm) side lengths differ by ${proxyDiffMm.toFixed(1)}mm (bounding-box proxy — no declared seam edge)` };
 }
 
+// BerryStudio-Upgrade-Plan-v5.md WP-44: arc-position of `point`, measured
+// ONLY within the forward span [fromIdx, toIdx) of `outline` (the same
+// walk convention walkEdgeLength above already uses) — returns null if
+// the point's own nearest projection isn't actually close to that
+// specific span (a generous 2cm tolerance; notch coordinates are hand-
+// picked construction points, not the outline's own literal vertices, so
+// exact incidence was never expected).
+function arcPositionWithinEdge(outline, fromIdx, toIdx, point) {
+  const n = outline.length;
+  if (!Number.isInteger(fromIdx) || !Number.isInteger(toIdx) || fromIdx < 0 || toIdx < 0 || fromIdx >= n || toIdx >= n) return null;
+  let i = fromIdx, walked = 0, guard = 0;
+  let bestDist = Infinity, bestArc = 0;
+  while (i !== toIdx) {
+    const next = (i + 1) % n;
+    const a = outline[i], b = outline[next];
+    const segL = segLen(a, b);
+    const { t, dist } = pointToSegmentInfo(point, a, b);
+    if (dist < bestDist) { bestDist = dist; bestArc = walked + t * segL; }
+    walked += segL;
+    i = next;
+    if (++guard > n) return null;
+  }
+  return bestDist <= 2 ? { arc: bestArc, total: walked } : null;
+}
+
 function checkNotchAlignment(pair) {
   if (!pair.front || !pair.back) return { status: 'warn', message: 'could not confidently pair this piece with a front/back counterpart' };
   const nf = (pair.front.notches || []).length;
   const nb = (pair.back.notches || []).length;
   if (nf !== nb) return { status: 'warn', message: `front has ${nf} notch(es), back has ${nb} — may be a deliberate single/double-notch front-vs-back convention, not necessarily a defect` };
   if (nf === 0) return { status: 'pass', message: 'n/a — no notches on either piece' };
-  let worst = 0;
+  // Prefer measuring a notch's position ALONG its own declared shared seam
+  // (front and back's own matching seamId edge) over the whole-piece
+  // perimeter fraction — the same "a real declared edge beats a proxy"
+  // upgrade WP-58 already gave checkSeamLengthParity, and necessary for
+  // the same reason: once a front/back pair's OWN neckline/top-of-panel
+  // curves genuinely differ in length (a deep front neckline paired with
+  // a shallow back, or vice versa — completely normal garment design,
+  // confirmed by direct measurement on this project's own leotard front/
+  // back pairings), the whole-piece perimeter fraction shifts by that
+  // same difference for EVERY point downstream of it, including points
+  // sitting on a seam whose own real length matches to the millimetre
+  // (confirmed separately by checkSeamLengthParity itself) — a false
+  // positive with the whole-piece-only method, not a real defect.
+  const shared = sharedSeamEdge(pair.front, pair.back);
+  let worst = 0, usedSeam = false;
   for (let i = 0; i < nf; i++) {
-    const pf = arcPositionFraction(pair.front.outline, pair.front.notches[i]);
-    const pb = arcPositionFraction(pair.back.outline, pair.back.notches[i]);
-    worst = Math.max(worst, Math.abs(pf - pb));
+    const fn = pair.front.notches[i], bn = pair.back.notches[i];
+    if (shared) {
+      const fw = arcPositionWithinEdge(pair.front.outline, shared.front.fromIdx, shared.front.toIdx, fn);
+      const bw = arcPositionWithinEdge(pair.back.outline, shared.back.fromIdx, shared.back.toIdx, bn);
+      if (fw && bw && fw.total > 0 && bw.total > 0) {
+        usedSeam = true;
+        worst = Math.max(worst, Math.abs(fw.arc / fw.total - bw.arc / bw.total));
+        continue;
+      }
+    }
+    worst = Math.max(worst, Math.abs(arcPositionFraction(pair.front.outline, fn) - arcPositionFraction(pair.back.outline, bn)));
   }
-  if (worst <= NOTCH_ARC_TOL_FRACTION) return { status: 'pass', message: `matches within ${(worst * 100).toFixed(1)}% of perimeter` };
-  return { status: 'fail', message: `notch position differs by ${(worst * 100).toFixed(1)}% of perimeter between front and back` };
+  const note = usedSeam ? ` (measured along the declared "${shared.seamId}" seam)` : '';
+  if (worst <= NOTCH_ARC_TOL_FRACTION) return { status: 'pass', message: `matches within ${(worst * 100).toFixed(1)}% of perimeter${note}` };
+  return { status: 'fail', message: `notch position differs by ${(worst * 100).toFixed(1)}% of perimeter between front and back${note}` };
 }
 
 // ---------- ease (WP-24) ----------
@@ -418,6 +466,28 @@ function checkNotchAlignment(pair) {
 // or "fail" — an honest hedge, not a guess either way.
 const MIN_WEARING_EASE_CM = 5;
 
+// BerryStudio-Upgrade-Plan-v5.md WP-44: MIN_WEARING_EASE_CM assumes a
+// non-stretch woven bodice — a finished chest SMALLER than the body is
+// always a defect there. Real stretch performance fabric (leotards,
+// underwear/bra-and-brief constructions) is drafted the opposite way ON
+// PURPOSE: a NEGATIVE-ease finished measurement that the fabric itself
+// stretches to fit, not a mistake to flag. Without this distinction,
+// declaring `chestEdgeIndices` on any real stretch-fabric piece (the
+// actual gap this WP closes) would turn every one of those patterns'
+// live "Check Pattern" runs into a false FAIL — this is the reason
+// js/ai.js's leotard/underwear builders never declared the hint at all
+// before this WP, not an oversight. `stretchFabric: true` (populated at
+// construction time, same convention as `chestEdgeIndices` itself) opts
+// a piece into this different, but equally real, floor instead.
+// STRETCH_EASE_FLOOR_PCT is a real number, not a guess: 4-way stretch
+// performance knits (nylon/spandex, what every one of this codebase's
+// leotard/underwear patterns is drafted in) commonly negative-ease to
+// 65-80% of the body's own circumference in real dancewear/activewear
+// patternmaking — below ~65% asks the fabric to stretch further than it
+// safely recovers from wear after wear, a real construction defect, not
+// an intentional tight fit.
+const STRETCH_EASE_FLOOR_PCT = 0.65;
+
 // Canvas.getPieces() (Check Pattern's real caller) returns every piece
 // already shifted by an arbitrary per-piece layout offset — layoutPieces()
 // positions pieces left-to-right in the 2D canvas, so a piece authored
@@ -442,6 +512,12 @@ function checkEase(piece, bodyChestCm) {
   if (half == null) return { status: 'deferred', message: 'not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)' };
   if (bodyChestCm == null || !Number.isFinite(bodyChestCm)) return { status: 'deferred', message: 'not applicable — no body chest measurement was supplied to Check Pattern' };
   const impliedFullChest = half * 4;
+  if (piece.stretchFabric) {
+    const pct = impliedFullChest / bodyChestCm;
+    if (pct < STRETCH_EASE_FLOOR_PCT) return { status: 'fail', message: `implied finished chest (${impliedFullChest.toFixed(1)}cm) is only ${(pct * 100).toFixed(0)}% of the body chest (${bodyChestCm.toFixed(1)}cm) — beyond what 4-way stretch performance fabric comfortably negative-eases to, a real construction defect` };
+    if (pct > 1) return { status: 'warn', message: `implied finished chest (${impliedFullChest.toFixed(1)}cm) is LARGER than the body chest (${bodyChestCm.toFixed(1)}cm) for a piece declared as stretch fabric — worth confirming the negative-ease intent` };
+    return { status: 'pass', message: `${(pct * 100).toFixed(0)}% of body chest (finished ${impliedFullChest.toFixed(1)}cm vs body ${bodyChestCm.toFixed(1)}cm) — within stretch-fabric negative-ease range` };
+  }
   const easeCm = impliedFullChest - bodyChestCm;
   if (easeCm < 0) return { status: 'fail', message: `implied finished chest (${impliedFullChest.toFixed(1)}cm) is ${Math.abs(easeCm).toFixed(1)}cm SMALLER than the body chest (${bodyChestCm.toFixed(1)}cm) — this garment cannot physically close` };
   if (easeCm < MIN_WEARING_EASE_CM) return { status: 'warn', message: `only ${easeCm.toFixed(1)}cm of implied chest ease (finished ${impliedFullChest.toFixed(1)}cm vs body ${bodyChestCm.toFixed(1)}cm) — tight enough to be an intentional close-fitting style, or a defect; this check can't tell style intent from a mistake` };
