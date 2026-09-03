@@ -6,6 +6,57 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-44 (part 2): `underwear-library.js`'s cross-piece pairing goes from 0% to 92.3% verified — one missing `ROLE_PAIR` entry, not a construction gap
+
+`BerryStudio-Upgrade-Plan-v5.md` WP-44's own reconnaissance (part 1's
+CHANGELOG entry) flagged `js/underwear-library.js` reporting a real
+anomaly — **0%** cross-piece pairing verified, the one number among the
+four collections that wasn't just low, it was zero — and set it aside as
+its own honest, separate gap rather than folding an un-investigated
+number into part 1's already-distinct scope. Investigated here.
+
+### Root cause, confirmed by direct inspection, not assumed
+`js/underwear-library.js`'s own module comment already explains why:
+`briefPieces()` (all 24 brief/trunk patterns) deliberately declares
+`role: "brief-front"`/`role: "brief-back"` — NOT `"front-panel"`/
+`"back-panel"` — because those generic roles trigger
+`buildSewingSteps()`'s "join at the shoulder seams" instruction, wrong
+for a brief (it joins at the side seams, with a crotch gusset between
+front and back). That real, deliberate distinction meant
+`js/validate.js`'s own `ROLE_PAIR` map — which only lists the generic
+front/back role families — never recognized `brief-front`/`brief-back`
+as a pair at all, falling all the way through to the name-guessing
+heuristic for every single one of these 24 patterns' most important
+seam relationship.
+
+### Fixed
+- `js/validate.js`: added `'brief-front': 'brief-back'` to `ROLE_PAIR`.
+  One entry — the pairing relationship was already real and already
+  declared at construction time; it only needed a place in this map to
+  be recognized as "Verified" rather than "Heuristic."
+
+### Verification
+- `underwear-library.js` alone: 0 → 24 of its 26 real front/back-style
+  pairs now verified (92.3%). The remaining 2 (`wb09`/`gb07`'s racerback
+  bra "Front Panel"/"Racerback Panel" pairing) are a genuinely different,
+  not-yet-role-declared construction — left as a real, honest gap, not
+  folded into this fix.
+- Library-wide cross-piece pairing: 313 → 337 verified (62.7% → 67.5%).
+  `test/validate-library.test.js`'s own regression floor raised from 313
+  to 337 — a fresh, real re-measurement (a standalone script mirroring
+  that test's own counting logic), never bumped to make a change go
+  green without one, per that test's own stated convention. Its local
+  `ROLE_PAIRS_FOR_TEST` mirror list gets the same new pair.
+- `node --test "test/**/*.test.js"`: 315/315, no regressions (this WP
+  added no new tests of its own — the existing "front/back pairs with a
+  declared role are reported Verified" test already exercises the new
+  `ROLE_PAIR` entry directly, by construction, the moment the floor was
+  raised against it).
+- `cloth-lab` `npx vitest run`: 835/835, unchanged — no geometry touched,
+  only a validator-side role-mapping addition.
+- `npx oxlint js`: zero new warnings.
+
+
 ## WP-44 (part 1): notch/ease authoring-scale gate closure begins with the single highest-leverage collection — Girls' Gymnastics Leotards — and finds and fixes a real false positive in `checkNotchAlignment` along the way
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-44 — notch coverage ≥80%/ease-deferred

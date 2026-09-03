@@ -243,6 +243,16 @@ const ROLE_PAIR = {
   'front-panel': 'back-panel',
   'hip-panel-front': 'hip-panel-back',
   'skirt-front-gore': 'skirt-back-gore',
+  // BerryStudio-Upgrade-Plan-v5.md WP-44: js/underwear-library.js's
+  // briefPieces() (all 24 brief/trunk patterns) declares this exact real
+  // front/back pair already — 'brief-front'/'brief-back' were deliberately
+  // NOT named 'front-panel'/'back-panel' (that pair triggers
+  // buildSewingSteps()'s "join at the shoulder seams" instruction, wrong
+  // for a brief) but that same real distinctness meant this pairing check
+  // never recognized them as a pair at all before this, falling all the
+  // way through to the name-guessing heuristic. A real, declared
+  // relationship deserves "Verified," the same as every other pair above.
+  'brief-front': 'brief-back',
 };
 
 // WP-58 (docs/plan 4.md Phase 5): TWO pieces sharing a role are usually
