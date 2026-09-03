@@ -6,6 +6,93 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-43 continued: `jacketFrontBack()` gets a real neckline curve — the necessary first step before a collar can seam to it
+
+`BerryStudio-Upgrade-Plan-v5.md` WP-43, the "single biggest remaining
+lever" for Cloth Lab collar/lapel-facing seaming. A programmatic survey
+(not grep-guessing) found 33 of the 46 collar-bearing patterns use
+`jacketFrontBack()`, not `princessBodice()` (which WP-65 already exposed
+a real neckline edge on). Investigating why `jacketFrontBack()` had no
+`necklineEndIdx` equivalent found the real reason: **it had no distinct
+neckline curve at all** — front and back both jumped straight from the
+neck/closure point into one combined shoulder+armhole curve. Confirmed by
+direct measurement, not assumption: the collar/facing pieces' own
+neck-attaching edges measured 1.8x-2.5x longer than anything in the
+jacket panel — proof there was no comparable curve to point a seamId at,
+not a length mismatch to tune away.
+
+### Changed
+- `js/fancy-patterns.js`'s `jacketFrontBack()`: both `front` and `back`
+  now draft a real, size-scaled neckline curve ahead of the existing
+  (byte-for-byte unchanged) shoulder+armhole curve, declared as real
+  seamable edges (`jacketFrontNeck`/`jacketBackNeck`) — reachable from 2D
+  Walk-the-Seam tooling for the first time. The pre-existing `jacketSide`
+  seam (WP-58) is completely untouched geometrically, just re-indexed —
+  verified both by the existing curve-resampling test and a new dedicated
+  regression test (below).
+- Redrafting `shawlCollar()`/`lapelFacing()`/`collarStand()` so their own
+  neck edge actually matches these new curves by construction is real,
+  separate follow-up work — the actual collar-to-jacket seam pairing.
+  Not attempted this pass; these curves are the necessary prerequisite,
+  now in place.
+
+### Fixed (found and resolved within this same pass, not shipped broken)
+- Starting the new curve exactly at the piece's own true center point
+  (X=0) initially broke `checkFoldSymmetry` on every back panel (and a
+  couple of near-symmetric fronts) — 49 failures. That check flags any
+  point within 2% of a piece's own width of its min-X whose deviation
+  exceeds a much tighter ~0.5%-of-width straightness tolerance, and a
+  smooth curve leaving X=0 necessarily passes through that gap (confirmed
+  directly: the reported ~0.3-0.46cm deviations matched a hand-derived
+  first-bezier-sample calculation almost exactly). Fixed with a short,
+  real, size-scaled straight lead-in segment before the curve proper
+  begins — a genuine, conventional patternmaking technique (a very short
+  straight extension at the true center point), not a check-dodging hack.
+- The same dead-zone class of failure turned up completely independently
+  in two long-standing call sites (`mf14`/`bf13`'s Kandura and Vest
+  fronts): their pre-existing hem-corner points (`closureX*0.3`) had only
+  ever been safe by accident — they used to BE the piece's own min-X;
+  adding a true center point at true 0 moved min-X and exposed them.
+  Fixed the same way (floored at the same lead-in constant, only ever
+  raising a value that was already fine, never lowering one).
+- A hand-counted index-shift constant (from an earlier draft, before the
+  sample count was tuned) silently produced wrong curve indices when the
+  sample count changed — caught by `test/fancy-patterns-curves.test.js`
+  re-sampling the claimed curves against the real outline before this
+  ever reached CHANGELOG. Replaced with a shift computed from the real
+  array length (`2 + neckPts.length`) so it can't drift out of sync with
+  the sample count again.
+
+### Added
+- `test/jacket-neckline.test.js`: every pattern declaring a
+  `jacketFrontNeck`/`jacketBackNeck` edge has a real, non-degenerate
+  curve on both sides (36 patterns, 44 call sites — a few patterns call
+  `jacketFrontBack()` twice, e.g. `mf05`'s separate jacket+vest layers);
+  and the pre-existing `jacketSide` seam still matches EXACTLY between
+  each front and its real corresponding back (matched by equal seam
+  length, not piece-list position, since multi-layer patterns can have
+  more than one back to choose from) — the regression guard for WP-58's
+  own fix, now that this function's index math has been touched again.
+
+### Verification
+- `node --test test/fancy-patterns-curves.test.js`: every claimed curve
+  (including the two new ones) reproduces the real flattened outline
+  points.
+- `node --test test/jacket-neckline.test.js`: both new tests pass.
+- Full 308-pattern validator sweep (`test/validate-library.test.js`): 0
+  fails on every fail-capable check — identical to the pre-change
+  baseline (confirmed by direct comparison, not assumed).
+- `node --test "test/**/*.test.js"`: 301/301 (299 prior + 2 new), no
+  regressions.
+- `cloth-lab` `npx vitest run`: 778/778, unaffected (this pass didn't
+  touch the Cloth Lab side yet — that's the collar-matching follow-up).
+- `npx oxlint` on every touched file: zero new warnings.
+- Rendered the raw front/back outline of a representative pattern
+  (`wf06`) directly from its own coordinates (not the composited
+  thumbnail) to confirm the new neckline reads as a real, smooth curve —
+  not a jagged or degenerate shape.
+
+
 ## WP-68: add a lint step to CI — every "zero new oxlint warnings" claim in this project's history had been manual, never enforced
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-68. `.github/workflows/deploy-pages.yml`
