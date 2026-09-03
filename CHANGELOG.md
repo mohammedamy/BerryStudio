@@ -6,6 +6,40 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-71: a repo-scoped skill for closing out a work package
+
+`BerryStudio-Upgrade-Plan-v5.md` WP-71. Every WP shipped across this
+project's history — including every one this session landed — follows
+the same closing sequence, re-derived from memory each time: revert any
+active `TEMP-LOCAL-TEST-BYPASS`, run the full test/lint suites, write a
+`CHANGELOG.md` entry in the established format, ship on its own
+branch/PR. Re-deriving a checklist from memory every time is exactly the
+kind of repeated step a skill exists to make reliable — most concretely,
+this project has had to state the "revert the bypass before committing"
+rule explicitly more than once, a real, avoidable failure mode.
+
+### Added
+- `.claude/skills/close-out-wp/SKILL.md`: the checklist as a Claude Code
+  skill — grep the whole tree for `TEMP-LOCAL-TEST-BYPASS` (not just the
+  one known location, in case a different local-test shortcut got added
+  this session), run whichever test/lint suites apply to what actually
+  changed, write the CHANGELOG entry by reading the file's *current* top
+  entries first (the format has drifted in small ways over time — copy
+  what's live, not a remembered template), and stop before the
+  commit/PR/merge step for a final go-ahead rather than auto-shipping.
+- `README.md`'s Development section: a short pointer to the skill,
+  matching how this project documents its other conventions.
+
+### Honest limitation, stated rather than assumed away
+This skill was authored mid-session, so it was never in *this* session's
+own skill listing (fixed at session start) — it could be written and
+reviewed for content, but not actually *invoked* to confirm the end
+state matches doing the checklist by hand. That's a real gap against the
+acceptance bar this WP set for itself ("verified by actually using it
+once, not just written and assumed to work") — needs a fresh session,
+where the skill is discoverable, to close for real.
+
+
 ## WP-70: give the male torso the same real front/back asymmetry, subtler
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-70, optional follow-on to this

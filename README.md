@@ -1060,6 +1060,14 @@ npm install --no-save ajv
 node scripts/generate-schema-validator.mjs
 ```
 
+**Closing out a work package:** `.claude/skills/close-out-wp/SKILL.md`
+(BerryStudio-Upgrade-Plan-v5.md WP-71) packages the checklist every WP in
+`CHANGELOG.md`'s history has followed by hand — revert any temp local-test
+bypass, run the full test/lint suites, write a `CHANGELOG.md` entry in the
+established format, ship on its own branch/PR — as a Claude Code skill, so
+a session finishing a change doesn't have to re-derive the sequence from
+memory each time.
+
 ## Automation API
 
 `window.BerryStudio` (`js/berry-studio-api.js`) is a small, permanent,

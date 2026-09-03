@@ -2,8 +2,18 @@
 .DS_Store
 ._*
 
-# Local editor / assistant config
-.claude/
+# Local editor / assistant config — settings.local.json, launch.json,
+# worktrees/ (a transient scratch working copy per agent run) are all
+# genuinely local, never meant to be shared. BerryStudio-Upgrade-Plan-v5.md
+# WP-71's own skill is the one deliberate exception: a project-scoped
+# Claude Code skill is meant to be committed and shared across sessions
+# the same way any other project convention/doc is — un-ignoring the
+# whole directory wouldn't work here (git won't descend into an ignored
+# directory to evaluate a negated sub-pattern), so this ignores each
+# top-level entry individually instead of the directory as a unit,
+# specifically so `!.claude/skills/` below can carve out just that one.
+.claude/*
+!.claude/skills/
 
 # Logs & temp
 *.log
