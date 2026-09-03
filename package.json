@@ -6,10 +6,12 @@
   "description": "Dev/test tooling for the root BerryStudio app. The shipped app itself stays build-free — index.html loads js/*.js directly as ES modules, this file is never referenced by the browser.",
   "scripts": {
     "test": "node --test test/*.test.js",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "lint": "oxlint js"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",
-    "jsdom": "^25.0.1"
+    "jsdom": "^25.0.1",
+    "oxlint": "^1.71.0"
   }
 }
