@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { computeBodyDims, torsoProfile } from './computeBodyDims.js'
-import { bumpWindow, femaleTorsoSculpt, torsoZBump, femaleTorsoExtraRadius } from './torsoSculpt.js'
+import { bumpWindow, femaleTorsoSculpt, torsoZBump, femaleTorsoExtraRadius, maleTorsoSculpt, maleTorsoZBump, maleTorsoExtraRadius } from './torsoSculpt.js'
 
 const WOMEN_M = { chest: 88, waist: 70, hips: 96, shoulder: 39, backLen: 41, sleeve: 58, neck: 37, bicep: 28, inseam: 78, thigh: 56, height: 167 }
+const MEN_M = { chest: 100, waist: 86, hips: 100, shoulder: 46, backLen: 45, sleeve: 64, neck: 40, bicep: 33, inseam: 82, thigh: 60, height: 178 }
 
 describe('bumpWindow', () => {
   it('peaks at 1 at its center and falls to exactly 0 by +-halfWidth', () => {
@@ -106,5 +107,73 @@ describe('femaleTorsoExtraRadius', () => {
     // Gap between the lumbar window's top edge (0.50) and the breast
     // window's bottom edge (0.59) — see femaleTorsoSculpt's own numbers.
     expect(femaleTorsoExtraRadius(dims.hipY + dims.span * 0.545, dims, 0.72)).toBe(0)
+  })
+})
+
+// WP-70: the same asymmetry, subtler, for the male torso — one chest
+// lobe (not two), smaller lumbar/glute amplitudes. Mirrors the female
+// test structure above so the two stay comparable at a glance.
+describe('maleTorsoZBump', () => {
+  const dims = computeBodyDims(MEN_M, 'men')
+
+  it('the chest bump is a single lobe, centered dead-front — no valley, unlike the female breast', () => {
+    const { chest } = maleTorsoSculpt(dims)
+    expect(maleTorsoZBump(chest.centerY, 0, dims)).toBeGreaterThan(0)
+    // Symmetric either side of dead-center, still one continuous mass.
+    expect(maleTorsoZBump(chest.centerY, 0.2, dims)).toBeCloseTo(maleTorsoZBump(chest.centerY, -0.2, dims), 10)
+  })
+
+  it('the chest bump is zero far outside its Y window', () => {
+    expect(maleTorsoZBump(dims.hipY, 0, dims)).toBe(0)
+  })
+
+  it('the lower-back curve pulls the waist IN and pushes the hip OUT, straight-back only', () => {
+    const { lumbar, glute } = maleTorsoSculpt(dims)
+    expect(maleTorsoZBump(lumbar.centerY, Math.PI, dims)).toBeGreaterThan(0)
+    expect(maleTorsoZBump(glute.centerY, Math.PI, dims)).toBeLessThan(0)
+    expect(maleTorsoZBump(lumbar.centerY, 0, dims)).toBe(0)
+    expect(maleTorsoZBump(glute.centerY, 0, dims)).toBe(0)
+  })
+
+  it('is smaller in magnitude than the equivalent female feature at the same body scale (subtler, not just a copy)', () => {
+    // Compare at matched proportional heights/radii by reusing MEN_M's own
+    // dims for both calls — the point is the AMPLITUDE relationship, not
+    // an apples-to-apples cross-sex body comparison.
+    const { chest: mChest } = maleTorsoSculpt(dims)
+    const { breast: fChest } = femaleTorsoSculpt(dims)
+    expect(mChest.amplitude).toBeLessThan(fChest.amplitude)
+  })
+})
+
+describe('maleTorsoExtraRadius', () => {
+  const dims = computeBodyDims(MEN_M, 'men')
+  const zScale = 0.78
+
+  it('keeps the collision ellipse outside the sculpted mesh everywhere on the torso', () => {
+    const profile = torsoProfile(dims)
+    const minY = profile[0][1]
+    const maxY = profile[profile.length - 1][1]
+    const radiusAt = (y) => {
+      for (let i = 0; i < profile.length - 1; i++) {
+        const [r0, y0] = profile[i]
+        const [r1, y1] = profile[i + 1]
+        if (y >= y0 && y <= y1) return r0 + (r1 - r0) * ((y - y0) / (y1 - y0))
+      }
+      return y < minY ? profile[0][0] : profile[profile.length - 1][0]
+    }
+    let worstMargin = Infinity
+    for (let yi = 0; yi <= 60; yi++) {
+      const y = minY + ((maxY - minY) * yi) / 60
+      const r = radiusAt(y)
+      const extra = maleTorsoExtraRadius(y, dims, zScale)
+      for (let pi = 0; pi <= 100; pi++) {
+        const phi = -Math.PI + (2 * Math.PI * pi) / 100
+        const meshZ = r * zScale * Math.cos(phi) + maleTorsoZBump(y, phi, dims)
+        const collisionZ = (r + extra) * zScale * Math.cos(phi)
+        const margin = Math.cos(phi) >= 0 ? collisionZ - meshZ : meshZ - collisionZ
+        if (margin < worstMargin) worstMargin = margin
+      }
+    }
+    expect(worstMargin).toBeGreaterThanOrEqual(-1e-6)
   })
 })

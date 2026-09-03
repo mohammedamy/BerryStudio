@@ -126,3 +126,53 @@ export function femaleTorsoExtraRadius(y, dims, zScale, samples = 96) {
   }
   return maxExtra * 1.03 // cushion for the gaps between sampled angles
 }
+
+// BerryStudio-Upgrade-Plan-v5.md WP-70 (optional follow-on to the female
+// sculpt above): a real, if subtler, male torso gets its own front/back
+// asymmetry too — modest pectoral fullness (front, ONE lobe, dead-center —
+// unlike the female breast's two, a male chest reads as one continuous
+// mass, not two separate forms) and the same lower-back concept (lumbar
+// dip, glute swell), sized down since a male silhouette's own back curve
+// is real but genuinely less pronounced than the female one this was
+// modeled from. Reuses `bumpWindow`/`torsoZBump`'s own math verbatim —
+// only the numbers and the front lobe count differ — so this carries
+// forward the exact same collision-safety guarantee
+// (maleTorsoExtraRadius below), verified the same sampled way, not
+// assumed to inherit it just because the mechanism looks similar.
+export function maleTorsoSculpt(dims) {
+  const { hipY, span, chestR, waistR, hipR } = dims
+  return {
+    chest: { centerY: hipY + span * 0.72, halfWidth: span * 0.13, amplitude: chestR * 0.05, phiHalfWidth: 0.7 },
+    lumbar: { centerY: hipY + span * 0.38, halfWidth: span * 0.12, amplitude: waistR * 0.06 },
+    glute: { centerY: hipY - span * 0.02, halfWidth: span * 0.10, amplitude: hipR * 0.08 },
+  }
+}
+
+export function maleTorsoZBump(y, phi, dims) {
+  const { chest, lumbar, glute } = maleTorsoSculpt(dims)
+  let dz = 0
+  // One lobe, centered at phi=0 (dead front) — no valley, unlike the
+  // female breast's two-lobe split (see femaleTorsoSculpt's own header).
+  dz += chest.amplitude * bumpWindow(y, chest.centerY, chest.halfWidth) * bumpWindow(phi, 0, chest.phiHalfWidth)
+  const backWeight = Math.max(0, -Math.cos(phi))
+  dz += lumbar.amplitude * bumpWindow(y, lumbar.centerY, lumbar.halfWidth) * backWeight
+  dz -= glute.amplitude * bumpWindow(y, glute.centerY, glute.halfWidth) * backWeight
+  return dz
+}
+
+// Same derivation as femaleTorsoExtraRadius — numeric sampling, not a
+// closed-form peak formula, for the same "different curvature near a
+// shared peak" reason documented there.
+export function maleTorsoExtraRadius(y, dims, zScale, samples = 96) {
+  let maxExtra = 0
+  for (let i = 0; i <= samples; i++) {
+    const phi = -Math.PI + (2 * Math.PI * i) / samples
+    const c = Math.cos(phi)
+    if (Math.abs(c) < 1e-6) continue
+    const dz = maleTorsoZBump(y, phi, dims)
+    if (dz === 0) continue
+    const needed = dz / (zScale * c)
+    if (needed > maxExtra) maxExtra = needed
+  }
+  return maxExtra * 1.03
+}

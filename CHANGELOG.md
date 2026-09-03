@@ -6,6 +6,50 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-70: give the male torso the same real front/back asymmetry, subtler
+
+`BerryStudio-Upgrade-Plan-v5.md` WP-70, optional follow-on to this
+session's earlier female torso sculpt (which was explicitly scoped to
+`female && !kid` per the user's own request). The male torso still used
+the original plain, radially-symmetric lathe — front and back read
+identically. A real male chest/lower-back has its own, subtler asymmetry
+too: modest pectoral fullness, a real if less pronounced lumbar curve.
+
+### Changed
+- `cloth-lab/src/body/torsoSculpt.js`: new `maleTorsoSculpt()`/
+  `maleTorsoZBump()`/`maleTorsoExtraRadius()`, reusing `bumpWindow()`'s
+  own math verbatim. One key shape difference from the female sculpt, not
+  just smaller numbers: the chest bump is a **single lobe centered dead-
+  front**, not two — a male chest reads as one continuous mass, unlike
+  the female breast's deliberate two-lobe/valley split. Amplitudes are
+  roughly half the female sculpt's own (chest `chestR*0.05` vs
+  `chestR*0.10`, lumbar/glute similarly scaled down).
+- Wired into `Avatar.jsx`, `collisionRig.js` (its own
+  `maleTorsoExtraRadius` collision-safety margin, verified the identical
+  sampled way — not assumed to inherit the property just because the
+  mechanism looks the same), and `js/three-view.js` (independent
+  hand-matched port, same convention as every other file in this pair).
+  Kids of either sex are unaffected — same `!kid` gate the female sculpt
+  already used. The female path is byte-for-byte unchanged.
+
+### Verification
+- New tests in `cloth-lab/src/body/torsoSculpt.test.js` (5 tests): single-
+  lobe front bump confirmed (no valley, unlike female), back curve pulls
+  waist in/pushes hip out on the true back only, male amplitude confirmed
+  smaller than the equivalent female one, and the same sampled-grid proof
+  `femaleTorsoExtraRadius` got — the collision ellipse never sits inside
+  the sculpted mesh anywhere on the torso, checked independently for the
+  male sculpt's own numbers, not assumed from the female result.
+- `cloth-lab` `npx vitest run`: 835/835 (830 prior + 5 new).
+- `node --test "test/**/*.test.js"`: 301/301, no regressions.
+- `npx oxlint`: zero new warnings on any touched file.
+- Live-verified in Cloth Lab (Men category, body-only view, front and
+  back rotation): a visible, modest chest bulge and a real waist-in/
+  hip-out back curve, subtler than the female version as intended.
+  Live-verified in the root app's 3D Preview in a real Chrome tab (Men
+  category): renders cleanly, zero console errors.
+
+
 ## WP-45: verification sweep — closes 4 of 5 items, and finds a real bug along the way
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-45's five-item checklist, none of

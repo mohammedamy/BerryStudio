@@ -1,5 +1,5 @@
 import { torsoProfile } from './computeBodyDims.js'
-import { femaleTorsoExtraRadius } from './torsoSculpt.js'
+import { femaleTorsoExtraRadius, maleTorsoExtraRadius } from './torsoSculpt.js'
 
 // Tapered-capsule ("round cone": distance-to-segment + linearly-interpolated
 // radius) collision primitives — a pure function of computeBodyDims()'s
@@ -43,15 +43,20 @@ export function deriveCollisionRig(dims) {
   const zScale = female ? 0.72 : 0.78
   const primitives = []
 
-  // Avatar.jsx's female torso mesh isn't a plain lathe any more (see
-  // torsoSculpt.js) — it sculpts a breast + lower-back curve into the
-  // surface itself, which can locally protrude beyond torsoProfile()'s own
-  // radius. `extraRadiusAt` reproduces exactly enough headroom to keep
+  // Avatar.jsx's adult torso mesh isn't a plain lathe any more (see
+  // torsoSculpt.js) — it sculpts a breast/chest + lower-back curve into
+  // the surface itself, which can locally protrude beyond torsoProfile()'s
+  // own radius. `extraRadiusAt` reproduces exactly enough headroom to keep
   // this rig's own promise ("match the VISIBLE mesh", this file's own
   // header above) true for that sculpted surface too — see
   // femaleTorsoExtraRadius's own header for the derivation and
   // torsoSculpt.test.js for the sampled proof that it never falls short.
-  const extraRadiusAt = (y) => (female && !kid ? femaleTorsoExtraRadius(y, dims, zScale) : 0)
+  // WP-70: adult male bodies get the analogous (smaller) margin from
+  // maleTorsoExtraRadius, same reasoning, verified the same sampled way.
+  const extraRadiusAt = (y) => {
+    if (kid) return 0
+    return female ? femaleTorsoExtraRadius(y, dims, zScale) : maleTorsoExtraRadius(y, dims, zScale)
+  }
 
   const profile = torsoProfile(dims)
   for (let i = 0; i < profile.length - 1; i++) {
