@@ -92,6 +92,14 @@ export let FancyGen;
     for (const p of pieces) {
       if (!p.curves && p.outline && p.outline.curves) p.curves = p.outline.curves;
       if (!p.edges && p.outline && p.outline.edges) p.edges = p.outline.edges;
+      // BerryStudio-Upgrade-Plan-v5.md WP-44: same hoist idiom as
+      // curves/edges above — jacketFrontBack() attaches chestEdgeIndices/
+      // notches directly to the outline array it returns (the same
+      // convention `.edges` already used there), since call sites pass
+      // `outline: jb.back` rather than spreading a separate meta object
+      // the way princessBodice()'s own pieces do.
+      if (!p.chestEdgeIndices && p.outline && p.outline.chestEdgeIndices) p.chestEdgeIndices = p.outline.chestEdgeIndices;
+      if (!p.notches && p.outline && p.outline.notches) p.notches = p.outline.notches;
     }
     return pieces;
   }
@@ -676,11 +684,36 @@ export let FancyGen;
     // (`princessFrontNeck`/`princessBackNeck`), which a collar/collar-
     // stand/lapel-facing piece can now seam to instead of floating
     // unattached near the neck.
+    // BerryStudio-Upgrade-Plan-v5.md WP-44: bust-level and waist-level
+    // notches, the same dual convention princessPanel() already
+    // established in js/pattern-builders.js — real coordinates, not
+    // re-derived indices: princessCurve()'s own addSeg() anchors each
+    // segment at its literal (bustX,bustY)/(waistX,waistY) argument, so
+    // these ARE the exact vertices on frontCurve/backCurve (and, since
+    // frontSide/backSide splice the SAME curve just reversed, on their
+    // own outlines too — a notch matches by nearest point, not by index,
+    // so the identical coordinate works on both). Deliberately NO
+    // `chestEdgeIndices` anywhere in this function: checkEase()'s own
+    // module comment already excludes princess-seamed pieces by name —
+    // the real chest circumference is split across frontCenter AND
+    // frontSide, so neither piece alone can honestly report it.
+    const frontNotches = [[fBustX, bustY], [fWaistX, waistY]];
+    const backNotches = [[bBustX, bustY], [bWaistX, waistY]];
+    // Notches live on frontSide/backSide only, NOT frontCenter/backCenter.
+    // frontSide and backSide are sewn to their own center panel along the
+    // princessFront/princessBack seam (checked below), so a bust/waist
+    // notch there measures a real shared-seam relationship. frontCenter
+    // and backCenter, by contrast, share NO seam with each other in this
+    // construction — they connect only indirectly, via their respective
+    // side panels — so giving both a "matching" notch would assert an
+    // alignment that doesn't physically exist, and checkNotchAlignment
+    // correctly flagged that as a real (not false-positive) mismatch when
+    // this was tried.
     const meta = {
       frontCenter: { role: 'bodice-front-center', cutOnFold: true, princessSeamId: 'princessFront', necklineEndIdx: frontCurveOffset, curves: [...frontNeckCurve, ...offsetCurves(frontCurveCurves, frontCurveOffset)], edges: [frontCenterEdge, { fromIdx: 0, toIdx: frontCurveOffset, seamId: 'princessFrontNeck' }] },
-      frontSide: { role: 'bodice-front-side', bilateral: true, curves: frontSide.curves || [], edges: [{ fromIdx: 0, toIdx: frontCurve.length - 1, seamId: 'princessFront' }] },
+      frontSide: { role: 'bodice-front-side', bilateral: true, curves: frontSide.curves || [], edges: [{ fromIdx: 0, toIdx: frontCurve.length - 1, seamId: 'princessFront' }], notches: frontNotches },
       backCenter: { role: 'bodice-back-center', cutOnFold: true, princessSeamId: 'princessBack', necklineEndIdx: backCurveOffset, curves: [{ fromIdx: 0, toIdx: neckCurveToIdx(backNeck, backCurve, backNeckSeg[2]), ...qBezToCubic(...backNeckSeg) }, ...offsetCurves(backCurveCurves, backCurveOffset)], edges: [backCenterEdge, { fromIdx: 0, toIdx: backCurveOffset, seamId: 'princessBackNeck' }] },
-      backSide: { role: 'bodice-back-side', bilateral: true, curves: backSide.curves || [], edges: [{ fromIdx: 0, toIdx: backCurve.length - 1, seamId: 'princessBack' }] },
+      backSide: { role: 'bodice-back-side', bilateral: true, curves: backSide.curves || [], edges: [{ fromIdx: 0, toIdx: backCurve.length - 1, seamId: 'princessBack' }], notches: backNotches },
     };
     return { frontCenter, frontSide, backCenter, backSide, hemY, sideX, meta };
   }
@@ -786,6 +819,17 @@ export let FancyGen;
       { fromIdx: 0, toIdx: backNeckShift - 1, seamId: 'jacketBackNeck' },
       { fromIdx: backNeckShift, toIdx: backNeckShift + 8, seamId: 'jacketSide' },
     ];
+    // BerryStudio-Upgrade-Plan-v5.md WP-44: `back` is a genuine cut-on-
+    // fold half panel with no closure/button-stand allowance at center
+    // back — the fold-doubling assumption checkEase()'s own
+    // chestEdgeIndices hint relies on holds here cleanly, unlike `front`
+    // below (a real front-opening overlap distorts the same math there —
+    // checkEase()'s own module comment already names "an asymmetric
+    // wrap/jacket front" as the case that needs to stay honestly
+    // deferred, so `front` deliberately gets a notch only, no hint).
+    // `[underarmX, armY]` is this panel's own widest point.
+    back.chestEdgeIndices = [backNeckShift];
+    back.notches = [[underarmX, armY]];
 
     // The front's own neckline curve reuses the EXISTING [closureX, 4]
     // point as its own endpoint (frontSeg1's own p0, unchanged) rather
@@ -841,6 +885,14 @@ export let FancyGen;
       { fromIdx: 0, toIdx: frontNeckShift - 1, seamId: 'jacketFrontNeck' },
       { fromIdx: frontNeckShift - 1 + 7, toIdx: frontNeckShift - 1 + 14, seamId: 'jacketSide' },
     ];
+    // WP-44: notch only, no chestEdgeIndices — `front` carries a real
+    // closure/button-stand allowance at center front (`closureX`), so
+    // doubling its own half-width overstates true half-chest by that
+    // allowance; checkEase()'s own module comment already names this
+    // exact "asymmetric jacket front" case as one to leave honestly
+    // deferred rather than guessed at (see `back`'s own WP-44 comment
+    // above for the matching case where the hint IS safe).
+    front.notches = [[frontUnderarmX, armY]];
     // BerryStudio-Upgrade-Plan-v5.md WP-43 continued: the real, measured
     // arc length of each declared neckline edge above — not the raw
     // `closureX`/`backNeckW` constants that shaped it, the actual sampled

@@ -6,6 +6,78 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-44 (part 3): notch/ease coverage for `fancy-patterns.js`'s princess bodices and jacket fronts/backs — and a second real `checkNotchAlignment` false-positive family, fixed by correcting the metadata, not the checker
+
+`BerryStudio-Upgrade-Plan-v5.md` WP-44's third slice: `js/fancy-patterns.js`
+(the 64-pattern Fancy Collection) had 0% `chestEdgeIndices` coverage and
+near-zero notch coverage on its two most chest-relevant shared builders —
+`princessBodice()` (princess-seamed jackets/dresses/coats) and
+`jacketFrontBack()` (blazers/coats/sherwanis) — before this pass.
+
+### Added
+- `princessBodice(m, o)`: `frontSide`/`backSide` (the pieces that actually
+  carry the full bust/waist width, per `checkEase`'s own module comment
+  excluding princess-seamed *center* pieces) now declare `notches` at the
+  bust and waist points — the exact literal coordinates `princessCurve()`'s
+  own `addSeg()` anchors each curve segment to, so the notch lands on the
+  real vertex, not an approximation. Deliberately still NO
+  `chestEdgeIndices` anywhere in this function, unchanged from before: the
+  real chest circumference is split across the center AND side panels, so
+  neither alone can honestly report it — the documented exclusion this
+  function's own comment already called out.
+- `jacketFrontBack(m, len, o)`: `back` gets `chestEdgeIndices` (the
+  neckline-shift vertex sits at the underarm/chest level for this
+  construction) plus an underarm notch; `front` gets the matching underarm
+  notch only — deliberately no `chestEdgeIndices` on `front`, since a real
+  center-front closure/overlap allowance breaks the fold-doubling
+  assumption `checkEase` depends on (this function's own asymmetric-wrap
+  exclusion, stated in `checkEase`'s module comment, applies here too).
+- `hoistCurves(pieces)`: extended to also hoist `chestEdgeIndices`/
+  `notches` from an outline array onto its wrapping piece object, matching
+  what it already did for `.curves`/`.edges` — needed because
+  `jacketFrontBack()` attaches this metadata to the bare outline array,
+  not a `meta` wrapper.
+
+### A second real `checkNotchAlignment` false positive — found, then traced to bad metadata, not a checker bug
+Giving `princessBodice()`'s `frontCenter`/`backCenter` the same bust/waist
+notches (by literal coordinate, mirroring `frontSide`/`backSide`) at first
+looked like the obvious symmetric choice — until the full-library sweep
+turned up 14 new real "Bodice Front Center / Bodice Back Center"
+`checkNotchAlignment` fails. Unlike part 1's leotard false positive (a
+real bug in the checker's arc-position method, fixed in `js/validate.js`
+itself), direct inspection here (`grep -n "seamId:"`) confirmed
+`frontCenter` and `backCenter` declare no shared `seamId` with each
+other at all — in this construction they connect only indirectly, through
+their respective side panels, never to each other directly. A "matching"
+notch between two pieces that share no real seam asserts a relationship
+that doesn't exist in the garment, so the checker was right to flag it.
+Fixed by removing the notch declaration from `frontCenter`/`backCenter`
+(kept on `frontSide`/`backSide`, which do share a real seam with their own
+center panel and passed cleanly), with a code comment recording why —
+an honest limitation of this construction, not a workaround.
+
+### Verification
+- `/tmp/wp44_failcheck.mjs` (full 308-pattern sweep, all four collections):
+  0 fails, confirming the corrected metadata resolves all 14 false
+  positives without weakening the check.
+- `fancy-patterns.js` alone: notch coverage 19.9% (126/633 pieces),
+  `chestEdgeIndices` 7.4% (47/633) — real, honest numbers, still well
+  short of WP-44's ≥80%/≤20% gates; this collection's remaining ~35 shared
+  builders (sleeves, gores, trouser panels, wrap fronts) are mostly not
+  chest-relevant and are left for a later slice.
+- Library-wide (four collections combined): notch coverage 33.2%
+  (720/2170), `chestEdgeIndices` 16.5% (359/2170), cross-piece pairing
+  67.5% (337/499) — unchanged from part 2 on the pairing figure, since
+  this slice added no new role/pairing metadata, only notches and ease
+  hints.
+- `node --test "test/**/*.test.js"`: 315/315, no regressions (this slice
+  added no new tests of its own — the existing library-wide sweep test
+  already exercises every new notch/chestEdgeIndices declaration by
+  construction).
+- `cloth-lab` `npx vitest run`: 835/835, unchanged.
+- `npm run lint`: zero new warnings, zero errors.
+
+
 ## WP-44 (part 2): `underwear-library.js`'s cross-piece pairing goes from 0% to 92.3% verified — one missing `ROLE_PAIR` entry, not a construction gap
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-44's own reconnaissance (part 1's
