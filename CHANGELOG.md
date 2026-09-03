@@ -6,6 +6,28 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-44 (part 5): notch coverage for `data.js`'s six hand-authored patterns — and one asymmetric-front exclusion left correctly unforced
+
+`js/data.js` holds the six original, hand-authored patterns (`womens_dress`, `abaya`, `mens_shirt`, `thobe`, `girls_dress`, `boys_trousers`) that predate `js/library.js`'s shared builders. All of them already had `chestEdgeIndices` on their bodice front/back panels from WP-24; this pass closes the one remaining gap on those same panels — notches.
+
+### Added
+- `girls_dress`: `bodice_front`/`bodice_back` — both share the literal same outline, so a notch at the same already-declared chest vertex (`[cF,1]`, the same vertex `chestEdgeIndices` already points at) matches exactly by construction (confirmed 0.0% perimeter difference).
+- `thobe`: `front`/`back` — a notch at each panel's own underarm-level vertex; the two outlines are the same shape with each other's X values uniformly offset by ~1cm, so the same relative vertex matches closely (confirmed 0.2%).
+- `mens_shirt`: `back` gets a notch at the same height as `front`'s existing one (front already had a notch from WP-24; back didn't). Back's outline has no literal vertex at that height — this is a point on the underarm→hem edge rather than an existing corner, placed there by the nearest-point-projection convention this codebase already establishes for notches (confirmed 0.1%).
+
+### Deliberately NOT added: a notch on `abaya`'s front
+`abaya`'s front panel is a genuinely open, un-folded panel (already excluded from `chestEdgeIndices` since WP-24, for the same reason) — it has no vertex that corresponds to anything on the back the way a folded pair's do. Adding a notch only to the back would produce a real, correctly-reported "different notch count" mismatch for no informational gain, so both stay notch-free, matching how the two already handle `chestEdgeIndices`.
+
+### Verification
+- `/tmp/wp44_failcheck.mjs` (full 308-pattern sweep): 0 fails.
+- Confirmed each new pair reports `checkNotchAlignment` as `pass` (not `warn`), at 0.0%–0.2% perimeter difference — not just "no fail," genuinely matching.
+- `library.js` (+`data.js`) group: notch coverage 68.2%→69.5% (259→264/380).
+- Library-wide: notch coverage 35.4%→35.6% (768→773/2170); `chestEdgeIndices`/pairing unchanged (this slice added neither).
+- `node --test "test/**/*.test.js"`: 315/315, no regressions.
+- `cloth-lab` `npx vitest run`: 835/835, unchanged.
+- `npm run lint`: zero new warnings, zero errors.
+
+
 ## WP-44 (part 4): notch coverage for `underwear-library.js`'s briefs — and an honest architectural non-fit for `chestEdgeIndices` there, documented rather than forced
 
 `js/underwear-library.js` (44 patterns, 219 pieces) had 0% notch coverage

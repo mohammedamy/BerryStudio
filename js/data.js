@@ -149,6 +149,12 @@ export const PATTERNS = {
           desc:{en:"Back panel joined to a shoulder yoke.",ar:"الظهر متصل بكوّة الكتف."},
           outline:[[0,0],[cF+1,2],[cF+2,m.backLen*0.5],[cF+1,len],[0,len]],
           grain:[[3,8],[3,len-8]],
+          // WP-44: side-seam notch at the same height as front's own
+          // [cF,m.backLen] notch — this outline has no literal vertex
+          // there (it goes straight from the underarm point to the hem),
+          // so this is a point ON the underarm->hem edge rather than an
+          // existing corner; nearest-point projection places it correctly.
+          notches:[[cF+1.5,m.backLen]],
           role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[1] },
         { key:"sleeve", name:{en:"Shirt Sleeve",ar:"كم القميص"},
           desc:{en:"Full sleeve with placket for the cuff.",ar:"كم كامل مع فتحة للأساور."},
@@ -211,11 +217,18 @@ export const PATTERNS = {
           desc:{en:"Front with placket and pocket.",ar:"المقدمة مع الحاشية والجيب."},
           outline:[[0,0],[w,2],[w+4,m.backLen],[w+8,len],[0,len]],
           grain:[[4,8],[4,len-8]],
+          // WP-44: notch at the underarm-level vertex (outline[2]) — front
+          // and back share the same point count and near-identical
+          // proportions (back is this same shape uniformly offset by ~1cm
+          // at each corresponding point), so the same relative vertex
+          // matches closely between the two.
+          notches:[[w+4,m.backLen]],
           role:"bodice-front-center", cutOnFold:true, chestEdgeIndices:[1] },
         { key:"back", name:{en:"Thobe Back",ar:"ظهر الثوب"},
           desc:{en:"Back on the fold.",ar:"الظهر على الطية."},
           outline:[[0,0],[w+1,2],[w+5,m.backLen],[w+9,len],[0,len]],
           grain:[[4,8],[4,len-8]],
+          notches:[[w+5,m.backLen]],
           role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[1] },
         { key:"sleeve", name:{en:"Thobe Sleeve",ar:"كم الثوب"},
           desc:{en:"Long straight sleeve.",ar:"كم طويل مستقيم."},
@@ -241,10 +254,15 @@ export const PATTERNS = {
         { key:"bodice_front", name:{en:"Bodice Front",ar:"صدرية أمامية"},
           desc:{en:"Fitted front bodice.",ar:"صدرية أمامية ضيقة."},
           outline:[[0,0],[cF,1],[cF,bod],[0,bod]], grain:[[cF/2,4],[cF/2,bod-4]],
+          // WP-44: front and back share this exact literal outline, so a
+          // notch at the same chest-level vertex both already declare via
+          // chestEdgeIndices matches by construction — no seamId needed.
+          notches:[[cF,1]],
           role:"bodice-front-center", cutOnFold:true, chestEdgeIndices:[1] },
         { key:"bodice_back", name:{en:"Bodice Back",ar:"صدرية خلفية"},
           desc:{en:"Back bodice with button opening.",ar:"صدرية خلفية بفتحة أزرار."},
           outline:[[0,0],[cF,1],[cF,bod],[0,bod]], grain:[[cF/2,4],[cF/2,bod-4]],
+          notches:[[cF,1]],
           role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[1] },
         { key:"skirt", name:{en:"Gathered Skirt",ar:"تنورة مكشكشة"},
           desc:{en:"Full rectangle skirt, gathered to waist.",ar:"تنورة مستطيلة كاملة تُكشكش عند الوسط."},
