@@ -24,6 +24,10 @@ import { t, dirFor } from './i18n'
 // deferred: a waistband is also stiff/narrow enough to barely affect drape,
 // so skipping it doesn't compromise proving the import->author->simulate
 // pipeline on a real, non-T-shirt garment.
+function patternSignature({ lang: _lang, ...pattern }) {
+  return JSON.stringify(pattern)
+}
+
 const SKIRT_ROLES = { frontSkirt: 'hipPanelFront', backSkirt: 'hipPanelBack' }
 
 // WP-5.3: `embedded`/`pattern`/`onReady` are only used by the new embedded
@@ -46,7 +50,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   const [measurementsByCategory, setMeasurementsByCategory] = useState(
     pattern ? { ...DEFAULT_MEASUREMENTS, [pattern.category]: pattern.measurements } : DEFAULT_MEASUREMENTS,
   )
-  const [debugView, setDebugView] = useState(bodyOnly ? 'off' : 'cloth')
+  const [debugView, setDebugView] = useState(bodyOnly ? 'off' : pattern ? 'seams' : 'cloth')
   const [fabricId, setFabricId] = useState((pattern && pattern.fabricId) || DEFAULT_FABRIC)
   // WP-35: 'default' (unchanged) or 'high' (true dihedral-angle bend) — a
   // real sim rebuild when toggled, not a live uniform swap like fabricId
@@ -109,11 +113,10 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   // remount — seam-editor progress lost) and forced debugView back to
   // 'seams' (silently yanking the user off whatever view — Cloth, Weld,
   // Pieces — they were actually looking at) purely from switching languages.
-  const lastPatternSignatureRef = useRef(null)
+  const lastPatternSignatureRef = useRef(pattern ? patternSignature(pattern) : null)
   function applyIncomingPattern(payload) {
     if (payload.lang) setLang(payload.lang)
-    const { lang: _lang, ...patternOnly } = payload
-    const signature = JSON.stringify(patternOnly)
+    const signature = patternSignature(payload)
     if (signature === lastPatternSignatureRef.current) return // only `lang` differed — already applied above
     lastPatternSignatureRef.current = signature
 
@@ -170,7 +173,12 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
       <Header
         embedded={embedded} bodyOnly={bodyOnly} lang={lang}
         category={category} onCategoryChange={setCategory}
-        debugView={debugView} onDebugViewChange={setDebugView}
+        debugView={debugView} onDebugViewChange={(view) => {
+          // Imported designs must be finalized before any garment preview.
+          if (imported && !garment && ['cloth', 'weld', 'pieces'].includes(view)) {
+            setDebugView('seams')
+          } else setDebugView(view)
+        }}
       />
       <Workspace
         key={garmentVersion}

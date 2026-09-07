@@ -6,6 +6,36 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Cloth Lab fix package: import lifecycle and deformed export preparation
+
+Integrated the supplied fix package against main `be22e233`, preserving account
+configuration, entitlement gates, branding and unrelated features.
+
+### Fixed
+
+- Portable standalone asset base; imported designs start in Seams and cannot
+  select a demo preview before finalization.
+- Language-only updates retain finalized garments and seam selections.
+- Engine teardown, stale-load/readiness guards, latest-pattern readiness sync,
+  and sign-out cleanup even while Cloth Lab is hidden.
+- GLB/OBJ/USDZ refresh simulated positions, normals and bounds before export;
+  invalid snapshots do not partially mutate geometry.
+- Drag cleanup and lost pointer capture release the orbit-control lock.
+
+### Verification
+
+Node v26.7.0: 308 root tests and 849 Cloth Lab tests passed. Both lint commands
+passed with existing warning counts (92/9). Standalone and embedded builds passed.
+Playwright initially had 14 passes/5 failures; final CI-mode run exited 0 with
+13 first-attempt passes and 6 retry passes. Untouched baseline also needed retries
+(16 first-attempt passes, 3 retry passes). Built JS/CSS/HDR/textures resolve under
+both local hosting paths; the existing missing favicon remains.
+
+Authenticated GPU workflows, actual drape export/reopen fidelity, full mobile
+Cloth Lab layout and Quick Look remain unverified. No push or deployment.
+See [the integration report](docs/cloth-lab-fix-integration.md) for exact results,
+public-site asset failures and the acceptance checks remaining before merge.
+
 ## WP-71: a repo-scoped skill for closing out a work package
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-71. Every WP shipped across this

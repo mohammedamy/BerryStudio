@@ -219,6 +219,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // the active view.
   function refreshGatedUI(){
     renderLibraryPane(); renderAIPane(); renderBuilderPane(); renderExportPane();
+    if(!gateAllowed()) teardownClothLab();
     if(state.view==="clothlab") setView("clothlab");
   }
   async function refreshEntitlement(session){
@@ -3584,6 +3585,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   function loadClothLab(){
     if(!gateAllowed()){ teardownClothLab(); renderClothLabGate(); return; }
     hideClothLabGate();
+    if(clothLabActiveEngine !== state.clothLabEngine) teardownClothLab();
+    clothLabActiveEngine = state.clothLabEngine;
     if(state.clothLabEngine==="embedded"){ mountClothLabEmbedded(); return; }
     const frame=$("#clothLabFrame");
     if(frame.dataset.loaded) return;
@@ -3604,12 +3607,14 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // have switched the setting mid-session while the other engine was still
   // live from before the switch.
   function teardownClothLab(){
+    clothLabLoadGeneration++;
+    clothLabActiveEngine = null;
     clothLabReady = false;
     lastClothLabPayloadJSON = null;
     if(clothLabEmbedModule){ clothLabEmbedModule.unmount(); clothLabEmbedModule = null; }
     clothLabEmbedLoadPromise = null;
     const frame=$("#clothLabFrame");
-    if(frame){ frame.src = ""; delete frame.dataset.loaded; }
+    if(frame){ frame.removeAttribute("src"); delete frame.dataset.loaded; }
   }
   // `clothLabEmbedModule` holds the {update, unmount} handle mount() returns
   // once the dynamic import + first render actually complete — syncClothLab()
@@ -3618,6 +3623,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // import finishes (dynamic import() itself is cached by the module
   // registry, but calling mount() twice would create two React roots on the
   // same container).
+  let clothLabLoadGeneration = 0;
+  let clothLabActiveEngine = null;
   let clothLabEmbedModule = null;
   let clothLabEmbedLoadPromise = null;
   function mountClothLabEmbedded(){
@@ -3629,17 +3636,32 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // as clothLabOrigin() below not hardcoding an origin.
     const embedUrl = new URL("../cloth-lab/dist-embed/cloth-lab-embed.js", import.meta.url).href;
     const assetBase = new URL("../cloth-lab/dist-embed/", import.meta.url).href;
+    const generation = clothLabLoadGeneration;
     clothLabEmbedLoadPromise = import(/* @vite-ignore */ embedUrl).then((mod) => {
+      if(generation !== clothLabLoadGeneration || !gateAllowed() || state.clothLabEngine !== "embedded") return;
       clothLabEmbedModule = mod.mount(container, {
         assetBase,
         pattern: buildClothLabPayload(),
-        onReady: () => { clothLabReady = true; },
+        onReady: () => {
+          if(generation !== clothLabLoadGeneration || !gateAllowed() || state.clothLabEngine !== "embedded") return;
+          clothLabReady = true;
+          syncClothLab(true); // include edits made while React was mounting
+        },
       });
     }).catch((err) => {
+      if(generation !== clothLabLoadGeneration) return;
       console.error("Cloth Lab (embedded engine) failed to load:", err);
       clothLabEmbedLoadPromise = null; // allow a retry on the next tab switch
     });
     return clothLabEmbedLoadPromise;
+  }
+  function handleClothLabReady(e){
+    if(!e.data || e.data.type!=="clothlab:ready") return;
+    const frame=$("#clothLabFrame");
+    if(!frame || e.source!==frame.contentWindow || e.origin!==clothLabOrigin() ||
+       clothLabActiveEngine!=="iframe" || !frame.dataset.loaded || !gateAllowed()) return;
+    clothLabReady=true;
+    syncClothLab(true);
   }
   // Derived straight from the iframe's actual src (same-origin in production
   // — one combined GH Pages deploy; genuinely cross-origin in local dev —
@@ -4556,8 +4578,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       `<button ${state.clothLabEngine!=="embedded"?'class="active"':''}>${T("clothLabEngineIframe")}</button>`+
       `<button ${state.clothLabEngine==="embedded"?'class="active"':''}>${T("clothLabEngineEmbedded")}</button>`
     );
-    engineSeg.children[0].onclick=()=>{state.clothLabEngine="iframe";save();openSettings();};
-    engineSeg.children[1].onclick=()=>{state.clothLabEngine="embedded";save();openSettings();};
+    engineSeg.children[0].onclick=()=>{state.clothLabEngine="iframe";save();if(clothLabActiveEngine && clothLabActiveEngine!==state.clothLabEngine) teardownClothLab();if(state.view==="clothlab") setView("clothlab");openSettings();};
+    engineSeg.children[1].onclick=()=>{state.clothLabEngine="embedded";save();if(clothLabActiveEngine && clothLabActiveEngine!==state.clothLabEngine) teardownClothLab();if(state.view==="clothlab") setView("clothlab");openSettings();};
     engineRow.appendChild(engineSeg); body.appendChild(engineRow);
     const rb=el("button","big-btn ghost",T("resetOnb")); rb.style.marginTop="16px"; rb.onclick=()=>{closeModal("#settingsModal");startOnboarding();}; body.appendChild(rb);
     const ib=el("button","big-btn",IC.download+T("installApp")); ib.style.marginTop="8px"; ib.onclick=installApp; body.appendChild(ib);
@@ -4791,13 +4813,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // hear us) — confirm the sender really is our iframe, then send it the
     // current pattern right away and on every later tab switch (syncClothLab
     // itself no-ops if the pattern hasn't actually changed).
-    window.addEventListener("message",(e)=>{
-      if(!e.data || e.data.type!=="clothlab:ready") return;
-      const frame=$("#clothLabFrame");
-      if(!frame || e.source!==frame.contentWindow) return;
-      clothLabReady=true;
-      syncClothLab(true);
-    });
+    window.addEventListener("message",handleClothLabReady);
   }
   function updateUnitsPill(){ $("#unitsPill .u").textContent=state.unitsCm?"cm":"inch"; }
 

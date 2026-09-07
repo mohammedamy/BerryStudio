@@ -8,6 +8,7 @@ import { ClothSimulation, textureDimFor, QUALITY_TIER_DEFAULT } from './ClothSim
 import { FABRIC_PRESETS, DEFAULT_FABRIC } from './fabricPresets'
 import { deriveCollisionRig, deriveShoulderPinMask, deriveWaistbandPinMask } from '../body/collisionRig'
 import { getAssetBase } from '../assetBase'
+import { updateExportGeometry } from '../export/prepareScene'
 
 // A single real (CC0, see public/textures/fabric-weave/README.md) fabric-
 // weave texture set, shared across every fabric preset — color/roughness/
@@ -285,17 +286,13 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier
       const buffer = new Float32Array(texDim * texDim * 4)
       gl.readRenderTargetPixels(sim.gpuCompute.getCurrentRenderTarget(sim.posVar), 0, 0, texDim, texDim, buffer)
       const { cloth } = assembled
-      const posAttr = mesh.geometry.attributes.position
-      for (let i = 0; i < cloth.renderVertexCount; i++) {
-        const sp = cloth.renderVertexToSimParticle[i]
-        posAttr.array[i * 3] = buffer[sp * 4]
-        posAttr.array[i * 3 + 1] = buffer[sp * 4 + 1]
-        posAttr.array[i * 3 + 2] = buffer[sp * 4 + 2]
-      }
-      posAttr.needsUpdate = true
-      mesh.geometry.computeBoundingSphere()
+      updateExportGeometry(mesh.geometry, buffer, cloth.renderVertexToSimParticle)
       return true
     }
+
+    // File exporters read CPU attributes, not our GPU vertex shader.
+    const exportMesh = meshRef.current
+    if (exportMesh) exportMesh.userData.prepareExport = refreshGeometryToCurrentPositions
 
     function onPointerDown(e) {
       const sim = simRef.current
@@ -326,7 +323,7 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier
 
       camera.getWorldDirection(camDir)
       const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(camDir, hit.point)
-      dragRef.current = { particleIndex, plane }
+      dragRef.current = { particleIndex, plane, pointerId: e.pointerId }
       sim.setDragParticle(particleIndex, hit.point)
       onDragStateChange?.(true)
       canvas.setPointerCapture?.(e.pointerId)
@@ -348,18 +345,26 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier
       dragRef.current = null
       simRef.current?.clearDrag()
       onDragStateChange?.(false)
-      canvas.releasePointerCapture?.(e.pointerId)
+      if (canvas.hasPointerCapture?.(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
     }
 
     canvas.addEventListener('pointerdown', onPointerDown)
     canvas.addEventListener('pointermove', onPointerMove)
     canvas.addEventListener('pointerup', onPointerUp)
     canvas.addEventListener('pointercancel', onPointerUp)
+    canvas.addEventListener('lostpointercapture', onPointerUp)
     return () => {
+      if (exportMesh) delete exportMesh.userData.prepareExport
+      const pointerId = dragRef.current?.pointerId
+      dragRef.current = null
+      simRef.current?.clearDrag()
+      onDragStateChange?.(false)
+      if (pointerId !== undefined && canvas.hasPointerCapture?.(pointerId)) canvas.releasePointerCapture(pointerId)
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointermove', onPointerMove)
       canvas.removeEventListener('pointerup', onPointerUp)
       canvas.removeEventListener('pointercancel', onPointerUp)
+      canvas.removeEventListener('lostpointercapture', onPointerUp)
     }
   }, [gl, camera, assembled, onDragStateChange])
 
