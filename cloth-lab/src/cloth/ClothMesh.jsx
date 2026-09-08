@@ -55,7 +55,7 @@ function loadFabricTextures() {
 // about the steady-state render loop — grab-and-drag below does a ONE-TIME
 // readback per pointerdown, which is a rare, user-paced event, not a
 // per-frame cost).
-export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier = QUALITY_TIER_DEFAULT, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef }) {
+export default function ClothMesh({ paused = false, dims, fabricId = DEFAULT_FABRIC, qualityTier = QUALITY_TIER_DEFAULT, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef }) {
   const gl = useThree((s) => s.gl)
   const camera = useThree((s) => s.camera)
 
@@ -241,7 +241,7 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier
   useFrame((_, delta) => {
     const sim = simRef.current
     if (!sim) return
-    sim.step(delta)
+    if (!paused) sim.step(delta)
     if (material.userData.shader) {
       material.userData.shader.uniforms.uSimPositionTex.value = sim.getPositionTexture()
     }

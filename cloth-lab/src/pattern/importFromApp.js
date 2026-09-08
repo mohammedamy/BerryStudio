@@ -432,16 +432,24 @@ export function convertAppPattern(payload) {
       : declaredPlacement
 
     if (SLEEVE_ROLES.has(schemaRole)) {
-      sleeves.push({ id: p.id, label, outline: local, color: p.color })
+      sleeves.push({ id: p.id, label, outline: cutOnFold ? unfoldPiece(local) : local, color: p.color, bilateral: bilateral !== false && !cutOnFold })
       continue
     }
 
     if (schemaRole === 'skirt-front-gore' || schemaRole === 'skirt-back-gore' || schemaRole === 'skirt-side-gore-left' || schemaRole === 'skirt-side-gore-right') {
       const internalRole = { 'skirt-front-gore': 'goreFront', 'skirt-back-gore': 'goreBack', 'skirt-side-gore-left': 'goreSideLeft', 'skirt-side-gore-right': 'goreSideRight' }[schemaRole]
-      rawPieces.push({ id: p.id, label: p.label, outline: local, color: p.color })
-      roles[p.id] = internalRole
-      pushSeamIdEdges(p.id, edges, local.length)
-      recognized.push({ id: p.id, label })
+      const outline = cutOnFold ? unfoldPiece(local) : local
+      const copies = bilateral && !cutOnFold ? [
+        { id: p.id + '_r', outline }, { id: p.id + '_l', outline: mirrorOutline(outline) },
+      ] : [{ id: p.id, outline }]
+      for (const copy of copies) {
+        rawPieces.push({ id: copy.id, label: p.label, outline: copy.outline, color: p.color })
+        roles[copy.id] = internalRole
+        const copyEdges = copy.id.endsWith('_l') && bilateral && !cutOnFold && edges ? mirrorEdgeIndices(edges, local.length) : edges
+        const tagged = bilateral && !cutOnFold ? copyEdges?.map(e => ({ ...e, seamId: e.seamId ? e.seamId + (copy.id.endsWith('_r') ? '_R' : '_L') : e.seamId })) : copyEdges
+        pushSeamIdEdges(copy.id, tagged, copy.outline.length)
+        recognized.push({ id: copy.id, label })
+      }
       continue
     }
 
@@ -594,22 +602,21 @@ export function convertAppPattern(payload) {
   // shape; an unstitched-but-correctly-placed sleeve drapes plausibly from
   // gravity+placement alone, safer than guessing a seam location).
   for (const s of sleeves) {
-    const rId = s.id + '_r', lId = s.id + '_l'
-    rawPieces.push({ id: rId, label: s.label, outline: s.outline, color: s.color })
-    rawPieces.push({ id: lId, label: s.label, outline: mirrorOutline(s.outline), color: s.color })
-    roles[rId] = 'sleeve'
-    roles[lId] = 'sleeve'
-    const tube = sleeveTubeEdges(s.outline)
-    if (tube) {
-      pushEdge(rId, 'frontSeam', tube.frontSeam.from, tube.frontSeam.to)
-      pushEdge(rId, 'backSeam', tube.backSeam.from, tube.backSeam.to)
-      pushEdge(lId, 'frontSeam', tube.frontSeam.from, tube.frontSeam.to)
-      pushEdge(lId, 'backSeam', tube.backSeam.from, tube.backSeam.to)
-      seamInstructions.push({ id: rId + '_tube', a: { piece: rId, edge: 'frontSeam' }, b: { piece: rId, edge: 'backSeam' }, reverse: true })
-      seamInstructions.push({ id: lId + '_tube', a: { piece: lId, edge: 'frontSeam' }, b: { piece: lId, edge: 'backSeam' }, reverse: true })
+    const copies = s.bilateral === false ? [{ id: s.id, outline: s.outline, suffix: '' }] : [
+      { id: s.id + '_r', outline: s.outline, suffix: ' (R)' },
+      { id: s.id + '_l', outline: mirrorOutline(s.outline), suffix: ' (L)' },
+    ]
+    for (const copy of copies) {
+      rawPieces.push({ id: copy.id, label: s.label, outline: copy.outline, color: s.color })
+      roles[copy.id] = 'sleeve'
+      const tube = sleeveTubeEdges(copy.outline)
+      if (tube) {
+        pushEdge(copy.id, 'frontSeam', tube.frontSeam.from, tube.frontSeam.to)
+        pushEdge(copy.id, 'backSeam', tube.backSeam.from, tube.backSeam.to)
+        seamInstructions.push({ id: copy.id + '_tube', a: { piece: copy.id, edge: 'frontSeam' }, b: { piece: copy.id, edge: 'backSeam' }, reverse: true })
+      }
+      recognized.push({ id: copy.id, label: s.label + copy.suffix })
     }
-    recognized.push({ id: rId, label: s.label + ' (R)' })
-    recognized.push({ id: lId, label: s.label + ' (L)' })
   }
 
   // Front/back seams (both paths converge here) — only when BOTH sides of a
