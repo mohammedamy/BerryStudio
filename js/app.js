@@ -2,6 +2,7 @@
    BerryStudio — application controller.
    Wires i18n, themes, RTL, panels, grading, 3D, export, etc.
    ============================================================ */
+import { designKey as clothDesignKey, ensureClothPieceIds } from './cloth-workflow-contract.js';
 import { I18N } from './i18n.js';
 import { PATTERNS, LIBRARY, computeMeasurements, SIZES, SIZE_STEP, KIDS_AGES } from './data.js';
 import { Canvas } from './canvas.js';
@@ -3708,7 +3709,11 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // garment. Piece outlines are already cm, already compatible; the harder
   // half-piece/role/seam conversion happens entirely on the cloth-lab side.
   function buildClothLabPayload(){
+    const pieces = ensureClothPieceIds(Canvas.getPieces());
     return {
+      designId: String(state.activeProjectId || "current"),
+      designName: activeProject()?.title || T("untitledProject"),
+      clothLabSetup: pieces[0]?.clothLabSetup,
       type: "berrystudio:pattern",
       measurements: currentMeas(),
       category: state.category,
@@ -3719,8 +3724,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       // (below) but nothing telling cloth-lab which one, or its own UI
       // chrome, should actually be shown. See cloth-lab/src/i18n.js.
       lang: state.lang,
-      pieces: Canvas.getPieces().filter(p=>p.visible!==false).map((p,i)=>({
-        id: ((p.name&&p.name.en)||"piece").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")+"_"+i,
+      pieces: pieces.map((p,i)=>({
+        id: p.clothLabId,
+        visible: p.visible !== false,
         label: p.name || {en:"Piece "+(i+1), ar:"قطعة "+(i+1)},
         outline: p.outline,
         darts: p.darts, notches: p.notches, grain: p.grain,
@@ -4814,6 +4820,18 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // current pattern right away and on every later tab switch (syncClothLab
     // itself no-ops if the pattern hasn't actually changed).
     window.addEventListener("message",handleClothLabReady);
+    window.addEventListener("message", e => {
+      if(e.data?.type!=="clothlab:setup" || !gateAllowed()) return;
+      const embedded = state.clothLabEngine === "embedded";
+      const frame = $("#clothLabFrame");
+      if(embedded ? (e.source!==window || e.origin!==location.origin) : (!frame || e.source!==frame.contentWindow || e.origin!==clothLabOrigin())) return;
+      const current = buildClothLabPayload();
+      if(e.data.designId!==current.designId || e.data.design!==clothDesignKey(current)) return;
+      const setup = e.data.setup;
+      if(!setup || typeof setup.answers!=="object" || JSON.stringify(setup).length>2000000) return;
+      const first = Canvas.getPieces()[0];
+      if(first){ first.clothLabSetup = { ...setup, design: e.data.design }; save(); }
+    });
   }
   function updateUnitsPill(){ $("#unitsPill .u").textContent=state.unitsCm?"cm":"inch"; }
 

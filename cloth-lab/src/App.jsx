@@ -11,29 +11,20 @@ import { DEFAULT_MEASUREMENTS } from './state/measurements'
 import { computeBodyDims } from './body/computeBodyDims'
 import { DEFAULT_FABRIC } from './cloth/fabricPresets'
 import { QUALITY_TIER_DEFAULT } from './cloth/ClothSimulation'
-import { buildSkirtRaw, DEFAULT_SKIRT_STYLE } from './pattern/library/skirt'
+import PatternReview from './workflow/PatternReview'
+import SewingDesk from './workflow/SewingDesk'
+import SceneBoundary from './workflow/SceneBoundary'
+import { planPattern, designKey } from './workflow/patternPlan'
+import { readSession, writeSession } from './workflow/session'
 import { useSeamEditor } from './seam/useSeamEditor'
 import SeamEditorPanel from './seam/SeamEditorPanel'
-import { convertAppPattern } from './pattern/importFromApp'
 import { t, dirFor } from './i18n'
 
-// Front/back skirt panels only — no waistband. A waistband needs its single
-// bottom edge SPLIT into two sub-seams (one to the front top, one to the
-// back top), which needs the seam-authoring UI to support inserting a new
-// vertex mid-edge, not just picking among existing ones. Deliberately
-// deferred: a waistband is also stiff/narrow enough to barely affect drape,
-// so skipping it doesn't compromise proving the import->author->simulate
-// pipeline on a real, non-T-shirt garment.
-function patternSignature({ lang: _lang, ...pattern }) {
-  return JSON.stringify(pattern)
-}
-
-const SKIRT_ROLES = { frontSkirt: 'hipPanelFront', backSkirt: 'hipPanelBack' }
+function patternSignature(payload) { return designKey(payload) }
 
 // WP-5.3: `embedded`/`pattern`/`onReady` are only used by the new embedded
 // entry point (embed.js) — the standalone build (main.jsx) renders <App />
-// with none of them, so every default below reproduces standalone's exact
-// prior behavior unchanged. `pattern`, when given, is the SAME payload
+// with none of them and waits for a real pattern handoff. `pattern`, when given, is the SAME payload
 // shape buildClothLabPayload() (js/app.js) already builds for the iframe
 // bridge — embed.js's update() re-renders this component with a new
 // `pattern` object each time the root app's own state changes, replacing
@@ -46,11 +37,12 @@ const SKIRT_ROLES = { frontSkirt: 'hipPanelFront', backSkirt: 'hipPanelBack' }
 // already renders nothing but BodyAvatar for any debugView other than
 // pieces/weld/cloth/seams) rather than adding a new rendering path.
 export default function App({ embedded = false, pattern = null, onReady, bodyOnly = false } = {}) {
+  const hostOriginRef = useRef(embedded ? window.location.origin : null)
   const [category, setCategory] = useState(pattern?.category || 'women')
   const [measurementsByCategory, setMeasurementsByCategory] = useState(
     pattern ? { ...DEFAULT_MEASUREMENTS, [pattern.category]: pattern.measurements } : DEFAULT_MEASUREMENTS,
   )
-  const [debugView, setDebugView] = useState(bodyOnly ? 'off' : pattern ? 'seams' : 'cloth')
+  const [debugView, setDebugView] = useState(bodyOnly ? 'off' : 'seams')
   const [fabricId, setFabricId] = useState((pattern && pattern.fabricId) || DEFAULT_FABRIC)
   // WP-35: 'default' (unchanged) or 'high' (true dihedral-angle bend) — a
   // real sim rebuild when toggled, not a live uniform swap like fabricId
@@ -65,7 +57,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   // unrecognized rig, VRM, no walk clip, no leg rig for "seated". null when
   // the current avatar/pose combination has full support.
   const [poseWarning, setPoseWarning] = useState(null)
-  const [garment, setGarment] = useState(null) // null = default T-shirt; else {pieces, seams} from the seam editor
+  const [garment, setGarment] = useState(null) // null = no finalized garment; never substituted with demo cloth
   // Per-category GLB avatar URLs from the bridge (root app's state.avatarGLB
   // dict) — keyed by category, not a single URL, because cloth-lab's own
   // Header category switcher is independent of the bridge: switching
@@ -81,9 +73,22 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
 
   // Whatever the bridge (root BerryStudio app — iframe postMessage in
   // standalone/legacy mode, the `pattern` prop when embedded) last sent,
-  // converted — see pattern/importFromApp.js. null = nothing imported yet,
-  // falls back to the skirt-import demo below exactly as before this feature.
-  const [imported, setImported] = useState(pattern ? convertAppPattern(pattern) : null)
+  // reviewed before conversion. null means no imported design; no demo fallback.
+  const [source, setSource] = useState(pattern)
+  const [answers, setAnswers] = useState(() => readSession(pattern)?.answers || (pattern?.clothLabSetup?.design === designKey(pattern) ? pattern.clothLabSetup.answers : {}))
+  const [configuring, setConfiguring] = useState(!bodyOnly)
+  const [savedEditor, setSavedEditor] = useState(() => readSession(pattern)?.editor || (pattern?.clothLabSetup?.design === designKey(pattern) ? pattern.clothLabSetup.editor : null))
+  const [storageWarning, setStorageWarning] = useState(false)
+  const plan = useMemo(() => planPattern(source, answers), [source, answers])
+  const imported = source ? plan.imported : null
+  function persist(nextAnswers, editor) {
+    if (!source) return
+    const state = { answers: nextAnswers, editor }
+    setStorageWarning(!writeSession(source, state))
+    // The host validates the sending frame, design identity and source shape
+    // before saving. Standalone stores locally when no host is present.
+    if (hostOriginRef.current) (embedded ? window : window.parent).postMessage({ type: 'clothlab:setup', designId: source.designId, design: designKey(source), setup: state }, hostOriginRef.current)
+  }
   // Bumped once per accepted bridge payload. useSeamEditor's drafts/seams are
   // lazy-initialized (useState(() => ...)) and won't pick up new rawPieces on
   // their own — Workspace below is remounted via key={garmentVersion} to
@@ -92,11 +97,6 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
 
   const measurements = measurementsByCategory[category]
   const dims = useMemo(() => computeBodyDims(measurements, category), [measurements, category])
-
-  const skirtRawPieces = useMemo(
-    () => buildSkirtRaw(measurements, DEFAULT_SKIRT_STYLE).filter((p) => p.id !== 'waistband'),
-    [measurements],
-  )
 
   // Shared by both ingestion paths below: convert (closed-world classifier
   // — see importFromApp.js for exactly what is/isn't recognized), sync
@@ -116,18 +116,20 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   const lastPatternSignatureRef = useRef(pattern ? patternSignature(pattern) : null)
   function applyIncomingPattern(payload) {
     if (payload.lang) setLang(payload.lang)
-    const signature = patternSignature(payload)
-    if (signature === lastPatternSignatureRef.current) return // only `lang` differed — already applied above
-    lastPatternSignatureRef.current = signature
-
-    const result = convertAppPattern(payload)
     setCategory(payload.category)
-    setMeasurementsByCategory((prev) => ({ ...prev, [payload.category]: payload.measurements }))
-    if (result.fabricId) setFabricId(result.fabricId)
+    setMeasurementsByCategory(prev => ({ ...prev, [payload.category]: payload.measurements }))
+    if (payload.fabricId) setFabricId(payload.fabricId)
     setAvatarGLBByCategory(payload.avatarGLB || {})
-    setGarment(null) // the previous "Simulate This Garment" result doesn't apply to a new pattern
-    setImported(result)
-    setGarmentVersion((v) => v + 1)
+    const signature = patternSignature(payload)
+    if (signature === lastPatternSignatureRef.current) return
+    lastPatternSignatureRef.current = signature
+    const saved = readSession(payload) || (payload.clothLabSetup?.design === signature ? payload.clothLabSetup : null)
+    setSource(payload)
+    setAnswers(saved?.answers || {})
+    setSavedEditor(saved?.editor || null)
+    setGarment(null)
+    setConfiguring(!bodyOnly)
+    setGarmentVersion(v => v + 1)
     setDebugView(bodyOnly ? 'off' : 'seams')
   }
 
@@ -139,7 +141,8 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   useEffect(() => {
     if (embedded) return
     function onMessage(e) {
-      if (!e.data || e.data.type !== 'berrystudio:pattern') return
+      if (e.source !== window.parent || !e.data || e.data.type !== 'berrystudio:pattern') return
+      hostOriginRef.current = e.origin
       applyIncomingPattern(e.data)
     }
     window.addEventListener('message', onMessage)
@@ -172,15 +175,21 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
     <div className="cloth-lab-root" dir={dirFor(lang)} lang={lang}>
       <Header
         embedded={embedded} bodyOnly={bodyOnly} lang={lang}
-        category={category} onCategoryChange={setCategory}
+        category={category} onCategoryChange={setCategory} linked={!!source}
+        configuring={configuring} onConfigure={() => { setConfiguring(true); setDebugView('seams') }}
         debugView={debugView} onDebugViewChange={(view) => {
+          if (configuring && plan?.ready) { setConfiguring(false); setGarmentVersion(v => v + 1) }
           // Imported designs must be finalized before any garment preview.
-          if (imported && !garment && ['cloth', 'weld', 'pieces'].includes(view)) {
+          if ((!garment || configuring) && ['cloth', 'weld', 'pieces'].includes(view)) {
             setDebugView('seams')
           } else setDebugView(view)
         }}
       />
-      <Workspace
+      {storageWarning && <div role="status" className="cl-error">{lang === 'ar' ? 'تعذر الحفظ المحلي. أبقِ هذه الصفحة مفتوحة.' : 'Local saving failed. Keep this page open to retain your work.'}</div>}
+      {!bodyOnly && configuring ? (source ? <PatternReview source={source} plan={plan} lang={lang}
+        onAnswer={(id, answer) => { const next = { ...answers, [id]: answer }; setAnswers(next); setGarment(null); setSavedEditor(null); persist(next, null) }}
+        onContinue={() => { if (!plan.ready) return; setConfiguring(false); setDebugView('seams'); setGarmentVersion(v => v + 1) }} /> :
+        <div className="cl-empty"><h2>{lang === 'ar' ? 'ابدأ من الباترون الخاص بك' : 'Start with your pattern'}</h2><p>{lang === 'ar' ? 'أنشئ أو افتح تصميماً في BerryStudio ثم افتح Cloth Lab. لن يتم استبداله بقطعة تجريبية.' : 'Create or open a design in BerryStudio, then open Cloth Lab. Your design will never be replaced with a demo garment.'}</p></div>) : <Workspace
         key={garmentVersion}
         bodyOnly={bodyOnly} lang={lang}
         dims={dims} measurements={measurements}
@@ -191,26 +200,38 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
         poseId={poseId} onPoseChange={setPoseId}
         poseWarning={poseWarning} onPoseWarning={setPoseWarning}
         debugView={debugView} garment={garment}
-        imported={imported} skirtRawPieces={skirtRawPieces}
+        imported={imported} restored={savedEditor}
+        onEditorChange={editor => { setSavedEditor(editor); persist(answers, editor); setGarment(null) }}
+        onReview={() => { setConfiguring(true); setDebugView("seams") }}
+        onViewChange={setDebugView}
         avatarGLBUrl={avatarGLBByCategory[category]}
-        onReset={() => { setGarment(null); setImported(null); setGarmentVersion((v) => v + 1) }}
+        onReset={() => { setGarment(null); setDebugView("seams"); setGarmentVersion((v) => v + 1) }}
         onSimulate={(result) => { setGarment(result); setDebugView('cloth') }}
-      />
+      />}
     </div>
   )
 }
 
-// Owns the one useSeamEditor instance shared by the sidebar panel and the 3D
-// Seams view — split out from App so the whole thing can be remounted
+// Owns the one useSeamEditor instance shared by the sidebar panel and flat
+// sewing desk — split out from App so the whole thing can be remounted
 // (via App's key={garmentVersion}) as a unit whenever a new garment import
 // needs a fresh seam-editor rather than picking up on top of a stale one.
-function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, qualityTier, onQualityTierChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, debugView, garment, imported, skirtRawPieces, avatarGLBUrl, onReset, onSimulate }) {
-  const rawPieces = imported ? imported.rawPieces : skirtRawPieces
-  const roles = imported ? imported.roles : SKIRT_ROLES
+function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, qualityTier, onQualityTierChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, debugView, garment, imported, restored, onEditorChange, onReview, onViewChange, avatarGLBUrl, onReset, onSimulate }) {
+  const rawPieces = imported ? imported.rawPieces : []
+  const roles = imported ? imported.roles : {}
   const seedEdges = imported ? imported.edgeInstructions : undefined
   const seedSeams = imported ? imported.seamInstructions : undefined
   const placementHints = imported ? imported.placementHints : undefined
-  const seamEditor = useSeamEditor(rawPieces, roles, seedEdges, seedSeams, placementHints)
+  const seamEditor = useSeamEditor(rawPieces, roles, seedEdges, seedSeams, placementHints, restored)
+  const [paused, setPaused] = useState(false)
+  const [restartVersion, setRestartVersion] = useState(0)
+  const editorChangedRef = useRef(onEditorChange)
+  editorChangedRef.current = onEditorChange
+  const initialEditorRef = useRef(true)
+  useEffect(() => {
+    if (initialEditorRef.current) { initialEditorRef.current = false; return }
+    editorChangedRef.current?.({ drafts: seamEditor.drafts, seams: seamEditor.seams, separate: seamEditor.separate, reviewed: seamEditor.reviewed })
+  }, [seamEditor.drafts, seamEditor.seams, seamEditor.separate, seamEditor.reviewed])
   const statsRef = useRef({ substeps: 0, emaMs: 0, lastCostMs: 0 })
   const exportRef = useRef(null)
 
@@ -261,8 +282,8 @@ function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, f
   }, [dims])
 
   return (
-    <div style={{ flex: '1 1 auto', display: 'flex', minHeight: 0 }}>
-      <aside style={{ width: 260, flex: '0 0 auto', borderInlineEnd: '1px solid var(--border)', background: 'var(--panel)', overflowY: 'auto' }}>
+    <div className="cl-workspace">
+      <aside className="cl-sidebar">
         {!bodyOnly && (
           <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ color: 'var(--text-2)' }}>{t(lang, 'garment')}</span>
@@ -277,22 +298,16 @@ function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, f
             )}
           </div>
         )}
-        {!bodyOnly && imported && imported.skipped.length > 0 && (
-          <div style={{ padding: '8px 14px', fontSize: 11.5, color: 'var(--text-2)', borderBottom: '1px solid var(--border)', lineHeight: 1.5 }}>
-            {t(lang, 'piecesUsedSkipped', {
-              used: imported.recognized.length,
-              total: imported.recognized.length + imported.skipped.length,
-              list: imported.skipped.map((s) => s.label).join(', '),
-            })}
-          </div>
-        )}
-        <MeasurementPanel lang={lang} measurements={measurements} onChange={onMeasurementsChange} />
-        {!bodyOnly && <FabricPanel lang={lang} fabricId={fabricId} onChange={onFabricChange} qualityTier={qualityTier} onQualityTierChange={onQualityTierChange} />}
-        <AvatarPanel lang={lang} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />
-        <ExportPanel lang={lang} exportRef={exportRef} />
+        {!bodyOnly && <button className="cl-link" onClick={onReview}>{lang === 'ar' ? 'مراجعة جميع قطع التصميم' : 'Review all source pieces'}</button>}
         {!bodyOnly && debugView === 'seams' && <SeamEditorPanel lang={lang} editor={seamEditor} onSimulate={onSimulate} />}
+        <details open={bodyOnly}><summary>{lang === 'ar' ? 'الجسم والقياسات' : 'Body & measurements'}</summary>
+        <MeasurementPanel lang={lang} measurements={measurements} onChange={onMeasurementsChange} />
+        </details>
+        {!bodyOnly && <details open={debugView === 'cloth'}><summary>{lang === 'ar' ? 'القماش' : 'Fabric'}</summary><FabricPanel lang={lang} fabricId={fabricId} onChange={onFabricChange} qualityTier={qualityTier} onQualityTierChange={onQualityTierChange} /></details>}
+        <details><summary>{lang === 'ar' ? 'المظهر والوضعية' : 'Appearance & pose'}</summary><AvatarPanel lang={lang} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} /></details>
+        {(bodyOnly || (garment && debugView !== 'seams')) && <details open={bodyOnly}><summary>{lang === 'ar' ? 'التصدير' : 'Export'}</summary><ExportPanel lang={lang} exportRef={exportRef} /></details>}
       </aside>
-      <main style={{ flex: '1 1 auto', position: 'relative' }}>
+      <main className="cl-preview">
         {poseWarning && debugView !== 'seams' && (
           <div
             role="alert"
@@ -316,9 +331,14 @@ function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, f
             </button>
           </div>
         )}
-        <Canvas shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
-          <Scene dims={dims} lang={lang} debugView={debugView} fabricId={fabricId} qualityTier={qualityTier} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} controlsRef={controlsRef} />
-        </Canvas>
+        {debugView === 'seams' && !bodyOnly ? <SewingDesk editor={seamEditor} lang={lang} /> : <>
+          <div className="cl-preview-tools"><button onClick={fitCamera}>{lang === 'ar' ? 'ملاءمة العرض' : 'Fit view'}</button><button onClick={() => zoomBy(1.2)} aria-label="Zoom in">+</button><button onClick={() => zoomBy(0.83)} aria-label="Zoom out">−</button>{debugView === 'cloth' && <><button onClick={() => setPaused(v => !v)}>{paused ? (lang === 'ar' ? 'تشغيل' : 'Resume') : (lang === 'ar' ? 'إيقاف مؤقت' : 'Pause')}</button><button onClick={() => { setPaused(false); setRestartVersion(v => v + 1) }}>{lang === 'ar' ? 'إعادة المعاينة' : 'Restart drape'}</button></>}</div>
+          <SceneBoundary key={`${debugView}-${garment?.pieces?.length}`} lang={lang} onRecover={() => onViewChange('seams')}>
+            <Canvas key={restartVersion} shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
+              <Scene dims={dims} lang={lang} debugView={debugView} fabricId={fabricId} qualityTier={qualityTier} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} controlsRef={controlsRef} paused={paused} />
+            </Canvas>
+          </SceneBoundary>
+        </>}
         {debugView === 'cloth' && isSolverHUDEnabled() && <SolverHUD statsRef={statsRef} />}
       </main>
     </div>

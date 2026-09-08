@@ -6,6 +6,72 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Cloth Lab guided workspace: source pieces, sewing decisions and preview controls
+
+The user requested an easier Cloth Lab tied to the current design, with clear
+multiple-choice questions for ambiguous pieces, darts and attachments. Setup
+now happens on flat drawings before a WebGL preview is mounted.
+
+### Changed / Added / Fixed
+
+- `js/cloth-workflow-contract.js` and the host payload retain stable piece IDs,
+  current project identity and every source piece, including hidden pieces.
+  Explicit inclusion/exclusion replaces silently skipping unconfigured pieces.
+  The new shared module is included in service-worker precaching.
+- `workflow/PatternReview.jsx` presents bilingual placement, cutting quantity,
+  hidden-piece and dart questions. Source outlines and dart markings remain
+  visible. Invalid or unsupported configurations block the preview with an
+  explanation; the source pattern geometry is not rewritten.
+- `workflow/patternPlan.js` cuts supported straight-boundary darts and pairs
+  their legs. If this replaces an existing attachment edge, join review is
+  required. Internal/curved/endpoint-mouth darts can remain explicit markings
+  or be prepared in the pattern editor; arbitrary dart geometry is not claimed.
+- `workflow/SewingDesk.jsx` replaces WebGL point picking during setup with SVG
+  panels, named-edge selection and numbered start/end selectors. The seam hook
+  allows several selected edges, checks unfinished/unattached pieces, frees
+  canceled spans and restores saved seams by stable piece identity.
+- `pattern/triangulate.js` assigns a common subdivision count to a whole joined
+  edge group. Pairwise overwrites previously gave shared junctions inconsistent
+  vertex counts. A four-piece join now passes real triangulation and assembly.
+- `pattern/importFromApp.js` respects explicit single/pair/fold choices for
+  sleeves and skirt gores. The previous sleeve path always created two copies.
+- `App.jsx`, `Header.jsx` and scoped CSS implement Pieces → Joins → Simulate,
+  grouped adjustment panels, mobile wrapping and inline fit/zoom/pause/restart.
+  Restart retains the finalized garment; scene errors offer return-to-joins.
+  Setup and committed joins are saved locally and returned to the authenticated
+  host with sender/origin/design checks. Language changes retain edits.
+- A no-pattern BodyForm restore regression was found during this integration
+  and fixed before completion, with a dedicated component regression test.
+  BodyForm also keeps its export controls expanded to preserve its existing flow.
+  Authentication, entitlement rules and the earlier lifecycle/export fixes are
+  retained. No temporary entitlement bypass was introduced.
+
+### Verification
+
+Node v26.7.0: `npm test` passed **310** root tests;
+`npm --prefix cloth-lab test` passed **880** tests in 32 files.
+Both lint commands passed with **92 root / 8 Cloth Lab warnings**, no errors
+(previous Cloth Lab count was 9; a touched unused declaration was removed).
+Standalone and embedded production builds passed. `git diff --check` passed.
+
+English and Arabic static review components were visually inspected at desktop
+width and a 390px mobile viewport. Component tests use the real workflow with
+the WebGL scene mocked; these are not GPU drape/export tests.
+
+The initial Playwright run had 13 first-attempt passes, five retry passes and
+one BodyForm failure. Its null-restoration error was fixed. A subsequent run
+was stopped after finding collapsed BodyForm export controls; those controls
+were corrected before the reviewed run. The final `CI=1 npm run test:e2e`
+exited **0**: **16 first-attempt passes and 3 retry passes** (19 total, 2.3m).
+BodyForm avatar generation, GLB/OBJ download and handoff passed in 11.2s.
+The retry passes were the signed-out automation export/generation gate,
+select-anything editing, and Add Point smoke checks.
+
+Authenticated embedded/iframe draping, GPU-deformed GLB/OBJ/USDZ reopen fidelity,
+real-device mobile behavior and Quick Look remain unverified. The existing
+high-quality physics instability is not claimed fixed. See
+[workflow scope and limitations](docs/cloth-lab-guided-workspace.md).
+
 ## Cloth Lab fix package: import lifecycle and deformed export preparation
 
 Integrated the supplied fix package against main `be22e233`, preserving account

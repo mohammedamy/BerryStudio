@@ -10,10 +10,11 @@ import { finalizePiece } from './piece.js'
 // so the rest of the pipeline (triangulate/assemble/simulate) never needs to
 // know whether a piece was hand-authored or interactively authored.
 export function createDraftPiece(rawPiece, role, placementHint) {
-  return { id: rawPiece.id, label: rawPiece.label, role, outline: rawPiece.outline, color: rawPiece.color, edges: {}, placementHint }
+  return { id: rawPiece.id, label: rawPiece.label, role, outline: rawPiece.outline, color: rawPiece.color, sourceId: rawPiece.sourceId, joinReview: rawPiece.joinReview, darts: rawPiece.darts, edges: {}, placementHint }
 }
 
 function edgeIndices(from, to, n) {
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0 || from >= n || to >= n) throw new Error('Choose valid outline points for this edge.')
   const idxs = []
   let i = from
   while (true) {
@@ -33,7 +34,10 @@ export function addEdge(draft, name, fromIdx, toIdx) {
   if (fromIdx === toIdx) throw new Error(`"${name}": start and end are the same point — an edge needs at least 2 points`)
   const newIdxs = edgeIndices(fromIdx, toIdx, n)
   for (const [existingName, e] of Object.entries(draft.edges)) {
-    const existingIdxs = new Set(edgeIndices(e.from, e.to, n))
+    const oldIndices = edgeIndices(e.from, e.to, n)
+    const oldSegments = new Set(oldIndices.slice(0, -1))
+    if (newIdxs.slice(0, -1).some(i => oldSegments.has(i))) throw new Error(`"${name}" overlaps existing edge "${existingName}"`)
+    const existingIdxs = new Set(oldIndices)
     for (const idx of newIdxs) {
       const isSharedEndpoint = idx === e.from || idx === e.to
       if (existingIdxs.has(idx) && !isSharedEndpoint) {
@@ -58,7 +62,6 @@ let freeEdgeCounter = 0
 // full-perimeter-coverage check still passes without forcing the user to
 // tediously name every last uninteresting span themselves.
 export function finalizeDraftPiece(draft) {
-  const n = draft.outline.length
   const edges = { ...draft.edges }
   const names = Object.keys(edges)
   if (names.length === 0) {
