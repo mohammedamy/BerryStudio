@@ -6,6 +6,39 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Cloth Lab: prevent collapsed seam normals from blacking out Simulate
+
+A live, authenticated Princess-Seam Ball Gown rendered in Placed panels and
+Join alignment but went black in Simulate, even on Default quality. GPU
+readback found 3,191 render vertices with finite positions inside the body
+bounds. Direct rendering produced 166,680 non-black pixels; post-processing
+produced zero. Hiding the cloth restored post-processing. Guarding the
+cloth normal calculation restored the visible scene on the same real GPU.
+
+### Fixed
+
+- Guard zero-area neighbor rings before normalization. Use the rest normal,
+  or a finite axis when the rest triangle is also degenerate. Invalid
+  shading values can otherwise spread across the frame through bloom.
+- Share the current position-texture uniform across shader variants and
+  initialize it before first render, including fabric/map recompiles.
+- Add a local GPU regression fixture and `npm run test:cloth-gpu`: execute
+  the production normal helper on the GPU, then test the complete scene
+  with deliberately collapsed rings, bloom, fabric changes and resume.
+  Neither production build includes the fixture as an entry point.
+
+### Verification and limits
+
+- Root: 310 tests passed; Cloth Lab: 880 tests passed.
+- GPU regression: 2 Playwright tests passed using SwiftShader software WebGL.
+- Both lints passed with existing warnings (92 root, 8 Cloth Lab).
+- Standalone and embedded builds passed; standalone retains its chunk-size warning.
+- The guarded-normal diagnostic restored the affected live Chrome view with
+  legitimate access. No authentication or entitlement checks were bypassed.
+- This fixes a rendering blackout, not missing garment joins, collision
+  accuracy, or the separately reported High-quality physics instability.
+  Hardware export/Quick Look and a deployed-build retest remain unverified.
+
 ## Cloth Lab guided workspace: source pieces, sewing decisions and preview controls
 
 The user requested an easier Cloth Lab tied to the current design, with clear
