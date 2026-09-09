@@ -6,6 +6,9 @@ import * as THREE from 'three'
 import Scene from '../src/scene/Scene'
 import { computeBodyDims } from '../src/body/computeBodyDims'
 import { SAFE_CLOTH_NORMAL_GLSL } from '../src/cloth/surfaceShader'
+import { checkAdaptiveMotion } from './motion'
+
+window.checkAdaptiveMotion = (counts, tier) => checkAdaptiveMotion(window.renderProbe.gl, counts, tier)
 
 const dims = computeBodyDims({ chest: 88, waist: 70, hips: 96, shoulder: 39, backLen: 41, sleeve: 58, neck: 37, bicep: 28, inseam: 78, thigh: 56, height: 167 }, 'women')
 

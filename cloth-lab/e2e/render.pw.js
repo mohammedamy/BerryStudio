@@ -26,6 +26,17 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.renderFrames > 3)
 })
 
+for (const tier of ['default', 'high']) {
+  test(`${tier} preserves free-particle velocity when adaptive substeps change`, async ({ page }) => {
+    const positions = await page.evaluate(tier => window.checkAdaptiveMotion([8, 4, 12, 6, 8], tier), tier)
+    positions.forEach(([x, y, z], frame) => {
+      expect(x).toBeCloseTo((frame + 1) / 60, 5)
+      expect(y).toBeCloseTo(1, 5)
+      expect(z).toBeCloseTo(0, 5)
+    })
+  })
+}
+
 test('GPU normal calculation stays finite for collapsed rings and degenerate rest triangles', async ({ page }) => {
   for (const [candidate, rest, expected] of [
     [[0, 3, 4], [1, 0, 0], [0, 0.6, 0.8]],

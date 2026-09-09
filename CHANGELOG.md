@@ -6,6 +6,39 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## Cloth Lab: preserve motion when adaptive substeps change
+
+While investigating the remaining High-quality instability, an isolated GPU
+test found a timestep defect shared by both quality tiers. The solver changes
+its substep count with GPU load, but treated displacement from the previous
+timestep as though it covered the new interval. With gravity, damping and
+constraints disabled, reducing eight substeps to four halved particle speed:
+after two frames, a particle moving at 1 m/s reached 0.025 m instead of
+0.033333 m. Both tiers failed this regression before the correction.
+
+### Fixed
+
+- `ClothSimulation.step()` scales Verlet history by the new/previous timestep
+  ratio on the first substep only. Subsequent substeps use their own updated
+  history at scale 1. Fixed-count steps retain the existing calculation.
+- Add a local GPU motion fixture using the production solver in both tiers,
+  checking constant velocity through 8 → 4 → 12 → 6 → 8 substeps. This fixture
+  is outside both production entry points and uses no authentication bypass.
+
+### Verification and limits
+
+- Cloth Lab: **880 tests passed** in 32 files.
+- GPU: **4 Playwright tests passed** using SwiftShader, including both motion
+  regressions and both existing collapsed-normal rendering regressions.
+- Cloth Lab lint passed with **8 existing warnings**, none in changed files.
+- Standalone and embedded builds passed; the standalone chunk-size warning
+  remains. `git diff --check` passed; no temporary entitlement bypass found.
+- This confirms velocity preservation for free motion during timestep
+  adaptation. It does not establish stability of the joined gown, repair
+  missing joins, or validate hardware collision/export behavior. Fabric damping
+  and constraint convergence still depend on the number of substeps.
+- Changes are local; no push or deployment was performed.
+
 ## Cloth Lab: prevent collapsed seam normals from blacking out Simulate
 
 A live, authenticated Princess-Seam Ball Gown rendered in Placed panels and
