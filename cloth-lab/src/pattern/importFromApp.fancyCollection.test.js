@@ -60,7 +60,7 @@ test('every Fancy Collection design id is discovered (sanity check on the id pat
   expect(FANCY_IDS.length).toBe(64)
 })
 
-describe.each(['XS', 'M', '3XL'])('mf05 waistband at %s', size => {
+describe.each(['XS', 'M', 'XXXL'])('mf05 waistband at %s', size => {
   test('joins all four waist edges with matching lengths and welded particles', () => {
     const m = computeMeasurements({ category: 'men', size, standard: 'intl' })
     const payloadPieces = PATTERNS.mf05.pieces(m).map(toPayloadPiece)
@@ -240,11 +240,9 @@ describe.each(PRINCESS_IDS)('%s princess seam', (id) => {
 
     // The freed-up neckline range is now a real, own edge (not silently
     // swallowed by the princess-seam claim) on every *Center piece.
-    const centerIds = Object.entries(result.roles)
-      .filter(([, role]) => role === 'frontPanel' || role === 'backPanel')
-      .map(([pid]) => pid)
-      .filter((pid) => result.rawPieces.some((p) => p.id === pid))
-    const neckEdges = result.edgeInstructions.filter((e) => e.edgeName === 'seamId_princessFrontNeck' || e.edgeName === 'seamId_princessBackNeck')
-    expect(neckEdges.length, 'both frontCenter and backCenter should have their own real neckline edge').toBeGreaterThanOrEqual(2)
+    for (const p of payload.pieces.filter(p => p.princessSeamId)) {
+      const neckEdge = result.edgeInstructions.find(e => e.pieceId === p.id && e.fromIdx === 0 && e.toIdx === p.necklineEndIdx)
+      expect(neckEdge, `${p.id} must retain its own neckline span, regardless of its join name`).toBeTruthy()
+    }
   })
 })

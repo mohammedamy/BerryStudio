@@ -253,6 +253,43 @@ export let FancyGen;
     const stand = [ [0,0],[h+2,0],[h+2,4],[0,4] ];
     return { collar, stand };
   }
+  // Shirt collar for wf09's princess bodice. Both pieces are half patterns
+  // folded at center back. Draft sewing lengths from the actual neckline,
+  // not the nominal body-neck measurement used by unrelated collar styles.
+  function princessShirtCollar(b) {
+    const necklineLength = (outline, end) => {
+      let length = 0;
+      for (let i = 0; i < end; i++) length += Math.hypot(outline[i+1][0] - outline[i][0], outline[i+1][1] - outline[i][1]);
+      return length;
+    };
+    const backLen = necklineLength(b.backCenter, b.meta.backCenter.necklineEndIdx);
+    const frontLen = necklineLength(b.frontCenter, b.meta.frontCenter.necklineEndIdx);
+    const length = backLen + frontLen;
+    for (const [key, outline, name] of [['frontCenter', b.frontCenter, 'Front'], ['backCenter', b.backCenter, 'Back']]) {
+      const meta = b.meta[key], end = meta.necklineEndIdx;
+      meta.edges = meta.edges.filter(e => e.seamId !== `princess${name}Neck`).concat([
+        { fromIdx: 0, toIdx: end, seamId: `wf09Neck${name}_R` },
+        { ...foldMirrorEdge(outline.length, 0, end), seamId: `wf09Neck${name}_L` },
+      ]);
+    }
+    const stand = [[0,0], [backLen,0], [length,0], [length,4], [backLen,4], [0,4]];
+    stand.edges = [
+      { fromIdx: 0, toIdx: 1, seamId: 'wf09NeckBack_R', reverse: false },
+      { fromIdx: 1, toIdx: 2, seamId: 'wf09NeckFront_R' },
+      { ...foldMirrorEdge(stand.length, 0, 1), seamId: 'wf09NeckBack_L', reverse: false },
+      { ...foldMirrorEdge(stand.length, 1, 2), seamId: 'wf09NeckFront_L' },
+      { fromIdx: 3, toIdx: 5, seamId: 'wf09Collar_R' },
+      { ...foldMirrorEdge(stand.length, 3, 5), seamId: 'wf09Collar_L' },
+    ];
+    const outer = [[length+2,5], [length*0.5,7], [0,6]];
+    const collar = [[0,0], [length,0], outer[0], ...qBez(...outer, 6)];
+    withCurves(collar, [{ fromIdx: 2, toIdx: 8, ...qBezToCubic(...outer) }]);
+    collar.edges = [
+      { fromIdx: 0, toIdx: 1, seamId: 'wf09Collar_R' },
+      { ...foldMirrorEdge(collar.length, 0, 1), seamId: 'wf09Collar_L' },
+    ];
+    return { collar, stand, length, backLen };
+  }
   // One-piece shawl collar for tuxedos/blazers — curved on both edges.
   function shawlCollar(neck, depth) {
     depth = depth || 22;
@@ -1643,14 +1680,14 @@ export let FancyGen;
     (m) => {
       const b = princessBodice(m, { neckline:"round", hipY:m.backLen*0.98+4, hemY:m.backLen*0.98+6 });
       const waistW = q(m.waist), hemLen = m.height*0.55 - b.hemY, hemW = q(m.hips)*1.7;
-      const cs = collarStand(m.neck);
+      const cs = princessShirtCollar(b);
       return [
         { key:"bodiceFC", name:{en:"Bodice Front Center",ar:"مقدمة الصدرية الوسطى"}, desc:{en:"Center front panel with a shirt-style opening.",ar:"مقدمة وسطى بفتحة بطراز القميص."}, ...b.meta.frontCenter, outline:b.frontCenter, grain:[[2,10],[2,b.hemY-4]] },
         { key:"bodiceFS", name:{en:"Bodice Front Side",ar:"جانب الصدرية الأمامي"}, desc:{en:"Curved side panel joined at the princess seam.",ar:"لوحة جانبية منحنية تلتقي بخط قصة الأميرة."}, ...b.meta.frontSide, outline:b.frontSide, grain:[[4,10],[4,b.hemY-4]] },
         { key:"bodiceBC", name:{en:"Bodice Back Center",ar:"خلفية الصدرية الوسطى"}, desc:{en:"Center back panel.",ar:"لوحة الخلفية الوسطى."}, ...b.meta.backCenter, outline:b.backCenter, grain:[[2,10],[2,b.hemY-4]] },
         { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel.",ar:"لوحة جانبية خلفية منحنية."}, ...b.meta.backSide, outline:b.backSide, grain:[[4,10],[4,b.hemY-4]] },
-        { key:"collar", name:{en:"Shirt Collar",ar:"ياقة قميص"}, desc:{en:"Two-piece shirt-style collar.",ar:"ياقة قميص من قطعتين."}, role:"collar", outline:cs.collar, grain:[[4,2],[4,5]] },
-        { key:"collarStandPc", name:{en:"Collar Stand",ar:"قاعدة الياقة"}, desc:{en:"Standing band beneath the collar.",ar:"شريط واقف أسفل الياقة."}, role:"collar-stand", outline:cs.stand, grain:[[3,1],[m.neck/2,1]] },
+        { key:"collar", name:{en:"Shirt Collar",ar:"ياقة قميص"}, desc:{en:"Shirt collar cut on the center-back fold and sewn to its stand.",ar:"ياقة قميص تُقص على طية منتصف الظهر وتُخاط بقاعدتها."}, role:"collar", cutOnFold:true, outline:cs.collar, grain:[[2,3],[cs.length-2,3]] },
+        { key:"collarStandPc", name:{en:"Collar Stand",ar:"قاعدة الياقة"}, desc:{en:"Collar stand cut on the center-back fold, matched to the front and back neckline.",ar:"قاعدة ياقة تُقص على طية منتصف الظهر وتطابق خط رقبة المقدمة والظهر."}, role:"collar-stand", cutOnFold:true, outline:cs.stand, notches:[[cs.backLen,0]], grain:[[2,2],[cs.length-2,2]] },
         { key:"sleeve", name:{en:"Sleeve",ar:"الكم"}, desc:{en:"Curved-cap set-in sleeve.",ar:"كم مثبّت برأس منحنٍ."}, role:"sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.7), grain:[[q(m.bicep)*0.5,4],[q(m.bicep)*0.5,m.sleeve*0.55]] },
         { key:"skirtF", name:{en:"Skirt Front Gore",ar:"مروحة التنورة الأمامية"}, desc:{en:"A-line front gore.",ar:"مروحة أمامية بقصة A."}, role:"skirt-front-gore", outline:gorePanel(waistW*0.55, hemW*0.3, hemLen, 4), grain:[[4,10],[4,hemLen-10]] },
         { key:"skirtB", name:{en:"Skirt Back Gore",ar:"مروحة التنورة الخلفية"}, desc:{en:"A-line back gore.",ar:"مروحة خلفية بقصة A."}, role:"skirt-back-gore", outline:gorePanel(waistW*0.55, hemW*0.32, hemLen, 4), grain:[[4,10],[4,hemLen-10]] },

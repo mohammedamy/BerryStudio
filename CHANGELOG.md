@@ -1,10 +1,65 @@
 # Changelog
 
+## 2026-09-09 — WP-43: preserve authored folded-torso neckline seams
+
+- Prevent automatic torso top edges from claiming a declared neckline that
+  starts at the fold, which previously caused collar joins to be skipped.
+- Generate automatic front/back top joins only when both panels provide their
+  referenced edges; retain side joins and the legacy path for other panels.
+- Cover one-sided and two-sided neckline declarations. Validation: 310 root
+  tests, 893 Cloth Lab tests, both lints and both production builds pass.
+- mf11 collar drafting remains open; see `docs/plan-v3-2-progress.md` for the
+  front-panel topology and coarse-mesh limitations found during investigation.
+
+
 All notable changes to this project are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions.
 Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
+
+## WP-43 continued: join wf09's shirt collar through a fitted stand
+
+Plan v3.2 §7's collar work, scoped to the Belted A-Line Coat Dress (`wf09`).
+Its collar and stand previously had no joins. At size M the actual half
+neckline measures 8.568 cm at the front plus 6.129 cm at the back, while the
+old stand measured 20.5 cm. Declaring seam IDs on that geometry would force
+unmatched lengths together.
+
+### Changed / Fixed
+
+- Draft this pattern's collar and stand from the actual neckline arc lengths.
+  Both are cut on the center-back fold. The stand has four separate neckline
+  spans with a shoulder notch, plus two upper edges joining the collar.
+  The collar's attachment edge matches the stand; its outer edge remains
+  curved, with matching curve metadata for export.
+- Declare both mirrored neckline spans on this pattern's center panels,
+  preserving the existing four princess joins. Use explicit same-direction
+  matching for the back neckline and reversed matching for the front and
+  collar, keeping center-back, shoulder and center-front endpoints aligned.
+- Add three import/triangulation/assembly regressions at XS, M and XXXL.
+  They assert all six joins, exact authored seam-length parity, anatomical
+  center endpoint matching, and shared simulation-particle indices without
+  an edge collapsing onto itself. Curved-edge resampling is checked within
+  1%; resampling can shortcut polyline corners even when authored lengths
+  match exactly.
+- Correct the preceding waistband test's `3XL` input to the engine's real
+  `XXXL` key. The old label silently fell back to M, so its previous large-size
+  verification claim was incorrect. The actual XXXL waistband check passes.
+  Replace a name-specific neckline regression with a check of the real
+  declared span; this also removes one existing unused-variable warning.
+
+### Verification and limits
+
+- Root: **310 tests passed**; full 308-pattern / 2,171-piece validator retains
+  **0 failures** (9,512 pass, 2,341 warn, 2,171 deferred verdicts).
+- Cloth Lab: **891 tests passed**, 34 files.
+- Both lints passed: **92 root / 7 Cloth Lab warnings**, no new warnings.
+- Standalone and embedded builds passed; the existing standalone chunk-size
+  warning remains. Diff whitespace checks pass; no entitlement bypass found.
+- This verifies construction geometry and welded topology, not physical fit,
+  an authenticated GPU drape, or export/reopen fidelity. Other collar styles
+  and unrelated garment joins remain open. Changes are local, not deployed.
 
 ## WP-43 continued: add and join the three-piece suit's trouser waistband
 
