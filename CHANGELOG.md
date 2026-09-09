@@ -6,6 +6,115 @@ Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
 
+## WP-43 continued: add and join the three-piece suit's trouser waistband
+
+Plan v3.2 §7 explicitly lists `mf05`'s trouser waistband as unfinished.
+Direct reproduction found that the suit had no waistband piece at all, rather
+than an existing strip missing seam metadata. Added a band sized from the
+existing leg-waist edges, with four real joins to the bilateral front/back legs.
+
+### Added / Fixed
+
+- `js/fancy-patterns.js`: author the missing bilingual Trouser Waistband,
+  folded at center back, with a side-seam notch and separate front/back
+  attachment spans. Declare matching waist edges on this suit's leg panels.
+  Their geometry and other `trouserPanel()` callers remain unchanged.
+- `importFromApp.js`: honor an optional boolean `reverse` on declared seam
+  edges, from either contributor, including bilateral copies. Existing edges
+  retain reverse matching by default; conflicting directions stay unjoined.
+  This was required because the band's back-waist edge runs in the same
+  direction as the back leg's edge, while its front-waist edge runs opposite.
+  Always reversing both would incorrectly join anatomical endpoints.
+- Regression tests at XS, M and 3XL check all four counterpart identities,
+  equal seam lengths, anatomical center/side endpoint correspondence, and
+  actual shared simulation-particle indices after triangulation and assembly.
+  Separate importer tests cover direction defaults, either contributor,
+  bilateral copies, conflicting declarations and non-boolean input.
+- Update the intentional library-content baseline from 2,170 to **2,171**
+  pieces (308 patterns). The added waistband uses an existing valid role.
+  The existing leg-join regression now counts leg-to-leg joins specifically,
+  preserving its outseam/inseam guarantee while allowing the new waist join.
+
+### Verification and limits
+
+- `npm test`: **310 passed**. Full-library validator: **0 failures**, across
+  308 patterns / 2,171 pieces (9,512 pass, 2,341 warn, 2,171 deferred verdicts).
+- `npm --prefix cloth-lab test`: **888 passed**, 33 files.
+- Both lints passed with the existing **92 root / 8 Cloth Lab warnings**.
+- Standalone and embedded builds passed; the standalone chunk-size warning
+  remains. `git diff --check` passed. No temporary entitlement bypass found.
+- These are geometry/import/assembly checks, not a GPU drape or physical-fit
+  certification. The waistband matches the existing authored waist lengths;
+  the existing leg block's sizing and open waist-to-hip side spans were not
+  redrafted. Collar, other accessory joins, and full-garment stability remain
+  separate WP-43/WP-45 work. Nothing was pushed or deployed.
+
+## Cloth Lab: preserve motion when adaptive substeps change
+
+While investigating the remaining High-quality instability, an isolated GPU
+test found a timestep defect shared by both quality tiers. The solver changes
+its substep count with GPU load, but treated displacement from the previous
+timestep as though it covered the new interval. With gravity, damping and
+constraints disabled, reducing eight substeps to four halved particle speed:
+after two frames, a particle moving at 1 m/s reached 0.025 m instead of
+0.033333 m. Both tiers failed this regression before the correction.
+
+### Fixed
+
+- `ClothSimulation.step()` scales Verlet history by the new/previous timestep
+  ratio on the first substep only. Subsequent substeps use their own updated
+  history at scale 1. Fixed-count steps retain the existing calculation.
+- Add a local GPU motion fixture using the production solver in both tiers,
+  checking constant velocity through 8 → 4 → 12 → 6 → 8 substeps. This fixture
+  is outside both production entry points and uses no authentication bypass.
+
+### Verification and limits
+
+- Cloth Lab: **880 tests passed** in 32 files.
+- GPU: **4 Playwright tests passed** using SwiftShader, including both motion
+  regressions and both existing collapsed-normal rendering regressions.
+- Cloth Lab lint passed with **8 existing warnings**, none in changed files.
+- Standalone and embedded builds passed; the standalone chunk-size warning
+  remains. `git diff --check` passed; no temporary entitlement bypass found.
+- This confirms velocity preservation for free motion during timestep
+  adaptation. It does not establish stability of the joined gown, repair
+  missing joins, or validate hardware collision/export behavior. Fabric damping
+  and constraint convergence still depend on the number of substeps.
+- Changes are local; no push or deployment was performed.
+
+## Cloth Lab: prevent collapsed seam normals from blacking out Simulate
+
+A live, authenticated Princess-Seam Ball Gown rendered in Placed panels and
+Join alignment but went black in Simulate, even on Default quality. GPU
+readback found 3,191 render vertices with finite positions inside the body
+bounds. Direct rendering produced 166,680 non-black pixels; post-processing
+produced zero. Hiding the cloth restored post-processing. Guarding the
+cloth normal calculation restored the visible scene on the same real GPU.
+
+### Fixed
+
+- Guard zero-area neighbor rings before normalization. Use the rest normal,
+  or a finite axis when the rest triangle is also degenerate. Invalid
+  shading values can otherwise spread across the frame through bloom.
+- Share the current position-texture uniform across shader variants and
+  initialize it before first render, including fabric/map recompiles.
+- Add a local GPU regression fixture and `npm run test:cloth-gpu`: execute
+  the production normal helper on the GPU, then test the complete scene
+  with deliberately collapsed rings, bloom, fabric changes and resume.
+  Neither production build includes the fixture as an entry point.
+
+### Verification and limits
+
+- Root: 310 tests passed; Cloth Lab: 880 tests passed.
+- GPU regression: 2 Playwright tests passed using SwiftShader software WebGL.
+- Both lints passed with existing warnings (92 root, 8 Cloth Lab).
+- Standalone and embedded builds passed; standalone retains its chunk-size warning.
+- The guarded-normal diagnostic restored the affected live Chrome view with
+  legitimate access. No authentication or entitlement checks were bypassed.
+- This fixes a rendering blackout, not missing garment joins, collision
+  accuracy, or the separately reported High-quality physics instability.
+  Hardware export/Quick Look and a deployed-build retest remain unverified.
+
 ## Cloth Lab guided workspace: source pieces, sewing decisions and preview controls
 
 The user requested an easier Cloth Lab tied to the current design, with clear

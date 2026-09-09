@@ -329,7 +329,7 @@ export function convertAppPattern(payload) {
       }
       pushEdge(pieceId, `seamId_${e.seamId}`, e.fromIdx, e.toIdx)
       if (outlineLen != null) { const set = (claimedIndices[pieceId] ||= new Set()); for (const i of edgeIndexSet(outlineLen, e.fromIdx, e.toIdx)) set.add(i) }
-      ;(seamIdEdges[e.seamId] ||= []).push({ pieceId, fromIdx: e.fromIdx, toIdx: e.toIdx })
+      ;(seamIdEdges[e.seamId] ||= []).push({ pieceId, fromIdx: e.fromIdx, toIdx: e.toIdx, reverse: e.reverse })
     }
   }
 
@@ -552,8 +552,8 @@ export function convertAppPattern(payload) {
             // declared edge anywhere else to pair against.
             seamInstructions.push({ id: `${p.id}_mirror${i}`, a: { piece: rId, edge: edgeName }, b: { piece: lId, edge: edgeName }, reverse: true })
           } else if (e.seamId) {
-            ;(seamIdEdges[e.seamId + '_R'] ||= []).push({ pieceId: rId, fromIdx: e.fromIdx, toIdx: e.toIdx })
-            ;(seamIdEdges[e.seamId + '_L'] ||= []).push({ pieceId: lId, fromIdx: mirrored[i].fromIdx, toIdx: mirrored[i].toIdx })
+            ;(seamIdEdges[e.seamId + '_R'] ||= []).push({ pieceId: rId, fromIdx: e.fromIdx, toIdx: e.toIdx, reverse: e.reverse })
+            ;(seamIdEdges[e.seamId + '_L'] ||= []).push({ pieceId: lId, fromIdx: mirrored[i].fromIdx, toIdx: mirrored[i].toIdx, reverse: e.reverse })
           }
         })
       }
@@ -651,7 +651,12 @@ export function convertAppPattern(payload) {
     const aEdgeName = edgeInstructions.find((e) => e.pieceId === a.pieceId && e.fromIdx === a.fromIdx && e.toIdx === a.toIdx)?.edgeName
     const bEdgeName = edgeInstructions.find((e) => e.pieceId === b.pieceId && e.fromIdx === b.fromIdx && e.toIdx === b.toIdx)?.edgeName
     if (!aEdgeName || !bEdgeName) continue
-    seamInstructions.push({ id: `seamId_${seamIdCounter++}_${seamId}`, a: { piece: a.pieceId, edge: aEdgeName }, b: { piece: b.pieceId, edge: bEdgeName }, reverse: true })
+    // Either contributor may declare the matching direction. Conflicting
+    // declarations are ambiguous, just like a seam with 3+ contributors.
+    const aReverse = typeof a.reverse === 'boolean' ? a.reverse : undefined
+    const bReverse = typeof b.reverse === 'boolean' ? b.reverse : undefined
+    if (aReverse !== undefined && bReverse !== undefined && aReverse !== bReverse) continue
+    seamInstructions.push({ id: `seamId_${seamIdCounter++}_${seamId}`, a: { piece: a.pieceId, edge: aEdgeName }, b: { piece: b.pieceId, edge: bEdgeName }, reverse: aReverse ?? bReverse ?? true })
   }
 
   const fabricId = FABRIC_NAME_TO_ID.has(payload.fabricId) ? payload.fabricId : null

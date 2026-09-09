@@ -9,6 +9,7 @@ import { FABRIC_PRESETS, DEFAULT_FABRIC } from './fabricPresets'
 import { deriveCollisionRig, deriveShoulderPinMask, deriveWaistbandPinMask } from '../body/collisionRig'
 import { getAssetBase } from '../assetBase'
 import { updateExportGeometry } from '../export/prepareScene'
+import { SAFE_CLOTH_NORMAL_GLSL } from './surfaceShader'
 
 // A single real (CC0, see public/textures/fabric-weave/README.md) fabric-
 // weave texture set, shared across every fabric preset — color/roughness/
@@ -58,6 +59,8 @@ function loadFabricTextures() {
 export default function ClothMesh({ paused = false, dims, fabricId = DEFAULT_FABRIC, qualityTier = QUALITY_TIER_DEFAULT, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef }) {
   const gl = useThree((s) => s.gl)
   const camera = useThree((s) => s.camera)
+  // Keep the current texture bound across first compile and fabric-map recompiles.
+  const positionUniform = useRef({ value: null })
 
   const assembled = useMemo(() => {
     const triangulated = triangulateAll(pieces, seams, 2)
@@ -170,11 +173,11 @@ export default function ClothMesh({ paused = false, dims, fabricId = DEFAULT_FAB
       ...(fabric.anisotropy != null && { anisotropy: fabric.anisotropy, anisotropyRotation: fabric.anisotropyRotation ?? 0 }),
     })
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.uSimPositionTex = { value: null }
+      shader.uniforms.uSimPositionTex = positionUniform.current
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
-          'attribute vec2 aSimUV;\nattribute vec4 aNbrUV0;\nattribute vec4 aNbrUV1;\nuniform sampler2D uSimPositionTex;\n#include <common>'
+          'attribute vec2 aSimUV;\nattribute vec4 aNbrUV0;\nattribute vec4 aNbrUV1;\nuniform sampler2D uSimPositionTex;\n#include <common>\n' + SAFE_CLOTH_NORMAL_GLSL
         )
         .replace(
           '#include <begin_vertex>',
@@ -184,7 +187,7 @@ export default function ClothMesh({ paused = false, dims, fabricId = DEFAULT_FAB
           vec3 rn2 = texture2D( uSimPositionTex, aNbrUV1.xy ).xyz - selfPos;
           vec3 rn3 = texture2D( uSimPositionTex, aNbrUV1.zw ).xyz - selfPos;
           vec3 smoothNormal = cross(rn0, rn1) + cross(rn1, rn2) + cross(rn2, rn3) + cross(rn3, rn0);
-          vNormal = normalize( normalMatrix * normalize(smoothNormal) );
+          vNormal = clothSafeNormal(normalMatrix * clothSafeNormal(smoothNormal, normal), vec3(0.0, 0.0, 1.0));
           vec3 transformed = selfPos;`
         )
       mat.userData.shader = shader
@@ -224,9 +227,11 @@ export default function ClothMesh({ paused = false, dims, fabricId = DEFAULT_FAB
     const sim = new ClothSimulation(gl, assembled.cloth, assembled.neighbors, fabric, { collisionRig, pinnedMask, qualityTier })
     sim.preRelax()
     simRef.current = sim
+    positionUniform.current.value = sim.getPositionTexture()
     return () => {
       sim.dispose()
       simRef.current = null
+      positionUniform.current.value = null
     }
     // WP-35: qualityTier changes the compiled shader and uploaded textures
     // (see ClothSimulation's constructor) — unlike fabricId below, it can't
@@ -242,9 +247,7 @@ export default function ClothMesh({ paused = false, dims, fabricId = DEFAULT_FAB
     const sim = simRef.current
     if (!sim) return
     if (!paused) sim.step(delta)
-    if (material.userData.shader) {
-      material.userData.shader.uniforms.uSimPositionTex.value = sim.getPositionTexture()
-    }
+    positionUniform.current.value = sim.getPositionTexture()
     // WP-7.3: cheap plain-object write, no state/re-render — SolverHUD.jsx
     // polls this ref on its own throttled timer from outside the R3F loop.
     if (statsRef) Object.assign(statsRef.current, sim.getStats())
