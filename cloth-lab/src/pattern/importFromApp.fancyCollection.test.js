@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest'
 import '../../../js/fancy-patterns.js' // side effect: registers all 64 designs into PATTERNS/LIBRARY
-import { PATTERNS } from '../../../js/data.js'
+import { PATTERNS, computeMeasurements } from '../../../js/data.js'
 import { convertAppPattern } from './importFromApp.js'
 import { createDraftPiece, addEdge, finalizeDraftPiece } from './seamAuthoring.js'
 import { triangulateAll } from './triangulate.js'
@@ -58,6 +58,62 @@ function toPayloadPiece(p, i) {
 
 test('every Fancy Collection design id is discovered (sanity check on the id pattern)', () => {
   expect(FANCY_IDS.length).toBe(64)
+})
+
+describe.each(['XS', 'M', '3XL'])('mf05 waistband at %s', size => {
+  test('joins all four waist edges with matching lengths and welded particles', () => {
+    const m = computeMeasurements({ category: 'men', size, standard: 'intl' })
+    const payloadPieces = PATTERNS.mf05.pieces(m).map(toPayloadPiece)
+    const result = convertAppPattern({ pieces: payloadPieces, measurements: m, category: 'men' })
+    const band = result.recognized.find(p => p.label === 'Trouser Waistband')
+    expect(band, 'the suit needs a real waistband piece').toBeTruthy()
+    const seams = result.seamInstructions.filter(s => s.a.piece === band.id || s.b.piece === band.id)
+    expect(seams).toHaveLength(4)
+    const legIds = payloadPieces.filter(p => p.role === 'trouser-front' || p.role === 'trouser-back')
+      .flatMap(p => [p.id + '_r', p.id + '_l'])
+    expect(new Set(seams.map(s => s.a.piece === band.id ? s.b.piece : s.a.piece))).toEqual(new Set(legIds))
+    const drafts = result.rawPieces.map(p => createDraftPiece(p, result.roles[p.id]))
+    const byId = Object.fromEntries(drafts.map(p => [p.id, p]))
+    for (const e of result.edgeInstructions) addEdge(byId[e.pieceId], e.edgeName, e.fromIdx, e.toIdx)
+    const pieces = drafts.map(d => finalizeDraftPiece({ id: d.id, role: d.role, outline: d.outline, edges: { ...d.edges } }))
+    const triangulated = triangulateAll(pieces, result.seamInstructions)
+    const cloth = assembleCloth(triangulated, computeBodyDims(m, 'men'), result.seamInstructions)
+    const offsets = {}, meshes = {}
+    let offset = 0
+    for (const mesh of triangulated) {
+      offsets[mesh.pieceId] = offset
+      meshes[mesh.pieceId] = mesh
+      offset += mesh.positions2D.length
+    }
+    const chainLength = (mesh, chain) => chain.slice(1).reduce((sum, idx, i) => {
+      const a = mesh.positions2D[chain[i]], b = mesh.positions2D[idx]
+      return sum + Math.hypot(b[0] - a[0], b[1] - a[1])
+    }, 0)
+    for (const seam of seams) {
+      const a = meshes[seam.a.piece], b = meshes[seam.b.piece]
+      const ca = a.boundaryChains[seam.a.edge], cb = b.boundaryChains[seam.b.edge]
+      expect(chainLength(a, ca)).toBeCloseTo(chainLength(b, cb), 5)
+      const walkB = seam.reverse ? cb.slice().reverse() : cb
+      // Anatomical correspondence, independently of the declared direction:
+      // back center meets the band fold; front center meets its free end.
+      const bandMesh = meshes[band.id]
+      const halfBandLength = Math.max(...bandMesh.positions2D.map(p => Math.abs(p[0])))
+      for (const i of [0, ca.length - 1]) {
+        const leg = a.pieceId === band.id ? b : a
+        const legPoint = a.pieceId === band.id ? b.positions2D[walkB[i]] : a.positions2D[ca[i]]
+        const bandPoint = a.pieceId === band.id ? a.positions2D[ca[i]] : b.positions2D[walkB[i]]
+        const atCenter = Math.abs(legPoint[0]) < 1e-6
+        const expected = atCenter ? (result.roles[leg.pieceId] === 'legBack' ? 0 : halfBandLength) : halfBandLength / 2
+        expect(Math.abs(bandPoint[0]), 'center and side waist points must match anatomically').toBeCloseTo(expected, 5)
+      }
+      const particles = ca.map((v, i) => {
+        const particle = cloth.renderVertexToSimParticle[offsets[a.pieceId] + v]
+        expect(particle).toBe(cloth.renderVertexToSimParticle[offsets[b.pieceId] + walkB[i]])
+        return particle
+      })
+      expect(new Set(particles).size, 'a waist edge must not collapse onto itself').toBe(ca.length)
+    }
+  })
 })
 
 describe.each(FANCY_IDS)('%s', (id) => {
@@ -119,7 +175,9 @@ describe.each(TROUSER_IDS)('%s trousers', (id) => {
       .map(([id]) => id)
     expect(legPieceIds.length).toBe(4) // front_r, front_l, back_r, back_l
 
-    const involves = (pid) => result.seamInstructions.filter((s) => s.a.piece === pid || s.b.piece === pid)
+    // Count leg-to-leg joins specifically; a waistband adds a third join.
+    const involves = (pid) => result.seamInstructions.filter((s) =>
+      (s.a.piece === pid || s.b.piece === pid) && legPieceIds.includes(s.a.piece) && legPieceIds.includes(s.b.piece))
     for (const pid of legPieceIds) {
       expect(involves(pid).length, `${pid} should have exactly 1 outseam + 1 inseam seam`).toBe(2)
     }
