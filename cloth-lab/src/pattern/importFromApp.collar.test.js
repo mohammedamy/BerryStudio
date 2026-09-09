@@ -72,3 +72,31 @@ describe.each(['XS', 'M', 'XXXL'])('wf09 collar at %s', size => {
     expect(result.seamInstructions.filter(s => /princess(?:Front|Back)_[RL]$/.test(s.id))).toHaveLength(4)
   })
 })
+
+// Folded torso panels with a declared neckline must not have its first
+// segment claimed by the importer's legacy front/back top seam.
+describe('authored neckline ownership', () => {
+  test.each([true, false])('preserves collar joins when both panels declare a neckline: %s', both => {
+    const panel = [[0,0], [1,0.3], [3,1], [5,3], [6,8], [0,8]]
+    const neck = [{ fromIdx: 0, toIdx: 2, seamId: 'neck' }]
+    const payload = { pieces: [
+      { id: 'front', role: 'front-panel', cutOnFold: true, outline: panel,
+        necklineEndIdx: 2, edges: neck },
+      { id: 'back', role: 'back-panel', cutOnFold: true, outline: panel,
+        ...(both ? { necklineEndIdx: 2, edges: [{ ...neck[0], seamId: 'backNeck' }] } : {}) },
+      { id: 'collar', role: 'collar', outline: [[0,0],[3,0],[3,2],[0,2]],
+        edges: [{ fromIdx: 0, toIdx: 1, seamId: 'neck' }] },
+    ] }
+    const result = convertAppPattern(payload)
+    expect(result.seamInstructions.filter(s => s.id.endsWith('_neck'))).toHaveLength(1)
+    expect(result.seamInstructions.filter(s => /_(right|left)Top$/.test(s.id))).toHaveLength(0)
+    expect(result.seamInstructions.filter(s => /_(right|left)Side$/.test(s.id))).toHaveLength(2)
+    const drafts = result.rawPieces.map(p => createDraftPiece(p, result.roles[p.id]))
+    const byId = Object.fromEntries(drafts.map(p => [p.id, p]))
+    for (const e of result.edgeInstructions) addEdge(byId[e.pieceId], e.edgeName, e.fromIdx, e.toIdx)
+    for (const seam of result.seamInstructions) {
+      expect(byId[seam.a.piece].edges[seam.a.edge]).toBeDefined()
+      expect(byId[seam.b.piece].edges[seam.b.edge]).toBeDefined()
+    }
+  })
+})

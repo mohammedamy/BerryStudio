@@ -506,7 +506,10 @@ export function convertAppPattern(payload) {
         // own declared `edges` now always goes through pushSeamIdEdges,
         // regardless of which placement it has.
         if (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack') {
-          const geo = deriveTorsoEdgeInstructions(outline, { includeTop: placement === 'frontPanel' || placement === 'backPanel', necklineEndIdx, sideEndIdx })
+          // An authored neckline starting at the fold owns the top span;
+          // don't also weld that span directly to the opposite body panel.
+          const authoredTop = necklineEndIdx != null && edges?.some(e => e.seamId && e.fromIdx === 0 && e.toIdx === necklineEndIdx)
+          const geo = deriveTorsoEdgeInstructions(outline, { includeTop: !authoredTop && (placement === 'frontPanel' || placement === 'backPanel'), necklineEndIdx, sideEndIdx })
           // Code-review fix: a genuinely tiny outline can leave
           // deriveTorsoEdgeInstructions unable to produce a real,
           // non-degenerate rightSide/leftSide (see that function's own
@@ -627,7 +630,7 @@ export function convertAppPattern(payload) {
   for (const [frontKey, backKey, includeTop] of [['frontPanel', 'backPanel', true], ['hipPanelFront', 'hipPanelBack', false]]) {
     if (bySlot[frontKey].length === 1 && bySlot[backKey].length === 1) {
       const f = bySlot[frontKey][0].id, b = bySlot[backKey][0].id
-      if (includeTop) {
+      if (includeTop && [f, b].every(id => edgeInstructions.some(e => e.pieceId === id && e.edgeName === 'rightTop') && edgeInstructions.some(e => e.pieceId === id && e.edgeName === 'leftTop'))) {
         seamInstructions.push({ id: frontKey + '_rightTop', a: { piece: f, edge: 'rightTop' }, b: { piece: b, edge: 'rightTop' }, reverse: false })
         seamInstructions.push({ id: frontKey + '_leftTop', a: { piece: f, edge: 'leftTop' }, b: { piece: b, edge: 'leftTop' }, reverse: false })
       }

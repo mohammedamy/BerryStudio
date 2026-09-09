@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-09 — WP-43: preserve authored folded-torso neckline seams
+
+- Prevent automatic torso top edges from claiming a declared neckline that
+  starts at the fold, which previously caused collar joins to be skipped.
+- Generate automatic front/back top joins only when both panels provide their
+  referenced edges; retain side joins and the legacy path for other panels.
+- Cover one-sided and two-sided neckline declarations. Validation: 310 root
+  tests, 893 Cloth Lab tests, both lints and both production builds pass.
+- mf11 collar drafting remains open; see `docs/plan-v3-2-progress.md` for the
+  front-panel topology and coarse-mesh limitations found during investigation.
+
+
 All notable changes to this project are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions.
 Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),

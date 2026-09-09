@@ -43,3 +43,22 @@ does not establish correct waistband attachment.
 
 WP-30 requires a real iOS Quick Look result. PayPal Stage C remains deferred
 pending the provider decision. Neither is marked complete by this continuation.
+
+## WP-43: authored neckline importer prerequisite
+
+The importer now lets a declared neckline starting at a folded torso's center
+own its top span. Previously the automatic front/back top edges claimed the
+first neckline segment, causing the collar's authored seam to be silently
+skipped. Automatic top seams are emitted only when both participating panels
+actually have those edges; side seams remain available. Two regression cases
+cover declarations on both panels and on only one panel.
+
+Validation: 310 root tests, 893 Cloth Lab tests, both lints and both builds pass.
+This change is local, not deployed.
+
+The mf11 Classic Denim Jacket collar investigation remains open. Completing it
+requires separate opening-front panels, a folded back with explicit side joins,
+and a decision about short-curve mesh sampling. A trial measured roughly 10–13%
+length loss on the short back neckline at the default 2 cm mesh spacing despite
+exact authored length parity. No mf11 drafting changes are included in this pass.
+Do not mark mf11 attachment or physical fit complete based on the importer fix.
