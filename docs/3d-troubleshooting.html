@@ -27,7 +27,7 @@
       <p>Open <a href="../3d-test.html">/3d-test.html</a> — BerryStudio's own capability probe. It reports WebGL2/WebGPU support, float-texture render support (the GPU cloth solver needs this), and max texture size, and gives you a clear verdict before you wait for a load that might fail. If it reports your device can't run the GPU solver, 3D Preview (which doesn't need it) still works fully.</p>
 
       <h2>Zoom feels wrong, or the avatar doesn't fit the view</h2>
-      <p>This was a real, now-fixed bug (see the main <a href="../README.md">README</a>'s Honest notes): Cloth Lab's standalone build was missing one link in its CSS height chain, so the whole page silently sized itself to its sidebar's content height instead of the real window — which made every zoom/distance calculation wrong and the avatar look oversized. If you still see this after updating, hard-refresh (clear the page's cached service-worker assets) before reporting it as a new issue.</p>
+      <p>This was a real, now-fixed bug (see the main <a href="https://github.com/mohammedamy/BerryStudio/blob/main/README.md">README</a>'s Honest notes): Cloth Lab's standalone build was missing one link in its CSS height chain, so the whole page silently sized itself to its sidebar's content height instead of the real window — which made every zoom/distance calculation wrong and the avatar look oversized. If you still see this after updating, hard-refresh (clear the page's cached service-worker assets) before reporting it as a new issue.</p>
 
       <h2>GLB avatar doesn't load, or looks wrong</h2>
       <ul>
@@ -56,7 +56,7 @@
       <p>افتح <a href="../3d-test.html">/3d-test.html</a> — فاحص القدرات الخاص بـBerryStudio نفسه. يُبلغ عن دعم WebGL2/WebGPU، ودعم عرض النسيج العائم (float-texture، يحتاجه محلل القماش بمعالج الرسوميات)، والحجم الأقصى للنسيج، ويعطيك حكمًا واضحًا قبل انتظار تحميل قد يفشل. إذا أفاد أن جهازك لا يستطيع تشغيل المحلل، تبقى المعاينة ثلاثية الأبعاد (التي لا تحتاجه) تعمل بالكامل.</p>
 
       <h2>التكبير يبدو خاطئًا، أو الصورة الرمزية لا تناسب العرض</h2>
-      <p>كانت هذه علة حقيقية وتم إصلاحها الآن (راجع ملاحظات الصدق في <a href="../README.md">README</a> الرئيسي): كان بناء Cloth Lab المستقل يفتقد حلقة واحدة في سلسلة ارتفاع CSS، فكانت الصفحة بأكملها تتحجّم بصمت وفق ارتفاع محتوى الشريط الجانبي بدلًا من النافذة الحقيقية — ما جعل كل حساب تكبير/مسافة خاطئًا وجعل الصورة الرمزية تبدو كبيرة الحجم. إذا استمر ظهور هذا بعد التحديث، حدّث الصفحة بقوة (لمسح أصول عامل الخدمة (service worker) المخزّنة مؤقتًا) قبل الإبلاغ عنها كمشكلة جديدة.</p>
+      <p>كانت هذه علة حقيقية وتم إصلاحها الآن (راجع ملاحظات الصدق في <a href="https://github.com/mohammedamy/BerryStudio/blob/main/README.md">README</a> الرئيسي): كان بناء Cloth Lab المستقل يفتقد حلقة واحدة في سلسلة ارتفاع CSS، فكانت الصفحة بأكملها تتحجّم بصمت وفق ارتفاع محتوى الشريط الجانبي بدلًا من النافذة الحقيقية — ما جعل كل حساب تكبير/مسافة خاطئًا وجعل الصورة الرمزية تبدو كبيرة الحجم. إذا استمر ظهور هذا بعد التحديث، حدّث الصفحة بقوة (لمسح أصول عامل الخدمة (service worker) المخزّنة مؤقتًا) قبل الإبلاغ عنها كمشكلة جديدة.</p>
 
       <h2>الصورة الرمزية GLB لا تُحمَّل، أو تبدو خاطئة</h2>
       <ul>

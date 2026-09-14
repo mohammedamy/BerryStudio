@@ -1,5 +1,13 @@
 import { test, expect } from '@playwright/test';
 
+const startupErrors = new WeakMap();
+test.beforeEach(async ({ page }) => {
+  const errors = [];
+  startupErrors.set(page, errors);
+  page.on('pageerror', error => errors.push(String(error)));
+  page.on('requestfailed', request => errors.push(`${request.url()}: ${request.failure()?.errorText}`));
+});
+
 // Onboarding shows after a deliberate 400ms delay (js/app.js's init(),
 // `setTimeout(startOnboarding, 400)`) — not synchronously on load. A plain
 // `isVisible()` check taken immediately after page.goto() can race ahead
@@ -11,6 +19,13 @@ import { test, expect } from '@playwright/test';
 // explicitly for the button (up to a few seconds) handles both outcomes:
 // the delayed appearance, and never appearing at all.
 async function dismissOnboarding(page) {
+  // A visible static canvas is not evidence that ES modules have initialized.
+  // Wait for the default draft before calling Canvas methods or using panes.
+  try {
+    await expect.poll(() => page.evaluate(() => window.Canvas?.getPieces?.().length ?? 0), { timeout: 20000 }).toBeGreaterThan(0);
+  } catch (error) {
+    throw new Error(`${error.message}\nStartup errors: ${(startupErrors.get(page) || []).join('\n') || '(none)'}`);
+  }
   const skip = page.getByRole('button', { name: 'Skip' });
   await skip.waitFor({ state: 'visible', timeout: 3000 }).catch(() => null);
   if (await skip.isVisible().catch(() => false)) await skip.click();
@@ -108,7 +123,8 @@ test('3D Preview still initializes when unpkg.com is completely blocked (esm.sh 
   await page.goto('/index.html');
   await dismissOnboarding(page);
   await page.locator('#viewToggle button[data-v="3d"]').click();
-  await page.waitForTimeout(3000);
+  // CDN fallback startup varies; assert readiness instead of a fixed delay.
+  await expect.poll(() => page.evaluate(() => window.View3D.isReady()), { timeout: 15000 }).toBe(true);
 
   const state3d = await page.evaluate(() => {
     const c = document.getElementById('canvas3d');

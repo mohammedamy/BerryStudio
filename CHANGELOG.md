@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-09-14 — V6-01: restore BodyForm and make AI input behavior explicit
+
+The first v6 package integrates the September audit repairs with the deployed
+PR #52 baseline. BodyForm's import map was blocked by the production CSP;
+image adapters also sent text-only requests to edits or silently ignored
+reference photos. The repair preserves current catalog and collar work.
+
+### Fixed / Added
+
+- Authorize exact import-map hashes in root and BodyForm CSP, without allowing
+  arbitrary inline scripts. Add hash-drift and CSP-active browser regressions.
+- Give all 25 drafting toolbar controls and Fit view translated accessible
+  names; cover switching to Arabic in the real browser test.
+- Route OpenAI text-only image requests to generations and reference requests
+  to edits. Return structured malformed-reference errors and reject reference
+  photos for the supplied ComfyUI text-to-image workflow before networking.
+- Repair eight README links and correct English/Arabic access, validation,
+  engine-default and generated-pattern descriptions.
+- Refresh the service-worker cache version for the release.
+- Wait for actual app/default-pattern readiness in browser smoke tests, report
+  startup failures, and replace the CDN fallback test's fixed three-second delay.
+- Serve tests on explicit IPv4 loopback with a larger accept backlog after
+  diagnostics exposed local socket resets during concurrent module requests.
+- Add the consolidated v6 plan and execution record, preserve its v5 source,
+  and refresh library metrics after PR #52: notch coverage 35.7%, explicit
+  verified pairing 67.5%. Subscription work remains the last phase.
+
+### Verification
+
+- Root unit suite: 329 passed. Cloth Lab: 893 passed across 34 files.
+- Root lint: 91 existing warnings, no errors; Cloth lint: 7 existing warnings,
+  no errors. No temporary test-bypass markers in the release source.
+- Browser suite: 21 passed in 2.0 minutes with two workers and no retries
+  after the test-server repair. Local BodyForm visually rendered with CSP
+  active and no observed console errors. See docs/plan-v6-progress.md.
+- This package does not include the separate unfinished local mf11 collar edits,
+  a mobile layout redesign, real-provider billing calls, or physical fit claims.
+
 ## 2026-09-14 — PR #52 integration with main
 
 - Resolve overlapping changelog additions by retaining both histories.

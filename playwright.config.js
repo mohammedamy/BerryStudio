@@ -1,9 +1,9 @@
 import { defineConfig } from '@playwright/test';
 
 // One light smoke suite (see BerryStudio-Upgrade-Plan WP-0.2) — not a broad
-// E2E suite. Spins up the same `python3 -m http.server` flow the README
-// documents for local dev, so the test runs against exactly what a
-// developer/CI would actually serve, not a special test-only server.
+// E2E suite. Serves the unmodified repository with the standard-library
+// static handler, an explicit loopback address and enough accept backlog
+// for concurrent module-loading bursts.
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
@@ -20,21 +20,16 @@ export default defineConfig({
   // the runner. `list` stays first for a normal human-readable console log.
   reporter: process.env.CI ? [['list'], ['github']] : [['list']],
   webServer: {
-    command: 'python3 -m http.server 8793',
-    url: 'http://localhost:8793/index.html',
+    command: 'python3 scripts/serve-e2e.py',
+    url: 'http://127.0.0.1:8793/index.html',
     reuseExistingServer: !process.env.CI,
     timeout: 15_000,
   },
   use: {
-    baseURL: 'http://localhost:8793',
-    // BerryStudio-Upgrade-Plan WP-1 added a real, strict CSP (no
-    // 'unsafe-inline' in script-src — see index.html). Playwright's own
-    // browser automation injects its test-harness instrumentation as an
-    // inline script, which that CSP correctly blocks like any other inline
-    // script — a real site visitor never triggers this, only the test
-    // driver does. `bypassCSP` is Playwright's documented mechanism for
-    // exactly this situation: it only affects this isolated test browser
-    // context, never the CSP real users get.
+    baseURL: 'http://127.0.0.1:8793',
+    // Legacy smoke cases retain their existing CSP bypass. The separate
+    // csp.spec.js explicitly disables it and verifies real visitor policy.
+    // Passing this broad suite alone is not evidence of CSP compatibility.
     bypassCSP: true,
   },
 });
