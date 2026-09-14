@@ -167,3 +167,43 @@ test('comfyui.generate times out honestly if ComfyUI never finishes rendering', 
   assert.equal(r.ok, false);
   assert.match(r.error, /timed out/);
 });
+
+test('OpenAI text-only requests use generations JSON and honor the selected model', async () => {
+  let calls = 0;
+  const r = await ImageProviders['openai-images'].generate(
+    { apiKey: 'test-key', baseUrl: 'https://example.test/v1/', model: 'selected-model' },
+    { prompt: 'A linen jacket', images: [] },
+    { fetchImpl: mockFetch((url, options) => {
+      calls++;
+      assert.equal(url, 'https://example.test/v1/images/generations');
+      assert.equal(options.headers['content-type'], 'application/json');
+      assert.deepEqual(JSON.parse(options.body), { model: 'selected-model', prompt: 'A linen jacket' });
+      return jsonResponse(200, { data: [{ b64_json: 'QUJD' }] });
+    }) },
+  );
+  assert.equal(calls, 1);
+  assert.equal(r.ok, true);
+  assert.equal(r.image, 'data:image/png;base64,QUJD');
+});
+
+test('ComfyUI refuses reference photos instead of silently discarding them', async () => {
+  let calls = 0;
+  const r = await ImageProviders.comfyui.generate({},
+    { prompt: 'Preserve this garment', images: ['data:image/png;base64,QUJD'] },
+    { fetchImpl: async () => { calls++; throw new Error('must not submit'); } },
+  );
+  assert.equal(r.ok, false);
+  assert.match(r.error, /text-to-image only/);
+  assert.equal(calls, 0);
+});
+
+test('OpenAI invalid edit image returns an adapter error without a network request', async () => {
+  let calls = 0;
+  const r = await ImageProviders['openai-images'].generate({ apiKey: 'test-key' },
+    { prompt: 'Edit', images: ['not-an-image'] },
+    { fetchImpl: async () => { calls++; throw new Error('must not submit'); } },
+  );
+  assert.equal(r.ok, false);
+  assert.match(r.error, /not a data URL/);
+  assert.equal(calls, 0);
+});

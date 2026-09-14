@@ -45,10 +45,8 @@
      deliberately narrow: one hardcoded "text-to-image" workflow graph
      (CheckpointLoaderSimple -> CLIPTextEncode x2 -> EmptyLatentImage ->
      KSampler -> VAEDecode -> SaveImage), not a user-editable node graph —
-     that stays out of scope. Reference photos (`images`) are silently
-     ignored by this adapter (no LoadImage/img2img wiring) rather than
-     erroring, exactly like every other adapter here treats an unsupported
-     input; the checkpoint to run is auto-detected from whatever's
+     that stays out of scope. Reference photos (`images`) are rejected before submission
+     because this workflow has no LoadImage/img2img wiring; the checkpoint to run is auto-detected from whatever's
      actually installed on the user's ComfyUI instance (object_info),
      never guessed, so a fresh install with no checkpoint fails with an
      honest "install a checkpoint" message instead of a confusing 400.
@@ -113,13 +111,22 @@ const openaiImages = {
     if (!fetchImpl) return fail('openai-images', 'fetch is not available in this environment');
     if (!cfg.apiKey) return fail('openai-images', 'no API key configured');
     const baseUrl = cfg.baseUrl || this.defaultBaseUrl;
-    const form = new FormData();
-    form.append('model', model || cfg.model || DEFAULT_MODEL);
-    form.append('prompt', prompt);
-    (images || []).forEach((d) => form.append('image[]', dataURLToBlob(d), 'image.png'));
     try {
-      const { res } = await timedFetch(fetchImpl, `${baseUrl}/images/edits`, {
-        method: 'POST', headers: { authorization: `Bearer ${cfg.apiKey}` }, body: form,
+      const hasImages = !!images?.length;
+      const headers = { authorization: `Bearer ${cfg.apiKey}` };
+      let body;
+      if (hasImages) {
+        body = new FormData();
+        body.append('model', model || cfg.model || DEFAULT_MODEL);
+        body.append('prompt', prompt);
+        images.forEach(d => body.append('image[]', dataURLToBlob(d), 'image.png'));
+      } else {
+        headers['content-type'] = 'application/json';
+        body = JSON.stringify({ model: model || cfg.model || DEFAULT_MODEL, prompt });
+      }
+      const path = hasImages ? 'edits' : 'generations';
+      const { res } = await timedFetch(fetchImpl, `${baseUrl.replace(/\/$/, '')}/images/${path}`, {
+        method: 'POST', headers, body,
       }, 90000);
       if (!res.ok) return fail('openai-images', await readErrorText(res));
       const image = extractImage(await res.json());
@@ -237,7 +244,8 @@ const comfyui = {
       return { ok: true, message: `Connected — ComfyUI ${ver}${vram ? `, ${Math.round(vram / 1e9)}GB VRAM` : ''}`, latencyMs };
     } catch (e) { return { ok: false, message: (e && e.message) || String(e) }; }
   },
-  async generate(cfg, { prompt }, opts = {}) {
+  async generate(cfg, { prompt, images }, opts = {}) {
+    if (images?.length) return fail('comfyui', 'This ComfyUI workflow supports text-to-image only. Choose an image-editing provider to use reference photos.');
     const fetchImpl = getFetch(opts);
     if (!fetchImpl) return fail('comfyui', 'fetch is not available in this environment');
     const baseUrl = cfg.baseUrl || this.defaultBaseUrl;

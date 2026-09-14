@@ -173,7 +173,7 @@ export const I18N = {
     avatarModel_girl2: "Girl (alt. 1)",
     avatarModel_girl3: "Girl (alt. 2)",
     clothLabEngine: "3D Cloth Lab engine",
-    clothLabEngineD: "\"Iframe\" (default) loads Cloth Lab as a separate embedded app — the safest, most isolated option. \"Embedded\" mounts it directly into this page instead, sharing this page's own React/Three.js so it starts faster and updates instantly — an experimental option, still being rolled out.",
+    clothLabEngineD: "\"Embedded\" is the default and opens Cloth Lab in this workspace. \"Iframe\" runs it in an isolated frame as a compatibility option.",
     clothLabEngineIframe: "Iframe",
     clothLabEngineEmbedded: "Embedded",
     // BerryStudio-Upgrade-Plan WP-10: standalone BodyForm page (body.html)
@@ -381,7 +381,7 @@ export const I18N = {
     attrOverrideInvalid: "That value isn't recognized — nothing changed",
     // ai fashion billboard
     billboardTitle: "AI Fashion Billboard",
-    billboardDesc: "Turn real clothing photos into an editorial model photo, then have AI draw a measured pattern from that photo. Needs a small server-side proxy — see AI Image endpoint in Settings.",
+    billboardDesc: "Turn clothing photos into an editorial model image, then explore a pattern illustration. Configure an image provider in Settings → Image generation. Generated dimensions need calibration and patternmaker review before cutting.",
     billboardUpload1: "Clothing photo 1", billboardUpload2: "Clothing photo 2 (optional)",
     billboardGenerate: "Generate Billboard Photo", billboardGenerating: "Generating…",
     billboardStageSending: "Sending photos to the AI…", billboardStageRendering: "Rendering the editorial photo…",
@@ -629,7 +629,7 @@ export const I18N = {
     avatarModel_girl2: "بنت (بديل 1)",
     avatarModel_girl3: "بنت (بديل 2)",
     clothLabEngine: "محرك معمل القماش ثلاثي الأبعاد",
-    clothLabEngineD: "\"إطار مضمّن\" (الافتراضي) يحمّل معمل القماش كتطبيق منفصل مضمّن — الخيار الأكثر أمانًا وعزلًا. \"مدمج\" يضمّه مباشرة في هذه الصفحة بدلًا من ذلك، مستخدمًا React/Three.js الخاصين بهذه الصفحة نفسها، فيبدأ أسرع ويتحدّث فورًا — خيار تجريبي لا يزال قيد الطرح.",
+    clothLabEngineD: "\"مدمج\" هو الخيار الافتراضي ويفتح معمل القماش داخل مساحة العمل. يشغّله خيار \"إطار مضمّن\" في إطار منفصل للتوافق.",
     clothLabEngineIframe: "إطار مضمّن",
     clothLabEngineEmbedded: "مدمج",
     // BerryStudio-Upgrade-Plan WP-10: standalone BodyForm page (body.html)
@@ -810,7 +810,7 @@ export const I18N = {
     attrOverridePromptYN: "إغلاق ملفوف؟ (نعم/لا)", attrOverridePromptColor: "أدخل لونًا (مثل rgb(200,60,90) أو #c83c5a)",
     attrOverrideInvalid: "هذه القيمة غير معروفة — لم يتغيّر شيء",
     billboardTitle: "لوحة الأزياء الإعلانية بالذكاء الاصطناعي",
-    billboardDesc: "حوّل صور قطع حقيقية إلى صورة عارضة أزياء احترافية، ثم اجعل الذكاء الاصطناعي يرسم باترونًا بالقياسات من تلك الصورة. يحتاج وسيطًا خادميًا صغيرًا — انظر نقطة صور الذكاء الاصطناعي في الإعدادات.",
+    billboardDesc: "حوّل صور الملابس إلى صورة أزياء احترافية، ثم استكشف رسمًا توضيحيًا للباترون. اختر مزوّد صور من الإعدادات ← توليد الصور. تحتاج القياسات المولّدة إلى معايرة ومراجعة صانع باترونات قبل القص.",
     billboardUpload1: "صورة القطعة 1", billboardUpload2: "صورة القطعة 2 (اختياري)",
     billboardGenerate: "توليد صورة إعلانية", billboardGenerating: "جارٍ التوليد…",
     billboardStageSending: "جارٍ إرسال الصور للذكاء الاصطناعي…", billboardStageRendering: "جارٍ توليد الصورة الإعلانية…",

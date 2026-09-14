@@ -1,0 +1,194 @@
+[
+  {
+    "url": "https://berrystudio.org/",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/3d-test.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/README.md",
+    "status": 404
+  },
+  {
+    "url": "https://berrystudio.org/body.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/cloth-lab/",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/css/styles.css",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/3d-troubleshooting.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/ai-setup/anthropic.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/ai-setup/gemini.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/ai-setup/index.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/ai-setup/llamacpp-vllm.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/ai-setup/lmstudio.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/ai-setup/ollama.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/ai-setup/openai-compatible.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/ai-setup/openai.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/ai-setup/proxy.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/docs.css",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/docs.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/faq.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/index.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/shortcuts.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/docs/tools.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/icons/icon-192.png",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/icons/icon-512.png",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/index.html",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/ai-fusion.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/ai-keystore.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/ai-providers.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/ai-spec-pipeline.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/ai.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/app.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/auth.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/berry-studio-api.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/billboard.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/body-page.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/canvas.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/capability-check-3d.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/capability-probe.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/data.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/fancy-patterns.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/i18n.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/image-providers.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/library.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/schema-validate.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/three-view.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/js/validate.js",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/manifest.webmanifest",
+    "status": 200
+  },
+  {
+    "url": "https://berrystudio.org/privacy.html",
+    "status": 200
+  }
+]

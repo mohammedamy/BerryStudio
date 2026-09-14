@@ -1,0 +1,18 @@
+{
+  "scope": "All registered patterns; category defaults, international size M; validator called without body measurements, matching the existing library sweep. Not a drape or fit test.",
+  "patterns": 308,
+  "pieces": 2171,
+  "piecesWithNotches": 326,
+  "piecesWithChestHints": 112,
+  "pairs": {
+    "verified": 313,
+    "heuristic": 105,
+    "unmatched": 81
+  },
+  "checks": {
+    "pass": 9512,
+    "warn": 2341,
+    "fail": 0,
+    "deferred": 2171
+  }
+}

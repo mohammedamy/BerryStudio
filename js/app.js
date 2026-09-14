@@ -394,6 +394,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       if (tl === "sep") { rail.appendChild(el("div","tool-sep")); return; }
       const b = el("button", "tool", IC[tl.i]);
       b.dataset.tool = tl.id;
+      b.setAttribute("aria-label", T("t_"+tl.id));
       tip(b, T("t_"+tl.id), T("tt_"+tl.id));
       b.onclick = () => {
         if (tl.toggle) { const v = !Canvas.getOpt(tl.toggle); Canvas.setOpt(tl.toggle, v); b.classList.toggle("active", v); toast(T("t_"+tl.id)); return; }

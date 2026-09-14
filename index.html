@@ -41,7 +41,8 @@
   the Supabase REST/auth calls the SDK itself makes are already covered by
   connect-src's existing broad `https:` allowance.
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com https://esm.sh https://accounts.google.com https://alcdn.msauth.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https: http://localhost:* https://localhost:*; worker-src 'self' blob:; manifest-src 'self'; base-uri 'self'; form-action 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-+sDORT8rDcCdw0F9/mJm17ooHir2g3ZbuW2TycE4RZg=' https://unpkg.com https://esm.sh https://accounts.google.com https://alcdn.msauth.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https: http://localhost:* https://localhost:*; worker-src 'self' blob:; manifest-src 'self'; base-uri 'self'; form-action 'self';">
+<!-- CSP authorizes only this exact import map; update its SHA-256 when editing it. -->
 <script type="importmap">
 {
   "imports": {
@@ -209,7 +210,7 @@
           <button id="zout">−</button>
           <span class="zval" id="zval">100%</span>
           <button id="zin">+</button>
-          <button id="zfit"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg></button>
+          <button id="zfit" data-i18n-aria="tt_zoomfit"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg></button>
         </div>
       </div>
     </main>
