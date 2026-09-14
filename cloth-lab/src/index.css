@@ -51,3 +51,54 @@
 .cloth-lab-root button {
   cursor: pointer;
 }
+
+/* Guided workflow: all selectors stay inside the embedded application. */
+.cloth-lab-root { min-width: 0; min-height: 0; }
+.cloth-lab-root button, .cloth-lab-root select { min-height: 38px; border: 1px solid var(--border); background: var(--panel-2); border-radius: 8px; padding: 7px 12px; }
+.cloth-lab-root button:disabled { opacity: .45; cursor: not-allowed; }
+.cloth-lab-root :focus-visible { outline: 3px solid #f6bc59; outline-offset: 3px; }
+.cloth-lab-root .cl-header { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--panel); }
+.cloth-lab-root .cl-header nav, .cloth-lab-root .cl-categories { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.cloth-lab-root [aria-current=step] { background:var(--accent); color:white; }
+.cloth-lab-root .cl-inspect { position:relative; }
+.cloth-lab-root summary { cursor:pointer; padding:12px; font-weight:600; }
+.cloth-lab-root .cl-inspect > div { position:absolute; top:100%; inset-inline-end:0; z-index:20; display:grid; gap:5px; background:var(--panel); border:1px solid var(--border); padding:8px; width:190px; }
+.cloth-lab-root .cl-review, .cloth-lab-root .cl-sewing { padding:24px; overflow:auto; min-height:0; }
+.cloth-lab-root .cl-heading { max-width:760px; margin-bottom:20px; }
+.cloth-lab-root h2 { font-size:24px; line-height:1.2; margin:8px 0; }
+.cloth-lab-root .cl-heading p, .cloth-lab-root .cl-piece-card p { color:var(--text-2); margin:8px 0 14px; }
+.cloth-lab-root .cl-eyebrow { color:var(--accent-2); font-size:12px; font-weight:700; letter-spacing:.04em; }
+.cloth-lab-root .cl-summary { padding:12px 16px; background:var(--panel); border-radius:10px; margin-bottom:16px; }
+.cloth-lab-root .cl-inventory, .cloth-lab-root .cl-piece-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:16px; align-items:start; }
+.cloth-lab-root .cl-piece-card { border:1px solid var(--border); border-radius:12px; padding:16px; background:var(--panel); min-width:0; }
+.cloth-lab-root .cl-piece-card header { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; }
+.cloth-lab-root .cl-piece-card header span { font-size:12px; color:var(--accent-2); }
+.cloth-lab-root fieldset { min-width:0; border:1px solid var(--border); border-radius:10px; margin:12px 0; padding:12px; }
+.cloth-lab-root legend { padding:0 5px; font-weight:600; }
+.cloth-lab-root .cl-choice { display:flex; gap:10px; align-items:flex-start; padding:10px; cursor:pointer; border-radius:8px; line-height:1.4; }
+.cloth-lab-root .cl-choice:hover { background:var(--panel-2); }
+.cloth-lab-root .cl-choice input { margin-top:3px; accent-color:var(--accent-2); flex:none; }
+.cloth-lab-root .cl-primary { background:var(--accent); color:white; font-weight:700; margin-top:20px; padding:12px 24px; }
+.cloth-lab-root .cl-link { background:transparent; color:var(--accent-2); margin:8px 0; }
+.cloth-lab-root .cl-error { margin:16px; padding:16px; border:1px solid var(--danger); border-radius:10px; overflow-wrap:anywhere; }
+.cloth-lab-root .cl-empty { padding:40px; max-width:660px; margin:auto; }
+.cloth-lab-root .cl-workspace { flex:1 1 auto; min-height:0; display:grid; grid-template-columns:300px minmax(0,1fr); }
+.cloth-lab-root .cl-sidebar { background:var(--panel); border-inline-end:1px solid var(--border); overflow:auto; min-height:0; }
+.cloth-lab-root .cl-sidebar > details { border-top:1px solid var(--border); }
+.cloth-lab-root .cl-preview { min-width:0; min-height:0; position:relative; overflow:auto; }
+.cloth-lab-root .cl-preview:has(canvas) { overflow:hidden; }
+.cloth-lab-root .cl-preview-tools { position:absolute; top:12px; inset-inline-start:12px; z-index:4; display:flex; flex-wrap:wrap; gap:6px; max-width:calc(100% - 24px); }
+.cloth-lab-root .cl-pattern-svg { width:100%; height:250px; background:var(--bg); margin:12px 0; border-radius:8px; touch-action:manipulation; }
+.cloth-lab-root .cl-pattern-svg [role=button] { cursor:pointer; }
+.cloth-lab-root .cl-point-selects { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+.cloth-lab-root .cl-point-selects label, .cloth-lab-root .cl-field { display:grid; gap:4px; font-size:12px; }
+@media (max-width:760px) {
+ .cloth-lab-root .cl-workspace { display:flex; flex-direction:column; overflow:auto; }
+ .cloth-lab-root .cl-sidebar { flex:none; overflow:visible; border-inline-end:0; }
+ .cloth-lab-root .cl-preview { flex:none; overflow:visible; min-height:420px; }
+ .cloth-lab-root .cl-preview:has(canvas) { height:60vh; }
+ .cloth-lab-root .cl-review, .cloth-lab-root .cl-sewing { padding:14px; }
+ .cloth-lab-root .cl-inventory, .cloth-lab-root .cl-piece-grid { grid-template-columns:minmax(0,1fr); }
+ .cloth-lab-root .cl-header { padding:8px; }
+ .cloth-lab-root .cl-header button { font-size:12px; padding:7px 9px; }
+}

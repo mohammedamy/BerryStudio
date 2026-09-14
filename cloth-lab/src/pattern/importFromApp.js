@@ -329,7 +329,7 @@ export function convertAppPattern(payload) {
       }
       pushEdge(pieceId, `seamId_${e.seamId}`, e.fromIdx, e.toIdx)
       if (outlineLen != null) { const set = (claimedIndices[pieceId] ||= new Set()); for (const i of edgeIndexSet(outlineLen, e.fromIdx, e.toIdx)) set.add(i) }
-      ;(seamIdEdges[e.seamId] ||= []).push({ pieceId, fromIdx: e.fromIdx, toIdx: e.toIdx })
+      ;(seamIdEdges[e.seamId] ||= []).push({ pieceId, fromIdx: e.fromIdx, toIdx: e.toIdx, reverse: e.reverse })
     }
   }
 
@@ -432,16 +432,24 @@ export function convertAppPattern(payload) {
       : declaredPlacement
 
     if (SLEEVE_ROLES.has(schemaRole)) {
-      sleeves.push({ id: p.id, label, outline: local, color: p.color })
+      sleeves.push({ id: p.id, label, outline: cutOnFold ? unfoldPiece(local) : local, color: p.color, bilateral: bilateral !== false && !cutOnFold })
       continue
     }
 
     if (schemaRole === 'skirt-front-gore' || schemaRole === 'skirt-back-gore' || schemaRole === 'skirt-side-gore-left' || schemaRole === 'skirt-side-gore-right') {
       const internalRole = { 'skirt-front-gore': 'goreFront', 'skirt-back-gore': 'goreBack', 'skirt-side-gore-left': 'goreSideLeft', 'skirt-side-gore-right': 'goreSideRight' }[schemaRole]
-      rawPieces.push({ id: p.id, label: p.label, outline: local, color: p.color })
-      roles[p.id] = internalRole
-      pushSeamIdEdges(p.id, edges, local.length)
-      recognized.push({ id: p.id, label })
+      const outline = cutOnFold ? unfoldPiece(local) : local
+      const copies = bilateral && !cutOnFold ? [
+        { id: p.id + '_r', outline }, { id: p.id + '_l', outline: mirrorOutline(outline) },
+      ] : [{ id: p.id, outline }]
+      for (const copy of copies) {
+        rawPieces.push({ id: copy.id, label: p.label, outline: copy.outline, color: p.color })
+        roles[copy.id] = internalRole
+        const copyEdges = copy.id.endsWith('_l') && bilateral && !cutOnFold && edges ? mirrorEdgeIndices(edges, local.length) : edges
+        const tagged = bilateral && !cutOnFold ? copyEdges?.map(e => ({ ...e, seamId: e.seamId ? e.seamId + (copy.id.endsWith('_r') ? '_R' : '_L') : e.seamId })) : copyEdges
+        pushSeamIdEdges(copy.id, tagged, copy.outline.length)
+        recognized.push({ id: copy.id, label })
+      }
       continue
     }
 
@@ -498,7 +506,10 @@ export function convertAppPattern(payload) {
         // own declared `edges` now always goes through pushSeamIdEdges,
         // regardless of which placement it has.
         if (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack') {
-          const geo = deriveTorsoEdgeInstructions(outline, { includeTop: placement === 'frontPanel' || placement === 'backPanel', necklineEndIdx, sideEndIdx })
+          // An authored neckline starting at the fold owns the top span;
+          // don't also weld that span directly to the opposite body panel.
+          const authoredTop = necklineEndIdx != null && edges?.some(e => e.seamId && e.fromIdx === 0 && e.toIdx === necklineEndIdx)
+          const geo = deriveTorsoEdgeInstructions(outline, { includeTop: !authoredTop && (placement === 'frontPanel' || placement === 'backPanel'), necklineEndIdx, sideEndIdx })
           // Code-review fix: a genuinely tiny outline can leave
           // deriveTorsoEdgeInstructions unable to produce a real,
           // non-degenerate rightSide/leftSide (see that function's own
@@ -544,8 +555,8 @@ export function convertAppPattern(payload) {
             // declared edge anywhere else to pair against.
             seamInstructions.push({ id: `${p.id}_mirror${i}`, a: { piece: rId, edge: edgeName }, b: { piece: lId, edge: edgeName }, reverse: true })
           } else if (e.seamId) {
-            ;(seamIdEdges[e.seamId + '_R'] ||= []).push({ pieceId: rId, fromIdx: e.fromIdx, toIdx: e.toIdx })
-            ;(seamIdEdges[e.seamId + '_L'] ||= []).push({ pieceId: lId, fromIdx: mirrored[i].fromIdx, toIdx: mirrored[i].toIdx })
+            ;(seamIdEdges[e.seamId + '_R'] ||= []).push({ pieceId: rId, fromIdx: e.fromIdx, toIdx: e.toIdx, reverse: e.reverse })
+            ;(seamIdEdges[e.seamId + '_L'] ||= []).push({ pieceId: lId, fromIdx: mirrored[i].fromIdx, toIdx: mirrored[i].toIdx, reverse: e.reverse })
           }
         })
       }
@@ -594,22 +605,21 @@ export function convertAppPattern(payload) {
   // shape; an unstitched-but-correctly-placed sleeve drapes plausibly from
   // gravity+placement alone, safer than guessing a seam location).
   for (const s of sleeves) {
-    const rId = s.id + '_r', lId = s.id + '_l'
-    rawPieces.push({ id: rId, label: s.label, outline: s.outline, color: s.color })
-    rawPieces.push({ id: lId, label: s.label, outline: mirrorOutline(s.outline), color: s.color })
-    roles[rId] = 'sleeve'
-    roles[lId] = 'sleeve'
-    const tube = sleeveTubeEdges(s.outline)
-    if (tube) {
-      pushEdge(rId, 'frontSeam', tube.frontSeam.from, tube.frontSeam.to)
-      pushEdge(rId, 'backSeam', tube.backSeam.from, tube.backSeam.to)
-      pushEdge(lId, 'frontSeam', tube.frontSeam.from, tube.frontSeam.to)
-      pushEdge(lId, 'backSeam', tube.backSeam.from, tube.backSeam.to)
-      seamInstructions.push({ id: rId + '_tube', a: { piece: rId, edge: 'frontSeam' }, b: { piece: rId, edge: 'backSeam' }, reverse: true })
-      seamInstructions.push({ id: lId + '_tube', a: { piece: lId, edge: 'frontSeam' }, b: { piece: lId, edge: 'backSeam' }, reverse: true })
+    const copies = s.bilateral === false ? [{ id: s.id, outline: s.outline, suffix: '' }] : [
+      { id: s.id + '_r', outline: s.outline, suffix: ' (R)' },
+      { id: s.id + '_l', outline: mirrorOutline(s.outline), suffix: ' (L)' },
+    ]
+    for (const copy of copies) {
+      rawPieces.push({ id: copy.id, label: s.label, outline: copy.outline, color: s.color })
+      roles[copy.id] = 'sleeve'
+      const tube = sleeveTubeEdges(copy.outline)
+      if (tube) {
+        pushEdge(copy.id, 'frontSeam', tube.frontSeam.from, tube.frontSeam.to)
+        pushEdge(copy.id, 'backSeam', tube.backSeam.from, tube.backSeam.to)
+        seamInstructions.push({ id: copy.id + '_tube', a: { piece: copy.id, edge: 'frontSeam' }, b: { piece: copy.id, edge: 'backSeam' }, reverse: true })
+      }
+      recognized.push({ id: copy.id, label: s.label + copy.suffix })
     }
-    recognized.push({ id: rId, label: s.label + ' (R)' })
-    recognized.push({ id: lId, label: s.label + ' (L)' })
   }
 
   // Front/back seams (both paths converge here) — only when BOTH sides of a
@@ -620,7 +630,7 @@ export function convertAppPattern(payload) {
   for (const [frontKey, backKey, includeTop] of [['frontPanel', 'backPanel', true], ['hipPanelFront', 'hipPanelBack', false]]) {
     if (bySlot[frontKey].length === 1 && bySlot[backKey].length === 1) {
       const f = bySlot[frontKey][0].id, b = bySlot[backKey][0].id
-      if (includeTop) {
+      if (includeTop && [f, b].every(id => edgeInstructions.some(e => e.pieceId === id && e.edgeName === 'rightTop') && edgeInstructions.some(e => e.pieceId === id && e.edgeName === 'leftTop'))) {
         seamInstructions.push({ id: frontKey + '_rightTop', a: { piece: f, edge: 'rightTop' }, b: { piece: b, edge: 'rightTop' }, reverse: false })
         seamInstructions.push({ id: frontKey + '_leftTop', a: { piece: f, edge: 'leftTop' }, b: { piece: b, edge: 'leftTop' }, reverse: false })
       }
@@ -644,7 +654,12 @@ export function convertAppPattern(payload) {
     const aEdgeName = edgeInstructions.find((e) => e.pieceId === a.pieceId && e.fromIdx === a.fromIdx && e.toIdx === a.toIdx)?.edgeName
     const bEdgeName = edgeInstructions.find((e) => e.pieceId === b.pieceId && e.fromIdx === b.fromIdx && e.toIdx === b.toIdx)?.edgeName
     if (!aEdgeName || !bEdgeName) continue
-    seamInstructions.push({ id: `seamId_${seamIdCounter++}_${seamId}`, a: { piece: a.pieceId, edge: aEdgeName }, b: { piece: b.pieceId, edge: bEdgeName }, reverse: true })
+    // Either contributor may declare the matching direction. Conflicting
+    // declarations are ambiguous, just like a seam with 3+ contributors.
+    const aReverse = typeof a.reverse === 'boolean' ? a.reverse : undefined
+    const bReverse = typeof b.reverse === 'boolean' ? b.reverse : undefined
+    if (aReverse !== undefined && bReverse !== undefined && aReverse !== bReverse) continue
+    seamInstructions.push({ id: `seamId_${seamIdCounter++}_${seamId}`, a: { piece: a.pieceId, edge: aEdgeName }, b: { piece: b.pieceId, edge: bEdgeName }, reverse: aReverse ?? bReverse ?? true })
   }
 
   const fabricId = FABRIC_NAME_TO_ID.has(payload.fabricId) ? payload.fabricId : null

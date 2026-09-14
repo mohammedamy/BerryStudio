@@ -626,6 +626,7 @@ uniform sampler2D uBendNbrB;
 uniform sampler2D uBendRestA;
 uniform sampler2D uBendRestB;
 uniform float uDt;
+uniform float uVelocityScale;
 uniform float uGravityRamp;
 uniform vec3 uGravity;
 uniform float uDamping;
@@ -679,7 +680,7 @@ void main() {
   }
 
   vec3 prevPos = texture2D(texturePrevPosition, uv).xyz;
-  vec3 predicted = pos + (pos - prevPos) * uDamping + uGravity * uGravityRamp * uDt * uDt;
+  vec3 predicted = pos + (pos - prevPos) * uVelocityScale * uDamping + uGravity * uGravityRamp * uDt * uDt;
   float invMassSelf = 1.0 / max(uMassDensity * areaShare, 1e-6);
 
   // Structural: every unique triangle edge (see assemble.js deriveNeighbors).
@@ -956,6 +957,7 @@ export class ClothSimulation {
       uBendNbrA: { value: bendTex.nbrA }, uBendNbrB: { value: bendTex.nbrB },
       uBendRestA: { value: bendTex.restA }, uBendRestB: { value: bendTex.restB },
       uDt: { value: (1 / 60) / SUBSTEPS_START },
+      uVelocityScale: { value: 1 },
       uGravityRamp: { value: 0 },
       uGravity: { value: GRAVITY },
       uDamping: { value: fabric.damping },
@@ -1108,7 +1110,12 @@ export class ClothSimulation {
     const gravityRamp = Math.min(1, this.frameCount / GRAVITY_RAMP_FRAMES)
     const u = this.posVar.material.uniforms
     u.uGravityRamp.value = gravityRamp
+    const previousDt = u.uDt.value
     u.uDt.value = (1 / 60) / this.substeps
+    // Verlet stores displacement over the PREVIOUS substep, not velocity.
+    // Rescale that history once when the adaptive budget changes dt. Later
+    // substeps already contain displacement measured over the new interval.
+    u.uVelocityScale.value = u.uDt.value / previousDt
 
     const t0 = performance.now()
     for (let i = 0; i < this.substeps; i++) {
@@ -1131,6 +1138,7 @@ export class ClothSimulation {
         u.uSortedBuffer.value = this.spatialSort.compute(this.getPositionTexture())
       }
       this.gpuCompute.compute()
+      u.uVelocityScale.value = 1
     }
     // WebGL compute is queued, not necessarily finished, the instant
     // .compute() returns — but GPUComputationRenderer reuses a small fixed

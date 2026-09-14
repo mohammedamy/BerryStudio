@@ -1,10 +1,279 @@
 # Changelog
 
+## 2026-09-14 — PR #52 integration with main
+
+- Resolve overlapping changelog additions by retaining both histories.
+- Preserve the branch collar/notch/pairing work alongside main's newer
+  guided workspace and authored-neckline fixes.
+- Combined validation: 324 root tests, 893 Cloth Lab tests, both lints
+  (existing warnings), and both Cloth Lab builds pass.
+
+## 2026-09-09 — WP-43: preserve authored folded-torso neckline seams
+
+- Prevent automatic torso top edges from claiming a declared neckline that
+  starts at the fold, which previously caused collar joins to be skipped.
+- Generate automatic front/back top joins only when both panels provide their
+  referenced edges; retain side joins and the legacy path for other panels.
+- Cover one-sided and two-sided neckline declarations. Validation: 310 root
+  tests, 893 Cloth Lab tests, both lints and both production builds pass.
+- mf11 collar drafting remains open; see `docs/plan-v3-2-progress.md` for the
+  front-panel topology and coarse-mesh limitations found during investigation.
+
+
 All notable changes to this project are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions.
 Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
 established early per that plan's own "one WP = one PR = one changelog
 entry" rule.
+
+## WP-43 continued: join wf09's shirt collar through a fitted stand
+
+Plan v3.2 §7's collar work, scoped to the Belted A-Line Coat Dress (`wf09`).
+Its collar and stand previously had no joins. At size M the actual half
+neckline measures 8.568 cm at the front plus 6.129 cm at the back, while the
+old stand measured 20.5 cm. Declaring seam IDs on that geometry would force
+unmatched lengths together.
+
+### Changed / Fixed
+
+- Draft this pattern's collar and stand from the actual neckline arc lengths.
+  Both are cut on the center-back fold. The stand has four separate neckline
+  spans with a shoulder notch, plus two upper edges joining the collar.
+  The collar's attachment edge matches the stand; its outer edge remains
+  curved, with matching curve metadata for export.
+- Declare both mirrored neckline spans on this pattern's center panels,
+  preserving the existing four princess joins. Use explicit same-direction
+  matching for the back neckline and reversed matching for the front and
+  collar, keeping center-back, shoulder and center-front endpoints aligned.
+- Add three import/triangulation/assembly regressions at XS, M and XXXL.
+  They assert all six joins, exact authored seam-length parity, anatomical
+  center endpoint matching, and shared simulation-particle indices without
+  an edge collapsing onto itself. Curved-edge resampling is checked within
+  1%; resampling can shortcut polyline corners even when authored lengths
+  match exactly.
+- Correct the preceding waistband test's `3XL` input to the engine's real
+  `XXXL` key. The old label silently fell back to M, so its previous large-size
+  verification claim was incorrect. The actual XXXL waistband check passes.
+  Replace a name-specific neckline regression with a check of the real
+  declared span; this also removes one existing unused-variable warning.
+
+### Verification and limits
+
+- Root: **310 tests passed**; full 308-pattern / 2,171-piece validator retains
+  **0 failures** (9,512 pass, 2,341 warn, 2,171 deferred verdicts).
+- Cloth Lab: **891 tests passed**, 34 files.
+- Both lints passed: **92 root / 7 Cloth Lab warnings**, no new warnings.
+- Standalone and embedded builds passed; the existing standalone chunk-size
+  warning remains. Diff whitespace checks pass; no entitlement bypass found.
+- This verifies construction geometry and welded topology, not physical fit,
+  an authenticated GPU drape, or export/reopen fidelity. Other collar styles
+  and unrelated garment joins remain open. Changes are local, not deployed.
+
+## WP-43 continued: add and join the three-piece suit's trouser waistband
+
+Plan v3.2 §7 explicitly lists `mf05`'s trouser waistband as unfinished.
+Direct reproduction found that the suit had no waistband piece at all, rather
+than an existing strip missing seam metadata. Added a band sized from the
+existing leg-waist edges, with four real joins to the bilateral front/back legs.
+
+### Added / Fixed
+
+- `js/fancy-patterns.js`: author the missing bilingual Trouser Waistband,
+  folded at center back, with a side-seam notch and separate front/back
+  attachment spans. Declare matching waist edges on this suit's leg panels.
+  Their geometry and other `trouserPanel()` callers remain unchanged.
+- `importFromApp.js`: honor an optional boolean `reverse` on declared seam
+  edges, from either contributor, including bilateral copies. Existing edges
+  retain reverse matching by default; conflicting directions stay unjoined.
+  This was required because the band's back-waist edge runs in the same
+  direction as the back leg's edge, while its front-waist edge runs opposite.
+  Always reversing both would incorrectly join anatomical endpoints.
+- Regression tests at XS, M and 3XL check all four counterpart identities,
+  equal seam lengths, anatomical center/side endpoint correspondence, and
+  actual shared simulation-particle indices after triangulation and assembly.
+  Separate importer tests cover direction defaults, either contributor,
+  bilateral copies, conflicting declarations and non-boolean input.
+- Update the intentional library-content baseline from 2,170 to **2,171**
+  pieces (308 patterns). The added waistband uses an existing valid role.
+  The existing leg-join regression now counts leg-to-leg joins specifically,
+  preserving its outseam/inseam guarantee while allowing the new waist join.
+
+### Verification and limits
+
+- `npm test`: **310 passed**. Full-library validator: **0 failures**, across
+  308 patterns / 2,171 pieces (9,512 pass, 2,341 warn, 2,171 deferred verdicts).
+- `npm --prefix cloth-lab test`: **888 passed**, 33 files.
+- Both lints passed with the existing **92 root / 8 Cloth Lab warnings**.
+- Standalone and embedded builds passed; the standalone chunk-size warning
+  remains. `git diff --check` passed. No temporary entitlement bypass found.
+- These are geometry/import/assembly checks, not a GPU drape or physical-fit
+  certification. The waistband matches the existing authored waist lengths;
+  the existing leg block's sizing and open waist-to-hip side spans were not
+  redrafted. Collar, other accessory joins, and full-garment stability remain
+  separate WP-43/WP-45 work. Nothing was pushed or deployed.
+
+## Cloth Lab: preserve motion when adaptive substeps change
+
+While investigating the remaining High-quality instability, an isolated GPU
+test found a timestep defect shared by both quality tiers. The solver changes
+its substep count with GPU load, but treated displacement from the previous
+timestep as though it covered the new interval. With gravity, damping and
+constraints disabled, reducing eight substeps to four halved particle speed:
+after two frames, a particle moving at 1 m/s reached 0.025 m instead of
+0.033333 m. Both tiers failed this regression before the correction.
+
+### Fixed
+
+- `ClothSimulation.step()` scales Verlet history by the new/previous timestep
+  ratio on the first substep only. Subsequent substeps use their own updated
+  history at scale 1. Fixed-count steps retain the existing calculation.
+- Add a local GPU motion fixture using the production solver in both tiers,
+  checking constant velocity through 8 → 4 → 12 → 6 → 8 substeps. This fixture
+  is outside both production entry points and uses no authentication bypass.
+
+### Verification and limits
+
+- Cloth Lab: **880 tests passed** in 32 files.
+- GPU: **4 Playwright tests passed** using SwiftShader, including both motion
+  regressions and both existing collapsed-normal rendering regressions.
+- Cloth Lab lint passed with **8 existing warnings**, none in changed files.
+- Standalone and embedded builds passed; the standalone chunk-size warning
+  remains. `git diff --check` passed; no temporary entitlement bypass found.
+- This confirms velocity preservation for free motion during timestep
+  adaptation. It does not establish stability of the joined gown, repair
+  missing joins, or validate hardware collision/export behavior. Fabric damping
+  and constraint convergence still depend on the number of substeps.
+- Changes are local; no push or deployment was performed.
+
+## Cloth Lab: prevent collapsed seam normals from blacking out Simulate
+
+A live, authenticated Princess-Seam Ball Gown rendered in Placed panels and
+Join alignment but went black in Simulate, even on Default quality. GPU
+readback found 3,191 render vertices with finite positions inside the body
+bounds. Direct rendering produced 166,680 non-black pixels; post-processing
+produced zero. Hiding the cloth restored post-processing. Guarding the
+cloth normal calculation restored the visible scene on the same real GPU.
+
+### Fixed
+
+- Guard zero-area neighbor rings before normalization. Use the rest normal,
+  or a finite axis when the rest triangle is also degenerate. Invalid
+  shading values can otherwise spread across the frame through bloom.
+- Share the current position-texture uniform across shader variants and
+  initialize it before first render, including fabric/map recompiles.
+- Add a local GPU regression fixture and `npm run test:cloth-gpu`: execute
+  the production normal helper on the GPU, then test the complete scene
+  with deliberately collapsed rings, bloom, fabric changes and resume.
+  Neither production build includes the fixture as an entry point.
+
+### Verification and limits
+
+- Root: 310 tests passed; Cloth Lab: 880 tests passed.
+- GPU regression: 2 Playwright tests passed using SwiftShader software WebGL.
+- Both lints passed with existing warnings (92 root, 8 Cloth Lab).
+- Standalone and embedded builds passed; standalone retains its chunk-size warning.
+- The guarded-normal diagnostic restored the affected live Chrome view with
+  legitimate access. No authentication or entitlement checks were bypassed.
+- This fixes a rendering blackout, not missing garment joins, collision
+  accuracy, or the separately reported High-quality physics instability.
+  Hardware export/Quick Look and a deployed-build retest remain unverified.
+
+## Cloth Lab guided workspace: source pieces, sewing decisions and preview controls
+
+The user requested an easier Cloth Lab tied to the current design, with clear
+multiple-choice questions for ambiguous pieces, darts and attachments. Setup
+now happens on flat drawings before a WebGL preview is mounted.
+
+### Changed / Added / Fixed
+
+- `js/cloth-workflow-contract.js` and the host payload retain stable piece IDs,
+  current project identity and every source piece, including hidden pieces.
+  Explicit inclusion/exclusion replaces silently skipping unconfigured pieces.
+  The new shared module is included in service-worker precaching.
+- `workflow/PatternReview.jsx` presents bilingual placement, cutting quantity,
+  hidden-piece and dart questions. Source outlines and dart markings remain
+  visible. Invalid or unsupported configurations block the preview with an
+  explanation; the source pattern geometry is not rewritten.
+- `workflow/patternPlan.js` cuts supported straight-boundary darts and pairs
+  their legs. If this replaces an existing attachment edge, join review is
+  required. Internal/curved/endpoint-mouth darts can remain explicit markings
+  or be prepared in the pattern editor; arbitrary dart geometry is not claimed.
+- `workflow/SewingDesk.jsx` replaces WebGL point picking during setup with SVG
+  panels, named-edge selection and numbered start/end selectors. The seam hook
+  allows several selected edges, checks unfinished/unattached pieces, frees
+  canceled spans and restores saved seams by stable piece identity.
+- `pattern/triangulate.js` assigns a common subdivision count to a whole joined
+  edge group. Pairwise overwrites previously gave shared junctions inconsistent
+  vertex counts. A four-piece join now passes real triangulation and assembly.
+- `pattern/importFromApp.js` respects explicit single/pair/fold choices for
+  sleeves and skirt gores. The previous sleeve path always created two copies.
+- `App.jsx`, `Header.jsx` and scoped CSS implement Pieces → Joins → Simulate,
+  grouped adjustment panels, mobile wrapping and inline fit/zoom/pause/restart.
+  Restart retains the finalized garment; scene errors offer return-to-joins.
+  Setup and committed joins are saved locally and returned to the authenticated
+  host with sender/origin/design checks. Language changes retain edits.
+- A no-pattern BodyForm restore regression was found during this integration
+  and fixed before completion, with a dedicated component regression test.
+  BodyForm also keeps its export controls expanded to preserve its existing flow.
+  Authentication, entitlement rules and the earlier lifecycle/export fixes are
+  retained. No temporary entitlement bypass was introduced.
+
+### Verification
+
+Node v26.7.0: `npm test` passed **310** root tests;
+`npm --prefix cloth-lab test` passed **880** tests in 32 files.
+Both lint commands passed with **92 root / 8 Cloth Lab warnings**, no errors
+(previous Cloth Lab count was 9; a touched unused declaration was removed).
+Standalone and embedded production builds passed. `git diff --check` passed.
+
+English and Arabic static review components were visually inspected at desktop
+width and a 390px mobile viewport. Component tests use the real workflow with
+the WebGL scene mocked; these are not GPU drape/export tests.
+
+The initial Playwright run had 13 first-attempt passes, five retry passes and
+one BodyForm failure. Its null-restoration error was fixed. A subsequent run
+was stopped after finding collapsed BodyForm export controls; those controls
+were corrected before the reviewed run. The final `CI=1 npm run test:e2e`
+exited **0**: **16 first-attempt passes and 3 retry passes** (19 total, 2.3m).
+BodyForm avatar generation, GLB/OBJ download and handoff passed in 11.2s.
+The retry passes were the signed-out automation export/generation gate,
+select-anything editing, and Add Point smoke checks.
+
+Authenticated embedded/iframe draping, GPU-deformed GLB/OBJ/USDZ reopen fidelity,
+real-device mobile behavior and Quick Look remain unverified. The existing
+high-quality physics instability is not claimed fixed. See
+[workflow scope and limitations](docs/cloth-lab-guided-workspace.md).
+
+## Cloth Lab fix package: import lifecycle and deformed export preparation
+
+Integrated the supplied fix package against main `be22e233`, preserving account
+configuration, entitlement gates, branding and unrelated features.
+
+### Fixed
+
+- Portable standalone asset base; imported designs start in Seams and cannot
+  select a demo preview before finalization.
+- Language-only updates retain finalized garments and seam selections.
+- Engine teardown, stale-load/readiness guards, latest-pattern readiness sync,
+  and sign-out cleanup even while Cloth Lab is hidden.
+- GLB/OBJ/USDZ refresh simulated positions, normals and bounds before export;
+  invalid snapshots do not partially mutate geometry.
+- Drag cleanup and lost pointer capture release the orbit-control lock.
+
+### Verification
+
+Node v26.7.0: 308 root tests and 849 Cloth Lab tests passed. Both lint commands
+passed with existing warning counts (92/9). Standalone and embedded builds passed.
+Playwright initially had 14 passes/5 failures; final CI-mode run exited 0 with
+13 first-attempt passes and 6 retry passes. Untouched baseline also needed retries
+(16 first-attempt passes, 3 retry passes). Built JS/CSS/HDR/textures resolve under
+both local hosting paths; the existing missing favicon remains.
+
+Authenticated GPU workflows, actual drape export/reopen fidelity, full mobile
+Cloth Lab layout and Quick Look remain unverified. No push or deployment.
+See [the integration report](docs/cloth-lab-fix-integration.md) for exact results,
+public-site asset failures and the acceptance checks remaining before merge.
+
 
 ## WP-44 (part 5): notch coverage for `data.js`'s six hand-authored patterns — and one asymmetric-front exclusion left correctly unforced
 

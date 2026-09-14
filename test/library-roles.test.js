@@ -79,7 +79,8 @@ const ROLE_VOCABULARY = new Set([
 // either adding it as a genuinely new role too or reworking that
 // generator to reuse an existing one, neither in scope here).
 const KNOWN_INVALID_ROLE_COUNTS = { 'cape-sleeve': 2 };
-const BASELINE = { total: 2170, valid: 2166, none: 2, roleslessPatterns: 1 };
+// WP-43 adds mf05's missing trouser waistband, using the existing role.
+const BASELINE = { total: 2171, valid: 2167, none: 2, roleslessPatterns: 1 };
 
 test('every declared piece role is in the 53-value vocabulary, except the two documented pre-existing exceptions', () => {
   const ids = Object.keys(PATTERNS);

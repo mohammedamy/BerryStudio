@@ -6,6 +6,7 @@ import { t } from '../i18n'
 export default function SeamEditorPanel({ lang = 'en', editor, onSimulate }) {
   const { drafts, pendingStart, pendingEdges, seams, error, commitSeam, removeSeam, toggleReverse, clearPending, finalize } = editor
   const [reverseNext, setReverseNext] = useState(false)
+  const [attachIntent, setAttachIntent] = useState({})
 
   // Real imported pieces carry a bilingual `label: {en, ar}` object (every
   // rawPieces.push() in pattern/importFromApp.js passes p.label straight
@@ -30,7 +31,7 @@ export default function SeamEditorPanel({ lang = 'en', editor, onSimulate }) {
         {t(lang, 'seamAuthoring')}
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-2)', margin: '0 0 10px' }}>
-        {t(lang, 'seamAuthoringHint')}
+        {lang === 'ar' ? 'حدد الحواف على رسومات القطع. أضف حواف أخرى لوصلة متعددة القطع.' : 'Select edges on the piece drawings. Add more edges for a multi-piece join.'}
       </p>
 
       {pendingStart && (
@@ -43,27 +44,27 @@ export default function SeamEditorPanel({ lang = 'en', editor, onSimulate }) {
       {pendingEdges.length > 0 && (
         <div style={{ background: 'var(--panel-2)', borderRadius: 8, padding: 8, marginBottom: 10, fontSize: 12.5 }}>
           {pendingEdges.map((pe, i) => (
-            <div key={i}>{t(lang, 'edgeN', { n: i + 1 })}: {pieceLabel(pe.pieceIdx)} [{pe.from}→{pe.to}]</div>
+            <div key={i}>{t(lang, 'edgeN', { n: i + 1 })}: {pieceLabel(pe.pieceIdx)} [{pe.from + 1}→{pe.to + 1}]</div>
           ))}
           {pendingEdges.length === 1 && <div style={{ color: 'var(--text-2)' }}>{t(lang, 'pickTwoMore')}</div>}
         </div>
       )}
 
-      {pendingEdges.length === 2 && (
+      {pendingEdges.length >= 2 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5 }}>
             <input type="checkbox" checked={reverseNext} onChange={(e) => setReverseNext(e.target.checked)} />
-            {t(lang, 'reverse')}
+            {lang === 'ar' ? 'مطابقة النهايات المتعاكسة' : 'Match opposite ends'}
           </label>
           <button
             onClick={() => { commitSeam(reverseNext); setReverseNext(false) }}
             style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--accent)', color: '#fff', fontWeight: 600, fontSize: 12.5 }}
           >
-            {t(lang, 'createSeam')}
+            {lang === 'ar' ? 'وصل الحواف المحددة' : 'Join selected edges'}
           </button>
         </div>
       )}
-      {(pendingEdges.length > 0) && (
+      {(pendingStart || pendingEdges.length > 0) && (
         <button onClick={clearPending} style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--panel-2)', color: 'var(--text-2)', fontSize: 11.5, marginBottom: 10 }}>
           {t(lang, 'clearSelection')}
         </button>
@@ -71,11 +72,11 @@ export default function SeamEditorPanel({ lang = 'en', editor, onSimulate }) {
 
       {error && <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 10 }}>{error}</div>}
 
-      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', marginBottom: 6 }}>{t(lang, 'seamsCount', { n: seams.length })}</div>
+      <details open={seams.length <= 6}><summary>{t(lang, 'seamsCount', { n: seams.length })}</summary>
       {seams.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 10 }}>{t(lang, 'noneYet')}</div>}
       {seams.map((s) => (
         <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ flex: 1 }}>{s.a.piece}.{s.a.edge} ⟷ {s.b.piece}.{s.b.edge}</span>
+          <span style={{ flex: 1 }}>{pieceLabel(drafts.findIndex(d => d.id === s.a.piece))} ({s.a.edge.replaceAll('_', ' ')}) ⟷ {pieceLabel(drafts.findIndex(d => d.id === s.b.piece))} ({s.b.edge.replaceAll('_', ' ')})</span>
           <label style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
             <input type="checkbox" checked={s.reverse} onChange={() => toggleReverse(s.id)} /> {t(lang, 'rev')}
           </label>
@@ -83,8 +84,17 @@ export default function SeamEditorPanel({ lang = 'en', editor, onSimulate }) {
         </div>
       ))}
 
+      </details>
+      {(editor.unjoined || []).map(draft => <fieldset key={draft.id} className="cl-attachment-question"><legend>{lang === 'ar' ? 'كيف تتصل هذه القطعة؟' : 'How does this piece attach?'} {pieceLabel(drafts.findIndex(d => d.id === draft.id))}</legend>
+        <label className="cl-choice"><input type="radio" name={`attach-${draft.id}`} checked={!!attachIntent[draft.id]} onChange={() => { setAttachIntent(v => ({ ...v, [draft.id]: true })); document.querySelector('.cl-sewing')?.scrollIntoView({ block: 'nearest' }) }} />{lang === 'ar' ? 'سأحدد حوافها وأوصلها بقطعة أخرى' : 'I will select its edges and join it to another piece'}</label>
+        {draft.joinReview && <><p>{lang === 'ar' ? 'غيّرت البنسة حافة وصلة سابقة. راجع الوصلات المتبقية.' : 'The dart changed an existing join edge. Review the remaining attachments.'}</p><label className="cl-choice"><input type="radio" name={`attach-${draft.id}`} checked={false} onChange={() => editor.acknowledgeJoins(draft.id)} />{lang === 'ar' ? 'الوصلات المتبقية صحيحة؛ تبقى الحافة الجديدة حرة' : 'The remaining joins are correct; leave the new boundary free'}</label></>}
+        <label className="cl-choice"><input type="radio" name={`attach-${draft.id}`} checked={false} onChange={() => editor.markSeparate(draft.id, true)} />{lang === 'ar' ? 'تبقى قطعة منفصلة في هذه المعاينة' : 'Keep it separate in this preview'}</label>
+      </fieldset>)}
+      {(editor.separate || []).map(id => <p key={id}>{pieceLabel(drafts.findIndex(d => d.id === id))}: {lang === 'ar' ? 'منفصلة' : 'separate'} <button onClick={() => editor.markSeparate(id, false)}>{lang === 'ar' ? 'تغيير' : 'Change'}</button></p>)}
+      {(editor.warnings || []).length > 0 && <details><summary>{lang === 'ar' ? 'وصلات تحتاج مراجعة' : 'Import edges needing review'}</summary>{editor.warnings.map((w, i) => <p key={i}>{w}</p>)}</details>}
       <button
         onClick={() => { const result = finalize(); if (result) onSimulate(result) }}
+        disabled={!!editor.unjoined?.length || !!pendingStart || pendingEdges.length > 0}
         style={{ marginTop: 14, width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--accent-2)', color: '#fff', fontWeight: 700, fontSize: 13 }}
       >
         {t(lang, 'simulateGarment')}

@@ -1,3 +1,4 @@
+import { prepareSceneForExport } from './prepareScene'
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js'
 import { OBJExporter } from 'three/addons/exporters/OBJExporter.js'
 import { USDZExporter } from 'three/addons/exporters/USDZExporter.js'
@@ -32,6 +33,7 @@ function downloadBlob(blob, filename) {
 }
 
 export function exportGLB(scene, filename = 'garment.glb') {
+  prepareSceneForExport(scene)
   const exporter = new GLTFExporter()
   return new Promise((resolve, reject) => {
     exporter.parse(
@@ -48,6 +50,7 @@ export function exportGLB(scene, filename = 'garment.glb') {
 }
 
 export function exportOBJ(scene, filename = 'garment.obj') {
+  prepareSceneForExport(scene)
   const exporter = new OBJExporter()
   const text = exporter.parse(scene)
   downloadBlob(new Blob([text], { type: 'text/plain' }), filename)
@@ -55,6 +58,7 @@ export function exportOBJ(scene, filename = 'garment.obj') {
 }
 
 export async function exportUSDZ(scene, filename = 'garment.usdz') {
+  prepareSceneForExport(scene)
   const exporter = new USDZExporter()
   const bytes = await exporter.parseAsync(scene)
   downloadBlob(new Blob([bytes], { type: 'model/vnd.usdz+zip' }), filename)

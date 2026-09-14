@@ -8,6 +8,8 @@ import { ClothSimulation, textureDimFor, QUALITY_TIER_DEFAULT } from './ClothSim
 import { FABRIC_PRESETS, DEFAULT_FABRIC } from './fabricPresets'
 import { deriveCollisionRig, deriveShoulderPinMask, deriveWaistbandPinMask } from '../body/collisionRig'
 import { getAssetBase } from '../assetBase'
+import { updateExportGeometry } from '../export/prepareScene'
+import { SAFE_CLOTH_NORMAL_GLSL } from './surfaceShader'
 
 // A single real (CC0, see public/textures/fabric-weave/README.md) fabric-
 // weave texture set, shared across every fabric preset — color/roughness/
@@ -54,9 +56,11 @@ function loadFabricTextures() {
 // about the steady-state render loop — grab-and-drag below does a ONE-TIME
 // readback per pointerdown, which is a rare, user-paced event, not a
 // per-frame cost).
-export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier = QUALITY_TIER_DEFAULT, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef }) {
+export default function ClothMesh({ paused = false, dims, fabricId = DEFAULT_FABRIC, qualityTier = QUALITY_TIER_DEFAULT, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef }) {
   const gl = useThree((s) => s.gl)
   const camera = useThree((s) => s.camera)
+  // Keep the current texture bound across first compile and fabric-map recompiles.
+  const positionUniform = useRef({ value: null })
 
   const assembled = useMemo(() => {
     const triangulated = triangulateAll(pieces, seams, 2)
@@ -169,11 +173,11 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier
       ...(fabric.anisotropy != null && { anisotropy: fabric.anisotropy, anisotropyRotation: fabric.anisotropyRotation ?? 0 }),
     })
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.uSimPositionTex = { value: null }
+      shader.uniforms.uSimPositionTex = positionUniform.current
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
-          'attribute vec2 aSimUV;\nattribute vec4 aNbrUV0;\nattribute vec4 aNbrUV1;\nuniform sampler2D uSimPositionTex;\n#include <common>'
+          'attribute vec2 aSimUV;\nattribute vec4 aNbrUV0;\nattribute vec4 aNbrUV1;\nuniform sampler2D uSimPositionTex;\n#include <common>\n' + SAFE_CLOTH_NORMAL_GLSL
         )
         .replace(
           '#include <begin_vertex>',
@@ -183,7 +187,7 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier
           vec3 rn2 = texture2D( uSimPositionTex, aNbrUV1.xy ).xyz - selfPos;
           vec3 rn3 = texture2D( uSimPositionTex, aNbrUV1.zw ).xyz - selfPos;
           vec3 smoothNormal = cross(rn0, rn1) + cross(rn1, rn2) + cross(rn2, rn3) + cross(rn3, rn0);
-          vNormal = normalize( normalMatrix * normalize(smoothNormal) );
+          vNormal = clothSafeNormal(normalMatrix * clothSafeNormal(smoothNormal, normal), vec3(0.0, 0.0, 1.0));
           vec3 transformed = selfPos;`
         )
       mat.userData.shader = shader
@@ -223,9 +227,11 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier
     const sim = new ClothSimulation(gl, assembled.cloth, assembled.neighbors, fabric, { collisionRig, pinnedMask, qualityTier })
     sim.preRelax()
     simRef.current = sim
+    positionUniform.current.value = sim.getPositionTexture()
     return () => {
       sim.dispose()
       simRef.current = null
+      positionUniform.current.value = null
     }
     // WP-35: qualityTier changes the compiled shader and uploaded textures
     // (see ClothSimulation's constructor) — unlike fabricId below, it can't
@@ -240,10 +246,8 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier
   useFrame((_, delta) => {
     const sim = simRef.current
     if (!sim) return
-    sim.step(delta)
-    if (material.userData.shader) {
-      material.userData.shader.uniforms.uSimPositionTex.value = sim.getPositionTexture()
-    }
+    if (!paused) sim.step(delta)
+    positionUniform.current.value = sim.getPositionTexture()
     // WP-7.3: cheap plain-object write, no state/re-render — SolverHUD.jsx
     // polls this ref on its own throttled timer from outside the R3F loop.
     if (statsRef) Object.assign(statsRef.current, sim.getStats())
@@ -285,17 +289,13 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier
       const buffer = new Float32Array(texDim * texDim * 4)
       gl.readRenderTargetPixels(sim.gpuCompute.getCurrentRenderTarget(sim.posVar), 0, 0, texDim, texDim, buffer)
       const { cloth } = assembled
-      const posAttr = mesh.geometry.attributes.position
-      for (let i = 0; i < cloth.renderVertexCount; i++) {
-        const sp = cloth.renderVertexToSimParticle[i]
-        posAttr.array[i * 3] = buffer[sp * 4]
-        posAttr.array[i * 3 + 1] = buffer[sp * 4 + 1]
-        posAttr.array[i * 3 + 2] = buffer[sp * 4 + 2]
-      }
-      posAttr.needsUpdate = true
-      mesh.geometry.computeBoundingSphere()
+      updateExportGeometry(mesh.geometry, buffer, cloth.renderVertexToSimParticle)
       return true
     }
+
+    // File exporters read CPU attributes, not our GPU vertex shader.
+    const exportMesh = meshRef.current
+    if (exportMesh) exportMesh.userData.prepareExport = refreshGeometryToCurrentPositions
 
     function onPointerDown(e) {
       const sim = simRef.current
@@ -326,7 +326,7 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier
 
       camera.getWorldDirection(camDir)
       const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(camDir, hit.point)
-      dragRef.current = { particleIndex, plane }
+      dragRef.current = { particleIndex, plane, pointerId: e.pointerId }
       sim.setDragParticle(particleIndex, hit.point)
       onDragStateChange?.(true)
       canvas.setPointerCapture?.(e.pointerId)
@@ -348,18 +348,26 @@ export default function ClothMesh({ dims, fabricId = DEFAULT_FABRIC, qualityTier
       dragRef.current = null
       simRef.current?.clearDrag()
       onDragStateChange?.(false)
-      canvas.releasePointerCapture?.(e.pointerId)
+      if (canvas.hasPointerCapture?.(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
     }
 
     canvas.addEventListener('pointerdown', onPointerDown)
     canvas.addEventListener('pointermove', onPointerMove)
     canvas.addEventListener('pointerup', onPointerUp)
     canvas.addEventListener('pointercancel', onPointerUp)
+    canvas.addEventListener('lostpointercapture', onPointerUp)
     return () => {
+      if (exportMesh) delete exportMesh.userData.prepareExport
+      const pointerId = dragRef.current?.pointerId
+      dragRef.current = null
+      simRef.current?.clearDrag()
+      onDragStateChange?.(false)
+      if (pointerId !== undefined && canvas.hasPointerCapture?.(pointerId)) canvas.releasePointerCapture(pointerId)
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointermove', onPointerMove)
       canvas.removeEventListener('pointerup', onPointerUp)
       canvas.removeEventListener('pointercancel', onPointerUp)
+      canvas.removeEventListener('lostpointercapture', onPointerUp)
     }
   }, [gl, camera, assembled, onDragStateChange])
 

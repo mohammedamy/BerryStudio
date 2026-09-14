@@ -1048,8 +1048,17 @@ dev/test tooling only, never referenced by `index.html`:
 ```bash
 npm install && npm test        # root unit tests (node --test)
 npm run test:e2e               # Playwright smoke + AI settings specs
+npm run test:cloth-gpu         # Cloth Lab software-WebGL rendering regressions
 cd cloth-lab && npm test        # cloth-lab's own vitest unit tests
 ```
+
+The Cloth Lab GPU suite requires both root and `cloth-lab` dependencies and
+Playwright Chromium (`npx playwright install chromium`). It starts a local Vite
+fixture using the real scene and cloth renderer, without changing authentication.
+It checks finite GPU normals and visible bloom output after collapsed neighbor
+rings, fabric changes, and pause/resume. It uses SwiftShader software WebGL;
+passing it does not replace testing a signed-in garment on a real hardware GPU.
+The fixture is not an entry point in either Cloth Lab production build.
 
 If you ever change `schema/pattern-spec.v1.json`, regenerate its precompiled
 validator (`ajv` is a dev-only code-generation tool, never a runtime

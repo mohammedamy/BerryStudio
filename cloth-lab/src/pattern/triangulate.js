@@ -71,14 +71,34 @@ export function computeSubdivisions(pieces, seams, targetSpacingCm) {
   for (const p of pieces) subdiv[p.id] = {}
   const paired = new Set() // `${piece}.${edge}` already assigned via a seam
 
+  // All edges in a shared junction need ONE subdivision count. Assigning
+  // each pair independently overwrote the anchor for 3+ contributors,
+  // leaving earlier pairs with different vertex counts and crashing assembly.
+  const parents = new Map(), ends = new Map()
+  const keyOf = e => JSON.stringify([e.piece, e.edge])
+  function find(key) {
+    if (!parents.has(key)) parents.set(key, key)
+    if (parents.get(key) !== key) parents.set(key, find(parents.get(key)))
+    return parents.get(key)
+  }
   for (const seam of seams) {
-    const lenA = polylineLength(edgeRawPoints(byId[seam.a.piece], seam.a.edge))
-    const lenB = polylineLength(edgeRawPoints(byId[seam.b.piece], seam.b.edge))
-    const count = Math.max(2, Math.round((lenA + lenB) / 2 / targetSpacingCm))
-    subdiv[seam.a.piece][seam.a.edge] = count
-    subdiv[seam.b.piece][seam.b.edge] = count
-    paired.add(`${seam.a.piece}.${seam.a.edge}`)
-    paired.add(`${seam.b.piece}.${seam.b.edge}`)
+    const a = keyOf(seam.a), b = keyOf(seam.b)
+    ends.set(a, seam.a); ends.set(b, seam.b)
+    parents.set(find(b), find(a))
+  }
+  const groups = new Map()
+  for (const [key, edge] of ends) {
+    const root = find(key)
+    if (!groups.has(root)) groups.set(root, [])
+    groups.get(root).push(edge)
+  }
+  for (const edges of groups.values()) {
+    const length = edges.reduce((sum, e) => sum + polylineLength(edgeRawPoints(byId[e.piece], e.edge)), 0) / edges.length
+    const count = Math.max(2, Math.round(length / targetSpacingCm))
+    for (const e of edges) {
+      subdiv[e.piece][e.edge] = count
+      paired.add(`${e.piece}.${e.edge}`)
+    }
   }
   // Free (unpaired) edges — e.g. neckline/hem/cuff — get their own count.
   for (const p of pieces) {
