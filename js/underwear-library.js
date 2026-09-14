@@ -174,6 +174,17 @@ import { q, PATTERNS, LIBRARY } from './data.js';
       { fromIdx: 8, toIdx: 15, ...qBezToCubic(...legSeg) },
     ]);
     outline.edges = [{ fromIdx: 6, toIdx: 7, seamId: 'briefSide' }];
+    // WP-44: a single side-seam notch at the corner itself (index 7 — the
+    // real declared `briefSide` edge's own far end) — a real, common
+    // brief-construction notch marking where front and back meet at the
+    // side, placed on the one seam this panel actually shares with its
+    // pair. Front/back each get their own literal [cornerX, cornerY], not
+    // a shared literal — cornerX differs slightly front vs back (translated
+    // by each side's own waistX, per the WP-58 comment above), but both
+    // notches sit exactly at their own seam's toIdx endpoint, so
+    // checkNotchAlignment's seam-relative arc position matches by
+    // construction regardless.
+    outline.notches = [[cornerX, cornerY]];
     // BerryStudio-Upgrade-Plan-v5.md WP-45: cloth-lab's importer, with no
     // sideEndIdx hint, auto-derives its own geometric 'rightSide'/
     // 'leftSide' claim running all the way from just past the waist (index
@@ -194,6 +205,14 @@ import { q, PATTERNS, LIBRARY } from './data.js';
     outline.sideEndIdx = 6;
     return outline;
   }
+  // WP-44: deliberately no `chestEdgeIndices` anywhere in this function —
+  // a brief has no chest dimension at all (it's a waist/hip garment), so
+  // `checkEase`'s implied-full-chest math has nothing honest to measure
+  // here; every piece correctly reports ease as "not applicable" rather
+  // than a fabricated pass. Not a coverage gap to close, an architectural
+  // non-fit — same category as the hand-imported/princess-seamed/
+  // asymmetric-wrap exclusions `checkEase`'s own module comment already
+  // documents.
   function briefPieces(m, opts) {
     const qw = q(m.waist), qh = q(m.hips);
     const front = briefPanel(qw, qh, true, opts);
@@ -214,11 +233,11 @@ import { q, PATTERNS, LIBRARY } from './data.js';
       // of a fixed cm margin.
       { key: "front", name: { en: "Front Panel", ar: "القطعة الأمامية" },
         desc: { en: "Front panel with a curved waist edge and a curved leg opening.", ar: "قطعة أمامية بحافة خصر منحنية وفتحة ساق منحنية." },
-        outline: front, role: "brief-front", cutOnFold: true, edges: front.edges, sideEndIdx: front.sideEndIdx,
+        outline: front, role: "brief-front", cutOnFold: true, edges: front.edges, sideEndIdx: front.sideEndIdx, notches: front.notches,
         grain: [[qw * 0.15, frontLen * 0.2], [qw * 0.15, frontLen * 0.85]] },
       { key: "back", name: { en: "Back Panel", ar: "القطعة الخلفية" },
         desc: { en: "Back panel, cut higher at the waist and deeper at the crotch than the front for real seat coverage.", ar: "قطعة خلفية أعلى عند الخصر وأعمق عند خط الجسم من الأمامية لتغطية حقيقية للمقعد." },
-        outline: back, role: "brief-back", cutOnFold: true, edges: back.edges, sideEndIdx: back.sideEndIdx,
+        outline: back, role: "brief-back", cutOnFold: true, edges: back.edges, sideEndIdx: back.sideEndIdx, notches: back.notches,
         grain: [[qw * 0.15, backLen * 0.2], [qw * 0.15, backLen * 0.85]] },
       { key: "gusset", name: { en: "Crotch Gusset", ar: "دكة الجسم" },
         desc: { en: "Curved cotton-lining gusset seamed into the crotch, cut on the fold.", ar: "دكة قطنية منحنية تُخاط عند خط الجسم، تُقص على الطية." },

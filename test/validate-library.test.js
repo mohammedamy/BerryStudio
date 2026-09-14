@@ -128,6 +128,7 @@ test('front/back pairs with a declared role are reported "Verified", not "Heuris
       ['front-panel', 'back-panel'],
       ['hip-panel-front', 'hip-panel-back'],
       ['skirt-front-gore', 'skirt-back-gore'],
+      ['brief-front', 'brief-back'], // WP-44: js/validate.js's own ROLE_PAIR
     ];
     const countByRole = (role) => pieces.filter((p) => p.role === role).length;
     const hasRolePair = ROLE_PAIRS_FOR_TEST.some(([f, b]) => countByRole(f) === 1 && countByRole(b) === 1);
@@ -152,13 +153,19 @@ test('front/back pairs with a declared role are reported "Verified", not "Heuris
   // pattern library. Re-confirmed and raised (WP-66, 26 August 2026): now
   // that this sweep actually includes js/underwear-library.js (see this
   // file's own header), the true current baseline across all 308 patterns
-  // is 313 verified — a real, independently re-measured number (a
-  // standalone script mirroring this exact test's own counting logic),
-  // not carried forward from CHANGELOG.md prose. A drop below that is a
-  // real regression in pairByRole or in a generator's declared roles, not
-  // noise — raising this floor is only ever earned by counting a fresh,
-  // real run, never bumped to make a change go green.
-  if (verified < 313) {
-    throw new Error(`only ${verified} crossPiece pairs verified — expected at least 313 (regression of WP-25/WP-66)`);
+  // was 313 verified. Raised again (WP-44, 3 September 2026): adding
+  // 'brief-front'/'brief-back' to js/validate.js's own ROLE_PAIR — a real,
+  // already-declared pair in js/underwear-library.js's briefPieces() that
+  // simply had no ROLE_PAIR entry to be recognized by — took
+  // underwear-library.js alone from 0% to 92.3% verified (24 of its 26
+  // pairs); library-wide true baseline is now 337 verified, again a real,
+  // independently re-measured number (a standalone script mirroring this
+  // exact test's own counting logic), not carried forward from
+  // CHANGELOG.md prose. A drop below that is a real regression in
+  // pairByRole or in a generator's declared roles, not noise — raising
+  // this floor is only ever earned by counting a fresh, real run, never
+  // bumped to make a change go green.
+  if (verified < 337) {
+    throw new Error(`only ${verified} crossPiece pairs verified — expected at least 337 (regression of WP-25/WP-66/WP-44)`);
   }
 });
