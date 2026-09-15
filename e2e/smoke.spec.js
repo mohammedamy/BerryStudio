@@ -31,6 +31,14 @@ async function dismissOnboarding(page) {
   if (await skip.isVisible().catch(() => false)) await skip.click();
 }
 
+async function waitFor3D(page) {
+  try {
+    await expect.poll(() => page.evaluate(() => window.View3D.isReady()), { timeout: 15000 }).toBe(true);
+  } catch(error) {
+    throw new Error(`${error.message}\n3D startup diagnostics: ${(startupErrors.get(page) || []).join('\n') || '(none)'}`);
+  }
+}
+
 // A plain `toBeVisible()` timeout gives no clue WHY a canvas never
 // appeared — if the underlying mount threw, that's a console error this
 // test's own listener already captured into `errors`, but Playwright's
@@ -85,7 +93,7 @@ test('load, grade, export SVG, open 3D preview — no console errors', async ({ 
   // view switches, so this specifically checks for a VISIBLE canvas rather
   // than just "any canvas exists".
   await page.getByRole('button', { name: '3D Preview' }).click();
-  await page.waitForTimeout(2000);
+  await waitFor3D(page);
   await expect(page.locator('canvas:visible').first()).toBeVisible();
 
   // A real, previously-shipped regression this test's own predecessor never
@@ -124,7 +132,7 @@ test('3D Preview still initializes when unpkg.com is completely blocked (esm.sh 
   await dismissOnboarding(page);
   await page.locator('#viewToggle button[data-v="3d"]').click();
   // CDN fallback startup varies; assert readiness instead of a fixed delay.
-  await expect.poll(() => page.evaluate(() => window.View3D.isReady()), { timeout: 15000 }).toBe(true);
+  await waitFor3D(page);
 
   const state3d = await page.evaluate(() => {
     const c = document.getElementById('canvas3d');
@@ -839,7 +847,7 @@ test('bundled avatar picker loads a real GLB model into 3D Preview', async ({ pa
 
   await page.locator('#catSeg button[data-cat="men"]').click();
   await page.locator('#viewToggle button[data-v="3d"]').click();
-  await page.waitForTimeout(3000);
+  await waitFor3D(page);
 
   const state3d = await page.evaluate(() => {
     const c = document.getElementById('canvas3d');
