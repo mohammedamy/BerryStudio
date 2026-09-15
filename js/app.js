@@ -1,4 +1,6 @@
 import { initResponsiveWorkspace } from './responsive-workspace.js';
+import { migrateProject } from './project-revisions.js';
+import { mountCommandReview, patternPreview } from './project-review.js';
 /* ============================================================
    BerryStudio — application controller.
    Wires i18n, themes, RTL, panels, grading, 3D, export, etc.
@@ -955,7 +957,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       ci.style.cssText="position:absolute;width:0;height:0;opacity:0;pointer-events:none";
       ci.oninput=()=>{ Canvas.setColor(i,ci.value); sw.style.background=ci.value; sync3DFabric(); };
       sw.appendChild(ci); row.appendChild(sw);
-      const nameEl = el("span","lname",`${L(p.name)}<small>${p.name[state.lang==="ar"?"en":"ar"]}</small>`);
+      const nameEl = el("span","lname"); nameEl.textContent=L(p.name);
+      const otherName=el("small"); otherName.textContent=p.name[state.lang==="ar"?"en":"ar"]; nameEl.append(otherName);
       nameEl.ondblclick=(e)=>{ e.stopPropagation(); openLayerProps(i, row); };
       row.appendChild(nameEl);
       const props = el("button", null, IC.dots); props.title=T("layerProps");
@@ -1455,12 +1458,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       attributes: AIGen.attributes(style, state.lang, provenance),
       source: lastAIResult.source, validation: PatternValidator.run(built.pieces, {}),
     };
-    state.loaded = null;
-    Canvas.setPattern(newRes.pieces, newRes.colors);
-    hideEmpty(); renderLayersPane();
-    if(is3DActive()) build3D(newRes.colorInt);
-    renderAIAttrs(newRes);
-    toast(T("generated"));
+    reviewGeneratedPattern(newRes, "generated");
   }
   const SOURCE_LABEL_KEY = { vision:"provenanceVision", pixel:"provenancePixel", prompt:"provenancePrompt", heuristic:"provenanceHeuristic", spec:"provenanceSpec", "user-override":"provenanceUserOverride" };
   function renderAIAttrs(res){
@@ -1656,12 +1654,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
           onStage: setStage, segment: getSegmentFn(),
         });
       }
-      state.loaded = null;
-      Canvas.setPattern(res.pieces, res.colors);
-      hideEmpty(); renderLayersPane();
-      if(is3DActive()) build3D(res.colorInt);
-      renderAIAttrs(res);                         // show what was actually detected, right where the "thinking" ran
-      toast(T(doneToastKey));
+      reviewGeneratedPattern(res, doneToastKey);
     } catch(e){ toast(T("importFail")); }
     finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
   }
@@ -2167,6 +2160,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   function newProjectTab(){
     syncActiveProjectSnapshot();
     Canvas.clearAll();
+    Canvas.setHistory({undo:[],redo:[]});
     state.loaded=null; aiImage=null;
     const p = { id: projectSeq++, title: T("untitledProject"), customTitle:false,
       snapshot: Canvas.snapshotState(), history: Canvas.getHistory(), loaded:null, category: state.category, aiImage:null };
@@ -2220,14 +2214,50 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
 
   function projectPayload(){
-    return {app:"BerryStudio",version:1,pieces:Canvas.getPieces(),texts:Canvas.getTexts(),points:Canvas.getPoints(),cons:Canvas.getCons(),variables:Canvas.getVariables(),sketch:Canvas.snapshotState().sketch};
+    const payload = migrateProject(Canvas.snapshotState());
+    delete payload.view;
+    return payload;
+  }
+  function reviewProjectChange(){
+    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
+    const tabId = state.activeProjectId;
+    openModal(T("reviewTitle"), "", true);
+    mountCommandReview($("#genericModal .modal-body"), migrateProject(Canvas.snapshotState()), {
+      t:T, close:()=>closeModal("#genericModal"),
+      accept:proposal=>{
+        if(tabId !== state.activeProjectId) throw new Error('commandStale');
+        Canvas.acceptProposal(proposal);
+        state.loaded=null; renderLayersPane(); if(is3DActive()) build3D(); save();
+      },
+    });
+  }
+  function reviewGeneratedPattern(res, doneToastKey){
+    // Generated geometry is a new draft, never an in-place replacement.
+    const draft = migrateProject({pieces:res.pieces});
+    openModal(T("reviewGeneratedTitle"), "", true);
+    const body=$("#genericModal .modal-body");
+    const hint=el("p"); hint.textContent=T("reviewGeneratedHint");
+    const summary=el("p"); summary.textContent=typeof res.summary==='string'?res.summary:'';
+    body.append(hint, summary, patternPreview(draft.pieces));
+    const accept=el("button","big-btn"); accept.textContent=T("reviewNewProject");
+    const reject=el("button","big-btn ghost"); reject.textContent=T("reviewReject");
+    reject.onclick=()=>closeModal("#genericModal");
+    accept.onclick=()=>{
+      accept.disabled=true;
+      newProjectTab();
+      Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc']);
+      hideEmpty(); renderLayersPane(); renderAIAttrs(res);
+      if(is3DActive()) build3D(res.colorInt);
+      save(); closeModal("#genericModal"); toast(T(doneToastKey));
+    };
+    const actions=el("div","project-review-actions"); actions.append(accept,reject); body.append(actions);
   }
   // Shared by file-based Import Project and cloud-sync Load — same payload
   // shape, same success/failure semantics, one place to keep them in sync.
   function applyProjectPayload(data){
     if(!data || typeof data !== "object") return false;
-    const pieces=Array.isArray(data)?data:data.pieces;
-    if(!Canvas.loadPieces(pieces, data.texts, data.points, data.cons, data)) return false;
+    try { data=migrateProject(data); } catch { return false; }
+    if(!Canvas.loadPieces(data.pieces, data.texts, data.points, data.cons, data)) return false;
     state.loaded=null; hideEmpty(); renderLayersPane();
     if(is3DActive()) build3D(); save();
     return true;
@@ -2329,6 +2359,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // ---- lightweight dropdown menu ----
   function projectMenuItems(){ return [
     { icon:IC.newdoc,  label:T("newProject"),    run:newProject },
+    { icon:IC.edit,    label:T("reviewTitle"),   run:reviewProjectChange },
     { icon:IC.importf, label:T("importProject"), run:importProject },
     { icon:IC.importf, label:T("importPattern"), run:importPatternFile },
     "sep",

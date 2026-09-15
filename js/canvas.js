@@ -5,10 +5,14 @@
    ============================================================ */
 import { buildDXF, buildHPGL, buildPDF } from './pattern-export.js';
 import { offsetPoly as offsetPolyImpl } from './geometry.js';
+import { ensureClothPieceIds } from './cloth-workflow-contract.js';
+import { acceptCommands, projectContext } from './project-revisions.js';
 export const Canvas = (() => {
   let cv, ctx, dpr = 1;
   let resizeObserver;
   let view = { x: 60, y: 60, scale: 3.2 };     // px per cm
+  let projectMeta = { id: crypto.randomUUID(), revision: 0, status: 'draft' };
+  let projectData = {};
   let pieces = [];                              // current pattern pieces (cm space, positioned)
   let selected = -1;
   // Group piece selection — populated by Shift+click (the select/move tool's
@@ -190,6 +194,7 @@ export const Canvas = (() => {
 
   function setPattern(rawPieces, colors) {
     pushUndo();
+    projectMeta = { ...projectMeta, revision: projectMeta.revision + 1, status: 'draft', approval: null };
     pieces = layoutPieces(rawPieces);
     pieces.forEach((p, i) => p.color = colors[i % colors.length]);
     selected = -1; multiSelected=[]; sketch = []; texts = []; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null;
@@ -198,10 +203,10 @@ export const Canvas = (() => {
   function getPieces(){ return pieces; }
 
   // ---- undo / redo ----
-  function snapshot(){ return JSON.stringify({ pieces, sketch, texts, points, cons }); }
+  function snapshot(){ ensureClothPieceIds(pieces); return JSON.stringify({ ...projectData, pieces, sketch, texts, points, cons, variables, projectMeta }); }
   function pushUndo(){ undo.push(snapshot()); if (undo.length>60) undo.shift(); redo.length=0; }
-  function doUndo(){ if(!undo.length) return; redo.push(snapshot()); const s=JSON.parse(undo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; promoteBuf=[]; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; render(); }
-  function doRedo(){ if(!redo.length) return; undo.push(snapshot()); const s=JSON.parse(redo.pop()); pieces=s.pieces; sketch=s.sketch; texts=s.texts||[]; points=s.points||[]; cons=s.cons||[]; selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; promoteBuf=[]; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; render(); }
+  function doUndo(){ if(!undo.length) return; redo.push(snapshot()); restoreState({...JSON.parse(undo.pop()),view}); }
+  function doRedo(){ if(!redo.length) return; undo.push(snapshot()); restoreState({...JSON.parse(redo.pop()),view}); }
 
   // ---- Project Tabs support: full-state snapshot/restore + undo/redo
   // history pass-through, used by js/app.js to swap the ENTIRE canvas
@@ -217,7 +222,10 @@ export const Canvas = (() => {
   // left it; `bg` (trace/reference image) is deliberately NOT — see
   // js/app.js's Project Tabs comment for why that's out of scope.
   function snapshotState(){
+    ensureClothPieceIds(pieces);
     return {
+      ...JSON.parse(JSON.stringify(projectData)),
+      projectMeta: JSON.parse(JSON.stringify(projectMeta)),
       pieces: JSON.parse(JSON.stringify(pieces)),
       sketch: JSON.parse(JSON.stringify(sketch)),
       texts: JSON.parse(JSON.stringify(texts)),
@@ -234,6 +242,8 @@ export const Canvas = (() => {
   }
   function restoreState(snap){
     snap = JSON.parse(JSON.stringify(snap || {}));
+    projectData = projectContext(snap);
+    projectMeta = snap.projectMeta || { id: crypto.randomUUID(), revision: 0, status: 'draft' };
     pieces = snap.pieces || []; sketch = snap.sketch || []; texts = snap.texts || [];
     points = snap.points || []; cons = snap.cons || []; variables = snap.variables || {};
     advanceEntityIds();
@@ -246,6 +256,10 @@ export const Canvas = (() => {
     clickBuf=[]; measurePts=[]; pan=null; dragPiece=null; dragText=null; dragPoint=null; addPointPreview=null;
     pickCb=null; snapMark=null;
     if (snap.view){ view = { ...snap.view }; userAdjusted = true; render(); } else fit();
+  }
+  function acceptProposal(proposal){
+    const next = acceptCommands({ ...snapshotState(), app:'BerryStudio', version:2 }, proposal);
+    pushUndo(); restoreState(next);
   }
   function getHistory(){ return { undo: undo.slice(), redo: redo.slice() }; }
   function setHistory(h){ undo.length=0; redo.length=0; if (h){ if (h.undo) undo.push(...h.undo); if (h.redo) redo.push(...h.redo); } }
@@ -2448,12 +2462,14 @@ export const Canvas = (() => {
     texts = Array.isArray(txts) ? txts.map(t=>({ ...t, id: t.id || textSeq++ })) : [];
     points = Array.isArray(pts) ? pts.map(p=>({ xExpr:null, yExpr:null, ...p, id: p.id || pointSeq++ })) : [];
     cons = Array.isArray(consArr) ? consArr.map(c=>({ ...c, id: c.id || consSeq++ })) : [];
+    projectMeta = extras.projectMeta || { id: crypto.randomUUID(), revision: 0, status: 'draft' };
+    projectData = projectContext(extras);
     variables = { ...extras.variables };
     advanceEntityIds();
     selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; sketch=Array.isArray(extras.sketch) ? extras.sketch : []; promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; fit(); return true;
   }
   function clearAll(){
-    pushUndo(); pieces=[]; sketch=[]; texts=[]; points=[]; cons=[]; bg=null; variables={}; ghostSnap=null;
+    pushUndo(); projectMeta={id:crypto.randomUUID(),revision:0,status:'draft'}; projectData={}; pieces=[]; sketch=[]; texts=[]; points=[]; cons=[]; bg=null; variables={}; ghostSnap=null;
     selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; measurePts=[]; clickBuf=[]; promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null;
     userAdjusted=false; render();
   }
@@ -2468,7 +2484,7 @@ export const Canvas = (() => {
            addText, updateText, removeText, getTexts, onTextRequest,
            addPiece, removePiece, renamePiece, setPieceProps, nudgePiece, nudgePieces, importPieces,
            onZoomChange, exportSVG, exportDXF, exportHPGL, exportRaster, exportPDF, loadPieces, clearAll, screenOf, snapAngle45,
-           snapshotState, restoreState, getHistory, setHistory,
+           snapshotState, restoreState, getHistory, setHistory, acceptProposal,
            // construction geometry
            addPoint, removePoint, getPointById, getPoints, setPointName, setPointXY, setPointFormula, onPointRequest,
            getCons, removeCons, onPromoteRequest, finishPromotePiece, cancelPromote, onWarnRequest,

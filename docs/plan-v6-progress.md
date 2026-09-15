@@ -47,7 +47,7 @@ Base: V6-01 release. Separate unfinished local mf11 collar work remains untouche
 
 ## V6-03 — Access and persistence verification
 
-State: implemented and verified; awaiting release approval on `codex/v6-03-access-persistence` in the isolated checkout above. Not deployed.
+State: deployed through [PR #58](https://github.com/mohammedamy/BerryStudio/pull/58), merged as `2ec736e4bc9b8ee58e787c002a4dd58ce96d9855`. [Pages run 34974619211](https://github.com/mohammedamy/BerryStudio/actions/runs/34974619211) passed tests, build and publication. Live index, app controller, canvas, translations, responsive controller and service worker returned HTTP 200 and matched release commit `7ccead5` byte-for-byte.
 
 ### Fixed
 
@@ -72,9 +72,42 @@ The headless host stopped creating hardware WebGL contexts during verification. 
 
 ### Final verification
 
+- Deployment verification: GitHub's complete test job passed, followed by successful build and production deployment. The historical local test details below explain the issues fixed before release.
+
 - `npm test`: **332 passed, 0 failed**.
 - `npm run lint`: **91 existing warnings, 0 errors, no new warnings** compared with V6-02.
 - `PLAYWRIGHT_SOFTWARE_GL=1 PLAYWRIGHT_BROWSERS_PATH=/tmp/berry-playwright-browsers npx playwright test --workers=1`: **36 passed, 1 failed**; the failure exposed the mobile-to-desktop focus race described above.
 - After fixing that race, the entire responsive suite passed: **6 passed, 0 failed**, using the same environment and `npx playwright test e2e/responsive.spec.js --workers=1`. All 37 browser cases are therefore covered by the full run plus the focused post-fix rerun; a single all-green full rerun is not claimed.
 - No temporary entitlement bypasses or conflict markers in application/test sources; `git diff --check` passes.
 - Review patch: `docs/v6-03-review.patch` in the primary workspace. Separate original checkout changes remain untouched.
+
+## V6-04 — Starter-block inventory
+
+State: engineering inventory implemented and verified on `codex/v6-04-starter-inventory`; not deployed. Full maker-reviewed acceptance remains open.
+
+- Nominated `w07` woven skirt, `w01` bodice/dress and `m01` trousers. Captured explicit authored/proposed joins, all boundary segments, garment-specific checklists, unsupported cases and construction blockers.
+- Nine size cases (XS/M/XL), geometry and manifest hashes, detailed validator evidence and 305 reasoned exclusions. Historic WP-44 metrics remain separate; a fresh sweep exactly matches the baseline.
+- Candidate applicability: eight of nine pieces contain notches; two of two eligible torso pieces contain chest hints. Metadata presence does not establish correctness or fit.
+- A proposed trouser inseam mismatch of about 67.42 mm at M, incomplete dress assembly and a missing skirt vent keep these candidates out of production approval.
+- Verification: 337 root tests pass, 91 existing lint warnings with no new warnings, deterministic report output and clean diff checks. UI and Cloth Lab were not changed.
+- Review artifacts remain in the primary workspace: `docs/starter-block-inventory.md` and `docs/audits/v6-04-starter-inventory.json`. They belong to the separate V6-04 branch. All maker/sample approvals remain null; a named maker must review the concrete revisions and resolve blockers before promotion.
+
+## V6-05 — Project revision and typed command contract
+
+State: implemented on `codex/v6-05-project-revisions`, based on deployed V6-03 (`2ec736e`), in `/tmp/berry-v6-05-project-revisions`. Not deployed. V6-04's uncommitted inventory and the primary checkout's unrelated changes are preserved separately.
+
+- Version-2 JSON migration with stable project/piece IDs; preserve project-domain context and canvas data through file import/export, tabs, autosave and undo.
+- Project → Review change… supports bounded move, rename and color commands in English/Arabic. Preview is non-mutating; accept is atomic and one undo step; reject/close changes nothing. Locks and stale project/tab checks prevent unreviewed replacement.
+- AI generation and attribute regeneration require review and acceptance into a separate draft project. Existing designs and locks remain intact. New tabs have independent undo histories.
+- Undo/redo now preserve variables and project metadata. Pattern regeneration retains project context. Layer names render as text; preview uses safe DOM creation. Service-worker cache v31 includes the new modules.
+- Contract and scope boundaries: [project-revision-contract.md](project-revision-contract.md). This package does not claim maker approval, field-specific regeneration constraints, branching history or model-authored edit commands; those remain later integrations. Monetization stays in Phase 7.
+
+### Verification
+
+- `npm test`: **338 passed, 0 failed**.
+- `npm run lint`: **91 existing warnings, 0 errors, no new warnings**.
+- Complete browser suite: **40 passed** with software WebGL and one worker, including CSP, offline, responsive, drafting/export and Cloth Lab gating coverage.
+- After the final context-retention, name-normalization and preview refinements, the full unit/lint checks above were rerun, and **12 focused browser tests passed** (`e2e/project-revisions.spec.js` plus `e2e/access-persistence.spec.js`). These include AI reject/accept/undo/redo and preservation of the source project. A second complete 40-case run is not claimed.
+- Manual in-app browser inspection of the Arabic review form and dashed/current versus solid/proposed preview; compact form and styled acceptance controls verified.
+- No temporary entitlement bypasses in application code; no conflict markers; `git diff --check` passes.
+- Review patch in the primary workspace: `docs/v6-05-review.patch`; apply only against the V6-03 base or resolve changes on the implementation branch.

@@ -1,5 +1,55 @@
 # Changelog
 
+## 2026-09-16 — V6-05: versioned projects and reviewed design changes
+
+V6-05 establishes the bounded project/command foundation for later conversational
+and multimodal pattern workflows. Designers can review changes before accepting
+them; generated patterns no longer replace the active design immediately.
+Implementation is verified locally and is not yet deployed.
+
+### Added / Changed / Fixed
+
+- `js/project-revisions.js`: pure version-2 migration from version-1/unversioned
+  projects and raw piece arrays; validate supported geometry before import,
+  assign stable IDs using the existing Cloth Lab identity field, and preserve
+  project context and piece extensions. Future explicit versions are rejected.
+- Allowlisted move, rename and color batches validate atomically. Existing
+  whole-piece locks reject commands. Previews capture the persisted design;
+  acceptance rejects stale content and re-executes commands rather than trusting
+  a mutable after-state. Camera changes do not invalidate previews.
+- `js/project-review.js` and Project → Review change…: bilingual form, dashed
+  current/solid proposed outline overview, textual change summary, accept/reject
+  and localized errors. Safe DOM creation avoids treating labels as markup.
+- AI generation and attribute regeneration show a draft review. Acceptance
+  creates a separate project; rejection preserves the source. Generated drafts
+  are explicitly unverified. No model-written executable commands are accepted.
+- `js/canvas.js`: accepted command batches create one undo entry. Variables,
+  project identity, revision and context now survive undo/redo, snapshots and
+  tab restoration. Regeneration retains project context and clears the approval
+  slot while marking the result as draft.
+- Found and fixed during this pass: new tabs inherited the previous tab's undo
+  history, so Undo could bring another design into a fresh tab. New tabs now
+  start with independent history. Also render layer names as text, normalize
+  legacy piece names on migration, and give review dropdowns explicit labels.
+- Cache v31 precaches the new modules. `docs/project-revision-contract.md`
+  records schemas, limits and deferred integrations. Monetization remains last.
+
+### Verification
+
+- `npm test`: **338 passed, 0 failed**.
+- `npm run lint`: **91 existing warnings, 0 errors, no new warnings**.
+- `npm --prefix cloth-lab run build:embed`: succeeded; Cloth Lab source unchanged.
+- `PLAYWRIGHT_SOFTWARE_GL=1 PLAYWRIGHT_BROWSERS_PATH=/tmp/berry-playwright-browsers npx playwright test --workers=1`: **40 passed**.
+- After final metadata/preview refinements, repeated unit/lint checks and the
+  project-review plus access-persistence browser suites: **12 passed**. Includes
+  AI rejection, acceptance into a new tab, undo/redo and locked-source preservation.
+- Arabic review form and preview inspected in the in-app browser. No temporary
+  entitlement bypasses or source conflict markers; `git diff --check` passes.
+- Scope limits: preview is a straight-edge overview; revision checkpoints do
+  not yet enumerate every legacy pointer edit. Field-specific regeneration
+  constraints, branching history, model-authored edits and maker approval are
+  later packages, not claims of this release.
+
 ## 2026-09-15 — V6-03: reliable project reopening and account-state recovery
 
 The access/persistence matrix uncovered startup overwriting saved project
