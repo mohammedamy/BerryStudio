@@ -1,3 +1,4 @@
+import { initResponsiveWorkspace } from './responsive-workspace.js';
 /* ============================================================
    BerryStudio — application controller.
    Wires i18n, themes, RTL, panels, grading, 3D, export, etc.
@@ -4869,6 +4870,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     Canvas.onCalibrationRequest(openCalibPrompt);
     Canvas.onWarnRequest(key=>toast(T(key)));
     buildToolRail(); buildRail(); wire();
+    initResponsiveWorkspace();
     initAccountUI();
     applyTheme(); applyLang();
     updateUnitsPill(); updateStageChips();

@@ -1,6 +1,6 @@
 # BerryStudio v6 — AI fashion design to verified patterns
 
-Decision baseline: 9 September 2026. Execution started: 14 September 2026. V6-01 integrates the audit repair batch with deployed PR #52; see [execution progress](docs/plan-v6-progress.md). Subscription and monetization are the final phase, by owner instruction. This document consolidates the original upgrade plan, v3, v3.2, Plan 4, and **Plan 5**; historical documents remain evidence rather than competing execution queues.
+Decision baseline: 9 September 2026. Execution started: 14 September 2026. V6-01 is deployed through PR #56; V6-02 mobile/RTL implementation is verified and approved for deployment; see [execution progress](docs/plan-v6-progress.md). Subscription and monetization are the final phase, by owner instruction. This document consolidates the original upgrade plan, v3, v3.2, Plan 4, and **Plan 5**; historical documents remain evidence rather than competing execution queues.
 
 ## 1. Product direction
 

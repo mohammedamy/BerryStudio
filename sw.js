@@ -1,12 +1,12 @@
 /* BerryStudio — service worker (offline-capable, update-friendly) */
-const CACHE = "berrystudio-v28";
+const CACHE = "berrystudio-v29";
 const ASSETS = [
   "./", "./index.html",
   "./css/styles.css",
   "./js/i18n.js", "./js/data.js", "./js/canvas.js", "./js/three-view.js", "./js/ai.js", "./js/billboard.js", "./js/library.js", "./js/fancy-patterns.js", "./js/validate.js",
   "./js/ai-keystore.js", "./js/capability-probe.js", "./js/ai-providers.js", "./js/schema-validate.js", "./js/ai-spec-pipeline.js", "./js/ai-fusion.js", "./js/image-providers.js", "./js/app.js",
   "./js/vendor/pattern-spec-validate.generated.js",
-  "./js/cloth-workflow-contract.js",
+  "./js/cloth-workflow-contract.js", "./js/responsive-workspace.js",
   "./schema/pattern-spec.v1.json",
   "./manifest.webmanifest",
   "./icons/icon.svg",
