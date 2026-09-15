@@ -7,6 +7,7 @@ import { buildDXF, buildHPGL, buildPDF } from './pattern-export.js';
 import { offsetPoly as offsetPolyImpl } from './geometry.js';
 export const Canvas = (() => {
   let cv, ctx, dpr = 1;
+  let resizeObserver;
   let view = { x: 60, y: 60, scale: 3.2 };     // px per cm
   let pieces = [];                              // current pattern pieces (cm space, positioned)
   let selected = -1;
@@ -117,6 +118,13 @@ export const Canvas = (() => {
     getT = translator; onPick = pickCb;
     resize();
     window.addEventListener("resize", resize);
+    // Project tabs, toolbars and responsive panels can change the drawable
+    // area without resizing the window. Keep pixels and pointer geometry aligned.
+    resizeObserver?.disconnect();
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(resize);
+      resizeObserver.observe(cv);
+    }
     bind();
     render();
   }

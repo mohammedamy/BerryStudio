@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-09-15 — V6-02: usable mobile and Arabic workspaces
+
+The fixed inspector and wide header obscured most of the canvas on narrow
+screens. The compact layout now keeps category/view choices visible and opens
+panels or additional controls only when needed.
+
+### Changed / Fixed
+
+- Add translated Panels/More controls disclosures, Escape and outside-click
+  dismissal, focus restoration and automatic desktop visibility on resize.
+- Use logical positioning for RTL, wrap compact panel labels, translate stage
+  control names, and provide 44px primary touch targets.
+- Fit header, project tabs and workspace into the dynamic viewport; keep stage
+  actions scrollable within their own row. Size section-heading SVGs explicitly.
+- Observe canvas layout resizing. During this pass, editing tests exposed
+  stale canvas buffer dimensions after the project strip changed height;
+  selection and Add Point regressions pass with the observer in place.
+- Precache the new responsive controller and advance the service-worker cache.
+
+### Verification
+
+Responsive checks cover 320/390/768/1024px, English/Arabic grading, focus,
+outside dismissal, desktop transitions and layout-only canvas resizing.
+329 root tests and 27 browser tests pass; all six responsive cases were
+rechecked after final Arabic-label changes. Root lint passes with 91 existing
+warnings and no errors. Details: `docs/plan-v6-progress.md`. Physical device
+and Safari acceptance are not claimed. This entry records local V6-02 work;
+V6-01 is already deployed through PR #56.
+
 ## 2026-09-14 — V6-01: restore BodyForm and make AI input behavior explicit
 
 The first v6 package integrates the September audit repairs with the deployed
