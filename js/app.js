@@ -123,8 +123,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // clearly separable follow-up if that turns out wrong in practice).
     projects: [], activeProjectId: null,
   };
-  const savedRaw = JSON.parse(localStorage.getItem("pps") || "{}");
+  let savedRaw = {};
+  try {
+    const stored = JSON.parse(localStorage.getItem("pps") || "{}");
+    if(stored && typeof stored === "object" && !Array.isArray(stored)) savedRaw = stored;
+  } catch(e) { console.warn('[project] Saved settings could not be read', e); }
   const state = Object.assign({}, DEF, savedRaw);
+  if(!Array.isArray(state.projects)) state.projects = [];
+  let projectsReady = false;
+  let storageWarningShown = false;
   // WP-17: honour the OS-level reduced-motion preference by default, but only
   // on a first-ever visit — once a user has explicitly set the in-app toggle
   // (savedRaw already has the key), that explicit choice always wins.
@@ -139,7 +146,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // keeps a tab's stored content correct with no per-call-site change of
   // its own. A no-op before initProjectTabs() has ever run (activeProject()
   // finds nothing yet) — safe to call from anywhere, at any point in boot.
-  const save = () => { syncActiveProjectSnapshot(); localStorage.setItem("pps", JSON.stringify(state)); };
+  const save = () => {
+    if(!projectsReady) return;
+    syncActiveProjectSnapshot();
+    try { localStorage.setItem("pps", JSON.stringify(state)); storageWarningShown = false; }
+    catch(e) {
+      if(!storageWarningShown) toast(T("projectStorageFailed"));
+      storageWarningShown = true;
+    }
+  };
   const T = k => (I18N[state.lang][k] ?? I18N.en[k] ?? k);
   const L = o => (o ? (o[state.lang] ?? o.en) : "");
 
@@ -214,6 +229,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // "previous known value" to fall back to, so it does read as gated —
   // see refreshEntitlement()'s own comment.
   let currentEntitlement = null;
+  let entitlementUserId = null;
+  let entitlementRequest = 0;
   // The four rail panes gated below re-render themselves after every
   // refreshEntitlement() so a sign-in/out or trial-expiry check made while
   // one is already open updates it live, without the user having to click
@@ -225,7 +242,11 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if(state.view==="clothlab") setView("clothlab");
   }
   async function refreshEntitlement(session){
-    if(!session || !session.user){ currentEntitlement = null; return; }
+    const request = ++entitlementRequest;
+    const userId = session?.user?.id || null;
+    if(userId !== entitlementUserId) currentEntitlement = null;
+    entitlementUserId = userId;
+    if(!userId){ currentEntitlement = null; return; }
     try{
       // Pass session.user.id straight through — js/auth.js's getProfile()
       // skips its own client.auth.getUser() round trip when given one
@@ -241,14 +262,18 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       // the catch block below and preserves currentEntitlement, instead of
       // that catch being unreachable dead code for the exact scenario its
       // own comment described.
-      currentEntitlement = computeEntitlement(profile, Date.now());
+      if(request === entitlementRequest) currentEntitlement = computeEntitlement(profile, Date.now());
     } catch(e){
       console.error('[entitlement] refresh failed, keeping previous state', e);
       // Deliberately do NOT overwrite currentEntitlement here — see the
       // field's own comment above.
     }
   }
-  function gateAllowed(){ return isAllowed(currentEntitlement); }
+  function gateAllowed(){
+    if(currentEntitlement?.status === "trial" && Date.now() >= currentEntitlement.trialEndsAt)
+      currentEntitlement = {...currentEntitlement, status:"expired", allowed:false, daysRemaining:0};
+    return !!currentSession?.user && isAllowed(currentEntitlement);
+  }
   // Shared upsell block every gated pane/action renders — one visual
   // language for "sign in to start your trial" vs "your trial ended",
   // rather than four panes each inventing their own copy. `T(...)` keys
@@ -2085,13 +2110,13 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // UNCHANGED — every one of them just edits "whatever the current active
   // tab's canvas is", and this file's own save() (already called after all
   // of those) keeps that tab's stored snapshot in sync automatically.
-  let projectSeq = 1;
+  let projectSeq = Math.max(0, ...state.projects.map(p=>Number(p.id)||0)) + 1;
   function activeProject(){ return state.projects.find(p=>p.id===state.activeProjectId) || null; }
   // Refresh the active tab's stored snapshot from the live canvas — see
   // save()'s own comment for why this runs from there rather than at every
   // individual mutation site.
   function syncActiveProjectSnapshot(){
-    const p = activeProject(); if(!p) return;
+    const p = activeProject(); if(!p || !projectsReady) return;
     p.snapshot = Canvas.snapshotState();
     p.history = Canvas.getHistory();
     p.loaded = state.loaded;
@@ -2195,15 +2220,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
 
   function projectPayload(){
-    return {app:"BerryStudio",version:1,pieces:Canvas.getPieces(),texts:Canvas.getTexts(),points:Canvas.getPoints(),cons:Canvas.getCons(),variables:Canvas.getVariables()};
+    return {app:"BerryStudio",version:1,pieces:Canvas.getPieces(),texts:Canvas.getTexts(),points:Canvas.getPoints(),cons:Canvas.getCons(),variables:Canvas.getVariables(),sketch:Canvas.snapshotState().sketch};
   }
   // Shared by file-based Import Project and cloud-sync Load — same payload
   // shape, same success/failure semantics, one place to keep them in sync.
   function applyProjectPayload(data){
+    if(!data || typeof data !== "object") return false;
     const pieces=Array.isArray(data)?data:data.pieces;
-    if(!Canvas.loadPieces(pieces, data.texts, data.points, data.cons)) return false;
+    if(!Canvas.loadPieces(pieces, data.texts, data.points, data.cons, data)) return false;
     state.loaded=null; hideEmpty(); renderLayersPane();
-    Object.entries(data.variables||{}).forEach(([name,formula])=>{ try{ Canvas.setVariable(name, formula); }catch(e){} });
     if(is3DActive()) build3D(); save();
     return true;
   }
@@ -4543,7 +4568,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       // boot, i.e. gated) and re-render themselves once the real fetch
       // resolves, rather than this whole handler blocking sign-in/out UI
       // feedback (the button flip, the toast above) on a network round trip.
-      refreshEntitlement(session).then(refreshGatedUI);
+      const refreshing = refreshEntitlement(session);
+      refreshGatedUI(); // immediately clear panes when the account changes
+      refreshing.then(refreshGatedUI);
     });
   }
 
@@ -4871,11 +4898,19 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     Canvas.onWarnRequest(key=>toast(T(key)));
     buildToolRail(); buildRail(); wire();
     initResponsiveWorkspace();
-    initAccountUI();
+    initAccountUI().catch(e=>console.warn("[account] Sign-in is unavailable while offline", e));
     applyTheme(); applyLang();
     updateUnitsPill(); updateStageChips();
     $("#gridBtn").classList.toggle("active",Canvas.getOpt("grid"));
     $("#snapBtn").classList.toggle("active",Canvas.getOpt("snap"));
+    // Snapshot direct canvas edits too: these do not all pass through a
+    // settings/action handler that calls save(). Capture again on exit.
+    $("#patternCanvas").addEventListener("pointerup", save);
+    document.addEventListener("keyup", e=>{
+      if(!/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && !e.target.isContentEditable) save();
+    });
+    window.addEventListener("pagehide", save);
+    document.addEventListener("visibilitychange", ()=>{ if(document.hidden) save(); });
     // register SW
     if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
     // onboarding first run
@@ -4891,10 +4926,17 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         loadPattern(DEFAULT_PATTERN_BY_CATEGORY[handoff.category] || "womens_dress");
         grade(); renderSizePane(); renderMeasurePane();
         setView("clothlab");
+      } else if(state.projects.length){
+        const target = activeProject() || state.projects[0];
+        state.activeProjectId = null;
+        switchToProject(target.id);
+        setView(state.view||"2d");
       } else {
         loadPattern(state.loaded||"womens_dress"); setView(state.view||"2d");
       }
       initProjectTabs();
+      projectsReady = true;
+      save();
     },200);
   }
   document.addEventListener("DOMContentLoaded",init);

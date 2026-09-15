@@ -27,6 +27,11 @@ export default defineConfig({
   },
   use: {
     baseURL: 'http://127.0.0.1:8793',
+    // Explicit local fallback for hosts where headless Chromium cannot
+    // create a hardware WebGL context (for example after host sleep).
+    launchOptions: process.env.PLAYWRIGHT_SOFTWARE_GL === '1'
+      ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] }
+      : {},
     // Legacy smoke cases retain their existing CSP bypass. The separate
     // csp.spec.js explicitly disables it and verifies real visitor policy.
     // Passing this broad suite alone is not evidence of CSP compatibility.

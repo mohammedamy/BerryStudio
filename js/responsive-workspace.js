@@ -8,6 +8,8 @@ export function initResponsiveWorkspace() {
   const closeButton = document.getElementById('closeRailBtn');
   let railOpen = false;
   let menuOpen = false;
+  let lastFocused = document.activeElement;
+  document.addEventListener('focusin', event => { lastFocused = event.target; });
 
   function render() {
     rail.hidden = media.matches && !railOpen;
@@ -49,7 +51,10 @@ export function initResponsiveWorkspace() {
     if (railOpen && !rail.contains(event.target) && !railButton.contains(event.target)) closeRail();
   });
   media.addEventListener('change', () => {
-    const focused = document.activeElement;
+    // CSS can hide the focused mobile control before this event runs,
+    // leaving activeElement at body. Retain the focus origin across that
+    // browser-driven blur so desktop focus restoration is deterministic.
+    const focused = document.activeElement === document.body ? lastFocused : document.activeElement;
     railOpen = menuOpen = false;
     if (media.matches && rail.contains(focused)) railButton.focus();
     else if (media.matches && actions.contains(focused)) menuButton.focus();

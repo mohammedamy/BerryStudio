@@ -4,6 +4,7 @@
    ============================================================ */
 export const I18N = {
   en: {
+    projectStorageFailed: "Changes could not be saved on this device. Use Project → Save Project to keep a JSON backup.",
     dir: "ltr",
     appName: "BerryStudio",
     tagline: "Fashion Pattern Design & Grading",
@@ -479,6 +480,7 @@ export const I18N = {
     copiedObj: "Copied", cutObj: "Cut", pastedObj: "Pasted",
   },
   ar: {
+    projectStorageFailed: "تعذر حفظ التغييرات على هذا الجهاز. استخدم المشروع ← حفظ المشروع للاحتفاظ بنسخة JSON.",
     dir: "rtl",
     appName: "بيري ستوديو",
     tagline: "تصميم وتدريج باترونات الأزياء",

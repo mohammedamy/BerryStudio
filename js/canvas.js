@@ -227,10 +227,16 @@ export const Canvas = (() => {
       view: { ...view },
     };
   }
+  function advanceEntityIds(){
+    textSeq = Math.max(textSeq, ...texts.map(t=>(Number(t.id)||0)+1));
+    pointSeq = Math.max(pointSeq, ...points.map(p=>(Number(p.id)||0)+1));
+    consSeq = Math.max(consSeq, ...cons.map(c=>(Number(c.id)||0)+1));
+  }
   function restoreState(snap){
-    snap = snap || {};
+    snap = JSON.parse(JSON.stringify(snap || {}));
     pieces = snap.pieces || []; sketch = snap.sketch || []; texts = snap.texts || [];
     points = snap.points || []; cons = snap.cons || []; variables = snap.variables || {};
+    advanceEntityIds();
     // drop every ephemeral interaction/tool state — a tab switch mid-drag
     // (rare, but possible via a fast keyboard shortcut) must never leave a
     // stale drag/edit anchored to the OTHER tab's now-gone geometry.
@@ -1693,6 +1699,7 @@ export const Canvas = (() => {
 
   // ================= PUBLIC API =================
   function fit(){
+    if(!cv) return;
     userAdjusted = false;
     if(!pieces.length){ view={x:60,y:60,scale:3.2}; render(); onZoom(); return; }
     const all=pieces.flatMap(p=>p.outline);
@@ -2416,8 +2423,9 @@ export const Canvas = (() => {
   function exportPDF(opts){ return buildPDF(pieces, opts); }
 
   // ---- project round-trip: load already-positioned pieces / clear all ----
-  function loadPieces(arr, txts, pts, consArr){
-    if(!Array.isArray(arr) || !arr.length) return false;
+  function loadPieces(arr, txts, pts, consArr, extras = {}){
+    if(!Array.isArray(arr) || !arr.length || arr.some(p=>!p || !Array.isArray(p.outline) ||
+      p.outline.some(pt=>!Array.isArray(pt) || pt.length!==2 || !pt.every(Number.isFinite)))) return false;
     pushUndo();
     pieces = arr.map((p,i)=>({
       // Spread the source piece first so anything beyond this normalized
@@ -2440,8 +2448,9 @@ export const Canvas = (() => {
     texts = Array.isArray(txts) ? txts.map(t=>({ ...t, id: t.id || textSeq++ })) : [];
     points = Array.isArray(pts) ? pts.map(p=>({ xExpr:null, yExpr:null, ...p, id: p.id || pointSeq++ })) : [];
     cons = Array.isArray(consArr) ? consArr.map(c=>({ ...c, id: c.id || consSeq++ })) : [];
-    variables = {};
-    selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; sketch=[]; promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; fit(); return true;
+    variables = { ...extras.variables };
+    advanceEntityIds();
+    selected=-1; multiSelected=[]; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null; sketch=Array.isArray(extras.sketch) ? extras.sketch : []; promoteBuf=[]; pendingPromoteOutline=null; pendingPromoteIds=null; pendingPromoteSketchIdx=null; curveEdit=null; lassoPts=null; fit(); return true;
   }
   function clearAll(){
     pushUndo(); pieces=[]; sketch=[]; texts=[]; points=[]; cons=[]; bg=null; variables={}; ghostSnap=null;

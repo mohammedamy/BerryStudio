@@ -486,3 +486,25 @@ test("getHistory/setHistory carries undo/redo across a restoreState() swap witho
   assert.equal(Canvas.getPieces().length, 1);
   assert.equal(Canvas.getPieces()[0].name.en, "Tab A v1");
 });
+
+test("restored entity IDs do not collide with new annotations", () => {
+  Canvas.restoreState({ pieces:[], texts:[{id:9000,x:0,y:0,text:'old'}], points:[], cons:[] });
+  assert.ok(Canvas.addText({x:1,y:1,text:'new'}) > 9000);
+});
+
+test("restored canvas does not mutate its saved snapshot", () => {
+  const snap={pieces:[],texts:[{id:9500,x:0,y:0,text:'old'}]};
+  Canvas.restoreState(snap);
+  Canvas.addText({x:1,y:1,text:'new'});
+  assert.equal(snap.texts.length,1);
+});
+
+test("project import keeps sketches and variables and rejects invalid geometry before replacing work", () => {
+  const pieces=[{name:{en:'Front'},outline:[[0,0],[10,0],[10,10]]}];
+  const extras={variables:{waist:'72'},sketch:[{type:'freehand',pts:[[1,1],[2,2]]}]};
+  assert.equal(Canvas.loadPieces(pieces,[],[],[],extras),true);
+  assert.deepEqual(Canvas.snapshotState().sketch,extras.sketch);
+  assert.deepEqual(Canvas.getVariables(),extras.variables);
+  assert.equal(Canvas.loadPieces([{outline:[[null,0]]}]),false);
+  assert.equal(Canvas.getPieces()[0].name.en,'Front');
+});

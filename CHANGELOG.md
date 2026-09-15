@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-09-15 — V6-03: reliable project reopening and account-state recovery
+
+The access/persistence matrix uncovered startup overwriting saved project
+snapshots and late profile responses restoring stale access. This package
+protects local design work and keeps existing account gates tied to the
+current account. Subscription and monetization stay in the final phase.
+
+### Changed / Fixed
+
+- Restore saved project tabs before startup writes, retain unique tab and
+  annotation IDs, and isolate restored snapshots from live edits.
+- Save direct canvas edits and capture state when leaving/backgrounding;
+  recover from malformed stored JSON and report storage failures in EN/AR.
+- Preserve sketch strokes and the complete variable map through JSON import;
+  reject invalid outline coordinates before replacing the current pieces.
+- Ignore obsolete profile responses, clear retained access on account changes,
+  and expire cached trials even when profile refresh fails. Handle unavailable
+  auth startup without an unhandled rejection.
+- Fix a responsive focus race discovered in verification: hidden mobile
+  controls can lose focus before the media-query callback runs.
+- Add real-CSP browser account fixtures, JSON download/import/reopen coverage
+  and a warmed-installation offline test. Advance the service-worker cache.
+- Improve 3D test readiness diagnostics and offer explicit software WebGL for
+  test hosts unable to create hardware contexts; production graphics unchanged.
+
+### Verification
+
+332 root tests passed. Root lint: 91 existing warnings, no errors or new
+warnings. Serial software-WebGL browser run: 36 passed and one responsive
+focus failure; after fixing it, all six responsive cases passed. This covers
+all 37 browser cases across the full run and focused rerun. Account fixtures
+do not claim successful live OAuth or verify production RLS. Details and
+reproduction commands: `docs/plan-v6-progress.md`.
+
 ## 2026-09-15 — V6-02: usable mobile and Arabic workspaces
 
 The fixed inspector and wide header obscured most of the canvas on narrow
