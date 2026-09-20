@@ -1,0 +1,4295 @@
+{
+  "schemaVersion": 1,
+  "corpus": "v6-06-initial",
+  "adapter": "Chromium: actual AIGen.generate with local image decoding and heuristic silhouette analysis; no remote provider or production UI",
+  "runtime": {
+    "browser": "151.0.7922.34",
+    "platform": "darwin"
+  },
+  "scope": "Automated decision/family/length/validator checks, not maker acceptance or fit accuracy. Elapsed time includes artificial generation stages and image decoding; not time to accepted design.",
+  "includeHoldout": false,
+  "heldOutNotExecuted": 24,
+  "sourceHashes": {
+    "evaluation/v6-06/corpus.json": "5f12b5df3503ff2f350f69593386eb84d5c0c851b2f4c10025a3a07cb5ecb67e",
+    "evaluation/browser/harness.html": "5c17953aa9b02974ba94065bab6784e3ab007f8f5dccef90c5323e88029c56d5",
+    "evaluation/browser/harness.js": "49f8eea91b1d71353af38efdd8139562b9e1aa65d26effde8865a00209d8dc16",
+    "evaluation/browser/development.spec.js": "92b72f9d1381b26a0fc4ea8e56cadd8cfc8f6a32df188c79bb10afb893a7eb9f",
+    "playwright.evaluation.config.js": "55eb034a5aa7e5a9935c030bb0c567e451aaf1d8df46d3f0f0d0fe58196fe885",
+    "scripts/serve-evaluation.mjs": "1d53ec4577425c4b6f3f5f91edcafca66660ca14b0259deff4f44c12520b0a7b",
+    "scripts/evaluation-core.mjs": "3392cc455796e2c081d2aa3c406b360ed0b978901fd5ba06ad465eb10531499b",
+    "js/ai.js": "ab928b07d119a9c8c9efa0b46841a81ff195324bc567afc25373acef9bf3a8ab",
+    "js/data.js": "1c2232807c045d7023a3af9841705b86ef345b92d8873c5b7786f75c4cbef03d",
+    "js/pleats.js": "40567554b7964be70cf4b57292e6cc4abc02d53de564932f7a24b04b1f1df390",
+    "js/validate.js": "81ae5c780b8fbb1999718d9f16bffa8e7f852f811528b02dddb5ca895f500f87",
+    "js/geometry.js": "5ad73ee1b889ef5cded089b0f04b9a8118a390468b55ae62b46823fb924966ad",
+    "evaluation/v6-06/references/skirt-front.svg": "d4e8c5d5e3109b729824d2e6deffca798b7026c38f4f6eac421ea30dd4f238b6",
+    "evaluation/v6-06/references/skirt-back.svg": "1005ed12e61b2939b204703942445b692d84f39ad079a0d68a33261efad32f9a",
+    "evaluation/v6-06/references/dress-front.svg": "061d92aabd01b410d4e9c48a1b0b287dee6e4224c693e020c86f9e99f24d20e0",
+    "evaluation/v6-06/references/dress-back.svg": "9df50de4668fd4464494d67c55bc667575b2782477340cb6f06ac9c3fab570da",
+    "evaluation/v6-06/references/trousers-front.svg": "608e799270e3b45041e27705249c8b210f7de0e0831a5af74bc28aa681eb2e0d",
+    "evaluation/v6-06/references/trousers-back.svg": "34a6dbacf01576be66ef32dea3a09251f83974f3d434633117a1b65b49c4a8c3"
+  },
+  "outputBundleSha256": "ce93784cc18cce48111b74e7b32451a7d03ed14f24e98e0dec6d4268f7a5f0e2",
+  "imageControl": {
+    "ok": true,
+    "heightFrac": 0.77,
+    "aspect": 2.13,
+    "flare": 1,
+    "waistRatio": 1,
+    "sleeveFactor": 0,
+    "neckline": "offshoulder",
+    "hemShape": "straight",
+    "color": "rgb(17,17,17)",
+    "colorHem": "rgb(17,17,17)",
+    "twoTone": false,
+    "segmented": false
+  },
+  "summary": {
+    "requested": 36,
+    "executed": 36,
+    "pass": 16,
+    "fail": 20,
+    "notRun": 0,
+    "makerReviewed": 0,
+    "failures": {
+      "validator-failure": 8,
+      "missing-clarification": 6,
+      "draft-before-resolution": 12,
+      "missing-abstention": 6
+    },
+    "executionCoverage": 1,
+    "automatedPassRateAmongExecuted": 0.4444444444444444,
+    "passesPerRequestedTask": 0.4444444444444444,
+    "makerAcceptanceRate": null
+  },
+  "strata": {
+    "family": {
+      "skirt": {
+        "requested": 12,
+        "executed": 12,
+        "pass": 6,
+        "fail": 6,
+        "notRun": 0,
+        "makerReviewed": 0,
+        "failures": {
+          "validator-failure": 2,
+          "missing-clarification": 2,
+          "draft-before-resolution": 4,
+          "missing-abstention": 2
+        },
+        "executionCoverage": 1,
+        "automatedPassRateAmongExecuted": 0.5,
+        "passesPerRequestedTask": 0.5,
+        "makerAcceptanceRate": null
+      },
+      "dress": {
+        "requested": 12,
+        "executed": 12,
+        "pass": 2,
+        "fail": 10,
+        "notRun": 0,
+        "makerReviewed": 0,
+        "failures": {
+          "validator-failure": 6,
+          "missing-clarification": 2,
+          "draft-before-resolution": 4,
+          "missing-abstention": 2
+        },
+        "executionCoverage": 1,
+        "automatedPassRateAmongExecuted": 0.16666666666666666,
+        "passesPerRequestedTask": 0.16666666666666666,
+        "makerAcceptanceRate": null
+      },
+      "trousers": {
+        "requested": 12,
+        "executed": 12,
+        "pass": 8,
+        "fail": 4,
+        "notRun": 0,
+        "makerReviewed": 0,
+        "failures": {
+          "missing-clarification": 2,
+          "draft-before-resolution": 4,
+          "missing-abstention": 2
+        },
+        "executionCoverage": 1,
+        "automatedPassRateAmongExecuted": 0.6666666666666666,
+        "passesPerRequestedTask": 0.6666666666666666,
+        "makerAcceptanceRate": null
+      }
+    },
+    "language": {
+      "en": {
+        "requested": 18,
+        "executed": 18,
+        "pass": 8,
+        "fail": 10,
+        "notRun": 0,
+        "makerReviewed": 0,
+        "failures": {
+          "validator-failure": 4,
+          "missing-clarification": 3,
+          "draft-before-resolution": 6,
+          "missing-abstention": 3
+        },
+        "executionCoverage": 1,
+        "automatedPassRateAmongExecuted": 0.4444444444444444,
+        "passesPerRequestedTask": 0.4444444444444444,
+        "makerAcceptanceRate": null
+      },
+      "ar": {
+        "requested": 18,
+        "executed": 18,
+        "pass": 8,
+        "fail": 10,
+        "notRun": 0,
+        "makerReviewed": 0,
+        "failures": {
+          "validator-failure": 4,
+          "missing-clarification": 3,
+          "draft-before-resolution": 6,
+          "missing-abstention": 3
+        },
+        "executionCoverage": 1,
+        "automatedPassRateAmongExecuted": 0.4444444444444444,
+        "passesPerRequestedTask": 0.4444444444444444,
+        "makerAcceptanceRate": null
+      }
+    },
+    "inputType": {
+      "text": {
+        "requested": 30,
+        "executed": 30,
+        "pass": 10,
+        "fail": 20,
+        "notRun": 0,
+        "makerReviewed": 0,
+        "failures": {
+          "validator-failure": 8,
+          "missing-clarification": 6,
+          "draft-before-resolution": 12,
+          "missing-abstention": 6
+        },
+        "executionCoverage": 1,
+        "automatedPassRateAmongExecuted": 0.3333333333333333,
+        "passesPerRequestedTask": 0.3333333333333333,
+        "makerAcceptanceRate": null
+      },
+      "text+image": {
+        "requested": 6,
+        "executed": 6,
+        "pass": 6,
+        "fail": 0,
+        "notRun": 0,
+        "makerReviewed": 0,
+        "failures": {},
+        "executionCoverage": 1,
+        "automatedPassRateAmongExecuted": 1,
+        "passesPerRequestedTask": 1,
+        "makerAcceptanceRate": null
+      }
+    }
+  },
+  "unmeasured": [
+    "Maker acceptance",
+    "Sewn fit",
+    "Full measurement adherence",
+    "Join correctness",
+    "Lock preservation",
+    "Time and cost per accepted result",
+    "Remote model performance",
+    "Other browsers/devices"
+  ],
+  "rows": [
+    {
+      "id": "skirt-regular-en",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "draft",
+      "actualFamily": "skirt",
+      "lengthFactor": 1,
+      "pieceCount": 3,
+      "geometrySha256": "1db888f1076d292b9ce56341db0b81aaaa53348f78dc45b81ef1cfc97db03666",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 44.5cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 44.5cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Skirt / Back Skirt",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1147,
+      "makerReview": null
+    },
+    {
+      "id": "skirt-regular-ar",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "draft",
+      "actualFamily": "skirt",
+      "lengthFactor": 1,
+      "pieceCount": 4,
+      "geometrySha256": "4d8ba03d88399e132991ee4a82535d677f5a99c00a52f42501ebfe2f40cb923c",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 46.8cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Tie Sash",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 90.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Skirt / Back Skirt",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 22,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 4
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "skirt-long-en",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "fail",
+      "failures": [
+        "validator-failure"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "skirt",
+      "lengthFactor": 1.35,
+      "pieceCount": 4,
+      "geometrySha256": "6c0eecf7a0fac8e368542918efa9a45bbe9ea41211dbdab54c0c10701727f585",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 67.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Tie Sash",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 90.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Skirt / Back Skirt",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "fail",
+                "message": "front (56.9cm) and back (67.0cm) side lengths differ by 101.1mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 21,
+          "warn": 0,
+          "fail": 1,
+          "deferred": 4
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "skirt-long-ar",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "draft",
+      "actualFamily": "skirt",
+      "lengthFactor": 1.35,
+      "pieceCount": 3,
+      "geometrySha256": "2f3d5fc2b2289743db0fc5e01f5d0d070a713e16451b35c0145eb4d77db11739",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 60.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 60.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Skirt / Back Skirt",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "skirt-small-en",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "draft",
+      "actualFamily": "skirt",
+      "lengthFactor": 1,
+      "pieceCount": 3,
+      "geometrySha256": "a0f43058091d952faaebdb2b67481b7ebe3ac90b215120cecabf3edae5eb7c28",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 41.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 41.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Skirt / Back Skirt",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "skirt-small-ar",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "fail",
+      "failures": [
+        "validator-failure"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "skirt",
+      "lengthFactor": 1,
+      "pieceCount": 3,
+      "geometrySha256": "b3c092a956da6b342e588eed5f2a2570ea58907760a0bf8285ba21aed5b5099c",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 38.9cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 45.8cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Skirt / Back Skirt",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "fail",
+                "message": "front (38.9cm) and back (45.8cm) side lengths differ by 69.1mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 16,
+          "warn": 0,
+          "fail": 1,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "skirt-conflict-en",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "clarify",
+      "status": "fail",
+      "failures": [
+        "missing-clarification",
+        "draft-before-resolution"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "skirt",
+      "lengthFactor": 1.25,
+      "pieceCount": 3,
+      "geometrySha256": "94de5f761e1857b804fe9a0b6484a0e65adee6d1df87de997e59da7c6a22fb35",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 55.6cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 55.6cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Skirt / Back Skirt",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1143,
+      "makerReview": null
+    },
+    {
+      "id": "skirt-conflict-ar",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "clarify",
+      "status": "fail",
+      "failures": [
+        "missing-clarification",
+        "draft-before-resolution"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "skirt",
+      "lengthFactor": 1.25,
+      "pieceCount": 3,
+      "geometrySha256": "91d1f829eb5b3b78c0ff246331923630e694aa3c1f2fb9b15531440797a7e994",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 58.5cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 58.5cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Skirt / Back Skirt",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "skirt-invalid-en",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "abstain",
+      "status": "fail",
+      "failures": [
+        "missing-abstention",
+        "draft-before-resolution"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "skirt",
+      "lengthFactor": 1.1,
+      "pieceCount": 3,
+      "geometrySha256": "3bbd701d2dc7c6fcc3f60c72ce895dcab68a5d5af4a2b8f50b743860c06a63ec",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 51.5cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 51.5cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Skirt / Back Skirt",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "skirt-invalid-ar",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "abstain",
+      "status": "fail",
+      "failures": [
+        "missing-abstention",
+        "draft-before-resolution"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "skirt",
+      "lengthFactor": 0.85,
+      "pieceCount": 3,
+      "geometrySha256": "fff5dddcd32266952b1f2211ba1697f80784d81be8e6a6496a879e0803866b7e",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 39.8cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Skirt",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 39.8cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Skirt / Back Skirt",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "skirt-front-only-en",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text+image",
+      "split": "development",
+      "expectedDecision": "clarify",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "clarify",
+      "actualFamily": null,
+      "lengthFactor": null,
+      "pieceCount": 0,
+      "geometrySha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "validator": null,
+      "source": "local",
+      "imageSupplied": true,
+      "usedImage": false,
+      "decodedReferences": [
+        {
+          "id": "skirt-front",
+          "width": 200,
+          "height": 220,
+          "bytes": 433
+        }
+      ],
+      "stages": [
+        "analyzing",
+        "clarify"
+      ],
+      "elapsedMs": 14,
+      "makerReview": null
+    },
+    {
+      "id": "skirt-front-only-ar",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text+image",
+      "split": "development",
+      "expectedDecision": "clarify",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "clarify",
+      "actualFamily": null,
+      "lengthFactor": null,
+      "pieceCount": 0,
+      "geometrySha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "validator": null,
+      "source": "local",
+      "imageSupplied": true,
+      "usedImage": false,
+      "decodedReferences": [
+        {
+          "id": "skirt-front",
+          "width": 200,
+          "height": 220,
+          "bytes": 433
+        }
+      ],
+      "stages": [
+        "analyzing",
+        "clarify"
+      ],
+      "elapsedMs": 7,
+      "makerReview": null
+    },
+    {
+      "id": "dress-regular-en",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "fail",
+      "failures": [
+        "validator-failure"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "dress",
+      "lengthFactor": 1,
+      "pieceCount": 3,
+      "geometrySha256": "afc2c80eff91da8771ff9c31c9ac553e47361dc550b493da8fe7fedb25dc73a8",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Dress Front",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 94.0cm)"
+              },
+              "ease": {
+                "status": "fail",
+                "message": "implied finished chest (84.5cm) is 3.5cm SMALLER than the body chest (88.0cm) — this garment cannot physically close"
+              }
+            }
+          },
+          {
+            "label": "Dress Back",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 98.0cm)"
+              },
+              "ease": {
+                "status": "fail",
+                "message": "implied finished chest (84.5cm) is 3.5cm SMALLER than the body chest (88.0cm) — this garment cannot physically close"
+              }
+            }
+          },
+          {
+            "label": "Sleeve",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Dress Front / Dress Back",
+            "verified": true,
+            "checks": {
+              "seamLengthParity": {
+                "status": "fail",
+                "message": "front (102.0cm) and back (101.5cm) side lengths differ by 5.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "warn",
+                "message": "front has 2 notch(es), back has 1 — may be a deliberate single/double-notch front-vs-back convention, not necessarily a defect"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 15,
+          "warn": 1,
+          "fail": 3,
+          "deferred": 1
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1145,
+      "makerReview": null
+    },
+    {
+      "id": "dress-regular-ar",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "fail",
+      "failures": [
+        "validator-failure"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "dress",
+      "lengthFactor": 1,
+      "pieceCount": 3,
+      "geometrySha256": "302992dceb1d425014d35e8640dc3c3fd5c57159eabf6ae8fad7e2a72911ab27",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Dress Front",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 89.7cm)"
+              },
+              "ease": {
+                "status": "fail",
+                "message": "implied finished chest (84.5cm) is 3.5cm SMALLER than the body chest (88.0cm) — this garment cannot physically close"
+              }
+            }
+          },
+          {
+            "label": "Dress Back",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 105.7cm)"
+              },
+              "ease": {
+                "status": "fail",
+                "message": "implied finished chest (84.5cm) is 3.5cm SMALLER than the body chest (88.0cm) — this garment cannot physically close"
+              }
+            }
+          },
+          {
+            "label": "Sleeve",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Dress Front / Dress Back",
+            "verified": true,
+            "checks": {
+              "seamLengthParity": {
+                "status": "fail",
+                "message": "front (91.7cm) and back (107.7cm) side lengths differ by 159.8mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "warn",
+                "message": "front has 2 notch(es), back has 1 — may be a deliberate single/double-notch front-vs-back convention, not necessarily a defect"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 15,
+          "warn": 1,
+          "fail": 3,
+          "deferred": 1
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "dress-long-en",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "fail",
+      "failures": [
+        "validator-failure"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "dress",
+      "lengthFactor": 1.35,
+      "pieceCount": 3,
+      "geometrySha256": "bc151ce0fcff4b5a097fc4995b88e32d4af3455e81866fff41c8708ea2bb9f54",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Dress Front",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 127.0cm)"
+              },
+              "ease": {
+                "status": "pass",
+                "message": "8.0cm of implied chest ease (finished 96.0cm vs body 88.0cm)"
+              }
+            }
+          },
+          {
+            "label": "Dress Back",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 129.6cm)"
+              },
+              "ease": {
+                "status": "pass",
+                "message": "8.0cm of implied chest ease (finished 96.0cm vs body 88.0cm)"
+              }
+            }
+          },
+          {
+            "label": "Sleeve",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Dress Front / Dress Back",
+            "verified": true,
+            "checks": {
+              "seamLengthParity": {
+                "status": "fail",
+                "message": "front (140.1cm) and back (139.6cm) side lengths differ by 5.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "warn",
+                "message": "front has 2 notch(es), back has 1 — may be a deliberate single/double-notch front-vs-back convention, not necessarily a defect"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 1,
+          "fail": 1,
+          "deferred": 1
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "dress-long-ar",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "fail",
+      "failures": [
+        "validator-failure"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "dress",
+      "lengthFactor": 1.35,
+      "pieceCount": 3,
+      "geometrySha256": "008eeb463b02d0f3efb6edd5eaa59c6d2af467e0f6fa1389481a7438934db1e3",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Dress Front",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 123.1cm)"
+              },
+              "ease": {
+                "status": "fail",
+                "message": "implied finished chest (84.5cm) is 3.5cm SMALLER than the body chest (88.0cm) — this garment cannot physically close"
+              }
+            }
+          },
+          {
+            "label": "Dress Back",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 127.1cm)"
+              },
+              "ease": {
+                "status": "fail",
+                "message": "implied finished chest (84.5cm) is 3.5cm SMALLER than the body chest (88.0cm) — this garment cannot physically close"
+              }
+            }
+          },
+          {
+            "label": "Sleeve",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Dress Front / Dress Back",
+            "verified": true,
+            "checks": {
+              "seamLengthParity": {
+                "status": "fail",
+                "message": "front (142.2cm) and back (141.7cm) side lengths differ by 5.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "warn",
+                "message": "front has 2 notch(es), back has 1 — may be a deliberate single/double-notch front-vs-back convention, not necessarily a defect"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 15,
+          "warn": 1,
+          "fail": 3,
+          "deferred": 1
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1142,
+      "makerReview": null
+    },
+    {
+      "id": "dress-small-en",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "fail",
+      "failures": [
+        "validator-failure"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "dress",
+      "lengthFactor": 1,
+      "pieceCount": 3,
+      "geometrySha256": "bacb66f1fb813e46f50b104139356b18cfa96253641b65189f8307bc4e0e3e8a",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Dress Front",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 88.1cm)"
+              },
+              "ease": {
+                "status": "pass",
+                "message": "18.1cm of implied chest ease (finished 94.1cm vs body 76.0cm)"
+              }
+            }
+          },
+          {
+            "label": "Dress Back",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 90.7cm)"
+              },
+              "ease": {
+                "status": "pass",
+                "message": "18.1cm of implied chest ease (finished 94.1cm vs body 76.0cm)"
+              }
+            }
+          },
+          {
+            "label": "Sleeve",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Dress Front / Dress Back",
+            "verified": true,
+            "checks": {
+              "seamLengthParity": {
+                "status": "fail",
+                "message": "front (101.0cm) and back (100.5cm) side lengths differ by 5.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "warn",
+                "message": "front has 2 notch(es), back has 1 — may be a deliberate single/double-notch front-vs-back convention, not necessarily a defect"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 1,
+          "fail": 1,
+          "deferred": 1
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1143,
+      "makerReview": null
+    },
+    {
+      "id": "dress-small-ar",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "fail",
+      "failures": [
+        "validator-failure"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "dress",
+      "lengthFactor": 1,
+      "pieceCount": 2,
+      "geometrySha256": "2b027c4ab04dd0005a325cf9095755324d3428f6e2393c784fd1140dc884fccb",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Dress Front",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 87.0cm)"
+              },
+              "ease": {
+                "status": "fail",
+                "message": "implied finished chest (73.9cm) is 2.1cm SMALLER than the body chest (76.0cm) — this garment cannot physically close"
+              }
+            }
+          },
+          {
+            "label": "Dress Back",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 102.5cm)"
+              },
+              "ease": {
+                "status": "fail",
+                "message": "implied finished chest (73.9cm) is 2.1cm SMALLER than the body chest (76.0cm) — this garment cannot physically close"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Dress Front / Dress Back",
+            "verified": true,
+            "checks": {
+              "seamLengthParity": {
+                "status": "fail",
+                "message": "front (89.0cm) and back (104.5cm) side lengths differ by 155.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "warn",
+                "message": "front has 2 notch(es), back has 1 — may be a deliberate single/double-notch front-vs-back convention, not necessarily a defect"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 10,
+          "warn": 1,
+          "fail": 3,
+          "deferred": 0
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "dress-conflict-en",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "clarify",
+      "status": "fail",
+      "failures": [
+        "missing-clarification",
+        "draft-before-resolution"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "dress",
+      "lengthFactor": 1.25,
+      "pieceCount": 3,
+      "geometrySha256": "a2080d19ff9f3f96910bda83cb6e059187ce67a11181fa30296a10834759a936",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Dress Front",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 122.2cm)"
+              },
+              "ease": {
+                "status": "pass",
+                "message": "8.0cm of implied chest ease (finished 96.0cm vs body 88.0cm)"
+              }
+            }
+          },
+          {
+            "label": "Dress Back",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 123.3cm)"
+              },
+              "ease": {
+                "status": "pass",
+                "message": "8.0cm of implied chest ease (finished 96.0cm vs body 88.0cm)"
+              }
+            }
+          },
+          {
+            "label": "Sleeve",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Dress Front / Dress Back",
+            "verified": true,
+            "checks": {
+              "seamLengthParity": {
+                "status": "fail",
+                "message": "front (127.8cm) and back (127.3cm) side lengths differ by 5.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "warn",
+                "message": "front has 2 notch(es), back has 1 — may be a deliberate single/double-notch front-vs-back convention, not necessarily a defect"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 1,
+          "fail": 1,
+          "deferred": 1
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1143,
+      "makerReview": null
+    },
+    {
+      "id": "dress-conflict-ar",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "clarify",
+      "status": "fail",
+      "failures": [
+        "missing-clarification",
+        "draft-before-resolution"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "dress",
+      "lengthFactor": 1.25,
+      "pieceCount": 3,
+      "geometrySha256": "0fe7250dcc3bdd2b365b41fbb150c0f2d1587e42e7a978d44e36709034fece7a",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Dress Front",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 121.7cm)"
+              },
+              "ease": {
+                "status": "pass",
+                "message": "8.0cm of implied chest ease (finished 96.0cm vs body 88.0cm)"
+              }
+            }
+          },
+          {
+            "label": "Dress Back",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 122.9cm)"
+              },
+              "ease": {
+                "status": "pass",
+                "message": "8.0cm of implied chest ease (finished 96.0cm vs body 88.0cm)"
+              }
+            }
+          },
+          {
+            "label": "Sleeve",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Dress Front / Dress Back",
+            "verified": true,
+            "checks": {
+              "seamLengthParity": {
+                "status": "fail",
+                "message": "front (125.8cm) and back (125.3cm) side lengths differ by 5.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "warn",
+                "message": "front has 2 notch(es), back has 1 — may be a deliberate single/double-notch front-vs-back convention, not necessarily a defect"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 1,
+          "fail": 1,
+          "deferred": 1
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1142,
+      "makerReview": null
+    },
+    {
+      "id": "dress-invalid-en",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "abstain",
+      "status": "fail",
+      "failures": [
+        "missing-abstention",
+        "draft-before-resolution"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "dress",
+      "lengthFactor": 0.85,
+      "pieceCount": 2,
+      "geometrySha256": "141ffe226872a314bca1f7cdf482c4ff5c2abc35558a75aa3eef3f01c2f16387",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Dress Front",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 81.0cm)"
+              },
+              "ease": {
+                "status": "pass",
+                "message": "8.0cm of implied chest ease (finished 96.0cm vs body 88.0cm)"
+              }
+            }
+          },
+          {
+            "label": "Dress Back",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 82.1cm)"
+              },
+              "ease": {
+                "status": "pass",
+                "message": "8.0cm of implied chest ease (finished 96.0cm vs body 88.0cm)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Dress Front / Dress Back",
+            "verified": true,
+            "checks": {
+              "seamLengthParity": {
+                "status": "fail",
+                "message": "front (86.5cm) and back (86.0cm) side lengths differ by 5.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "warn",
+                "message": "front has 2 notch(es), back has 1 — may be a deliberate single/double-notch front-vs-back convention, not necessarily a defect"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 12,
+          "warn": 1,
+          "fail": 1,
+          "deferred": 0
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1145,
+      "makerReview": null
+    },
+    {
+      "id": "dress-invalid-ar",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "abstain",
+      "status": "fail",
+      "failures": [
+        "missing-abstention",
+        "draft-before-resolution"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "dress",
+      "lengthFactor": 0.85,
+      "pieceCount": 3,
+      "geometrySha256": "4d8e74ec24bd10276c105f4962c07fabe2b61b0d07b34b8c3731eea166694028",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Dress Front",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Dress Back",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 81.7cm)"
+              },
+              "ease": {
+                "status": "pass",
+                "message": "8.0cm of implied chest ease (finished 96.0cm vs body 88.0cm)"
+              }
+            }
+          },
+          {
+            "label": "Tie Sash",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 110.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Dress Front / Dress Back",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "fail",
+                "message": "front (84.5cm) and back (84.0cm) side lengths differ by 5.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "warn",
+                "message": "front has 2 notch(es), back has 1 — may be a deliberate single/double-notch front-vs-back convention, not necessarily a defect"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 16,
+          "warn": 1,
+          "fail": 1,
+          "deferred": 2
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1143,
+      "makerReview": null
+    },
+    {
+      "id": "dress-front-only-en",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text+image",
+      "split": "development",
+      "expectedDecision": "clarify",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "clarify",
+      "actualFamily": null,
+      "lengthFactor": null,
+      "pieceCount": 0,
+      "geometrySha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "validator": null,
+      "source": "local",
+      "imageSupplied": true,
+      "usedImage": false,
+      "decodedReferences": [
+        {
+          "id": "dress-front",
+          "width": 200,
+          "height": 220,
+          "bytes": 487
+        }
+      ],
+      "stages": [
+        "analyzing",
+        "clarify"
+      ],
+      "elapsedMs": 9,
+      "makerReview": null
+    },
+    {
+      "id": "dress-front-only-ar",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text+image",
+      "split": "development",
+      "expectedDecision": "clarify",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "clarify",
+      "actualFamily": null,
+      "lengthFactor": null,
+      "pieceCount": 0,
+      "geometrySha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "validator": null,
+      "source": "local",
+      "imageSupplied": true,
+      "usedImage": false,
+      "decodedReferences": [
+        {
+          "id": "dress-front",
+          "width": 200,
+          "height": 220,
+          "bytes": 487
+        }
+      ],
+      "stages": [
+        "analyzing",
+        "clarify"
+      ],
+      "elapsedMs": 5,
+      "makerReview": null
+    },
+    {
+      "id": "trousers-regular-en",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "draft",
+      "actualFamily": "trousers",
+      "lengthFactor": 1,
+      "pieceCount": 3,
+      "geometrySha256": "921415d702eb9289fab1795cab441cb1bb467a54f8149dd6ff16a5da4edfe0bb",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Leg / Back Leg",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "trousers-regular-ar",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "draft",
+      "actualFamily": "trousers",
+      "lengthFactor": 1,
+      "pieceCount": 3,
+      "geometrySha256": "66d2769a225f4540db6e79ae53c205bb52560a10549293e481058c26c26b4802",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Leg / Back Leg",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1143,
+      "makerReview": null
+    },
+    {
+      "id": "trousers-long-en",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "draft",
+      "actualFamily": "trousers",
+      "lengthFactor": 1.35,
+      "pieceCount": 3,
+      "geometrySha256": "9b35d811f58b903b42a215347513b473a9ea2281ad654997bf77578282142e06",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Leg / Back Leg",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1143,
+      "makerReview": null
+    },
+    {
+      "id": "trousers-long-ar",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "draft",
+      "actualFamily": "trousers",
+      "lengthFactor": 1.35,
+      "pieceCount": 3,
+      "geometrySha256": "a63921c5d1c80f54f30eadb58d31874d26298b8e9e5d517c5b6f5ad4743ae723",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Leg / Back Leg",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1143,
+      "makerReview": null
+    },
+    {
+      "id": "trousers-small-en",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "draft",
+      "actualFamily": "trousers",
+      "lengthFactor": 1,
+      "pieceCount": 3,
+      "geometrySha256": "37c24ee6085211e50d365a8b2a9b0713b7d241d3dc33e7758fc06547b1e45f90",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Leg / Back Leg",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1143,
+      "makerReview": null
+    },
+    {
+      "id": "trousers-small-ar",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "draft",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "draft",
+      "actualFamily": "trousers",
+      "lengthFactor": 1,
+      "pieceCount": 3,
+      "geometrySha256": "45c25167c9241890c8dc0dfd05cd5a7247ee84de791445f420dae9aee7078f3b",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Leg / Back Leg",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1143,
+      "makerReview": null
+    },
+    {
+      "id": "trousers-conflict-en",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "clarify",
+      "status": "fail",
+      "failures": [
+        "missing-clarification",
+        "draft-before-resolution"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "trousers",
+      "lengthFactor": 1,
+      "pieceCount": 3,
+      "geometrySha256": "921415d702eb9289fab1795cab441cb1bb467a54f8149dd6ff16a5da4edfe0bb",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Leg / Back Leg",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1143,
+      "makerReview": null
+    },
+    {
+      "id": "trousers-conflict-ar",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "clarify",
+      "status": "fail",
+      "failures": [
+        "missing-clarification",
+        "draft-before-resolution"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "trousers",
+      "lengthFactor": 1.25,
+      "pieceCount": 3,
+      "geometrySha256": "44a6841d19677b5387337ad47533b16e6b52ea4d4012dc8aed3d10cdeff902fb",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Leg / Back Leg",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "trousers-invalid-en",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "abstain",
+      "status": "fail",
+      "failures": [
+        "missing-abstention",
+        "draft-before-resolution"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "trousers",
+      "lengthFactor": 1.1,
+      "pieceCount": 3,
+      "geometrySha256": "d327056561f2724a2e17e23351d14a7bddd6b40d8a0a05ef9437bac9c03cacda",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Leg / Back Leg",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1143,
+      "makerReview": null
+    },
+    {
+      "id": "trousers-invalid-ar",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text",
+      "split": "development",
+      "expectedDecision": "abstain",
+      "status": "fail",
+      "failures": [
+        "missing-abstention",
+        "draft-before-resolution"
+      ],
+      "actualDecision": "draft",
+      "actualFamily": "trousers",
+      "lengthFactor": 1.1,
+      "pieceCount": 3,
+      "geometrySha256": "020a25a3ea13b950edf63bfc75eaf327e43bfe320551e52fabe710a02a4f6f83",
+      "validator": {
+        "perPiece": [
+          {
+            "label": "Front Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Back Leg",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "n/a — no candidate fold edge"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          },
+          {
+            "label": "Waistband",
+            "checks": {
+              "closedOutline": {
+                "status": "pass"
+              },
+              "selfIntersection": {
+                "status": "pass"
+              },
+              "grainline": {
+                "status": "pass"
+              },
+              "seamAllowance": {
+                "status": "pass"
+              },
+              "foldSymmetry": {
+                "status": "pass",
+                "message": "straight fold edge confirmed (2 points, span 7.0cm)"
+              },
+              "ease": {
+                "status": "deferred",
+                "message": "not applicable — no declared chest-edge hint for this piece (hand-imported, princess-seamed, or an asymmetric front this check does not yet cover)"
+              }
+            }
+          }
+        ],
+        "crossPiece": [
+          {
+            "label": "Front Leg / Back Leg",
+            "verified": false,
+            "checks": {
+              "seamLengthParity": {
+                "status": "pass",
+                "message": "matches within 0.0mm (bounding-box proxy — no declared seam edge)"
+              },
+              "notchAlignment": {
+                "status": "pass",
+                "message": "n/a — no notches on either piece"
+              }
+            }
+          }
+        ],
+        "summary": {
+          "pass": 17,
+          "warn": 0,
+          "fail": 0,
+          "deferred": 3
+        }
+      },
+      "source": "local",
+      "imageSupplied": false,
+      "usedImage": false,
+      "decodedReferences": [],
+      "stages": [
+        "analyzing",
+        "silhouette",
+        "drafting",
+        "done"
+      ],
+      "elapsedMs": 1144,
+      "makerReview": null
+    },
+    {
+      "id": "trousers-front-only-en",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text+image",
+      "split": "development",
+      "expectedDecision": "clarify",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "clarify",
+      "actualFamily": null,
+      "lengthFactor": null,
+      "pieceCount": 0,
+      "geometrySha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "validator": null,
+      "source": "local",
+      "imageSupplied": true,
+      "usedImage": false,
+      "decodedReferences": [
+        {
+          "id": "trousers-front",
+          "width": 200,
+          "height": 220,
+          "bytes": 461
+        }
+      ],
+      "stages": [
+        "analyzing",
+        "clarify"
+      ],
+      "elapsedMs": 8,
+      "makerReview": null
+    },
+    {
+      "id": "trousers-front-only-ar",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text+image",
+      "split": "development",
+      "expectedDecision": "clarify",
+      "status": "pass",
+      "failures": [],
+      "actualDecision": "clarify",
+      "actualFamily": null,
+      "lengthFactor": null,
+      "pieceCount": 0,
+      "geometrySha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "validator": null,
+      "source": "local",
+      "imageSupplied": true,
+      "usedImage": false,
+      "decodedReferences": [
+        {
+          "id": "trousers-front",
+          "width": 200,
+          "height": 220,
+          "bytes": 461
+        }
+      ],
+      "stages": [
+        "analyzing",
+        "clarify"
+      ],
+      "elapsedMs": 4,
+      "makerReview": null
+    }
+  ]
+}

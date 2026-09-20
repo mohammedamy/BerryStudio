@@ -1654,6 +1654,13 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
           onStage: setStage, segment: getSegmentFn(),
         });
       }
+      if(res.decision === "clarify"){
+        $("#aiStatus")?.classList.remove("show");
+        openModal(T("aiReferenceNeeded"), "", true);
+        const message=el("p"); message.textContent=T("aiReferenceUnreadable");
+        $("#genericModal .modal-body").appendChild(message);
+        return;
+      }
       reviewGeneratedPattern(res, doneToastKey);
     } catch(e){ toast(T("importFail")); }
     finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }

@@ -6,6 +6,8 @@
   "description": "Dev/test tooling for the root BerryStudio app. The shipped app itself stays build-free — index.html loads js/*.js directly as ES modules, this file is never referenced by the browser.",
   "scripts": {
     "test": "node --test test/*.test.js",
+    "evaluate:v6": "node scripts/evaluate-v6.mjs",
+    "evaluate:v6:browser": "playwright test --config playwright.evaluation.config.js",
     "test:e2e": "playwright test",
     "test:cloth-gpu": "playwright test --config playwright.cloth.config.js",
     "lint": "oxlint js"

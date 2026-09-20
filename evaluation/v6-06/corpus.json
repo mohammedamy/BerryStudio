@@ -1,0 +1,1858 @@
+{
+  "schemaVersion": 1,
+  "id": "v6-06-initial",
+  "status": "engineering-corpus-awaiting-maker-review",
+  "holdoutPolicy": "Freeze paired translation groups before tuning. Default baseline excludes holdout. These public fixtures are process-held-out, not a secret independent test set.",
+  "references": [
+    {
+      "id": "skirt-front",
+      "path": "evaluation/v6-06/references/skirt-front.svg",
+      "kind": "synthetic-schematic",
+      "view": "front",
+      "rights": {
+        "basis": "Created specifically for this repository evaluation; no external image used",
+        "permittedUse": "Repository evaluation and reproduction",
+        "externalRightsRequired": false
+      },
+      "limitations": [
+        "Not a photograph",
+        "No calibrated scale",
+        "Not maker-reviewed construction ground truth"
+      ],
+      "makerApproval": null
+    },
+    {
+      "id": "skirt-back",
+      "path": "evaluation/v6-06/references/skirt-back.svg",
+      "kind": "synthetic-schematic",
+      "view": "back",
+      "rights": {
+        "basis": "Created specifically for this repository evaluation; no external image used",
+        "permittedUse": "Repository evaluation and reproduction",
+        "externalRightsRequired": false
+      },
+      "limitations": [
+        "Not a photograph",
+        "No calibrated scale",
+        "Not maker-reviewed construction ground truth"
+      ],
+      "makerApproval": null
+    },
+    {
+      "id": "dress-front",
+      "path": "evaluation/v6-06/references/dress-front.svg",
+      "kind": "synthetic-schematic",
+      "view": "front",
+      "rights": {
+        "basis": "Created specifically for this repository evaluation; no external image used",
+        "permittedUse": "Repository evaluation and reproduction",
+        "externalRightsRequired": false
+      },
+      "limitations": [
+        "Not a photograph",
+        "No calibrated scale",
+        "Not maker-reviewed construction ground truth"
+      ],
+      "makerApproval": null
+    },
+    {
+      "id": "dress-back",
+      "path": "evaluation/v6-06/references/dress-back.svg",
+      "kind": "synthetic-schematic",
+      "view": "back",
+      "rights": {
+        "basis": "Created specifically for this repository evaluation; no external image used",
+        "permittedUse": "Repository evaluation and reproduction",
+        "externalRightsRequired": false
+      },
+      "limitations": [
+        "Not a photograph",
+        "No calibrated scale",
+        "Not maker-reviewed construction ground truth"
+      ],
+      "makerApproval": null
+    },
+    {
+      "id": "trousers-front",
+      "path": "evaluation/v6-06/references/trousers-front.svg",
+      "kind": "synthetic-schematic",
+      "view": "front",
+      "rights": {
+        "basis": "Created specifically for this repository evaluation; no external image used",
+        "permittedUse": "Repository evaluation and reproduction",
+        "externalRightsRequired": false
+      },
+      "limitations": [
+        "Not a photograph",
+        "No calibrated scale",
+        "Not maker-reviewed construction ground truth"
+      ],
+      "makerApproval": null
+    },
+    {
+      "id": "trousers-back",
+      "path": "evaluation/v6-06/references/trousers-back.svg",
+      "kind": "synthetic-schematic",
+      "view": "back",
+      "rights": {
+        "basis": "Created specifically for this repository evaluation; no external image used",
+        "permittedUse": "Repository evaluation and reproduction",
+        "externalRightsRequired": false
+      },
+      "limitations": [
+        "Not a photograph",
+        "No calibrated scale",
+        "Not maker-reviewed construction ground truth"
+      ],
+      "makerApproval": null
+    }
+  ],
+  "tasks": [
+    {
+      "id": "skirt-regular-en",
+      "groupId": "skirt-regular",
+      "split": "development",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a regular-length woven skirt with a plain hem.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "skirt",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "regular"
+      ]
+    },
+    {
+      "id": "skirt-regular-ar",
+      "groupId": "skirt-regular",
+      "split": "development",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون تنورة منسوجة بطول عادي وحاشية بسيطة.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "skirt",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "regular"
+      ]
+    },
+    {
+      "id": "skirt-short-en",
+      "groupId": "skirt-short",
+      "split": "holdout",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a short woven skirt, without changing the supplied waist.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "skirt",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "short"
+      ]
+    },
+    {
+      "id": "skirt-short-ar",
+      "groupId": "skirt-short",
+      "split": "holdout",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون تنورة منسوجة قصير دون تغيير قياس الخصر المرفق.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "skirt",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "short"
+      ]
+    },
+    {
+      "id": "skirt-long-en",
+      "groupId": "skirt-long",
+      "split": "development",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a long woven skirt with a plain hem.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "skirt",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "long"
+      ]
+    },
+    {
+      "id": "skirt-long-ar",
+      "groupId": "skirt-long",
+      "split": "development",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون تنورة منسوجة طويل بحاشية بسيطة.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "skirt",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "long"
+      ]
+    },
+    {
+      "id": "skirt-small-en",
+      "groupId": "skirt-small",
+      "split": "development",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a regular-length woven skirt using the supplied XXS measurements.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "XXS",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "skirt",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "small"
+      ]
+    },
+    {
+      "id": "skirt-small-ar",
+      "groupId": "skirt-small",
+      "split": "development",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون تنورة منسوجة بطول عادي باستخدام القياسات المرفقة للمقاس XXS.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "XXS",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "skirt",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "small"
+      ]
+    },
+    {
+      "id": "skirt-large-en",
+      "groupId": "skirt-large",
+      "split": "holdout",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a regular-length woven skirt using the supplied 5XL measurements.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "5XL",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "skirt",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "large"
+      ]
+    },
+    {
+      "id": "skirt-large-ar",
+      "groupId": "skirt-large",
+      "split": "holdout",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون تنورة منسوجة بطول عادي باستخدام القياسات المرفقة للمقاس 5XL.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "5XL",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "skirt",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "large"
+      ]
+    },
+    {
+      "id": "skirt-conflict-en",
+      "groupId": "skirt-conflict",
+      "split": "development",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a woven skirt. My waist is both 70 cm and 90 cm. Ask which is correct before drafting.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {
+          "waist": 70
+        },
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "skirt",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "conflict"
+      ]
+    },
+    {
+      "id": "skirt-conflict-ar",
+      "groupId": "skirt-conflict",
+      "split": "development",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون تنورة منسوجة. قياس خصري 70 سم و90 سم في الوقت نفسه. اسأل عن الصحيح قبل الرسم.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {
+          "waist": 70
+        },
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "skirt",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "conflict"
+      ]
+    },
+    {
+      "id": "skirt-missing-en",
+      "groupId": "skirt-missing",
+      "split": "holdout",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a fitted woven skirt. My waist measurement is missing; ask for it rather than guessing.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": [
+          "waist"
+        ]
+      },
+      "references": [],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "skirt",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "missing"
+      ]
+    },
+    {
+      "id": "skirt-missing-ar",
+      "groupId": "skirt-missing",
+      "split": "holdout",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون تنورة منسوجة ضيق. قياس خصري غير موجود؛ اسأل عنه بدلاً من التخمين.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": [
+          "waist"
+        ]
+      },
+      "references": [],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "skirt",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "missing"
+      ]
+    },
+    {
+      "id": "skirt-invalid-en",
+      "groupId": "skirt-invalid",
+      "split": "development",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a woven skirt with a waist of minus ten centimetres. Do not silently replace this invalid measurement.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {
+          "waist": -10
+        },
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "abstain",
+        "garmentType": "skirt",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "invalid"
+      ]
+    },
+    {
+      "id": "skirt-invalid-ar",
+      "groupId": "skirt-invalid",
+      "split": "development",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون تنورة منسوجة بقياس خصر سالب عشرة سنتيمترات. لا تستبدل هذا القياس غير الصالح بصمت.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {
+          "waist": -10
+        },
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "abstain",
+        "garmentType": "skirt",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "invalid"
+      ]
+    },
+    {
+      "id": "skirt-front-only-en",
+      "groupId": "skirt-front-only",
+      "split": "development",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text+image",
+      "prompt": "Use this front-only schematic to draft a woven skirt. Ask about the missing back and scale before drafting.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [
+        "skirt-front"
+      ],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "skirt",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "front-only"
+      ]
+    },
+    {
+      "id": "skirt-front-only-ar",
+      "groupId": "skirt-front-only",
+      "split": "development",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text+image",
+      "prompt": "استخدم هذا الرسم الأمامي فقط لعمل باترون تنورة منسوجة. اسأل عن الخلف والمقياس المفقودين قبل الرسم.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [
+        "skirt-front"
+      ],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "skirt",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "front-only"
+      ]
+    },
+    {
+      "id": "skirt-paired-en",
+      "groupId": "skirt-paired",
+      "split": "holdout",
+      "family": "skirt",
+      "language": "en",
+      "inputType": "text+image",
+      "prompt": "Use the front/back schematic references to draft a regular-length woven skirt. Ask about any construction details that cannot be inferred.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [
+        "skirt-front",
+        "skirt-back"
+      ],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "skirt",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "paired"
+      ]
+    },
+    {
+      "id": "skirt-paired-ar",
+      "groupId": "skirt-paired",
+      "split": "holdout",
+      "family": "skirt",
+      "language": "ar",
+      "inputType": "text+image",
+      "prompt": "استخدم الرسمين الأمامي والخلفي لعمل باترون تنورة منسوجة بطول عادي. اسأل عن تفاصيل الإنشاء التي لا يمكن استنتاجها.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [
+        "skirt-front",
+        "skirt-back"
+      ],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "skirt",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "paired"
+      ]
+    },
+    {
+      "id": "dress-regular-en",
+      "groupId": "dress-regular",
+      "split": "development",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a regular-length basic woven dress with a plain hem.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "dress",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "regular"
+      ]
+    },
+    {
+      "id": "dress-regular-ar",
+      "groupId": "dress-regular",
+      "split": "development",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون فستان أساسي منسوج بطول عادي وحاشية بسيطة.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "dress",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "regular"
+      ]
+    },
+    {
+      "id": "dress-short-en",
+      "groupId": "dress-short",
+      "split": "holdout",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a short basic woven dress, without changing the supplied waist.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "dress",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "short"
+      ]
+    },
+    {
+      "id": "dress-short-ar",
+      "groupId": "dress-short",
+      "split": "holdout",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون فستان أساسي منسوج قصير دون تغيير قياس الخصر المرفق.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "dress",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "short"
+      ]
+    },
+    {
+      "id": "dress-long-en",
+      "groupId": "dress-long",
+      "split": "development",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a long basic woven dress with a plain hem.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "dress",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "long"
+      ]
+    },
+    {
+      "id": "dress-long-ar",
+      "groupId": "dress-long",
+      "split": "development",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون فستان أساسي منسوج طويل بحاشية بسيطة.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "dress",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "long"
+      ]
+    },
+    {
+      "id": "dress-small-en",
+      "groupId": "dress-small",
+      "split": "development",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a regular-length basic woven dress using the supplied XXS measurements.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "XXS",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "dress",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "small"
+      ]
+    },
+    {
+      "id": "dress-small-ar",
+      "groupId": "dress-small",
+      "split": "development",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون فستان أساسي منسوج بطول عادي باستخدام القياسات المرفقة للمقاس XXS.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "XXS",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "dress",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "small"
+      ]
+    },
+    {
+      "id": "dress-large-en",
+      "groupId": "dress-large",
+      "split": "holdout",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a regular-length basic woven dress using the supplied 5XL measurements.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "5XL",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "dress",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "large"
+      ]
+    },
+    {
+      "id": "dress-large-ar",
+      "groupId": "dress-large",
+      "split": "holdout",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون فستان أساسي منسوج بطول عادي باستخدام القياسات المرفقة للمقاس 5XL.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "5XL",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "dress",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "large"
+      ]
+    },
+    {
+      "id": "dress-conflict-en",
+      "groupId": "dress-conflict",
+      "split": "development",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a basic woven dress. My waist is both 70 cm and 90 cm. Ask which is correct before drafting.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {
+          "waist": 70
+        },
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "dress",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "conflict"
+      ]
+    },
+    {
+      "id": "dress-conflict-ar",
+      "groupId": "dress-conflict",
+      "split": "development",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون فستان أساسي منسوج. قياس خصري 70 سم و90 سم في الوقت نفسه. اسأل عن الصحيح قبل الرسم.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {
+          "waist": 70
+        },
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "dress",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "conflict"
+      ]
+    },
+    {
+      "id": "dress-missing-en",
+      "groupId": "dress-missing",
+      "split": "holdout",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a fitted basic woven dress. My waist measurement is missing; ask for it rather than guessing.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": [
+          "waist"
+        ]
+      },
+      "references": [],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "dress",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "missing"
+      ]
+    },
+    {
+      "id": "dress-missing-ar",
+      "groupId": "dress-missing",
+      "split": "holdout",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون فستان أساسي منسوج ضيق. قياس خصري غير موجود؛ اسأل عنه بدلاً من التخمين.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": [
+          "waist"
+        ]
+      },
+      "references": [],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "dress",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "missing"
+      ]
+    },
+    {
+      "id": "dress-invalid-en",
+      "groupId": "dress-invalid",
+      "split": "development",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a basic woven dress with a waist of minus ten centimetres. Do not silently replace this invalid measurement.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {
+          "waist": -10
+        },
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "abstain",
+        "garmentType": "dress",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "invalid"
+      ]
+    },
+    {
+      "id": "dress-invalid-ar",
+      "groupId": "dress-invalid",
+      "split": "development",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون فستان أساسي منسوج بقياس خصر سالب عشرة سنتيمترات. لا تستبدل هذا القياس غير الصالح بصمت.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {
+          "waist": -10
+        },
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "abstain",
+        "garmentType": "dress",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "invalid"
+      ]
+    },
+    {
+      "id": "dress-front-only-en",
+      "groupId": "dress-front-only",
+      "split": "development",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text+image",
+      "prompt": "Use this front-only schematic to draft a basic woven dress. Ask about the missing back and scale before drafting.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [
+        "dress-front"
+      ],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "dress",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "front-only"
+      ]
+    },
+    {
+      "id": "dress-front-only-ar",
+      "groupId": "dress-front-only",
+      "split": "development",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text+image",
+      "prompt": "استخدم هذا الرسم الأمامي فقط لعمل باترون فستان أساسي منسوج. اسأل عن الخلف والمقياس المفقودين قبل الرسم.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [
+        "dress-front"
+      ],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "dress",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "front-only"
+      ]
+    },
+    {
+      "id": "dress-paired-en",
+      "groupId": "dress-paired",
+      "split": "holdout",
+      "family": "dress",
+      "language": "en",
+      "inputType": "text+image",
+      "prompt": "Use the front/back schematic references to draft a regular-length basic woven dress. Ask about any construction details that cannot be inferred.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [
+        "dress-front",
+        "dress-back"
+      ],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "dress",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "paired"
+      ]
+    },
+    {
+      "id": "dress-paired-ar",
+      "groupId": "dress-paired",
+      "split": "holdout",
+      "family": "dress",
+      "language": "ar",
+      "inputType": "text+image",
+      "prompt": "استخدم الرسمين الأمامي والخلفي لعمل باترون فستان أساسي منسوج بطول عادي. اسأل عن تفاصيل الإنشاء التي لا يمكن استنتاجها.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [
+        "dress-front",
+        "dress-back"
+      ],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "dress",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "paired"
+      ]
+    },
+    {
+      "id": "trousers-regular-en",
+      "groupId": "trousers-regular",
+      "split": "development",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a regular-length simple woven trousers with a plain hem.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "trousers",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "regular"
+      ]
+    },
+    {
+      "id": "trousers-regular-ar",
+      "groupId": "trousers-regular",
+      "split": "development",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون بنطلون بسيط منسوج بطول عادي وحاشية بسيطة.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "trousers",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "regular"
+      ]
+    },
+    {
+      "id": "trousers-short-en",
+      "groupId": "trousers-short",
+      "split": "holdout",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a short simple woven trousers, without changing the supplied waist.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "trousers",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "short"
+      ]
+    },
+    {
+      "id": "trousers-short-ar",
+      "groupId": "trousers-short",
+      "split": "holdout",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون بنطلون بسيط منسوج قصير دون تغيير قياس الخصر المرفق.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "trousers",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "short"
+      ]
+    },
+    {
+      "id": "trousers-long-en",
+      "groupId": "trousers-long",
+      "split": "development",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a long simple woven trousers with a plain hem.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "trousers",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "long"
+      ]
+    },
+    {
+      "id": "trousers-long-ar",
+      "groupId": "trousers-long",
+      "split": "development",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون بنطلون بسيط منسوج طويل بحاشية بسيطة.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "trousers",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "long"
+      ]
+    },
+    {
+      "id": "trousers-small-en",
+      "groupId": "trousers-small",
+      "split": "development",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a regular-length simple woven trousers using the supplied XXS measurements.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "XXS",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "trousers",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "small"
+      ]
+    },
+    {
+      "id": "trousers-small-ar",
+      "groupId": "trousers-small",
+      "split": "development",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون بنطلون بسيط منسوج بطول عادي باستخدام القياسات المرفقة للمقاس XXS.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "XXS",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "trousers",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "small"
+      ]
+    },
+    {
+      "id": "trousers-large-en",
+      "groupId": "trousers-large",
+      "split": "holdout",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a regular-length simple woven trousers using the supplied 5XL measurements.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "5XL",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "trousers",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "large"
+      ]
+    },
+    {
+      "id": "trousers-large-ar",
+      "groupId": "trousers-large",
+      "split": "holdout",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون بنطلون بسيط منسوج بطول عادي باستخدام القياسات المرفقة للمقاس 5XL.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "5XL",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "draft",
+        "garmentType": "trousers",
+        "geometryRequired": true,
+        "makerApproval": null
+      },
+      "tags": [
+        "large"
+      ]
+    },
+    {
+      "id": "trousers-conflict-en",
+      "groupId": "trousers-conflict",
+      "split": "development",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a simple woven trousers. My waist is both 70 cm and 90 cm. Ask which is correct before drafting.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {
+          "waist": 70
+        },
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "trousers",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "conflict"
+      ]
+    },
+    {
+      "id": "trousers-conflict-ar",
+      "groupId": "trousers-conflict",
+      "split": "development",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون بنطلون بسيط منسوج. قياس خصري 70 سم و90 سم في الوقت نفسه. اسأل عن الصحيح قبل الرسم.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {
+          "waist": 70
+        },
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "trousers",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "conflict"
+      ]
+    },
+    {
+      "id": "trousers-missing-en",
+      "groupId": "trousers-missing",
+      "split": "holdout",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a fitted simple woven trousers. My waist measurement is missing; ask for it rather than guessing.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": [
+          "waist"
+        ]
+      },
+      "references": [],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "trousers",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "missing"
+      ]
+    },
+    {
+      "id": "trousers-missing-ar",
+      "groupId": "trousers-missing",
+      "split": "holdout",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون بنطلون بسيط منسوج ضيق. قياس خصري غير موجود؛ اسأل عنه بدلاً من التخمين.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": [
+          "waist"
+        ]
+      },
+      "references": [],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "trousers",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "missing"
+      ]
+    },
+    {
+      "id": "trousers-invalid-en",
+      "groupId": "trousers-invalid",
+      "split": "development",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text",
+      "prompt": "Draft a simple woven trousers with a waist of minus ten centimetres. Do not silently replace this invalid measurement.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {
+          "waist": -10
+        },
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "abstain",
+        "garmentType": "trousers",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "invalid"
+      ]
+    },
+    {
+      "id": "trousers-invalid-ar",
+      "groupId": "trousers-invalid",
+      "split": "development",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text",
+      "prompt": "ارسم باترون بنطلون بسيط منسوج بقياس خصر سالب عشرة سنتيمترات. لا تستبدل هذا القياس غير الصالح بصمت.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {
+          "waist": -10
+        },
+        "missing": []
+      },
+      "references": [],
+      "expected": {
+        "decision": "abstain",
+        "garmentType": "trousers",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "invalid"
+      ]
+    },
+    {
+      "id": "trousers-front-only-en",
+      "groupId": "trousers-front-only",
+      "split": "development",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text+image",
+      "prompt": "Use this front-only schematic to draft a simple woven trousers. Ask about the missing back and scale before drafting.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [
+        "trousers-front"
+      ],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "trousers",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "front-only"
+      ]
+    },
+    {
+      "id": "trousers-front-only-ar",
+      "groupId": "trousers-front-only",
+      "split": "development",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text+image",
+      "prompt": "استخدم هذا الرسم الأمامي فقط لعمل باترون بنطلون بسيط منسوج. اسأل عن الخلف والمقياس المفقودين قبل الرسم.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [
+        "trousers-front"
+      ],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "trousers",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "front-only"
+      ]
+    },
+    {
+      "id": "trousers-paired-en",
+      "groupId": "trousers-paired",
+      "split": "holdout",
+      "family": "trousers",
+      "language": "en",
+      "inputType": "text+image",
+      "prompt": "Use the front/back schematic references to draft a regular-length simple woven trousers. Ask about any construction details that cannot be inferred.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [
+        "trousers-front",
+        "trousers-back"
+      ],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "trousers",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "paired"
+      ]
+    },
+    {
+      "id": "trousers-paired-ar",
+      "groupId": "trousers-paired",
+      "split": "holdout",
+      "family": "trousers",
+      "language": "ar",
+      "inputType": "text+image",
+      "prompt": "استخدم الرسمين الأمامي والخلفي لعمل باترون بنطلون بسيط منسوج بطول عادي. اسأل عن تفاصيل الإنشاء التي لا يمكن استنتاجها.",
+      "measurementSource": "synthetic standard-size fixture, not a person",
+      "measurements": {
+        "category": "women",
+        "size": "M",
+        "standard": "intl",
+        "units": "cm",
+        "overrides": {},
+        "missing": []
+      },
+      "references": [
+        "trousers-front",
+        "trousers-back"
+      ],
+      "expected": {
+        "decision": "clarify",
+        "garmentType": "trousers",
+        "geometryRequired": false,
+        "makerApproval": null
+      },
+      "tags": [
+        "paired"
+      ]
+    }
+  ]
+}

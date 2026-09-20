@@ -200,6 +200,29 @@ test('buildRomper sleeve honors the same gather/pleat/tuck technique as buildTop
   assert.ok(Math.abs(sleeveCapWidth(built) - computeGatherWidth(finishedCapW, 1.5)) < 1e-9);
 });
 
+// ---------- V6-06: development length-intent regression ----------
+test('explicit standard garment lengths override image proportions for spaced and hyphenated cues', () => {
+  for (const garment of ['skirt', 'dress', 'trousers']) {
+    for (const cue of ['regular length', 'regular-length', 'medium length', 'medium-length', 'knee length', 'knee-length', 'طول عادي', 'طول متوسط']) {
+      const style = AIGen.deriveStyle({
+        prompt: `${cue} ${garment}`, category: 'women',
+        metrics: { ok: true, heightFrac: 0.95 }, imageDataURL: 'test-image',
+      });
+      assert.equal(style.lengthF, 1, `${cue} ${garment}`);
+    }
+  }
+});
+
+test('standard length cues preserve sleeve masking and require complete English words', () => {
+  const derive = prompt => AIGen.deriveStyle({
+    prompt, category: 'women', metrics: { ok: true, heightFrac: 0.95 }, imageDataURL: 'test-image',
+  });
+  assert.equal(derive('regular-length dress with long sleeves').lengthF, 1);
+  assert.equal(derive('medium-length dress with short sleeves').lengthF, 1);
+  assert.equal(derive('irregular-length dress').lengthF, 1.3);
+  assert.equal(derive('regular lengthwise stripes on a dress').lengthF, 1.3);
+});
+
 // ---------- WP-39: real segmentation — sampleMatte() ----------
 // The one piece of new logic in the segmentation path that's pure and
 // DOM-independent (analyzeImage() itself needs a real Image/canvas, so

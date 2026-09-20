@@ -399,6 +399,8 @@ export const I18N = {
     specFallbackRateLimit: "Your AI provider is rate-limiting requests right now — showing the offline-analysis pattern instead.",
     specFallbackNetwork: "Couldn't reach your AI provider (network issue) — showing the offline-analysis pattern instead.",
     imageUnreadableNote: "Couldn't clearly read your photo — used your description/defaults instead.",
+    aiReferenceNeeded: "A clearer reference is needed",
+    aiReferenceUnreadable: "We couldn't identify a clear garment silhouette in this image. No draft was created. Upload a clearer image with more contrast, or remove the image and generate from your description. Your current pattern is unchanged.",
     // provenance / click-to-override (WP-4)
     provenanceVision: "vision", provenancePixel: "pixel analysis", provenancePrompt: "prompt",
     provenanceHeuristic: "heuristic", provenanceSpec: "AI", provenanceUserOverride: "your edit",
@@ -856,6 +858,8 @@ export const I18N = {
     specFallbackRateLimit: "مزوّد الذكاء الاصطناعي يحدّ من الطلبات حاليًا — يتم عرض نمط التحليل دون إنترنت بدلاً من ذلك.",
     specFallbackNetwork: "تعذّر الوصول إلى مزوّد الذكاء الاصطناعي (مشكلة في الشبكة) — يتم عرض نمط التحليل دون إنترنت بدلاً من ذلك.",
     imageUnreadableNote: "تعذّرت قراءة صورتك بوضوح — تم استخدام وصفك أو الإعدادات الافتراضية بدلاً من ذلك.",
+    aiReferenceNeeded: "نحتاج إلى صورة مرجعية أوضح",
+    aiReferenceUnreadable: "تعذّر تحديد شكل الثوب بوضوح في هذه الصورة. لم يتم إنشاء مسودة. ارفع صورة أوضح بتباين أكبر، أو احذف الصورة وأنشئ الباترون من وصفك. لم يتغير الباترون الحالي.",
     // المصدر ونسبة الثقة / التصحيح بالنقر (WP-4)
     provenanceVision: "رؤية", provenancePixel: "تحليل البكسل", provenancePrompt: "الوصف النصي",
     provenanceHeuristic: "تخمين", provenanceSpec: "ذكاء اصطناعي", provenanceUserOverride: "تعديلك",

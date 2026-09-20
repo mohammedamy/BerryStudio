@@ -23,6 +23,36 @@ async function review(page) {
 }
 const design = page => page.evaluate(()=>window.Canvas.snapshotState());
 
+for (const lang of ['en','ar']) {
+  test(`${lang}: unreadable reference requests clarification and preserves the draft until explicit text-only retry`,async({page})=>{
+    await start(page);
+    if(lang==='ar') await page.locator('#langBtn').click();
+    const before=await design(page);
+    await page.locator('#railTabs button[data-pane="ai"]').click();
+    const pane=page.locator('.rail-pane[data-pane="ai"]');
+    await page.locator('#aiPrompt').fill('regular-length woven skirt');
+    const picker=page.waitForEvent('filechooser');
+    await pane.getByRole('button',{name:lang==='en'?'Upload inspiration image':'رفع صورة مرجعية',exact:true}).click();
+    await (await picker).setFiles('evaluation/v6-06/references/skirt-front.svg');
+    const preview=pane.locator(':scope > .ai-preview');
+    await expect(preview).toHaveClass(/show/);
+    const generate=pane.getByRole('button',{name:lang==='en'?'Generate Pattern':'توليد الباترون',exact:true});
+    await generate.click();
+    await expect(page.getByRole('heading',{name:lang==='en'?'A clearer reference is needed':'نحتاج إلى صورة مرجعية أوضح'})).toBeVisible();
+    await expect(page.locator('#genericModal .modal-body')).toContainText(lang==='en'?'No draft was created.':'لم يتم إنشاء مسودة.');
+    expect(await design(page)).toEqual(before);
+    await expect(page.locator('.project-tab')).toHaveCount(1);
+    await expect(generate).toBeEnabled();
+    await page.locator('[data-close="#genericModal"]').click();
+    await expect(page.locator('#aiPrompt')).toHaveValue('regular-length woven skirt');
+    await preview.locator('.ai-x').click();
+    await generate.click();
+    await expect(page.locator('#genericModal')).toHaveClass(/show/);
+    await expect(page.locator('#genericModal svg')).toBeVisible();
+    expect(await design(page)).toEqual(before);
+  });
+}
+
 test('preview/reject, accept/undo/redo and stale/locked rejection with CSP enforced',async({page})=>{
   await start(page);
   const original=await design(page);

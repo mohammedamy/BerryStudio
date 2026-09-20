@@ -1,0 +1,5644 @@
+{
+  "schemaVersion": 1,
+  "corpus": "v6-06-initial",
+  "scope": "Raw generated geometry for maker inspection; not approved patterns or positioned import projects.",
+  "sourceHashes": {
+    "evaluation/v6-06/corpus.json": "5f12b5df3503ff2f350f69593386eb84d5c0c851b2f4c10025a3a07cb5ecb67e",
+    "evaluation/browser/harness.html": "5c17953aa9b02974ba94065bab6784e3ab007f8f5dccef90c5323e88029c56d5",
+    "evaluation/browser/harness.js": "f43f08166519f762cf66bd18c1871a98f674a34125ecb84bd4b19d3b7377d5e7",
+    "evaluation/browser/development.spec.js": "22a25d5f977ab12195f386b2d27631a493019ee834a057c0749c9b60d2c501ae",
+    "playwright.evaluation.config.js": "55eb034a5aa7e5a9935c030bb0c567e451aaf1d8df46d3f0f0d0fe58196fe885",
+    "scripts/serve-evaluation.mjs": "1d53ec4577425c4b6f3f5f91edcafca66660ca14b0259deff4f44c12520b0a7b",
+    "scripts/evaluation-core.mjs": "3392cc455796e2c081d2aa3c406b360ed0b978901fd5ba06ad465eb10531499b",
+    "js/ai.js": "5738fe7d05bf86d51125bbc614ce4e3704d4fb0d6c05aa37e5609eec02c4cae1",
+    "js/data.js": "1c2232807c045d7023a3af9841705b86ef345b92d8873c5b7786f75c4cbef03d",
+    "js/pleats.js": "40567554b7964be70cf4b57292e6cc4abc02d53de564932f7a24b04b1f1df390",
+    "js/validate.js": "81ae5c780b8fbb1999718d9f16bffa8e7f852f811528b02dddb5ca895f500f87",
+    "js/geometry.js": "5ad73ee1b889ef5cded089b0f04b9a8118a390468b55ae62b46823fb924966ad",
+    "evaluation/v6-06/references/skirt-front.svg": "d4e8c5d5e3109b729824d2e6deffca798b7026c38f4f6eac421ea30dd4f238b6",
+    "evaluation/v6-06/references/skirt-back.svg": "1005ed12e61b2939b204703942445b692d84f39ad079a0d68a33261efad32f9a",
+    "evaluation/v6-06/references/dress-front.svg": "061d92aabd01b410d4e9c48a1b0b287dee6e4224c693e020c86f9e99f24d20e0",
+    "evaluation/v6-06/references/dress-back.svg": "9df50de4668fd4464494d67c55bc667575b2782477340cb6f06ac9c3fab570da",
+    "evaluation/v6-06/references/trousers-front.svg": "608e799270e3b45041e27705249c8b210f7de0e0831a5af74bc28aa681eb2e0d",
+    "evaluation/v6-06/references/trousers-back.svg": "34a6dbacf01576be66ef32dea3a09251f83974f3d434633117a1b65b49c4a8c3"
+  },
+  "outputs": [
+    {
+      "taskId": "skirt-regular-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Skirt",
+            "ar": "تنورة أمامية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              22.88,
+              55.575
+            ],
+            [
+              11.44,
+              60.255
+            ],
+            [
+              0,
+              55.575
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              5
+            ],
+            [
+              11.44,
+              53.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Skirt",
+            "ar": "تنورة خلفية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              22.88,
+              55.575
+            ],
+            [
+              11.44,
+              60.255
+            ],
+            [
+              0,
+              55.575
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              5
+            ],
+            [
+              11.44,
+              53.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              65.6,
+              0
+            ],
+            [
+              65.6,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              61.6,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "skirt-regular-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Skirt",
+            "ar": "تنورة أمامية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              29.120000000000005,
+              0
+            ],
+            [
+              29.120000000000005,
+              46.8
+            ],
+            [
+              -11.648000000000003,
+              46.8
+            ]
+          ],
+          "grain": [
+            [
+              14.560000000000002,
+              5
+            ],
+            [
+              14.560000000000002,
+              41.8
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Skirt",
+            "ar": "تنورة خلفية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              29.120000000000005,
+              0
+            ],
+            [
+              29.120000000000005,
+              46.8
+            ],
+            [
+              0,
+              46.8
+            ]
+          ],
+          "grain": [
+            [
+              14.560000000000002,
+              5
+            ],
+            [
+              14.560000000000002,
+              41.8
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              82.4,
+              0
+            ],
+            [
+              82.4,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              78.4,
+              2
+            ]
+          ],
+          "role": "waistband"
+        },
+        {
+          "name": {
+            "en": "Tie Sash",
+            "ar": "حزام ربط"
+          },
+          "desc": {
+            "en": "Self-fabric sash for the wrap closure.",
+            "ar": "حزام من نفس القماش لإغلاق التنورة الملفوفة."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              7,
+              0
+            ],
+            [
+              7,
+              90
+            ],
+            [
+              0,
+              90
+            ]
+          ],
+          "grain": [
+            [
+              3.5,
+              8
+            ],
+            [
+              3.5,
+              82
+            ]
+          ],
+          "role": "wrap-tie"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "skirt-long-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Skirt",
+            "ar": "تنورة أمامية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              34.32,
+              56.862
+            ],
+            [
+              -9.152,
+              56.862
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              5
+            ],
+            [
+              11.44,
+              58.18
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Skirt",
+            "ar": "تنورة خلفية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              34.32,
+              66.9708
+            ],
+            [
+              0,
+              66.9708
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              5
+            ],
+            [
+              11.44,
+              58.18
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              65.6,
+              0
+            ],
+            [
+              65.6,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              61.6,
+              2
+            ]
+          ],
+          "role": "waistband"
+        },
+        {
+          "name": {
+            "en": "Tie Sash",
+            "ar": "حزام ربط"
+          },
+          "desc": {
+            "en": "Self-fabric sash for the wrap closure.",
+            "ar": "حزام من نفس القماش لإغلاق التنورة الملفوفة."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              7,
+              0
+            ],
+            [
+              7,
+              90
+            ],
+            [
+              0,
+              90
+            ]
+          ],
+          "grain": [
+            [
+              3.5,
+              8
+            ],
+            [
+              3.5,
+              82
+            ]
+          ],
+          "role": "wrap-tie"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "skirt-long-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Skirt",
+            "ar": "تنورة أمامية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              22.88,
+              60.021
+            ],
+            [
+              11.44,
+              65.0754
+            ],
+            [
+              0,
+              60.021
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              5
+            ],
+            [
+              11.44,
+              58.18
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Skirt",
+            "ar": "تنورة خلفية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              22.88,
+              60.021
+            ],
+            [
+              11.44,
+              65.0754
+            ],
+            [
+              0,
+              60.021
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              5
+            ],
+            [
+              11.44,
+              58.18
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              65.6,
+              0
+            ],
+            [
+              65.6,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              61.6,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "skirt-small-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Skirt",
+            "ar": "تنورة أمامية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              23,
+              0
+            ],
+            [
+              23,
+              51.29999999999999
+            ],
+            [
+              11.5,
+              55.61999999999999
+            ],
+            [
+              0,
+              51.29999999999999
+            ]
+          ],
+          "grain": [
+            [
+              11.5,
+              5
+            ],
+            [
+              11.5,
+              48.99999999999999
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Skirt",
+            "ar": "تنورة خلفية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              23,
+              0
+            ],
+            [
+              23,
+              51.29999999999999
+            ],
+            [
+              11.5,
+              55.61999999999999
+            ],
+            [
+              0,
+              51.29999999999999
+            ]
+          ],
+          "grain": [
+            [
+              11.5,
+              5
+            ],
+            [
+              11.5,
+              48.99999999999999
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              62,
+              0
+            ],
+            [
+              62,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              58,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "skirt-small-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Skirt",
+            "ar": "تنورة أمامية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              25.76,
+              0
+            ],
+            [
+              25.76,
+              38.879999999999995
+            ],
+            [
+              0,
+              38.879999999999995
+            ]
+          ],
+          "grain": [
+            [
+              12.88,
+              5
+            ],
+            [
+              12.88,
+              38.199999999999996
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Skirt",
+            "ar": "تنورة خلفية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              25.76,
+              0
+            ],
+            [
+              25.76,
+              45.791999999999994
+            ],
+            [
+              0,
+              45.791999999999994
+            ]
+          ],
+          "grain": [
+            [
+              12.88,
+              5
+            ],
+            [
+              12.88,
+              38.199999999999996
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              68.96000000000001,
+              0
+            ],
+            [
+              68.96000000000001,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              64.96000000000001,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "skirt-conflict-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Skirt",
+            "ar": "تنورة أمامية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              29.120000000000005,
+              0
+            ],
+            [
+              29.120000000000005,
+              55.575
+            ],
+            [
+              14.560000000000002,
+              60.255
+            ],
+            [
+              0,
+              55.575
+            ]
+          ],
+          "grain": [
+            [
+              14.560000000000002,
+              5
+            ],
+            [
+              14.560000000000002,
+              53.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Skirt",
+            "ar": "تنورة خلفية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              29.120000000000005,
+              0
+            ],
+            [
+              29.120000000000005,
+              55.575
+            ],
+            [
+              14.560000000000002,
+              60.255
+            ],
+            [
+              0,
+              55.575
+            ]
+          ],
+          "grain": [
+            [
+              14.560000000000002,
+              5
+            ],
+            [
+              14.560000000000002,
+              53.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              82.4,
+              0
+            ],
+            [
+              82.4,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              78.4,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "skirt-conflict-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Skirt",
+            "ar": "تنورة أمامية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              28.599999999999998,
+              58.5
+            ],
+            [
+              0,
+              58.5
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              5
+            ],
+            [
+              11.44,
+              53.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Skirt",
+            "ar": "تنورة خلفية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              28.599999999999998,
+              58.5
+            ],
+            [
+              0,
+              58.5
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              5
+            ],
+            [
+              11.44,
+              53.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              65.6,
+              0
+            ],
+            [
+              65.6,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              61.6,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "skirt-invalid-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Skirt",
+            "ar": "تنورة أمامية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              26,
+              0
+            ],
+            [
+              39,
+              51.480000000000004
+            ],
+            [
+              0,
+              51.480000000000004
+            ]
+          ],
+          "grain": [
+            [
+              13,
+              5
+            ],
+            [
+              13,
+              46.480000000000004
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Skirt",
+            "ar": "تنورة خلفية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              26,
+              0
+            ],
+            [
+              39,
+              51.480000000000004
+            ],
+            [
+              0,
+              51.480000000000004
+            ]
+          ],
+          "grain": [
+            [
+              13,
+              5
+            ],
+            [
+              13,
+              46.480000000000004
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              -6,
+              0
+            ],
+            [
+              -6,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              -10,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "skirt-invalid-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Skirt",
+            "ar": "تنورة أمامية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              22.88,
+              39.779999999999994
+            ],
+            [
+              0,
+              39.779999999999994
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              5
+            ],
+            [
+              11.44,
+              34.779999999999994
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Skirt",
+            "ar": "تنورة خلفية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              22.88,
+              39.779999999999994
+            ],
+            [
+              0,
+              39.779999999999994
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              5
+            ],
+            [
+              11.44,
+              34.779999999999994
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              -4.800000000000001,
+              0
+            ],
+            [
+              -4.800000000000001,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              -8.8,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "skirt-front-only-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Skirt",
+            "ar": "تنورة أمامية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              26,
+              0
+            ],
+            [
+              32.5,
+              46.8
+            ],
+            [
+              0,
+              46.8
+            ]
+          ],
+          "grain": [
+            [
+              13,
+              5
+            ],
+            [
+              13,
+              41.8
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Skirt",
+            "ar": "تنورة خلفية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              26,
+              0
+            ],
+            [
+              32.5,
+              46.8
+            ],
+            [
+              0,
+              46.8
+            ]
+          ],
+          "grain": [
+            [
+              13,
+              5
+            ],
+            [
+              13,
+              41.8
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              74,
+              0
+            ],
+            [
+              74,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              70,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "skirt-front-only-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Skirt",
+            "ar": "تنورة أمامية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              26,
+              0
+            ],
+            [
+              26,
+              55.575
+            ],
+            [
+              13,
+              60.255
+            ],
+            [
+              0,
+              55.575
+            ]
+          ],
+          "grain": [
+            [
+              13,
+              5
+            ],
+            [
+              13,
+              53.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Skirt",
+            "ar": "تنورة خلفية"
+          },
+          "desc": {
+            "en": "Generated skirt panel — flare and hem read from the reference.",
+            "ar": "بنل تنورة مولّد — الاتساع والحاشية من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              26,
+              0
+            ],
+            [
+              26,
+              55.575
+            ],
+            [
+              13,
+              60.255
+            ],
+            [
+              0,
+              55.575
+            ]
+          ],
+          "grain": [
+            [
+              13,
+              5
+            ],
+            [
+              13,
+              53.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              74,
+              0
+            ],
+            [
+              74,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              70,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "dress-regular-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Dress Front",
+            "ar": "مقدمة الفستان"
+          },
+          "desc": {
+            "en": "Generated front — neckline, hem and fit read from the reference.",
+            "ar": "قطعة أمامية مولّدة — فتحة الرقبة والحاشية والقصّة من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              8.983360000000001
+            ],
+            [
+              4.87872,
+              1
+            ],
+            [
+              21.12,
+              3
+            ],
+            [
+              22.12,
+              20.5
+            ],
+            [
+              19.04,
+              41
+            ],
+            [
+              23.88,
+              77.85499999999999
+            ],
+            [
+              28.599999999999998,
+              128.75
+            ],
+            [
+              0,
+              128.75
+            ]
+          ],
+          "darts": [
+            [
+              [
+                9.02,
+                32
+              ],
+              [
+                7.02,
+                41
+              ],
+              [
+                11.02,
+                41
+              ]
+            ]
+          ],
+          "notches": [
+            [
+              21.12,
+              3
+            ],
+            [
+              19.04,
+              41
+            ]
+          ],
+          "grain": [
+            [
+              10.56,
+              9
+            ],
+            [
+              10.56,
+              122.75
+            ]
+          ],
+          "role": "bodice-front-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Dress Back",
+            "ar": "ظهر الفستان"
+          },
+          "desc": {
+            "en": "Generated back panel — mirrors the front block.",
+            "ar": "قطعة خلفية مولّدة — تقابل القطعة الأمامية."
+          },
+          "outline": [
+            [
+              0,
+              4.9848
+            ],
+            [
+              4.4352,
+              1.5
+            ],
+            [
+              21.12,
+              3.5
+            ],
+            [
+              22.12,
+              20.5
+            ],
+            [
+              18.54,
+              41
+            ],
+            [
+              23.38,
+              77.85499999999999
+            ],
+            [
+              28.599999999999998,
+              128.75
+            ],
+            [
+              0,
+              128.75
+            ]
+          ],
+          "darts": [
+            [
+              [
+                9.02,
+                32
+              ],
+              [
+                7.02,
+                41
+              ],
+              [
+                11.02,
+                41
+              ]
+            ]
+          ],
+          "notches": [
+            [
+              21.12,
+              3.5
+            ]
+          ],
+          "grain": [
+            [
+              2,
+              9
+            ],
+            [
+              2,
+              122.75
+            ]
+          ],
+          "role": "bodice-back-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Sleeve",
+            "ar": "كم"
+          },
+          "desc": {
+            "en": "Generated sleeve — length and width read from the reference.",
+            "ar": "كم مولّد — الطول والاتساع من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              8.049999999999999,
+              -6.8999999999999995
+            ],
+            [
+              16.099999999999998,
+              0
+            ],
+            [
+              15.099999999999998,
+              26.1
+            ],
+            [
+              1,
+              26.1
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              8.049999999999999,
+              -6.8999999999999995
+            ]
+          ],
+          "grain": [
+            [
+              8.049999999999999,
+              4
+            ],
+            [
+              8.049999999999999,
+              22.1
+            ]
+          ],
+          "role": "sleeve",
+          "bilateral": true
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "dress-regular-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Dress Front",
+            "ar": "مقدمة الفستان"
+          },
+          "desc": {
+            "en": "Generated front — neckline, hem and fit read from the reference.",
+            "ar": "قطعة أمامية مولّدة — فتحة الرقبة والحاشية والقصّة من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              3
+            ],
+            [
+              7.53984,
+              1
+            ],
+            [
+              21.12,
+              3
+            ],
+            [
+              22.12,
+              20.5
+            ],
+            [
+              19.04,
+              41
+            ],
+            [
+              23.88,
+              67.03999999999999
+            ],
+            [
+              22.88,
+              92.7
+            ],
+            [
+              0,
+              92.7
+            ]
+          ],
+          "darts": [
+            [
+              [
+                9.02,
+                32
+              ],
+              [
+                7.02,
+                41
+              ],
+              [
+                11.02,
+                41
+              ]
+            ]
+          ],
+          "notches": [
+            [
+              21.12,
+              3
+            ],
+            [
+              19.04,
+              41
+            ]
+          ],
+          "grain": [
+            [
+              10.56,
+              9
+            ],
+            [
+              10.56,
+              97
+            ]
+          ],
+          "role": "bodice-front-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Dress Back",
+            "ar": "ظهر الفستان"
+          },
+          "desc": {
+            "en": "Generated back panel — mirrors the front block.",
+            "ar": "قطعة خلفية مولّدة — تقابل القطعة الأمامية."
+          },
+          "outline": [
+            [
+              0,
+              3.5
+            ],
+            [
+              5.3856,
+              1.5
+            ],
+            [
+              21.12,
+              3.5
+            ],
+            [
+              22.12,
+              20.5
+            ],
+            [
+              18.54,
+              41
+            ],
+            [
+              23.38,
+              67.03999999999999
+            ],
+            [
+              22.88,
+              109.18
+            ],
+            [
+              0,
+              109.18
+            ]
+          ],
+          "darts": [
+            [
+              [
+                9.02,
+                32
+              ],
+              [
+                7.02,
+                41
+              ],
+              [
+                11.02,
+                41
+              ]
+            ]
+          ],
+          "notches": [
+            [
+              21.12,
+              3.5
+            ]
+          ],
+          "grain": [
+            [
+              2,
+              9
+            ],
+            [
+              2,
+              97
+            ]
+          ],
+          "role": "bodice-back-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Sleeve",
+            "ar": "كم"
+          },
+          "desc": {
+            "en": "Generated sleeve — length and width read from the reference.",
+            "ar": "كم مولّد — الطول والاتساع من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              7,
+              -6
+            ],
+            [
+              14,
+              0
+            ],
+            [
+              13,
+              58
+            ],
+            [
+              1,
+              58
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              7,
+              -6
+            ]
+          ],
+          "grain": [
+            [
+              7,
+              4
+            ],
+            [
+              7,
+              54
+            ]
+          ],
+          "role": "sleeve",
+          "bilateral": true
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "dress-long-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Dress Front",
+            "ar": "مقدمة الفستان"
+          },
+          "desc": {
+            "en": "Generated front — neckline, hem and fit read from the reference.",
+            "ar": "قطعة أمامية مولّدة — فتحة الرقبة والحاشية والقصّة من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              12.088000000000001
+            ],
+            [
+              3.024,
+              -1
+            ],
+            [
+              24,
+              3
+            ],
+            [
+              25,
+              20.5
+            ],
+            [
+              21.5,
+              41
+            ],
+            [
+              27,
+              82.18100000000001
+            ],
+            [
+              26,
+              139.05
+            ],
+            [
+              0,
+              139.05
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              24,
+              3
+            ],
+            [
+              21.5,
+              41
+            ]
+          ],
+          "grain": [
+            [
+              12,
+              9
+            ],
+            [
+              12,
+              133.05
+            ]
+          ],
+          "role": "bodice-front-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Dress Back",
+            "ar": "ظهر الفستان"
+          },
+          "desc": {
+            "en": "Generated back panel — mirrors the front block.",
+            "ar": "قطعة خلفية مولّدة — تقابل القطعة الأمامية."
+          },
+          "outline": [
+            [
+              0,
+              9.42
+            ],
+            [
+              2.1599999999999997,
+              -0.5
+            ],
+            [
+              24,
+              3.5
+            ],
+            [
+              25,
+              20.5
+            ],
+            [
+              21,
+              41
+            ],
+            [
+              26.5,
+              82.18100000000001
+            ],
+            [
+              26,
+              139.05
+            ],
+            [
+              0,
+              139.05
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              24,
+              3.5
+            ]
+          ],
+          "grain": [
+            [
+              2,
+              9
+            ],
+            [
+              2,
+              133.05
+            ]
+          ],
+          "role": "bodice-back-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Sleeve",
+            "ar": "كم"
+          },
+          "desc": {
+            "en": "Generated sleeve — length and width read from the reference.",
+            "ar": "كم مولّد — الطول والاتساع من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              7,
+              -6
+            ],
+            [
+              14,
+              0
+            ],
+            [
+              13,
+              26.1
+            ],
+            [
+              1,
+              26.1
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              7,
+              -6
+            ]
+          ],
+          "grain": [
+            [
+              7,
+              4
+            ],
+            [
+              7,
+              22.1
+            ]
+          ],
+          "role": "sleeve",
+          "bilateral": true
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "dress-long-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Dress Front",
+            "ar": "مقدمة الفستان"
+          },
+          "desc": {
+            "en": "Generated front — neckline, hem and fit read from the reference.",
+            "ar": "قطعة أمامية مولّدة — فتحة الرقبة والحاشية والقصّة من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              8.983360000000001
+            ],
+            [
+              4.87872,
+              1
+            ],
+            [
+              21.12,
+              3
+            ],
+            [
+              22.12,
+              20.5
+            ],
+            [
+              19.04,
+              41
+            ],
+            [
+              23.88,
+              82.18100000000001
+            ],
+            [
+              22.88,
+              132.09750000000003
+            ],
+            [
+              11.44,
+              143.22150000000002
+            ],
+            [
+              0,
+              132.09750000000003
+            ]
+          ],
+          "darts": [
+            [
+              [
+                9.02,
+                32
+              ],
+              [
+                7.02,
+                41
+              ],
+              [
+                11.02,
+                41
+              ]
+            ]
+          ],
+          "notches": [
+            [
+              21.12,
+              3
+            ],
+            [
+              19.04,
+              41
+            ]
+          ],
+          "grain": [
+            [
+              10.56,
+              9
+            ],
+            [
+              10.56,
+              133.05
+            ]
+          ],
+          "role": "bodice-front-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Dress Back",
+            "ar": "ظهر الفستان"
+          },
+          "desc": {
+            "en": "Generated back panel — mirrors the front block.",
+            "ar": "قطعة خلفية مولّدة — تقابل القطعة الأمامية."
+          },
+          "outline": [
+            [
+              0,
+              4.9848
+            ],
+            [
+              4.4352,
+              1.5
+            ],
+            [
+              21.12,
+              3.5
+            ],
+            [
+              22.12,
+              20.5
+            ],
+            [
+              18.54,
+              41
+            ],
+            [
+              23.38,
+              82.18100000000001
+            ],
+            [
+              22.88,
+              132.09750000000003
+            ],
+            [
+              11.44,
+              143.22150000000002
+            ],
+            [
+              0,
+              132.09750000000003
+            ]
+          ],
+          "darts": [
+            [
+              [
+                9.02,
+                32
+              ],
+              [
+                7.02,
+                41
+              ],
+              [
+                11.02,
+                41
+              ]
+            ]
+          ],
+          "notches": [
+            [
+              21.12,
+              3.5
+            ]
+          ],
+          "grain": [
+            [
+              2,
+              9
+            ],
+            [
+              2,
+              133.05
+            ]
+          ],
+          "role": "bodice-back-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Sleeve",
+            "ar": "كم"
+          },
+          "desc": {
+            "en": "Generated sleeve — length and width read from the reference.",
+            "ar": "كم مولّد — الطول والاتساع من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              7,
+              -6
+            ],
+            [
+              14,
+              0
+            ],
+            [
+              13,
+              46.400000000000006
+            ],
+            [
+              1,
+              46.400000000000006
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              7,
+              -6
+            ]
+          ],
+          "grain": [
+            [
+              7,
+              4
+            ],
+            [
+              7,
+              42.400000000000006
+            ]
+          ],
+          "role": "sleeve",
+          "bilateral": true
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "dress-small-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Dress Front",
+            "ar": "مقدمة الفستان"
+          },
+          "desc": {
+            "en": "Generated front — neckline, hem and fit read from the reference.",
+            "ar": "قطعة أمامية مولّدة — فتحة الرقبة والحاشية والقصّة من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              11.866240000000001
+            ],
+            [
+              2.9635200000000004,
+              -1
+            ],
+            [
+              23.520000000000003,
+              3
+            ],
+            [
+              24.520000000000003,
+              19
+            ],
+            [
+              20.6,
+              38
+            ],
+            [
+              26.76,
+              64.03999999999999
+            ],
+            [
+              32.2,
+              100
+            ],
+            [
+              0,
+              100
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              23.520000000000003,
+              3
+            ],
+            [
+              20.6,
+              38
+            ]
+          ],
+          "grain": [
+            [
+              11.760000000000002,
+              9
+            ],
+            [
+              11.760000000000002,
+              94
+            ]
+          ],
+          "role": "bodice-front-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Dress Back",
+            "ar": "ظهر الفستان"
+          },
+          "desc": {
+            "en": "Generated back panel — mirrors the front block.",
+            "ar": "قطعة خلفية مولّدة — تقابل القطعة الأمامية."
+          },
+          "outline": [
+            [
+              0,
+              9.261600000000001
+            ],
+            [
+              2.1168,
+              -0.5
+            ],
+            [
+              23.520000000000003,
+              3.5
+            ],
+            [
+              24.520000000000003,
+              19
+            ],
+            [
+              20.1,
+              38
+            ],
+            [
+              26.26,
+              64.03999999999999
+            ],
+            [
+              32.2,
+              100
+            ],
+            [
+              0,
+              100
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              23.520000000000003,
+              3.5
+            ]
+          ],
+          "grain": [
+            [
+              2,
+              9
+            ],
+            [
+              2,
+              94
+            ]
+          ],
+          "role": "bodice-back-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Sleeve",
+            "ar": "كم"
+          },
+          "desc": {
+            "en": "Generated sleeve — length and width read from the reference.",
+            "ar": "كم مولّد — الطول والاتساع من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              7.014999999999999,
+              -6.8999999999999995
+            ],
+            [
+              14.029999999999998,
+              0
+            ],
+            [
+              13.029999999999998,
+              69.55
+            ],
+            [
+              1,
+              69.55
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              7.014999999999999,
+              -6.8999999999999995
+            ]
+          ],
+          "grain": [
+            [
+              7.014999999999999,
+              4
+            ],
+            [
+              7.014999999999999,
+              65.55
+            ]
+          ],
+          "role": "sleeve",
+          "bilateral": true
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "dress-small-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Dress Front",
+            "ar": "مقدمة الفستان"
+          },
+          "desc": {
+            "en": "Generated front — neckline, hem and fit read from the reference.",
+            "ar": "قطعة أمامية مولّدة — فتحة الرقبة والحاشية والقصّة من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              3
+            ],
+            [
+              6.597359999999999,
+              1
+            ],
+            [
+              18.48,
+              3
+            ],
+            [
+              19.48,
+              19
+            ],
+            [
+              16.4,
+              38
+            ],
+            [
+              21.24,
+              64.03999999999999
+            ],
+            [
+              30.36,
+              90
+            ],
+            [
+              0,
+              90
+            ]
+          ],
+          "darts": [
+            [
+              [
+                7.7,
+                29
+              ],
+              [
+                5.7,
+                38
+              ],
+              [
+                9.7,
+                38
+              ]
+            ]
+          ],
+          "notches": [
+            [
+              18.48,
+              3
+            ],
+            [
+              16.4,
+              38
+            ]
+          ],
+          "grain": [
+            [
+              9.24,
+              9
+            ],
+            [
+              9.24,
+              94
+            ]
+          ],
+          "role": "bodice-front-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Dress Back",
+            "ar": "ظهر الفستان"
+          },
+          "desc": {
+            "en": "Generated back panel — mirrors the front block.",
+            "ar": "قطعة خلفية مولّدة — تقابل القطعة الأمامية."
+          },
+          "outline": [
+            [
+              0,
+              3.5
+            ],
+            [
+              4.7124,
+              1.5
+            ],
+            [
+              18.48,
+              3.5
+            ],
+            [
+              19.48,
+              19
+            ],
+            [
+              15.9,
+              38
+            ],
+            [
+              20.74,
+              64.03999999999999
+            ],
+            [
+              30.36,
+              106
+            ],
+            [
+              0,
+              106
+            ]
+          ],
+          "darts": [
+            [
+              [
+                7.7,
+                29
+              ],
+              [
+                5.7,
+                38
+              ],
+              [
+                9.7,
+                38
+              ]
+            ]
+          ],
+          "notches": [
+            [
+              18.48,
+              3.5
+            ]
+          ],
+          "grain": [
+            [
+              2,
+              9
+            ],
+            [
+              2,
+              94
+            ]
+          ],
+          "role": "bodice-back-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "dress-conflict-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Dress Front",
+            "ar": "مقدمة الفستان"
+          },
+          "desc": {
+            "en": "Generated front — neckline, hem and fit read from the reference.",
+            "ar": "قطعة أمامية مولّدة — فتحة الرقبة والحاشية والقصّة من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              6.5440000000000005
+            ],
+            [
+              7.055999999999999,
+              1
+            ],
+            [
+              24,
+              3
+            ],
+            [
+              25,
+              20.5
+            ],
+            [
+              21.5,
+              41
+            ],
+            [
+              27,
+              77.85499999999999
+            ],
+            [
+              32.5,
+              128.75
+            ],
+            [
+              0,
+              128.75
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              24,
+              3
+            ],
+            [
+              21.5,
+              41
+            ]
+          ],
+          "grain": [
+            [
+              12,
+              9
+            ],
+            [
+              12,
+              122.75
+            ]
+          ],
+          "role": "bodice-front-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Dress Back",
+            "ar": "ظهر الفستان"
+          },
+          "desc": {
+            "en": "Generated back panel — mirrors the front block.",
+            "ar": "قطعة خلفية مولّدة — تقابل القطعة الأمامية."
+          },
+          "outline": [
+            [
+              0,
+              5.46
+            ],
+            [
+              5.039999999999999,
+              1.5
+            ],
+            [
+              24,
+              3.5
+            ],
+            [
+              25,
+              20.5
+            ],
+            [
+              21,
+              41
+            ],
+            [
+              26.5,
+              77.85499999999999
+            ],
+            [
+              32.5,
+              128.75
+            ],
+            [
+              0,
+              128.75
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              24,
+              3.5
+            ]
+          ],
+          "grain": [
+            [
+              2,
+              9
+            ],
+            [
+              2,
+              122.75
+            ]
+          ],
+          "role": "bodice-back-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Sleeve",
+            "ar": "كم"
+          },
+          "desc": {
+            "en": "Generated sleeve — length and width read from the reference.",
+            "ar": "كم مولّد — الطول والاتساع من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              8.049999999999999,
+              -6.8999999999999995
+            ],
+            [
+              16.099999999999998,
+              0
+            ],
+            [
+              15.099999999999998,
+              26.1
+            ],
+            [
+              1,
+              26.1
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              8.049999999999999,
+              -6.8999999999999995
+            ]
+          ],
+          "grain": [
+            [
+              8.049999999999999,
+              4
+            ],
+            [
+              8.049999999999999,
+              22.1
+            ]
+          ],
+          "role": "sleeve",
+          "bilateral": true
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "dress-conflict-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Dress Front",
+            "ar": "مقدمة الفستان"
+          },
+          "desc": {
+            "en": "Generated front — neckline, hem and fit read from the reference.",
+            "ar": "قطعة أمامية مولّدة — فتحة الرقبة والحاشية والقصّة من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              7.048
+            ],
+            [
+              10.584000000000001,
+              4.528
+            ],
+            [
+              24,
+              3
+            ],
+            [
+              25,
+              20.5
+            ],
+            [
+              21.5,
+              41
+            ],
+            [
+              27,
+              77.85499999999999
+            ],
+            [
+              32.5,
+              128.75
+            ],
+            [
+              0,
+              128.75
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              24,
+              3
+            ],
+            [
+              21.5,
+              41
+            ]
+          ],
+          "grain": [
+            [
+              12,
+              9
+            ],
+            [
+              12,
+              122.75
+            ]
+          ],
+          "role": "bodice-front-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Dress Back",
+            "ar": "ظهر الفستان"
+          },
+          "desc": {
+            "en": "Generated back panel — mirrors the front block.",
+            "ar": "قطعة خلفية مولّدة — تقابل القطعة الأمامية."
+          },
+          "outline": [
+            [
+              0,
+              5.819999999999999
+            ],
+            [
+              7.56,
+              4.02
+            ],
+            [
+              24,
+              3.5
+            ],
+            [
+              25,
+              20.5
+            ],
+            [
+              21,
+              41
+            ],
+            [
+              26.5,
+              77.85499999999999
+            ],
+            [
+              32.5,
+              128.75
+            ],
+            [
+              0,
+              128.75
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              24,
+              3.5
+            ]
+          ],
+          "grain": [
+            [
+              2,
+              9
+            ],
+            [
+              2,
+              122.75
+            ]
+          ],
+          "role": "bodice-back-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Sleeve",
+            "ar": "كم"
+          },
+          "desc": {
+            "en": "Generated sleeve — length and width read from the reference.",
+            "ar": "كم مولّد — الطول والاتساع من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              8.049999999999999,
+              -6.8999999999999995
+            ],
+            [
+              16.099999999999998,
+              0
+            ],
+            [
+              15.099999999999998,
+              26.1
+            ],
+            [
+              1,
+              26.1
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              8.049999999999999,
+              -6.8999999999999995
+            ]
+          ],
+          "grain": [
+            [
+              8.049999999999999,
+              4
+            ],
+            [
+              8.049999999999999,
+              22.1
+            ]
+          ],
+          "role": "sleeve",
+          "bilateral": true
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "dress-invalid-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Dress Front",
+            "ar": "مقدمة الفستان"
+          },
+          "desc": {
+            "en": "Generated front — neckline, hem and fit read from the reference.",
+            "ar": "قطعة أمامية مولّدة — فتحة الرقبة والحاشية والقصّة من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              6.5440000000000005
+            ],
+            [
+              7.055999999999999,
+              1
+            ],
+            [
+              24,
+              3
+            ],
+            [
+              25,
+              20.5
+            ],
+            [
+              1.5,
+              41
+            ],
+            [
+              27,
+              60.551
+            ],
+            [
+              39,
+              87.55
+            ],
+            [
+              0,
+              87.55
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              24,
+              3
+            ],
+            [
+              1.5,
+              41
+            ]
+          ],
+          "grain": [
+            [
+              12,
+              9
+            ],
+            [
+              12,
+              81.55
+            ]
+          ],
+          "role": "bodice-front-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Dress Back",
+            "ar": "ظهر الفستان"
+          },
+          "desc": {
+            "en": "Generated back panel — mirrors the front block.",
+            "ar": "قطعة خلفية مولّدة — تقابل القطعة الأمامية."
+          },
+          "outline": [
+            [
+              0,
+              5.46
+            ],
+            [
+              5.039999999999999,
+              1.5
+            ],
+            [
+              24,
+              3.5
+            ],
+            [
+              25,
+              20.5
+            ],
+            [
+              1,
+              41
+            ],
+            [
+              26.5,
+              60.551
+            ],
+            [
+              39,
+              87.55
+            ],
+            [
+              0,
+              87.55
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              24,
+              3.5
+            ]
+          ],
+          "grain": [
+            [
+              2,
+              9
+            ],
+            [
+              2,
+              81.55
+            ]
+          ],
+          "role": "bodice-back-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "dress-invalid-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Dress Front",
+            "ar": "مقدمة الفستان"
+          },
+          "desc": {
+            "en": "Generated front — neckline, hem and fit read from the reference.",
+            "ar": "قطعة أمامية مولّدة — فتحة الرقبة والحاشية والقصّة من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              7.048
+            ],
+            [
+              10.584000000000001,
+              4.528
+            ],
+            [
+              24,
+              3
+            ],
+            [
+              25,
+              20.5
+            ],
+            [
+              1.5,
+              41
+            ],
+            [
+              27,
+              60.551
+            ],
+            [
+              26,
+              87.55
+            ],
+            [
+              -8.32,
+              87.55
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              24,
+              3
+            ],
+            [
+              1.5,
+              41
+            ]
+          ],
+          "grain": [
+            [
+              12,
+              9
+            ],
+            [
+              12,
+              81.55
+            ]
+          ],
+          "role": "front-panel",
+          "cutOnFold": false
+        },
+        {
+          "name": {
+            "en": "Dress Back",
+            "ar": "ظهر الفستان"
+          },
+          "desc": {
+            "en": "Generated back panel — mirrors the front block.",
+            "ar": "قطعة خلفية مولّدة — تقابل القطعة الأمامية."
+          },
+          "outline": [
+            [
+              0,
+              5.819999999999999
+            ],
+            [
+              7.56,
+              4.02
+            ],
+            [
+              24,
+              3.5
+            ],
+            [
+              25,
+              20.5
+            ],
+            [
+              1,
+              41
+            ],
+            [
+              26.5,
+              60.551
+            ],
+            [
+              26,
+              87.55
+            ],
+            [
+              0,
+              87.55
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              24,
+              3.5
+            ]
+          ],
+          "grain": [
+            [
+              2,
+              9
+            ],
+            [
+              2,
+              81.55
+            ]
+          ],
+          "role": "bodice-back-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Tie Sash",
+            "ar": "حزام ربط"
+          },
+          "desc": {
+            "en": "Self-fabric sash for the wrap closure.",
+            "ar": "حزام من نفس القماش لإغلاق الفستان الملفوف."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              8,
+              0
+            ],
+            [
+              8,
+              110
+            ],
+            [
+              0,
+              110
+            ]
+          ],
+          "darts": [],
+          "notches": [],
+          "grain": [
+            [
+              4,
+              10
+            ],
+            [
+              4,
+              100
+            ]
+          ],
+          "role": "wrap-tie"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "dress-front-only-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Dress Front",
+            "ar": "مقدمة الفستان"
+          },
+          "desc": {
+            "en": "Generated front — neckline, hem and fit read from the reference.",
+            "ar": "قطعة أمامية مولّدة — فتحة الرقبة والحاشية والقصّة من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              10.072000000000001
+            ],
+            [
+              5.5440000000000005,
+              1
+            ],
+            [
+              24,
+              3
+            ],
+            [
+              25,
+              20.5
+            ],
+            [
+              21.5,
+              41
+            ],
+            [
+              27,
+              60.551
+            ],
+            [
+              39,
+              87.55
+            ],
+            [
+              -12.48,
+              87.55
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              24,
+              3
+            ],
+            [
+              21.5,
+              41
+            ]
+          ],
+          "grain": [
+            [
+              12,
+              9
+            ],
+            [
+              12,
+              81.55
+            ]
+          ],
+          "role": "front-panel",
+          "cutOnFold": false
+        },
+        {
+          "name": {
+            "en": "Dress Back",
+            "ar": "ظهر الفستان"
+          },
+          "desc": {
+            "en": "Generated back panel — mirrors the front block.",
+            "ar": "قطعة خلفية مولّدة — تقابل القطعة الأمامية."
+          },
+          "outline": [
+            [
+              0,
+              5.46
+            ],
+            [
+              5.039999999999999,
+              1.5
+            ],
+            [
+              24,
+              3.5
+            ],
+            [
+              25,
+              20.5
+            ],
+            [
+              21,
+              41
+            ],
+            [
+              26.5,
+              60.551
+            ],
+            [
+              39,
+              87.55
+            ],
+            [
+              0,
+              87.55
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              24,
+              3.5
+            ]
+          ],
+          "grain": [
+            [
+              2,
+              9
+            ],
+            [
+              2,
+              81.55
+            ]
+          ],
+          "role": "bodice-back-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Sleeve",
+            "ar": "كم"
+          },
+          "desc": {
+            "en": "Generated sleeve — length and width read from the reference.",
+            "ar": "كم مولّد — الطول والاتساع من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              10.5,
+              -9
+            ],
+            [
+              21,
+              0
+            ],
+            [
+              20,
+              46.400000000000006
+            ],
+            [
+              1,
+              46.400000000000006
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              10.5,
+              -9
+            ]
+          ],
+          "grain": [
+            [
+              10.5,
+              4
+            ],
+            [
+              10.5,
+              42.400000000000006
+            ]
+          ],
+          "role": "sleeve",
+          "bilateral": true
+        },
+        {
+          "name": {
+            "en": "Tie Sash",
+            "ar": "حزام ربط"
+          },
+          "desc": {
+            "en": "Self-fabric sash for the wrap closure.",
+            "ar": "حزام من نفس القماش لإغلاق الفستان الملفوف."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              8,
+              0
+            ],
+            [
+              8,
+              110
+            ],
+            [
+              0,
+              110
+            ]
+          ],
+          "darts": [],
+          "notches": [],
+          "grain": [
+            [
+              4,
+              10
+            ],
+            [
+              4,
+              100
+            ]
+          ],
+          "role": "wrap-tie"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "dress-front-only-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Dress Front",
+            "ar": "مقدمة الفستان"
+          },
+          "desc": {
+            "en": "Generated front — neckline, hem and fit read from the reference.",
+            "ar": "قطعة أمامية مولّدة — فتحة الرقبة والحاشية والقصّة من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              7.77376
+            ],
+            [
+              11.85408,
+              4.951359999999999
+            ],
+            [
+              26.880000000000003,
+              3
+            ],
+            [
+              27.880000000000003,
+              20.5
+            ],
+            [
+              23.96,
+              41
+            ],
+            [
+              30.120000000000005,
+              71.366
+            ],
+            [
+              43.68000000000001,
+              101.97000000000001
+            ],
+            [
+              0,
+              101.97000000000001
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              26.880000000000003,
+              3
+            ],
+            [
+              23.96,
+              41
+            ]
+          ],
+          "grain": [
+            [
+              13.440000000000001,
+              9
+            ],
+            [
+              13.440000000000001,
+              107.30000000000001
+            ]
+          ],
+          "role": "bodice-front-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Dress Back",
+            "ar": "ظهر الفستان"
+          },
+          "desc": {
+            "en": "Generated back panel — mirrors the front block.",
+            "ar": "قطعة خلفية مولّدة — تقابل القطعة الأمامية."
+          },
+          "outline": [
+            [
+              0,
+              6.3384
+            ],
+            [
+              8.4672,
+              4.3224
+            ],
+            [
+              26.880000000000003,
+              3.5
+            ],
+            [
+              27.880000000000003,
+              20.5
+            ],
+            [
+              23.46,
+              41
+            ],
+            [
+              29.620000000000005,
+              71.366
+            ],
+            [
+              43.68000000000001,
+              120.09800000000001
+            ],
+            [
+              0,
+              120.09800000000001
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              26.880000000000003,
+              3.5
+            ]
+          ],
+          "grain": [
+            [
+              2,
+              9
+            ],
+            [
+              2,
+              107.30000000000001
+            ]
+          ],
+          "role": "bodice-back-center",
+          "cutOnFold": true,
+          "chestEdgeIndices": [
+            2
+          ]
+        },
+        {
+          "name": {
+            "en": "Sleeve",
+            "ar": "كم"
+          },
+          "desc": {
+            "en": "Generated sleeve — length and width read from the reference.",
+            "ar": "كم مولّد — الطول والاتساع من المرجع."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              7,
+              -6
+            ],
+            [
+              14,
+              0
+            ],
+            [
+              13,
+              75.4
+            ],
+            [
+              1,
+              75.4
+            ]
+          ],
+          "darts": [],
+          "notches": [
+            [
+              7,
+              -6
+            ]
+          ],
+          "grain": [
+            [
+              7,
+              4
+            ],
+            [
+              7,
+              71.4
+            ]
+          ],
+          "role": "sleeve",
+          "bilateral": true
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "trousers-regular-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Leg",
+            "ar": "الساق الأمامية"
+          },
+          "desc": {
+            "en": "Generated front trouser leg.",
+            "ar": "ساق أمامية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              29.120000000000005,
+              0
+            ],
+            [
+              31.120000000000005,
+              11
+            ],
+            [
+              24.869760000000003,
+              115.5
+            ],
+            [
+              2,
+              115.5
+            ],
+            [
+              -2,
+              11
+            ]
+          ],
+          "grain": [
+            [
+              14.560000000000002,
+              7
+            ],
+            [
+              14.560000000000002,
+              108.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Leg",
+            "ar": "الساق الخلفية"
+          },
+          "desc": {
+            "en": "Generated back trouser leg.",
+            "ar": "ساق خلفية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              32.120000000000005,
+              0
+            ],
+            [
+              34.120000000000005,
+              11
+            ],
+            [
+              25.869760000000003,
+              115.5
+            ],
+            [
+              2,
+              115.5
+            ],
+            [
+              -4,
+              13
+            ]
+          ],
+          "grain": [
+            [
+              14.560000000000002,
+              7
+            ],
+            [
+              14.560000000000002,
+              108.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              82.4,
+              0
+            ],
+            [
+              82.4,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              78.4,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "trousers-regular-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Leg",
+            "ar": "الساق الأمامية"
+          },
+          "desc": {
+            "en": "Generated front trouser leg.",
+            "ar": "ساق أمامية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              24.88,
+              11
+            ],
+            [
+              22.473599999999998,
+              96
+            ],
+            [
+              2,
+              96
+            ],
+            [
+              -2,
+              11
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              7
+            ],
+            [
+              11.44,
+              89
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Leg",
+            "ar": "الساق الخلفية"
+          },
+          "desc": {
+            "en": "Generated back trouser leg.",
+            "ar": "ساق خلفية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              25.88,
+              0
+            ],
+            [
+              27.88,
+              11
+            ],
+            [
+              23.473599999999998,
+              96
+            ],
+            [
+              2,
+              96
+            ],
+            [
+              -4,
+              13
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              7
+            ],
+            [
+              11.44,
+              89
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              65.6,
+              0
+            ],
+            [
+              65.6,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              61.6,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "trousers-long-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Leg",
+            "ar": "الساق الأمامية"
+          },
+          "desc": {
+            "en": "Generated front trouser leg.",
+            "ar": "ساق أمامية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              26,
+              0
+            ],
+            [
+              28,
+              11
+            ],
+            [
+              24.72,
+              118
+            ],
+            [
+              2,
+              118
+            ],
+            [
+              -2,
+              11
+            ]
+          ],
+          "grain": [
+            [
+              13,
+              7
+            ],
+            [
+              13,
+              111
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Leg",
+            "ar": "الساق الخلفية"
+          },
+          "desc": {
+            "en": "Generated back trouser leg.",
+            "ar": "ساق خلفية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              29,
+              0
+            ],
+            [
+              31,
+              11
+            ],
+            [
+              25.72,
+              118
+            ],
+            [
+              2,
+              118
+            ],
+            [
+              -4,
+              13
+            ]
+          ],
+          "grain": [
+            [
+              13,
+              7
+            ],
+            [
+              13,
+              111
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              74,
+              0
+            ],
+            [
+              74,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              70,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "trousers-long-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Leg",
+            "ar": "الساق الأمامية"
+          },
+          "desc": {
+            "en": "Generated front trouser leg.",
+            "ar": "ساق أمامية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              26,
+              0
+            ],
+            [
+              28,
+              11
+            ],
+            [
+              29.4,
+              118
+            ],
+            [
+              2,
+              118
+            ],
+            [
+              -2,
+              11
+            ]
+          ],
+          "grain": [
+            [
+              13,
+              7
+            ],
+            [
+              13,
+              111
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Leg",
+            "ar": "الساق الخلفية"
+          },
+          "desc": {
+            "en": "Generated back trouser leg.",
+            "ar": "ساق خلفية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              29,
+              0
+            ],
+            [
+              31,
+              11
+            ],
+            [
+              30.4,
+              118
+            ],
+            [
+              2,
+              118
+            ],
+            [
+              -4,
+              13
+            ]
+          ],
+          "grain": [
+            [
+              13,
+              7
+            ],
+            [
+              13,
+              111
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              74,
+              0
+            ],
+            [
+              74,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              70,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "trousers-small-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Leg",
+            "ar": "الساق الأمامية"
+          },
+          "desc": {
+            "en": "Generated front trouser leg.",
+            "ar": "ساق أمامية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              20.24,
+              0
+            ],
+            [
+              22.24,
+              11
+            ],
+            [
+              19.115519999999997,
+              90
+            ],
+            [
+              2,
+              90
+            ],
+            [
+              -2,
+              11
+            ]
+          ],
+          "grain": [
+            [
+              10.12,
+              7
+            ],
+            [
+              10.12,
+              83
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Leg",
+            "ar": "الساق الخلفية"
+          },
+          "desc": {
+            "en": "Generated back trouser leg.",
+            "ar": "ساق خلفية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              23.24,
+              0
+            ],
+            [
+              25.24,
+              11
+            ],
+            [
+              20.115519999999997,
+              90
+            ],
+            [
+              2,
+              90
+            ],
+            [
+              -4,
+              13
+            ]
+          ],
+          "grain": [
+            [
+              10.12,
+              7
+            ],
+            [
+              10.12,
+              83
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              55.04,
+              0
+            ],
+            [
+              55.04,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              51.04,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "trousers-small-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Leg",
+            "ar": "الساق الأمامية"
+          },
+          "desc": {
+            "en": "Generated front trouser leg.",
+            "ar": "ساق أمامية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              20.24,
+              0
+            ],
+            [
+              22.24,
+              11
+            ],
+            [
+              27.859199999999998,
+              90
+            ],
+            [
+              2,
+              90
+            ],
+            [
+              -2,
+              11
+            ]
+          ],
+          "grain": [
+            [
+              10.12,
+              7
+            ],
+            [
+              10.12,
+              83
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Leg",
+            "ar": "الساق الخلفية"
+          },
+          "desc": {
+            "en": "Generated back trouser leg.",
+            "ar": "ساق خلفية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              23.24,
+              0
+            ],
+            [
+              25.24,
+              11
+            ],
+            [
+              28.859199999999998,
+              90
+            ],
+            [
+              2,
+              90
+            ],
+            [
+              -4,
+              13
+            ]
+          ],
+          "grain": [
+            [
+              10.12,
+              7
+            ],
+            [
+              10.12,
+              83
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              55.04,
+              0
+            ],
+            [
+              55.04,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              51.04,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "trousers-conflict-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Leg",
+            "ar": "الساق الأمامية"
+          },
+          "desc": {
+            "en": "Generated front trouser leg.",
+            "ar": "ساق أمامية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              29.120000000000005,
+              0
+            ],
+            [
+              31.120000000000005,
+              11
+            ],
+            [
+              24.869760000000003,
+              96
+            ],
+            [
+              2,
+              96
+            ],
+            [
+              -2,
+              11
+            ]
+          ],
+          "grain": [
+            [
+              14.560000000000002,
+              7
+            ],
+            [
+              14.560000000000002,
+              89
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Leg",
+            "ar": "الساق الخلفية"
+          },
+          "desc": {
+            "en": "Generated back trouser leg.",
+            "ar": "ساق خلفية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              32.120000000000005,
+              0
+            ],
+            [
+              34.120000000000005,
+              11
+            ],
+            [
+              25.869760000000003,
+              96
+            ],
+            [
+              2,
+              96
+            ],
+            [
+              -4,
+              13
+            ]
+          ],
+          "grain": [
+            [
+              14.560000000000002,
+              7
+            ],
+            [
+              14.560000000000002,
+              89
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              82.4,
+              0
+            ],
+            [
+              82.4,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              78.4,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "trousers-conflict-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Leg",
+            "ar": "الساق الأمامية"
+          },
+          "desc": {
+            "en": "Generated front trouser leg.",
+            "ar": "ساق أمامية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              24.88,
+              11
+            ],
+            [
+              20.82624,
+              115.5
+            ],
+            [
+              2,
+              115.5
+            ],
+            [
+              -2,
+              11
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              7
+            ],
+            [
+              11.44,
+              108.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Leg",
+            "ar": "الساق الخلفية"
+          },
+          "desc": {
+            "en": "Generated back trouser leg.",
+            "ar": "ساق خلفية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              25.88,
+              0
+            ],
+            [
+              27.88,
+              11
+            ],
+            [
+              21.82624,
+              115.5
+            ],
+            [
+              2,
+              115.5
+            ],
+            [
+              -4,
+              13
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              7
+            ],
+            [
+              11.44,
+              108.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              65.6,
+              0
+            ],
+            [
+              65.6,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              61.6,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "trousers-invalid-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Leg",
+            "ar": "الساق الأمامية"
+          },
+          "desc": {
+            "en": "Generated front trouser leg.",
+            "ar": "ساق أمامية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              24.88,
+              11
+            ],
+            [
+              22.473599999999998,
+              103.80000000000001
+            ],
+            [
+              2,
+              103.80000000000001
+            ],
+            [
+              -2,
+              11
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              7
+            ],
+            [
+              11.44,
+              96.80000000000001
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Leg",
+            "ar": "الساق الخلفية"
+          },
+          "desc": {
+            "en": "Generated back trouser leg.",
+            "ar": "ساق خلفية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              25.88,
+              0
+            ],
+            [
+              27.88,
+              11
+            ],
+            [
+              23.473599999999998,
+              103.80000000000001
+            ],
+            [
+              2,
+              103.80000000000001
+            ],
+            [
+              -4,
+              13
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              7
+            ],
+            [
+              11.44,
+              96.80000000000001
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              -4.800000000000001,
+              0
+            ],
+            [
+              -4.800000000000001,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              -8.8,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "trousers-invalid-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Leg",
+            "ar": "الساق الأمامية"
+          },
+          "desc": {
+            "en": "Generated front trouser leg.",
+            "ar": "ساق أمامية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              29.120000000000005,
+              0
+            ],
+            [
+              31.120000000000005,
+              11
+            ],
+            [
+              26.966400000000004,
+              103.80000000000001
+            ],
+            [
+              2,
+              103.80000000000001
+            ],
+            [
+              -2,
+              11
+            ]
+          ],
+          "grain": [
+            [
+              14.560000000000002,
+              7
+            ],
+            [
+              14.560000000000002,
+              96.80000000000001
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Leg",
+            "ar": "الساق الخلفية"
+          },
+          "desc": {
+            "en": "Generated back trouser leg.",
+            "ar": "ساق خلفية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              32.120000000000005,
+              0
+            ],
+            [
+              34.120000000000005,
+              11
+            ],
+            [
+              27.966400000000004,
+              103.80000000000001
+            ],
+            [
+              2,
+              103.80000000000001
+            ],
+            [
+              -4,
+              13
+            ]
+          ],
+          "grain": [
+            [
+              14.560000000000002,
+              7
+            ],
+            [
+              14.560000000000002,
+              96.80000000000001
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              -7.200000000000001,
+              0
+            ],
+            [
+              -7.200000000000001,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              -11.200000000000001,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "trousers-front-only-en",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Leg",
+            "ar": "الساق الأمامية"
+          },
+          "desc": {
+            "en": "Generated front trouser leg.",
+            "ar": "ساق أمامية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              24.88,
+              11
+            ],
+            [
+              26.592,
+              115.5
+            ],
+            [
+              2,
+              115.5
+            ],
+            [
+              -2,
+              11
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              7
+            ],
+            [
+              11.44,
+              108.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Leg",
+            "ar": "الساق الخلفية"
+          },
+          "desc": {
+            "en": "Generated back trouser leg.",
+            "ar": "ساق خلفية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              25.88,
+              0
+            ],
+            [
+              27.88,
+              11
+            ],
+            [
+              27.592,
+              115.5
+            ],
+            [
+              2,
+              115.5
+            ],
+            [
+              -4,
+              13
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              7
+            ],
+            [
+              11.44,
+              108.5
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              65.6,
+              0
+            ],
+            [
+              65.6,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              61.6,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    },
+    {
+      "taskId": "trousers-front-only-ar",
+      "units": "cm",
+      "pieces": [
+        {
+          "name": {
+            "en": "Front Leg",
+            "ar": "الساق الأمامية"
+          },
+          "desc": {
+            "en": "Generated front trouser leg.",
+            "ar": "ساق أمامية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              22.88,
+              0
+            ],
+            [
+              24.88,
+              11
+            ],
+            [
+              20.82624,
+              96
+            ],
+            [
+              2,
+              96
+            ],
+            [
+              -2,
+              11
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              7
+            ],
+            [
+              11.44,
+              89
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Back Leg",
+            "ar": "الساق الخلفية"
+          },
+          "desc": {
+            "en": "Generated back trouser leg.",
+            "ar": "ساق خلفية مولّدة."
+          },
+          "outline": [
+            [
+              2,
+              0
+            ],
+            [
+              25.88,
+              0
+            ],
+            [
+              27.88,
+              11
+            ],
+            [
+              21.82624,
+              96
+            ],
+            [
+              2,
+              96
+            ],
+            [
+              -4,
+              13
+            ]
+          ],
+          "grain": [
+            [
+              11.44,
+              7
+            ],
+            [
+              11.44,
+              89
+            ]
+          ]
+        },
+        {
+          "name": {
+            "en": "Waistband",
+            "ar": "الحزام"
+          },
+          "desc": {
+            "en": "Generated waistband.",
+            "ar": "حزام مولّد."
+          },
+          "outline": [
+            [
+              0,
+              0
+            ],
+            [
+              65.6,
+              0
+            ],
+            [
+              65.6,
+              7
+            ],
+            [
+              0,
+              7
+            ]
+          ],
+          "grain": [
+            [
+              3,
+              2
+            ],
+            [
+              61.6,
+              2
+            ]
+          ],
+          "role": "waistband"
+        }
+      ],
+      "observedDecision": "draft"
+    }
+  ]
+}
