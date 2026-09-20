@@ -218,3 +218,31 @@ open. Contract and scope: [design-brief-contract.md](design-brief-contract.md).
   rejection. Embedded build and diff checks pass; no temporary bypasses.
 - Review patch: `docs/v6-07-review.patch` in the primary workspace. Deployment
   authorized on 20 September; release outcome is tracked in GitHub Pages.
+
+
+## Combined V6-07–10 release revision — 20 September 2026
+
+The owner authorized review, fixes and deployment of all four foundations.
+V6-07 was already live; V6-08/09/10 are integrated on
+`codex/v6-07-10-release` from that deployed baseline. Earlier local worktrees
+remain preserved. No benchmark holdouts were executed.
+
+- V6-07: saved-brief async generation refuses stale project/brief results;
+  generated-draft acceptance rechecks entitlement.
+- V6-08: request-specific cancellation and immutable inputs prevent late
+  responses from overwriting retries or another project. Explicit concept
+  selection, reference removal, malformed-record validation and rollback on
+  storage quota failure are included.
+- V6-09: resolved saved briefs can preview an explicitly experimental A-line
+  template. Measurement names and reference types are validated. Unsaved brief
+  input blocks generation; accepted drafts retain the brief and program.
+  Fixed template lengths and unverified hip/closure/waistband construction are
+  disclosed before preview. This does not complete multimodal pattern drafting.
+- V6-10: real declared seam lengths and malformed/ambiguous spans are audited.
+  The former readiness claim is removed; matching side seams are only one
+  evidence item. Existing cloth placement is preserved. Production eligibility,
+  maker and sample approvals remain unclaimed.
+- Offline cache v35 includes all combined modules. Contract documents describe
+  the remaining limitations. Subscription/billing remains Phase 7.
+
+Release test and deployment evidence is recorded in the combined changelog.

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ImageProviders, getImageProvider } from '../js/image-providers.js';
+import { ImageProviders, getImageCapabilities, getImageProvider } from '../js/image-providers.js';
 
 function mockFetch(handler) { return async (url, options) => handler(url, options); }
 function jsonResponse(status, body) { return { ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body) }; }
@@ -18,7 +18,12 @@ test('all 5 image adapters implement the interface', () => {
     assert.equal(adapter.id, id);
     assert.equal(typeof adapter.generate, 'function');
     assert.ok(Array.isArray(adapter.fields));
+    assert.equal(typeof adapter.capabilities.textToImage, 'boolean');
+    assert.equal(typeof adapter.capabilities.imageToImage, 'boolean');
   }
+  assert.equal(getImageCapabilities('comfyui').imageToImage, false);
+  assert.equal(getImageCapabilities('local-image').imageToImage, true);
+  assert.deepEqual(getImageCapabilities('missing'), { textToImage: false, imageToImage: false, masks: false });
 });
 
 // Regression guard: real users have deployed server/billboard-proxy/worker.js

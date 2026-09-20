@@ -12,7 +12,10 @@ import { Canvas } from './canvas.js';
 import { View3D } from './three-view.js';
 import { AIGen } from './ai.js';
 import { mountDesignBrief } from './design-brief-panel.js';
+import { mountImageStudio } from './image-studio-panel.js';
+import { mountPatternProgram } from './pattern-program-panel.js';
 import { briefMatchesStyle } from './design-brief.js';
+import { assessWovenSkirtConstruction } from './construction-acceptance.js';
 import { Billboard } from './billboard.js';
 import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, exports nothing
 import './girls-leotards.js'; // side-effect only — adds the 100-pattern Girls' Gymnastics Leotards collection
@@ -153,10 +156,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   const save = () => {
     if(!projectsReady) return;
     syncActiveProjectSnapshot();
-    try { localStorage.setItem("pps", JSON.stringify(state)); storageWarningShown = false; }
+    try { localStorage.setItem("pps", JSON.stringify(state)); storageWarningShown = false; return true; }
     catch(e) {
       if(!storageWarningShown) toast(T("projectStorageFailed"));
-      storageWarningShown = true;
+      storageWarningShown = true; return false;
     }
   };
   const T = k => (I18N[state.lang][k] ?? I18N.en[k] ?? k);
@@ -198,6 +201,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   };
   let aiImage = null;   // data-URL of the uploaded AI inspiration image
   let refreshDesignBrief = null;
+  let refreshImageStudio = null;
+  let refreshPatternProgram = null;
   // AI Fashion Billboard — up to 2 source clothing photos, the generated
   // editorial "billboard" photo, and the pattern-drawing image derived from it
   let bbImages = [null, null];
@@ -942,6 +947,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
 
   function renderLayersPane() {
     refreshDesignBrief?.();
+    refreshImageStudio?.();
+    refreshPatternProgram?.();
     const c = $(".rail-pane[data-pane=layers]"); c.innerHTML="";
     c.appendChild(el("div","section-title",IC.layers+T("layersPanel")));
     // add-layer is always available (even on an empty canvas)
@@ -1226,11 +1233,38 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     c.appendChild(statusBox); c.appendChild(attrsBox);
     refreshDesignBrief=mountDesignBrief(c,{
       t:T,language:state.lang,getBrief:()=>Canvas.snapshotState().brief || null,
-      saveBrief:brief=>{Canvas.setDesignBrief(brief);save();},measurements:currentMeas,
+      saveBrief:brief=>{Canvas.setDesignBrief(brief);save();refreshPatternProgram?.();},measurements:currentMeas,
       generate:(prepared,brief,button)=>{
         if(!requireEntitlement()) return;
         return generatePatternFrom(prepared.prompt,null,button,'generated',{measurements:prepared.measurements,brief:{...brief,draftInputs:{measurements:prepared.measurements,provenance:prepared.provenance,category:state.category}}});
       },
+    });
+    refreshImageStudio=mountImageStudio(c,{
+      t:T,projectKey:()=>state.activeProjectId,
+      getStudio:()=>Canvas.snapshotState().imageStudio || null,
+      saveStudio:studio=>{
+        const before=Canvas.snapshotState(), history=Canvas.getHistory();
+        Canvas.setImageStudio(studio);
+        if(!save()) { Canvas.restoreState(before); Canvas.setHistory(history); syncActiveProjectSnapshot(); throw new Error('projectStorageFailed'); }
+      },
+      provider:()=>{
+        ensureAIState(); const id=state.aiImageProvider || 'proxy'; const adapter=ImageProviders[id];
+        return adapter ? {id,capabilities:adapter.capabilities} : null;
+      },
+      generate:async({prompt,images,providerId})=>{
+        if(!requireEntitlement()) throw new Error('imageStudioProviderMissing');
+        const adapter=ImageProviders[providerId]; const cfg=await resolveAICfg(providerId,aiCfgFor(providerId,true));
+        const unconfigured=providerId==='proxy' ? !cfg.baseUrl : adapter.needsKey && !cfg.apiKey;
+        if(unconfigured) throw new Error('imageStudioProviderMissing');
+        const result=await adapter.generate(cfg,{prompt,images,model:cfg.model});
+        if(!result.ok) throw new Error(result.error || 'imageStudioFailed');
+        return result.image;
+      },
+    });
+    refreshPatternProgram=mountPatternProgram(c,{
+      t:T,getBrief:()=>Canvas.snapshotState().brief || null,measurements:currentMeas,
+      validate:(pieces,measurements)=>PatternValidator.run(pieces,{bodyChestCm:measurements.chest,seamAllowanceCm:state.seamCm||1,offsetPoly:Canvas.offsetPoly}),
+      review:res=>{if(requireEntitlement()) reviewGeneratedPattern(res,'programDone');},
     });
 
     // ---- Direct SVG Pattern Import: sends the SAME uploaded reference
@@ -1578,6 +1612,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     finally{ btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; if(box) box.classList.remove("show"); }
   }
   async function generatePatternFrom(prompt, imageDataURL, btn, doneToastKey, options={}){
+    const sourceProject=state.activeProjectId, sourceBrief=JSON.stringify(Canvas.snapshotState().brief);
     const measurements=options.measurements || currentMeas();
     const category=state.category, lang=state.lang;
     const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7"; btn.disabled=true;
@@ -1676,6 +1711,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         return;
       }
       if(options.brief){
+        if(sourceProject!==state.activeProjectId || sourceBrief!==JSON.stringify(Canvas.snapshotState().brief)) { toast(T('commandStale')); return; }
         if(!briefMatchesStyle(options.brief,res.style)){
           openModal(T('briefValidationTitle'),'',true);
           const message=el('p');message.textContent=T('briefIntentFailed');
@@ -2270,19 +2306,27 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
   function reviewGeneratedPattern(res, doneToastKey){
     // Generated geometry is a new draft, never an in-place replacement.
-    const draft = migrateProject({pieces:res.pieces});
+    const draft = migrateProject({pieces:res.pieces,...(res.patternProgram?{patternProgram:res.patternProgram}:{})});
     openModal(T("reviewGeneratedTitle"), "", true);
     const body=$("#genericModal .modal-body");
     const hint=el("p"); hint.textContent=T("reviewGeneratedHint");
     const summary=el("p"); summary.textContent=typeof res.summary==='string'?res.summary:'';
-    body.append(hint, summary, patternPreview(draft.pieces));
+    const acceptance=(res.style?.type==='skirt' || res.patternProgram) ? assessWovenSkirtConstruction(draft.pieces) : null;
+    body.append(hint, summary);
+    if(acceptance) {
+      const evidence=el("p","help-note");
+      evidence.textContent=acceptance.decision==='side-seam-checked' ? T('constructionEvidenceReady') : `${T('constructionEvidenceMissing')}: ${acceptance.blockers.map(key=>T(key)).join(', ')}`;
+      body.append(evidence);
+    }
+    body.append(patternPreview(draft.pieces));
     const accept=el("button","big-btn"); accept.textContent=T("reviewNewProject");
     const reject=el("button","big-btn ghost"); reject.textContent=T("reviewReject");
     reject.onclick=()=>closeModal("#genericModal");
     accept.onclick=()=>{
+      if(!requireEntitlement()) return;
       accept.disabled=true;
       newProjectTab();
-      Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc'],res.brief?{brief:res.brief}:undefined);
+      Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc'],{...(res.brief?{brief:res.brief}:{}),...(res.patternProgram?{patternProgram:res.patternProgram}:{})});
       hideEmpty(); renderLayersPane(); renderAIAttrs(res);
       if(is3DActive()) build3D(res.colorInt);
       save(); closeModal("#genericModal"); toast(T(doneToastKey));

@@ -36,7 +36,7 @@ export function mountDesignBrief(container,{t,language,getBrief,saveBrief,measur
   input.oninput=paint;
   send.onclick=()=>{
     error.textContent='';
-    try { saveBrief(updateDesignBrief(getBrief(),input.value,language)); input.value=''; paint(); }
+    try { saveBrief(updateDesignBrief(getBrief(),input.value,language)); input.value=''; input.dispatchEvent(new Event('input',{bubbles:true})); }
     catch(e){error.textContent=t(e.message);}
   };
   draft.onclick=async()=>{

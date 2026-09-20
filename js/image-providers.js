@@ -82,6 +82,7 @@ function dataURLToBlob(dataUrl) {
 // ---------- proxy (today's js/billboard.js behaviour, unchanged) ----------
 const proxy = {
   id: 'proxy', label: 'Your own proxy (safest — key stays server-side)', needsKey: false,
+  capabilities: { textToImage: true, imageToImage: true, masks: false },
   defaultBaseUrl: '',
   fields: [{ key: 'baseUrl', type: 'url', required: true }],
   async generate(cfg, { prompt, images, model }, opts = {}) {
@@ -104,6 +105,7 @@ const proxy = {
 // ---------- openai-images ----------
 const openaiImages = {
   id: 'openai-images', label: 'OpenAI (gpt-image)', needsKey: true,
+  capabilities: { textToImage: true, imageToImage: true, masks: false },
   defaultBaseUrl: 'https://api.openai.com/v1',
   fields: [{ key: 'apiKey', type: 'key', required: true }],
   async generate(cfg, { prompt, images, model }, opts = {}) {
@@ -139,6 +141,7 @@ const openaiImages = {
 // ---------- gemini-image ----------
 const geminiImage = {
   id: 'gemini-image', label: 'Google Gemini (image generation)', needsKey: true,
+  capabilities: { textToImage: true, imageToImage: true, masks: false },
   defaultBaseUrl: 'https://generativelanguage.googleapis.com',
   fields: [{ key: 'apiKey', type: 'key', required: true }],
   async generate(cfg, { prompt, images, model }, opts = {}) {
@@ -171,6 +174,7 @@ const geminiImage = {
 // ---------- local-image (Automatic1111 stable-diffusion-webui) ----------
 const localImage = {
   id: 'local-image', label: 'Local Stable Diffusion (Automatic1111 API)', needsKey: false,
+  capabilities: { textToImage: true, imageToImage: true, masks: false },
   defaultBaseUrl: 'http://127.0.0.1:7860',
   fields: [{ key: 'baseUrl', type: 'url', required: false }],
   async generate(cfg, { prompt, images }, opts = {}) {
@@ -229,6 +233,7 @@ function buildComfyWorkflow({ ckptName, prompt, seed }) {
 }
 const comfyui = {
   id: 'comfyui', label: 'ComfyUI (local)', needsKey: false,
+  capabilities: { textToImage: true, imageToImage: false, masks: false },
   defaultBaseUrl: 'http://127.0.0.1:8188',
   fields: [{ key: 'baseUrl', type: 'url', required: false }],
   async test(cfg, opts = {}) {
@@ -305,3 +310,6 @@ const comfyui = {
 export const ImageProviders = { proxy, 'openai-images': openaiImages, 'gemini-image': geminiImage, 'local-image': localImage, comfyui };
 export const IMAGE_PROVIDER_IDS = Object.keys(ImageProviders);
 export function getImageProvider(id) { return ImageProviders[id] || null; }
+export function getImageCapabilities(id) {
+  return ImageProviders[id]?.capabilities || { textToImage: false, imageToImage: false, masks: false };
+}
