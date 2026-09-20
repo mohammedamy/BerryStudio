@@ -24,10 +24,9 @@
    silhouette profile. It still misreads busy or low-contrast photos
    (a dark garment against a dark background, in particular, since the
    whole approach is a colour-distance-from-border test) — when it can't
-   get a confident read it falls back to prompt text, then to
-   deterministic (input-seeded, not random) variety so the same input
-   always reproduces the same result, but different inputs actually look
-   different.
+   get a confident read, generation requests a clearer reference without
+   drafting. Text-only requests still use deterministic input-seeded variety
+   for unspecified style fields.
 
    BerryStudio-Upgrade-Plan-v2.0 WP-39: `analyzeImage(dataURL, opts)`
    accepts an optional `opts.segment(imageData) -> Promise<{width,height,
@@ -258,7 +257,7 @@ export const AIGen = (() => {
     // hasImg/seeded-pick branches below like a blank prompt would, so typing
     // this literal, common phrase couldn't actually pin the length; the
     // Guided Prompt Builder's "Medium" length option relies on this too.
-    else if(/regular length|medium length|knee[- ]length|طول عادي|طول متوسط/.test(tLen)) s.lengthF=1;
+    else if(/\b(?:regular|medium|knee)[- ]length\b|طول عادي|طول متوسط/.test(tLen)) s.lengthF=1;
     else if(hasImg && metrics.heightFrac!=null){
       const hf=metrics.heightFrac;
       s.lengthF *= hf>0.85 ? 1.3 : hf>0.65 ? 1.05 : hf<0.42 ? 0.62 : hf<0.55 ? 0.8 : 1;
@@ -1348,6 +1347,11 @@ export const AIGen = (() => {
     // 2) local: visible multi-stage silhouette analysis + drafting
     stage("analyzing");
     const metrics = imageDataURL ? await analyzeImage(imageDataURL, { segment }) : null;
+    if(imageDataURL && !metrics?.ok){
+      stage("clarify");
+      return { decision:"clarify", reason:"unreadable-image", source:"local",
+        imageSupplied:true, usedImage:false, pieces:[] };
+    }
     await wait(STAGE_MS);
 
     stage("silhouette");
@@ -1359,13 +1363,8 @@ export const AIGen = (() => {
     const built = build(style, measurements);
 
     stage("done");
-    // `imageSupplied` vs `usedImage`: both are false when no photo was
-    // given at all (nothing to say), but ONLY imageSupplied is true when a
-    // photo WAS given yet analyzeImage() couldn't read a clear silhouette
-    // from it (too little contrast, no clear edge run — see analyzeImage's
-    // own rowsFound threshold) — the caller uses that distinction to tell
-    // "you didn't attach a photo" apart from "your photo couldn't be read",
-    // which used to look identical (silently used prompt/defaults either way).
+    // Unreadable references return clarification above, before drafting.
+    // Preserve image provenance for readable-image and text-only results.
     return { ...built, summary: summary(style, lang), style, attributes: attributes(style, lang),
              source:"local", usedImage: !!(metrics && metrics.ok), imageSupplied: !!imageDataURL };
   }

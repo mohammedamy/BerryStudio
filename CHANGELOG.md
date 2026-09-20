@@ -1,11 +1,93 @@
 # Changelog
 
+## 2026-09-20 — V6-06: evaluation foundation and safer local AI drafting
+
+V6-06 establishes measurable evidence before later AI workflow expansion.
+This engineering release includes the evaluation foundation; maker review, calibrated
+real-image references and multi-view/provider evaluation remain open. A subsequent
+20 September development fix corrects standard-length prompt parsing locally
+and stops local drafting when an attached image cannot be read.
+
+### Added / Changed
+
+- Service-worker cache advances to v32 so updated AI and bilingual recovery
+  assets replace the prior offline bundle.
+- Local `AIGen.generate` now returns an explicit clarification decision and no
+  geometry for unreadable image silhouettes. The app presents English/Arabic
+  recovery instructions, preserves the current pattern and reference, and allows
+  an explicit text-only retry after removing the image. Provider success paths
+  remain unchanged; this is not a general missing-view or scale validation gate.
+- Preserved a further browser report and decision/geometry bundle under
+  `development-image-clarification-*.json`: **16 passes / 20 failures / none
+  skipped**. Six unreadable references now meet the coarse no-draft/clarify
+  check; completeness of view/scale questions is not established by this score.
+- `js/ai.js`: recognize hyphenated regular/medium/knee length wording as well
+  as spaced forms, with whole-word matching. Two regression tests cover all
+  three garment families, Arabic equivalents, image precedence and sleeve masking.
+- Post-fix development evidence is saved separately: text **10 passes / 20
+  failures / 6 not run**, browser **10 passes / 26 failures / 0 not run**.
+  All four length-intent failures are resolved; eight validator failures remain.
+  Original baselines and all 24 unexecuted holdouts are preserved.
+- `evaluation/v6-06/corpus.json`: 60 bilingual briefs across three families,
+  with 36 development tasks and 24 held out as translation groups. Covers
+  length, boundary sizes, conflicting/missing/invalid measurements and views.
+- Six repository-authored schematic SVG references with explicit permission
+  records and limits; no external images or personal measurements.
+- `scripts/evaluate-v6.mjs` and `evaluation-core.mjs`: deterministic local
+  text-core evaluation with source hashes, validator evidence, transparent
+  denominators and breakdowns. Image tasks are explicitly not run; exceptions
+  do not count as safe abstention. `npm run evaluate:v6` prints the report.
+- Preserved initial development baseline: 7 automated passes, 23 failures,
+  6 image cases untested; 24 holdouts untouched. Reported failures expose
+  length interpretation, geometry/validator and missing clarification/refusal
+  behavior. These counts are not maker acceptance or fit accuracy.
+- Proposed maker rubric, critical-failure taxonomy and unsigned per-revision
+  review template. Named maker review, calibrated/multi-view provider evaluation, correction
+  timing, full measurement adherence and sample fit remain explicit gaps.
+- Dedicated browser harness now executes all 36 development tasks through
+  `AIGen.generate`, including original reference bytes, image decoding and
+  heuristic silhouette analysis. Remote requests are blocked; held-outs and
+  unsupported multi-reference inputs are rejected. No production gates change.
+- Browser baseline: **7 automated passes, 29 failures, none skipped**. Six
+  references decode but their low-contrast silhouettes are not usable; draft
+  fallback instead of clarification is recorded as failure. A separate
+  high-contrast image control passes. The original text baseline is retained.
+- Saved raw generated geometry and hashes for maker inspection; added a
+  development failure backlog. Replaced a stalled Python test-only server with
+  a loopback Node server restricted to harness/reference/runtime-module paths.
+- Release tracking records V6-05 deployed through PR #59 and successful
+  Pages run 35037743902; four live app modules match the merged release.
+
+### Verification
+
+- Final release check after cache v32: **347 unit tests and 6 offline/project/AI
+  browser tests passed**; lint remains **91 existing warnings, 0 errors**.
+- `npm test`: **347 passed, 0 failed** (seven evaluation and two parser tests).
+- `npm run lint`: **91 existing warnings, 0 errors**; explicit lint of new
+  evaluator scripts and tests: **0 warnings, 0 errors**.
+- Repeated default baseline is byte-identical and excludes holdouts. Tests
+  enforce translation split integrity, reference permission presence, strict
+  decision/geometry scoring, source hashes and not-run denominators.
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/berry-playwright-browsers npm run evaluate:v6:browser`:
+  **1 passed**, covering all 36 development cases, decoded-image evidence,
+  positive control, missing-reference failure and holdout refusal. Browser
+  outcome failures are benchmark findings, distinct from test-harness failures.
+- `PLAYWRIGHT_SOFTWARE_GL=1 PLAYWRIGHT_BROWSERS_PATH=/tmp/berry-playwright-browsers npx playwright test --workers=1`:
+  **40 passed**, covering production persistence, CSP, Arabic/responsive controls,
+  AI settings, editing, exports and 3D workflows.
+- `git diff --check` and Cloth Lab embed build pass. No temporary test bypasses.
+- Image-clarification continuation: **347 unit tests passed**, lint still **91
+  existing warnings / 0 errors**; browser evaluation passed. All **40 existing
+  product browser tests passed**. The two new localized recovery tests initially
+  failed on ambiguous test selectors; after scoping uploads/previews correctly,
+  **both passed on a focused rerun**. Current source/bundle hashes verified.
+
 ## 2026-09-16 — V6-05: versioned projects and reviewed design changes
 
 V6-05 establishes the bounded project/command foundation for later conversational
 and multimodal pattern workflows. Designers can review changes before accepting
 them; generated patterns no longer replace the active design immediately.
-Implementation is verified locally and is not yet deployed.
+Deployed through PR #59 and successful Pages run 35037743902.
 
 ### Added / Changed / Fixed
 
