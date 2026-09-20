@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-09-20 — Review and integrate V6-07 through V6-10
+
+The owner requested a combined review, corrections and deployment. This release
+ships saved briefs, project image concepts, an experimental typed A-line template
+and a narrowly scoped declared-seam audit. Phase acceptance remains open.
+
+### Changed / Fixed
+
+- Capture immutable image request inputs and project identity; discard cancelled,
+  superseded, detached-panel and stale-project results. Explicit concept selection
+  and reference removal now work as described. Storage failures roll back image
+  updates rather than showing an unsaved success.
+- Reject stale saved-brief results; recheck access when accepting generated drafts.
+- Reject program type confusion and measurement-variable collisions; carry the
+  saved brief into program drafts and block unsaved brief inputs. Disclose fixed
+  lengths and unverified construction before previewing the A-line template.
+- Replace V6-10's premature construction-readiness claim with measured seam
+  evidence. Reject zero/invalid/ambiguous spans and mismatched lengths. Keep
+  existing cloth placement behavior and all physical approvals unclaimed.
+- Resolve shared controller, translation and offline-cache integration. Cache
+  v35 includes all new modules. No temporary entitlement bypasses are present.
+
+### Verification
+
+- `npm test`: 365 passed, 0 failed.
+- Cloth Lab Vitest: 893 passed across 34 files; embedded build succeeded.
+- Full Playwright run: 50 passed and one brief/program refresh failure found
+  during review. Fixed the missing input notification after saving a brief.
+  Final focused rerun of design brief, image studio and pattern program:
+  10 passed, including quota rollback, cancellation/retry, project isolation,
+  unsaved-input gating and accepted-program reload persistence.
+- `npm run lint`: 91 existing warnings, 0 errors; compared with the deployed
+  baseline and confirmed no new warnings. New module/test lint is clean.
+- `git diff --check` passed; no merge markers or temporary access bypasses.
+- Image provider responses in browser regressions are fixtures. Real-provider
+  compatibility, fashion benchmarks and physical maker/sample approval remain
+  open. GitHub Pages CI and live release verification follow the merge.
+
 ## 2026-09-20 — V6-07 foundation: saved bilingual brief and validated draft proposals
 
 Implements the bounded local starting point for V6-07's conversational brief

@@ -559,6 +559,12 @@ export const AIGen = (() => {
       const piece = { name:{en, ar},
         desc:{en:"Generated skirt panel — flare and hem read from the reference.", ar:"بنل تنورة مولّد — الاتساع والحاشية من المرجع."},
         outline:[[0,0],[panelW,0],...hemLine], grain:[[panelW/2,5],[panelW/2,gh-5]] };
+      // Straight/non-wrap panels share a real side seam. More complex wrap
+      // and asymmetric hem variants stay unlabelled rather than pretending
+      // their visibly different boundary is a matched construction join.
+      if(!style.wrap && ['straight','curved'].includes(style.hemShape)) {
+        piece.edges=[{fromIdx:1,toIdx:2,seamId:'skirt-side'}];
+      }
       if (waistMeta) piece.pleats = waistMeta;
       return piece;
     };
