@@ -21,7 +21,11 @@ async function review(page) {
   await page.locator('#projectBtn').click();
   await page.getByRole('button',{name:'Review change…',exact:true}).click();
 }
-const design = page => page.evaluate(()=>window.Canvas.snapshotState());
+// Automatic canvas fitting can change camera values when a panel opens;
+// content preservation assertions concern persisted design fields.
+const design = page => page.evaluate(()=>{
+  const {view:_view,...content}=window.Canvas.snapshotState();return content;
+});
 
 for (const lang of ['en','ar']) {
   test(`${lang}: unreadable reference requests clarification and preserves the draft until explicit text-only retry`,async({page})=>{

@@ -192,8 +192,9 @@ export const Canvas = (() => {
     });
   }
 
-  function setPattern(rawPieces, colors) {
+  function setPattern(rawPieces, colors, context) {
     pushUndo();
+    if(context?.brief) projectData.brief=JSON.parse(JSON.stringify(context.brief));
     projectMeta = { ...projectMeta, revision: projectMeta.revision + 1, status: 'draft', approval: null };
     pieces = layoutPieces(rawPieces);
     pieces.forEach((p, i) => p.color = colors[i % colors.length]);
@@ -260,6 +261,11 @@ export const Canvas = (() => {
   function acceptProposal(proposal){
     const next = acceptCommands({ ...snapshotState(), app:'BerryStudio', version:2 }, proposal);
     pushUndo(); restoreState(next);
+  }
+  function setDesignBrief(brief){
+    const next=JSON.parse(JSON.stringify(brief));
+    pushUndo(); projectData.brief=next;
+    projectMeta={...projectMeta,revision:projectMeta.revision+1,status:'draft',approval:null};
   }
   function getHistory(){ return { undo: undo.slice(), redo: redo.slice() }; }
   function setHistory(h){ undo.length=0; redo.length=0; if (h){ if (h.undo) undo.push(...h.undo); if (h.redo) redo.push(...h.redo); } }
@@ -2484,7 +2490,7 @@ export const Canvas = (() => {
            addText, updateText, removeText, getTexts, onTextRequest,
            addPiece, removePiece, renamePiece, setPieceProps, nudgePiece, nudgePieces, importPieces,
            onZoomChange, exportSVG, exportDXF, exportHPGL, exportRaster, exportPDF, loadPieces, clearAll, screenOf, snapAngle45,
-           snapshotState, restoreState, getHistory, setHistory, acceptProposal,
+           snapshotState, restoreState, getHistory, setHistory, acceptProposal, setDesignBrief,
            // construction geometry
            addPoint, removePoint, getPointById, getPoints, setPointName, setPointXY, setPointFormula, onPointRequest,
            getCons, removeCons, onPromoteRequest, finishPromotePiece, cancelPromote, onWarnRequest,

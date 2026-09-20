@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-09-20 — V6-07 foundation: saved bilingual brief and validated draft proposals
+
+Implements the bounded local starting point for V6-07's conversational brief
+workflow. This release contains the local brief workflow; model-backed advice, reviewed
+construction knowledge and full Phase 2 benchmark acceptance remain open.
+
+### Added / Changed
+
+- `design-brief.js` captures supported garment/length/fabric choices and
+  waist/hips/chest with source turn IDs. Arabic digits and numeric cm/inches
+  normalize to cm. Follow-ups retain unrelated choices; ambiguous units,
+  conflicting/nonpositive values and unsupported stretch requests block drafts.
+- `design-brief-panel.js` adds English/Arabic conversation history and explicit
+  captured-choice summaries with user/current-size measurement provenance.
+  Only listed choices affect generation; other notes remain in the conversation.
+  Input/history limits reject further edits instead of dropping existing data.
+- Canvas brief updates persist with project JSON, autosave, tab switching and
+  undo/redo. Malformed or unsupported saved briefs are retained and fail closed.
+- The brief-generation route rechecks entitlement and snapshots measurements,
+  category and language. Results must confirm family/length and pass failure-level
+  pattern checks before review. Accepted drafts create a separate project carrying
+  the brief, input provenance and validation report in one reversible operation.
+- New module assets are included in offline cache v33. Existing direct generation
+  remains separate; full input reconciliation across legacy paths is not claimed.
+- Release records now confirm V6-06 PR #60 and successful Pages run 35482735429;
+  its four changed live assets match the release by SHA-256.
+
+### Verification
+
+- Final v33 release check: **353 unit tests and six brief/offline browser tests
+  passed**, including English/Arabic persistence, refusal gates and cache reload.
+- **353 unit tests passed**; lint **91 existing warnings, 0 errors**. New brief
+  modules/tests lint cleanly; Cloth Lab embedded build and `git diff --check` pass.
+- Initial broad browser run: 42 passed, 3 failed. Two new acceptance tests
+  correctly hit an existing skirt seam-validation failure; acceptance coverage
+  now uses a passing trouser fixture and skirt/dress refusal has explicit tests.
+  The third failure compared auto-fit camera changes as if they were design
+  edits; that assertion now compares persisted content without camera state.
+- **10 focused browser checks passed** after these corrections, covering briefs,
+  project reviews, bilingual image recovery and offline reopening. Original
+  geometry and locked pieces remain intact; accepted draft/brief undo together.
+- **Five final brief browser tests passed** after adding declared-intent
+  verification, including a mismatched-result rejection. No temporary bypasses.
+- V6-06's corpus is unchanged; all 24 held-outs remain unexecuted.
+
 ## 2026-09-20 — V6-06: evaluation foundation and safer local AI drafting
 
 V6-06 establishes measurable evidence before later AI workflow expansion.

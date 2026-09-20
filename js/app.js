@@ -11,6 +11,8 @@ import { PATTERNS, LIBRARY, computeMeasurements, SIZES, SIZE_STEP, KIDS_AGES } f
 import { Canvas } from './canvas.js';
 import { View3D } from './three-view.js';
 import { AIGen } from './ai.js';
+import { mountDesignBrief } from './design-brief-panel.js';
+import { briefMatchesStyle } from './design-brief.js';
 import { Billboard } from './billboard.js';
 import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, exports nothing
 import './girls-leotards.js'; // side-effect only — adds the 100-pattern Girls' Gymnastics Leotards collection
@@ -195,6 +197,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     ],
   };
   let aiImage = null;   // data-URL of the uploaded AI inspiration image
+  let refreshDesignBrief = null;
   // AI Fashion Billboard — up to 2 source clothing photos, the generated
   // editorial "billboard" photo, and the pattern-drawing image derived from it
   let bbImages = [null, null];
@@ -938,6 +941,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
 
   function renderLayersPane() {
+    refreshDesignBrief?.();
     const c = $(".rail-pane[data-pane=layers]"); c.innerHTML="";
     c.appendChild(el("div","section-title",IC.layers+T("layersPanel")));
     // add-layer is always available (even on an empty canvas)
@@ -1220,6 +1224,14 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
 
     c.appendChild(preview); c.appendChild(guided); c.appendChild(f); c.appendChild(file); c.appendChild(up); c.appendChild(gen);
     c.appendChild(statusBox); c.appendChild(attrsBox);
+    refreshDesignBrief=mountDesignBrief(c,{
+      t:T,language:state.lang,getBrief:()=>Canvas.snapshotState().brief || null,
+      saveBrief:brief=>{Canvas.setDesignBrief(brief);save();},measurements:currentMeas,
+      generate:(prepared,brief,button)=>{
+        if(!requireEntitlement()) return;
+        return generatePatternFrom(prepared.prompt,null,button,'generated',{measurements:prepared.measurements,brief:{...brief,draftInputs:{measurements:prepared.measurements,provenance:prepared.provenance,category:state.category}}});
+      },
+    });
 
     // ---- Direct SVG Pattern Import: sends the SAME uploaded reference
     // image above to the configured AI provider with a fixed, highly-
@@ -1565,7 +1577,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     } catch(e){ toast(T("aiSvgFailGeneric")); }
     finally{ btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; if(box) box.classList.remove("show"); }
   }
-  async function generatePatternFrom(prompt, imageDataURL, btn, doneToastKey){
+  async function generatePatternFrom(prompt, imageDataURL, btn, doneToastKey, options={}){
+    const measurements=options.measurements || currentMeas();
+    const category=state.category, lang=state.lang;
     const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7"; btn.disabled=true;
     const setStage = beginAIThinking(!!imageDataURL);
     try {
@@ -1593,7 +1607,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         setStage("analyzing");
         const schema = await loadSpecSchema();
         const specResult = await generateFromSpec({
-          adapter, cfg, prompt, measurements: currentMeas(), category: state.category, lang: state.lang,
+          adapter, cfg, prompt, measurements, category, lang,
           schema, images: imageDataURL ? [imageDataURL] : undefined,
         });
         if(!specResult.fellBack){
@@ -1606,13 +1620,13 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
           // use the spec result as-is.
           if(imageDataURL && specResult.source==="spec"){
             const pixelMetrics = await AIGen.analyzeImage(imageDataURL, { segment: getSegmentFn() });
-            const promptStyle = AIGen.deriveStyle({ metrics: pixelMetrics, prompt, category: state.category, imageDataURL });
+            const promptStyle = AIGen.deriveStyle({ metrics: pixelMetrics, prompt, category, imageDataURL });
             const { style: fusedStyle, sourceMap } = fuseStyle({ specStyle: specResult.style, promptStyle });
-            const built = AIGen.build(fusedStyle, currentMeas());
+            const built = AIGen.build(fusedStyle, measurements);
             const provenance = mergeProvenance(sourceMap, provenanceMapFromSpec(specResult.spec));
             res = {
-              ...built, summary: AIGen.summary(fusedStyle, state.lang), style: fusedStyle,
-              attributes: AIGen.attributes(fusedStyle, state.lang, provenance),
+              ...built, summary: AIGen.summary(fusedStyle, lang), style: fusedStyle,
+              attributes: AIGen.attributes(fusedStyle, lang, provenance),
               source: "fused", validation: PatternValidator.run(built.pieces, {}),
               usedImage: !!(pixelMetrics && pixelMetrics.ok), imageSupplied: true,
             };
@@ -1630,12 +1644,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
             // exists to fix. Seeded on the prompt so identical input still
             // reproduces an identical result.
             if(res.style && res.source==="spec" && !res.style.neckline){
-              const style = { ...res.style, neckline: AIGen.pick(`${prompt}|${state.category}|neck`,
+              const style = { ...res.style, neckline: AIGen.pick(`${prompt}|${category}|neck`,
                 res.style.type==="shirt" ? ["collar","round","v"] : ["v","round","boat","offshoulder","halter"]) };
-              const built = AIGen.build(style, currentMeas());
+              const built = AIGen.build(style, measurements);
               res = {
                 ...res, ...built, style,
-                attributes: AIGen.attributes(style, state.lang, provenanceMapFromSpec(res.spec)),
+                attributes: AIGen.attributes(style, lang, provenanceMapFromSpec(res.spec)),
                 validation: PatternValidator.run(built.pieces, {}),
               };
             }
@@ -1649,8 +1663,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       // is configured, or the configured one failed/returned invalid output.
       if(!res){
         res = await AIGen.generate({
-          prompt, imageDataURL, category: state.category,
-          measurements: currentMeas(), endpoint: "", lang: state.lang,
+          prompt, imageDataURL, category,
+          measurements, endpoint: "", lang,
           onStage: setStage, segment: getSegmentFn(),
         });
       }
@@ -1660,6 +1674,22 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         const message=el("p"); message.textContent=T("aiReferenceUnreadable");
         $("#genericModal .modal-body").appendChild(message);
         return;
+      }
+      if(options.brief){
+        if(!briefMatchesStyle(options.brief,res.style)){
+          openModal(T('briefValidationTitle'),'',true);
+          const message=el('p');message.textContent=T('briefIntentFailed');
+          $('#genericModal .modal-body').appendChild(message);
+          return;
+        }
+        const report=PatternValidator.run(res.pieces,{bodyChestCm:measurements.chest,seamAllowanceCm:state.seamCm||1,offsetPoly:Canvas.offsetPoly});
+        if(report.summary.fail){
+          openModal(T('briefValidationTitle'),'',true);
+          const message=el('p');message.textContent=T('briefValidationFailed');
+          $('#genericModal .modal-body').appendChild(message);
+          return;
+        }
+        res.brief={...options.brief,validation:report};
       }
       reviewGeneratedPattern(res, doneToastKey);
     } catch(e){ toast(T("importFail")); }
@@ -2252,7 +2282,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     accept.onclick=()=>{
       accept.disabled=true;
       newProjectTab();
-      Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc']);
+      Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc'],res.brief?{brief:res.brief}:undefined);
       hideEmpty(); renderLayersPane(); renderAIAttrs(res);
       if(is3DActive()) build3D(res.colorInt);
       save(); closeModal("#genericModal"); toast(T(doneToastKey));
@@ -3451,6 +3481,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       Canvas.setPattern(pieces, PALETTE); renderLayersPane(); if(is3DActive()) build3D();
     }
     Canvas.recomputeConstruction();   // re-resolve any formula-driven construction points to the new measurements
+    refreshDesignBrief?.();
     updateGradeLbl(); updateStageChips(); renderSizePane(); save();
   }
 
