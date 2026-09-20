@@ -114,7 +114,7 @@ State: deployed through [PR #59](https://github.com/mohammedamy/BerryStudio/pull
 
 ## V6-06 — Evaluation corpus and maker rubric
 
-State: engineering foundation verified on `codex/v6-06-evaluation`; deployment authorized on 20 September and proceeding through the release pipeline. Maker acceptance remains open. Durable worktree: `/Users/mohammedamy/Developer/BerryStudio/.worktrees/v6-06-evaluation`. The initial temporary V6-06 draft was lost with `/tmp`; its corpus was reconstructed and completed here before evaluation.
+State: engineering foundation deployed through [PR #60](https://github.com/mohammedamy/BerryStudio/pull/60), merge `899ebd3b580842838a6b8b198034f7cf064cf27e`. [Pages run 35482735429](https://github.com/mohammedamy/BerryStudio/actions/runs/35482735429) completed successfully. Live `js/ai.js`, `js/app.js`, `js/i18n.js` and `sw.js` match the merged release by SHA-256. Maker acceptance remains open. Durable worktree: `/Users/mohammedamy/Developer/BerryStudio/.worktrees/v6-06-evaluation`.
 
 - 60 original briefs: 20 per family (skirt, dress, trousers), balanced 30 Arabic/30 English. Translation groups stay together: 36 development tasks, 24 process-held-out tasks. Holdouts have not been executed.
 - Six original front/back schematic reference assets with explicit provenance and permitted use. No external photography or personal body data. These are uncalibrated synthetic references, not maker-approved ground truth.
@@ -182,3 +182,39 @@ State: engineering foundation verified on `codex/v6-06-evaluation`; deployment a
 - User authorized deployment. Cache advanced to v32; final **347 unit tests and
   6 offline/project/AI browser checks passed**. Lint has 91 existing warnings,
   no errors; no temporary bypasses. Release outcome is tracked in GitHub Pages.
+
+## V6-07 — Bilingual conversational brief → proposal
+
+Scope: saved-brief engineering foundation implemented on
+`codex/v6-07-conversational-brief`. Full Phase 2 acceptance remains
+open. Contract and scope: [design-brief-contract.md](design-brief-contract.md).
+
+- Separate bilingual Design brief panel captures supported garment, length,
+  fabric and numeric waist/hips/chest fields over successive updates. User and
+  captured-choice turns persist with field source IDs. Arabic digits and
+  centimetre/inch conversion are supported; conflicts, absent units, invalid
+  measurements and stretch requests block this workflow until resolved.
+- Clearly lists recognized choices and current-size defaults. Unrecognized
+  notes stay in the conversation and are not silently treated as executable
+  drafting instructions. This is a bounded local parser, not a model-backed
+  fashion adviser.
+- Briefs round-trip with project JSON, autosave, tabs and undo/redo. Generated
+  candidates use a measurement/category snapshot and the existing review flow.
+  Acceptance creates a new project containing the brief, provenance and
+  validation report; original locked geometry remains unchanged. Geometry and
+  brief acceptance share one undo step.
+- Failure-level pattern checks block acceptance in the brief workflow. Regular
+  skirt and dress candidates expose existing construction-check failures;
+  passing trouser candidates exercise acceptance. The validator is unchanged.
+- Legacy direct generation remains separate. Full provider conversation,
+  grounded maker advice, design alternatives, field-level locks and broader
+  reconciliation are pending. No V6-06 holdout task was executed or tuned on.
+- Verification: **353 unit tests passed**, lint **91 existing warnings / 0
+  errors**, new modules/tests lint cleanly. Broad browser run passed 42 cases
+  with three failures subsequently resolved: two acceptance fixtures correctly
+  hit the construction gate, and one assertion included auto-fit camera state.
+  **10 focused browser checks passed**, then **five final brief checks passed**
+  with declared-intent gating, bilingual persistence/acceptance and skirt/dress
+  rejection. Embedded build and diff checks pass; no temporary bypasses.
+- Review patch: `docs/v6-07-review.patch` in the primary workspace. Deployment
+  authorized on 20 September; release outcome is tracked in GitHub Pages.
