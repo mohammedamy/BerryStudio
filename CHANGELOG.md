@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-09-20 — V6-11 construction-evidence record
+
+Continues V6-10 with a portable local record for declared construction checks.
+The record makes missing evidence and approvals explicit; it does not promote a
+draft to maker, sample or production status.
+
+### Added
+
+- Added `js/construction-evidence-record.js`, a versioned JSON record for the
+  supported woven-skirt seam audit. Unsupported families record
+  `not-applicable`, never a passing assessment.
+- Added a free local download in the Export pane and Project menu. The record
+  includes project revision, applicable checks and null maker/sample approvals;
+  `productionEligible` is always false.
+- Advanced offline cache to v36 and added English/Arabic labels and an explicit
+  scope contract.
+
+### Verification
+
+- `npm test`: **367 passed, 0 failed**.
+- Cloth Lab Vitest: **893 passed across 34 files**; the embedded bundle built
+  successfully.
+- Complete CSP-active Playwright suite: **53 passed**, including a download
+  inspection that confirms unsupported drafts remain `not-applicable` and
+  `productionEligible: false`.
+- Root lint: **91 existing warnings, 0 errors**; Cloth Lab lint: **10 existing
+  warnings, 0 errors**. No new warning was introduced by the new module.
+- `git diff --check` passed. No `TEMP-LOCAL-TEST-BYPASS` marker or conflict
+  marker exists in application or test sources.
+- This is software evidence only. No physical maker/sample review, fitting,
+  material test, production authorization or billing operation was performed.
+
 ## 2026-09-20 — Review and integrate V6-07 through V6-10
 
 The owner requested a combined review, corrections and deployment. This release
