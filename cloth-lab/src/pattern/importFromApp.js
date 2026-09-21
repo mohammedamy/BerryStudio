@@ -407,6 +407,10 @@ export function convertAppPattern(payload) {
     const edges = p.edges
     const necklineEndIdx = p.necklineEndIdx
     const sideEndIdx = p.sideEndIdx
+    // A construction with multiple opening-front panels cannot use the
+    // one-front/one-back geometric pairing below. It may opt out after
+    // declaring its complete torso joins explicitly with seam IDs.
+    const autoTorsoSeams = p.autoTorsoSeams !== false
     const princessSeamId = p.princessSeamId
     const local = relocalize(p.outline)
 
@@ -505,10 +509,17 @@ export function convertAppPattern(payload) {
         // counterpart to seam against at all); every cutOnFold piece's
         // own declared `edges` now always goes through pushSeamIdEdges,
         // regardless of which placement it has.
-        if (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack') {
+        if (autoTorsoSeams && (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack')) {
           // An authored neckline starting at the fold owns the top span;
           // don't also weld that span directly to the opposite body panel.
           const authoredTop = necklineEndIdx != null && edges?.some(e => e.seamId && e.fromIdx === 0 && e.toIdx === necklineEndIdx)
+          // A folded panel may also author both mirrored side seams when
+          // its counterpart is supplied as two separate opening-front
+          // panels (mf11). In that construction the generic bySlot seam
+          // cannot participate: it expects one full front and one full
+          // back. Let the explicit pair own those ranges just as an
+          // explicit neckline owns the top range above.
+          const authoredSides = edges?.filter(e => e.seamId && /Side_[RL]$/.test(e.seamId)).length >= 2
           const geo = deriveTorsoEdgeInstructions(outline, { includeTop: !authoredTop && (placement === 'frontPanel' || placement === 'backPanel'), necklineEndIdx, sideEndIdx })
           // Code-review fix: a genuinely tiny outline can leave
           // deriveTorsoEdgeInstructions unable to produce a real,
@@ -519,7 +530,7 @@ export function convertAppPattern(payload) {
           // Otherwise this piece is simply too small for the geometric
           // heuristic to seam automatically — placed, not auto-seamed,
           // same honest outcome an accessory role gets, not a crash.
-          if (geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
+          if (!authoredSides && geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
             bySlot[placement].push({ id: p.id, label })
             for (const e of geo) pushClaimedEdge(p.id, e.name, e.from, e.to, outline.length)
           }
@@ -583,7 +594,7 @@ export function convertAppPattern(payload) {
     // could actually declare a real one.
     rawPieces.push({ id: p.id, label: p.label, outline: local, color: p.color })
     roles[p.id] = placement
-    if (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack') {
+    if (autoTorsoSeams && (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack')) {
       // See the cutOnFold branch's own matching comment: only register
       // into bySlot when the geometric derivation actually produced
       // both a real rightSide and a real leftSide (a genuinely tiny

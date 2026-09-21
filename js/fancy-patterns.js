@@ -305,6 +305,28 @@ export let FancyGen;
     const stand = [ [0,0],[h+2,0],[h+2,4],[0,4] ];
     return { collar, stand };
   }
+  function jacketCollarBand(jb, seamPrefix) {
+    const edgeFor = (outline, seamId) => outline.edges.find(e => e.seamId === seamId);
+    const edgeLength = (outline, edge) => {
+      let length = 0;
+      for (let i = edge.fromIdx; i !== edge.toIdx; i = (i + 1) % outline.length) {
+        const a = outline[i], b = outline[(i + 1) % outline.length];
+        length += Math.hypot(b[0] - a[0], b[1] - a[1]);
+      }
+      return length;
+    };
+    const backLen = edgeLength(jb.back, edgeFor(jb.back, 'jacketBackNeck'));
+    const frontLen = edgeLength(jb.front, edgeFor(jb.front, 'jacketFrontNeck'));
+    const length = backLen + frontLen;
+    const stand = [[0,0], [backLen,0], [length,0], [length,4], [backLen,4], [0,4]];
+    stand.edges = [
+      { fromIdx: 0, toIdx: 1, seamId: `${seamPrefix}Back_R`, reverse: false },
+      { fromIdx: 1, toIdx: 2, seamId: `${seamPrefix}Front_R` },
+      { ...foldMirrorEdge(stand.length, 0, 1), seamId: `${seamPrefix}Back_L`, reverse: false },
+      { ...foldMirrorEdge(stand.length, 1, 2), seamId: `${seamPrefix}Front_L` },
+    ];
+    return stand;
+  }
   // Shirt collar for wf09's princess bodice. Both pieces are half patterns
   // folded at center back. Draft sewing lengths from the actual neckline,
   // not the nominal body-neck measurement used by unrelated collar styles.
@@ -2096,16 +2118,29 @@ export let FancyGen;
     (m) => {
       const len = m.backLen*0.95;
       const jb = jacketFrontBack(m, len, { hemFlareF:0.92, closureX:q(m.chest)*0.08 });
-      const neckArc = jb.frontNeckLen + jb.backNeckLen;
       const sl = sleeve2pc(m.bicep, m.sleeve-2);
-      const cs = collarStand(neckArc);
+      const frontNeck = jb.front.edges.find(e => e.seamId === 'jacketFrontNeck');
+      const frontSide = jb.front.edges.find(e => e.seamId === 'jacketSide');
+      const backNeck = jb.back.edges.find(e => e.seamId === 'jacketBackNeck');
+      const backSide = jb.back.edges.find(e => e.seamId === 'jacketSide');
+      const collarBand = jacketCollarBand(jb, 'mf11Neck');
+      jb.front.edges = [
+        { ...frontNeck, seamId:'mf11NeckFront' },
+        { ...frontSide, seamId:'mf11Side' },
+      ];
+      jb.back.edges = [
+        { ...backNeck, seamId:'mf11NeckBack_R', reverse:false },
+        { ...foldMirrorEdge(jb.back.length, backNeck.fromIdx, backNeck.toIdx), seamId:'mf11NeckBack_L', reverse:false },
+        { ...backSide, seamId:'mf11Side_R', reverse:false },
+        { ...foldMirrorEdge(jb.back.length, backSide.fromIdx, backSide.toIdx), seamId:'mf11Side_L', reverse:false },
+      ];
       return [
-        { key:"front", name:{en:"Jacket Front",ar:"مقدمة الجاكيت"}, desc:{en:"Front panel with a button-front closure.",ar:"مقدمة بإغلاق أزرار أمامي."}, role:"front-panel", outline:jb.front, grain:[[3,7],[3,len*0.6]] },
-        { key:"back", name:{en:"Jacket Back",ar:"خلفية الجاكيت"}, desc:{en:"Back panel below the shoulder yoke.",ar:"لوحة خلفية أسفل كوة الكتف."}, role:"back-panel", cutOnFold:true, outline:jb.back, grain:[[3,7],[3,len*0.6]] },
+        { key:"front", name:{en:"Jacket Front",ar:"مقدمة الجاكيت"}, desc:{en:"Front panel with a button-front closure.",ar:"مقدمة بإغلاق أزرار أمامي."}, role:"front-panel", bilateral:true, outline:jb.front, grain:[[3,7],[3,len*0.6]] },
+        { key:"back", name:{en:"Jacket Back",ar:"خلفية الجاكيت"}, desc:{en:"Back panel below the shoulder yoke.",ar:"لوحة خلفية أسفل كوة الكتف."}, role:"back-panel", cutOnFold:true, autoTorsoSeams:false, necklineEndIdx:backNeck.toIdx, outline:jb.back, grain:[[3,7],[3,len*0.6]] },
         { key:"backYoke", name:{en:"Back Yoke",ar:"كوة الظهر"}, desc:{en:"Curved western-style shoulder yoke.",ar:"كوة كتف منحنية بطراز غربي."}, role:"yoke", outline:yokePc(q(m.shoulder)*1.25, 9), grain:[[5,3],[5,6]] },
         { key:"sleeveU", name:{en:"Sleeve Upper",ar:"الكم العلوي"}, desc:{en:"Outer sleeve panel.",ar:"اللوحة الخارجية للكم."}, role:"sleeve-upper", bilateral:true, outline:sl.upper, grain:[[q(m.bicep)*0.5,3],[q(m.bicep)*0.5,m.sleeve*0.4]] },
         { key:"sleeveD", name:{en:"Sleeve Under",ar:"الكم السفلي"}, desc:{en:"Inner sleeve panel.",ar:"اللوحة الداخلية للكم."}, role:"sleeve-under", bilateral:true, outline:sl.under, grain:[[q(m.bicep)*0.3,3],[q(m.bicep)*0.3,m.sleeve*0.4]] },
-        { key:"collarBand", name:{en:"Collar Band",ar:"شريط الياقة"}, desc:{en:"Standing collar band.",ar:"شريط ياقة واقف."}, role:"collar-band", outline:cs.stand, grain:[[3,1],[m.neck/2,1]] },
+        { key:"collarBand", name:{en:"Collar Band",ar:"شريط الياقة"}, desc:{en:"Standing collar band.",ar:"شريط ياقة واقف."}, role:"collar-band", cutOnFold:true, outline:collarBand, grain:[[3,1],[m.neck/2,1]] },
         { key:"cuff", name:{en:"Cuff",ar:"الأسورة"}, desc:{en:"Buttoned cuff at the sleeve hem.",ar:"أسورة بزر عند نهاية الكم."}, role:"cuff", outline:cuffPc(q(m.bicep)*0.75), grain:[[3,1],[3,4]] },
         { key:"waistband", name:{en:"Hem Waistband",ar:"حزام الحاشية"}, desc:{en:"Buttoned waistband finishing the hem.",ar:"حزام بزر يُنهي الحاشية."}, role:"waistband", outline:waistbandPc(q(m.waist)*0.9, 7), grain:[[6,2],[6,5]] },
         { key:"pocketChestL", name:{en:"Chest Pocket Left",ar:"جيب الصدر الأيسر"}, desc:{en:"Flapped chest pocket.",ar:"جيب صدر بغطاء."}, role:"pocket", outline:pocketPc(8,3.5), grain:[[4,1],[4,2.5]] },

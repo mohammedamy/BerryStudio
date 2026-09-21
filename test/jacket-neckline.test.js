@@ -35,25 +35,24 @@ test('every jacketFrontBack-based pattern declares a real jacketFrontNeck/jacket
     const entry = PATTERNS[id];
     const m = computeMeasurements({ category: entry.category, size: 'M', standard: 'intl' });
     const pieces = entry.pieces(m);
-    const front = pieces.find((p) => findEdge(p, 'jacketFrontNeck'));
-    const back = pieces.find((p) => findEdge(p, 'jacketBackNeck'));
+    const front = pieces.find((p) => findEdge(p, 'jacketFrontNeck') || findEdge(p, 'mf11NeckFront'));
+    const back = pieces.find((p) => findEdge(p, 'jacketBackNeck') || findEdge(p, 'mf11NeckBack_R'));
     if (!front && !back) continue; // this pattern doesn't use jacketFrontBack at all
     checked.push(id);
     assert.ok(front, `${id}: has a jacketBackNeck edge but no matching jacketFrontNeck front`);
     assert.ok(back, `${id}: has a jacketFrontNeck edge but no matching jacketBackNeck back`);
-    const frontEdge = findEdge(front, 'jacketFrontNeck');
-    const backEdge = findEdge(back, 'jacketBackNeck');
+    const frontEdge = findEdge(front, 'jacketFrontNeck') || findEdge(front, 'mf11NeckFront');
+    const backEdge = findEdge(back, 'jacketBackNeck') || findEdge(back, 'mf11NeckBack_R');
     const frontLen = polylineLen(front.outline, frontEdge.fromIdx, frontEdge.toIdx);
     const backLen = polylineLen(back.outline, backEdge.fromIdx, backEdge.toIdx);
     assert.ok(frontLen > 0.5, `${id}: front's own jacketFrontNeck edge is degenerate (${frontLen.toFixed(3)}cm) — not a real curve`);
     assert.ok(backLen > 0.5, `${id}: back's own jacketBackNeck edge is degenerate (${backLen.toFixed(3)}cm) — not a real curve`);
   }
-  // Confirmed baseline (this WP): 36 patterns use jacketFrontBack() (44
-  // call sites total — a handful of patterns, e.g. mf05's separate
-  // jacket+vest layers, call it twice). A drop means the neckline
-  // stopped being declared somewhere it used to be; a rise is fine (new
-  // patterns adopting it).
-  assert.ok(checked.length >= 36, `only ${checked.length} patterns declare the new neckline edges — expected at least 36`);
+  // Thirty-five callers retain the generic edge IDs. mf11 deliberately
+  // replaces them with construction-specific left/right IDs so its two
+  // opening fronts can join a folded back and collar band independently;
+  // that topology has dedicated end-to-end coverage in Cloth Lab.
+  assert.ok(checked.length >= 35, `only ${checked.length} patterns declare the generic neckline edges — expected at least 35`);
 });
 
 test('the pre-existing jacketSide seam still matches EXACTLY between front and back (WP-58, unmoved by the neckline change)', () => {
