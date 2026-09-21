@@ -827,8 +827,13 @@ test('bundled avatar picker loads a real GLB model into 3D Preview', async ({ pa
   const errors = [];
   page.on('pageerror', (err) => errors.push(String(err)));
 
+  // A saved bundled static choice must migrate before the picker is opened;
+  // custom URLs and an intentional empty value are deliberately outside this
+  // migration, but shipped legacy files should receive the compatible rig.
+  await page.addInitScript(() => localStorage.setItem('pps', JSON.stringify({ avatarGLB: { men: 'avatars/fatman.glb' } })));
   await page.goto('/index.html');
   await dismissOnboarding(page);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('pps')).avatarGLB.men)).toBe('avatars/rigged/fatman.glb');
 
   await page.locator('#settingsBtn').click();
   const selects = page.locator('#settingsModal select');
@@ -843,7 +848,7 @@ test('bundled avatar picker loads a real GLB model into 3D Preview', async ({ pa
   await page.locator('#settingsModal [data-close]').click();
 
   const savedUrl = await page.evaluate(() => JSON.parse(localStorage.getItem('pps')).avatarGLB.men);
-  expect(savedUrl).toBe('avatars/man.glb');
+  expect(savedUrl).toBe('avatars/rigged/man.glb');
 
   await page.locator('#catSeg button[data-cat="men"]').click();
   await page.locator('#viewToggle button[data-v="3d"]').click();
