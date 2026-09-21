@@ -56,9 +56,15 @@ cover declarations on both panels and on only one panel.
 Validation: 310 root tests, 893 Cloth Lab tests, both lints and both builds pass.
 This change is local, not deployed.
 
-The mf11 Classic Denim Jacket collar investigation remains open. Completing it
-requires separate opening-front panels, a folded back with explicit side joins,
-and a decision about short-curve mesh sampling. A trial measured roughly 10–13%
-length loss on the short back neckline at the default 2 cm mesh spacing despite
-exact authored length parity. No mf11 drafting changes are included in this pass.
-Do not mark mf11 attachment or physical fit complete based on the importer fix.
+## WP-43: mf11 denim jacket collar band
+
+The Classic Denim Jacket now imports as two genuinely separate opening fronts
+and one folded back. Six explicit joins attach both front/back side seams and
+both halves of a collar band drafted from the actual neckline walks. XS, M and
+XXXL regressions verify authored length parity, seam resampling, and welded
+simulation particles without collapsing an edge onto itself.
+
+This establishes attachment topology, not physical fit or full-garment GPU
+stability. The decorative back yoke, two-piece sleeves, cuffs, hem band and
+pockets remain unjoined, and the jacket still has a stand-style band rather
+than a separately drafted collar leaf.

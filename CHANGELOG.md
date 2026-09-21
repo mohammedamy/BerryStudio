@@ -1,5 +1,27 @@
 # Changelog
 
+## WP-43: join the mf11 denim jacket collar band
+
+Adds explicit opening-front, folded-back and collar-band joins while preserving
+current main's collar and seam-coverage work. This verifies attachment topology,
+not physical fit, collar roll or full-GPU drape.
+
+### Changed / Fixed
+
+- Draft mf11's folded collar band from its authored front and back neckline
+  walks, with four collar joins and bilateral side seams.
+- Prevent generic one-front/one-back Cloth Lab torso pairing from competing
+  with this explicit construction.
+- Add XS, M and XXXL import, seam-length and welded-particle regressions.
+
+### Verification
+
+- `npm test`: 367 passed, 0 failed.
+- `cd cloth-lab && npm test`: 35 files / 896 tests passed.
+- Cloth Lab lint and embedded build pass with existing warnings only.
+- `git diff --check` passes. Browser/device and physical-fit verification are
+  not claimed for this construction-only change.
+
 ## 2026-09-21 — Rigged-avatar grounding hotfix
 
 3D Preview shallow-cloned a rigged mannequin scene. A skinned mesh could then
