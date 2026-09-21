@@ -78,7 +78,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // needs some starting value; a user who touches nothing gets exactly
     // today's plain-text-prompt behaviour.
     aiGuided: { type:"dress", fit:"any", flare:"any", length:"any", neckline:"any", sleeve:"any", hem:"any", closure:"none", notes:"" },
-    avatarGLB: { women: "", men: "", girls: "", boys: "" },
+    // New projects begin with the rigged bundled human GLBs rather than the
+    // procedural mannequin. Existing custom URLs and an intentionally
+    // selected "None" still win through the state merge below.
+    avatarGLB: { women: "avatars/rigged/woman2.glb", men: "avatars/rigged/man.glb", girls: "avatars/rigged/girl3.glb", boys: "avatars/rigged/boy2.glb" },
     // BerryStudio-Upgrade-Plan WP-5: "iframe" (cross-document, the original
     // engine) or "embedded" (cloth-lab's lib build mounted directly into
     // this page, sharing React/three.js via the import map — see
@@ -137,6 +140,32 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if(stored && typeof stored === "object" && !Array.isArray(stored)) savedRaw = stored;
   } catch(e) { console.warn('[project] Saved settings could not be read', e); }
   const state = Object.assign({}, DEF, savedRaw);
+  // V6-13: preserve a user's explicit custom URL or "None", but upgrade
+  // known bundled static URLs in saved projects to their pose-capable
+  // equivalents. Without this narrow migration, only brand-new projects
+  // would benefit from the Cloth Lab skeletons.
+  const RIGGED_BUNDLED_AVATAR_URLS = Object.freeze({
+    "avatars/man.glb": "avatars/rigged/man.glb",
+    "avatars/fatman.glb": "avatars/rigged/fatman.glb",
+    "avatars/woman2.glb": "avatars/rigged/woman2.glb",
+    "avatars/boy.glb": "avatars/rigged/boy.glb",
+    "avatars/boy2.glb": "avatars/rigged/boy2.glb",
+    "avatars/girl.glb": "avatars/rigged/girl.glb",
+    "avatars/girl2.glb": "avatars/rigged/girl2.glb",
+    "avatars/girl3.glb": "avatars/rigged/girl3.glb",
+  });
+  if (state.avatarGLB && typeof state.avatarGLB === "object" && !Array.isArray(state.avatarGLB)) {
+    const migratedAvatarGLB = Object.fromEntries(Object.entries(state.avatarGLB).map(([category, url]) => [category, RIGGED_BUNDLED_AVATAR_URLS[url] || url]));
+    const migrated = Object.entries(migratedAvatarGLB).some(([category, url]) => state.avatarGLB[category] !== url);
+    state.avatarGLB = migratedAvatarGLB;
+    // Persist just this safe, exact URL upgrade now. Waiting for a later
+    // incidental save would make the app work in the current session but
+    // reload the static asset next time if the user made no other change.
+    if (migrated) {
+      try { localStorage.setItem("pps", JSON.stringify({ ...savedRaw, avatarGLB: migratedAvatarGLB })); }
+      catch { /* The normal save path will surface quota errors later. */ }
+    }
+  }
   if(!Array.isArray(state.projects)) state.projects = [];
   let projectsReady = false;
   let storageWarningShown = false;
@@ -175,29 +204,26 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     SAR: { symbol: "ر.س", rate: 3.75, label: "SAR" },
     EGP: { symbol: "ج.م", rate: 49, label: "EGP" },
   };
-  // Bundled avatar GLBs (repo-relative, per README's own "drop them in the
-  // repo e.g. avatars/women.glb" convention) — static, unrigged single-mesh
-  // exports. Fine for 3D Preview (js/three-view.js just loads+scales, no
-  // skeleton needed); in 3D Cloth Lab, pose variants won't animate them
-  // since there's no skeleton to rotate — they'll still display, just
-  // static, exactly as an unposed/A-pose model would. Labels are EN/AR
+  // Bundled avatar GLBs are browser-ready rigged variants. The originals
+  // remain under avatars/ for rollback; these copies add the shared humanoid
+  // bone names and Walk clip that Cloth Lab recognizes. Labels are EN/AR
   // i18n keys (avatarModel_<id>), not raw strings, to stay bilingual.
   const BUNDLED_AVATARS = {
     men: [
-      { id: "man", file: "avatars/man.glb" },
-      { id: "fatman", file: "avatars/fatman.glb" },
+      { id: "man", file: "avatars/rigged/man.glb" },
+      { id: "fatman", file: "avatars/rigged/fatman.glb" },
     ],
     women: [
-      { id: "woman2", file: "avatars/woman2.glb" },
+      { id: "woman2", file: "avatars/rigged/woman2.glb" },
     ],
     boys: [
-      { id: "boy", file: "avatars/boy.glb" },
-      { id: "boy2", file: "avatars/boy2.glb" },
+      { id: "boy", file: "avatars/rigged/boy.glb" },
+      { id: "boy2", file: "avatars/rigged/boy2.glb" },
     ],
     girls: [
-      { id: "girl", file: "avatars/girl.glb" },
-      { id: "girl2", file: "avatars/girl2.glb" },
-      { id: "girl3", file: "avatars/girl3.glb" },
+      { id: "girl", file: "avatars/rigged/girl.glb" },
+      { id: "girl2", file: "avatars/rigged/girl2.glb" },
+      { id: "girl3", file: "avatars/rigged/girl3.glb" },
     ],
   };
   let aiImage = null;   // data-URL of the uploaded AI inspiration image

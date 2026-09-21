@@ -3,6 +3,16 @@
 Started: 14 September 2026. Updated: 15 September 2026.
 Canonical roadmap: [Plan v6](../BerryStudio-Upgrade-Plan-v6.md).
 
+## V6-13 — rigged human 3D avatars
+
+All eight bundled avatar selections now use generated rigged GLBs, each with
+the arm/leg skeleton vocabulary used by Cloth Lab, normalized skin weights and
+a small Walk clip. The static originals remain untouched. New projects use the
+relevant rigged human GLB by default. Saved bundled selections migrate to the
+matching rigged file, while custom URLs and an intentional “None” are kept.
+This adds software pose support only and does not claim physical drape, garment
+fit, maker review or export-fidelity approval.
+
 ## V6-01 — Audit repair release: deployed
 
 [PR #56](https://github.com/mohammedamy/BerryStudio/pull/56) merged as `63a726dc11ee9e4f04cbf1df4e18c34677578701`.

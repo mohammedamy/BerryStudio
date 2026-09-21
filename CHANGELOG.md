@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-09-21 — Rigged human 3D avatars
+
+New BerryStudio projects previously opened with the procedural stylized body,
+despite bundled human GLB models already being available. New projects now begin
+with the relevant bundled human avatar for their category. The original static
+assets could render and derive a standing mesh-fit collider, but did not carry
+the skeleton required for Cloth Lab poses or its walk playback.
+
+### Changed
+
+- All eight bundled women, men, girls and boys models now use a rigged GLB
+  variant with Cloth Lab's arm and leg bone names, normalized skin weights and
+  a Walk animation clip. The source meshes remain intact under `avatars/`;
+  generated runtime files are under `avatars/rigged/`.
+- Default women, men, girls and boys avatars now use the rigged GLB models.
+  Saved bundled selections migrate to the matching rigged file; custom URLs
+  and an intentional “None” remain unchanged.
+- Added the reproducible Blender generator at `scripts/rig-bundled-avatars.py`.
+- Advanced the service-worker cache to v39 so visitors receive the updated app
+  controller.
+
+### Verification
+
+- Every rigged GLB was re-imported into Blender and verified to contain its
+  required humanoid bones, a skinned mannequin mesh and the `Walk` action.
+  A pose-bone rotation visibly deformed every output mesh.
+- `npm test`: **367 passed, 0 failed**. Cloth Lab: **893 tests passed across
+  34 files**; both standalone and embedded bundles built successfully.
+- The rigged-avatar browser regression passed, including migration of a saved
+  bundled static selection. The production-CSP browser check passed (**2/2**).
+- Root and Cloth Lab lint completed with their established warnings and no
+  errors. `git diff --check` passed.
+
 ## 2026-09-21 — V6-12 in-app construction-evidence review
 
 V6-11 made declared geometry evidence portable, but required opening JSON to
