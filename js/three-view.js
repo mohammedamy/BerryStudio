@@ -13,7 +13,7 @@
    • Graceful fallback when WebGL / network is unavailable.
    ============================================================ */
 export const View3D = (() => {
-  let THREE, OrbitControls, GLTFLoader, RGBELoader;
+  let THREE, OrbitControls, GLTFLoader, RGBELoader, cloneSkeleton;
   let renderer, scene, camera, controls, raf = null;
   let root, bodyGroup, garmentGroup, limbs = {};
   let ready = false, spinning = true, walking = true, t = 0;
@@ -126,17 +126,18 @@ export const View3D = (() => {
     const THREE_ = tier.base ? await import(/* @vite-ignore */ tier.base) : await import(/* @vite-ignore */ "three");
     const addonUrl = (path) => tier.addons ? `${tier.addons}/${path}` : `three/addons/${path}`;
     const { OrbitControls: OC } = await import(/* @vite-ignore */ addonUrl("controls/OrbitControls.js"));
+    const { clone: cloneSkeleton_ } = await import(/* @vite-ignore */ addonUrl("utils/SkeletonUtils.js"));
     let GL = null, RGBE = null;
     try { ({ GLTFLoader: GL } = await import(/* @vite-ignore */ addonUrl("loaders/GLTFLoader.js"))); } catch (e) { /* optional */ }
     try { ({ RGBELoader: RGBE } = await import(/* @vite-ignore */ addonUrl("loaders/RGBELoader.js"))); } catch (e) { /* optional */ }
-    return { THREE_, OC, GL, RGBE };
+    return { THREE_, OC, GL, RGBE, cloneSkeleton_ };
   }
   async function loadDeps() {
     if (THREE) return true;
     for (const tier of DEP_TIERS) {
       try {
-        const { THREE_, OC, GL, RGBE } = await loadDepsFromTier(tier);
-        THREE = THREE_; OrbitControls = OC; GLTFLoader = GL; RGBELoader = RGBE;
+        const { THREE_, OC, GL, RGBE, cloneSkeleton_ } = await loadDepsFromTier(tier);
+        THREE = THREE_; OrbitControls = OC; GLTFLoader = GL; RGBELoader = RGBE; cloneSkeleton = cloneSkeleton_;
         return true;
       } catch (e) { /* try the next tier */ }
     }
@@ -988,13 +989,12 @@ export const View3D = (() => {
     const avatarId = (url.match(/([^/]+)\.glb(?:[?#].*)?$/i) || [])[1];
     const gltf = await loadGLTFWithRetry(url, onProgress);
     disposeObject3D(bodyGroup); disposeObject3D(garmentGroup);
-    // clone(true) copies the scenegraph/transform hierarchy but shares leaf
-    // geometry/material with the cached original (three.js clone() is
-    // shallow on those) — so this category's height/pose changes never
-    // corrupt the cached copy other avatars/rebuilds reuse, while the one-
-    // time pedestal/spike cleanup below (which mutates geometry in place)
-    // still only has to run once per URL, not on every rebuild.
-    root.clear(); limbs = {}; bodyGroup = gltf.scene.clone(true); root.add(bodyGroup);
+    // A plain Object3D.clone(true) leaves a SkinnedMesh's Skeleton pointing
+    // at the cached source bones. Scaling and grounding that clone can then
+    // evaluate the mesh against a different hierarchy, making the model look
+    // partly buried. SkeletonUtils rebinds each copied SkinnedMesh to its
+    // copied bones while still sharing immutable geometry/material buffers.
+    root.clear(); limbs = {}; bodyGroup = cloneSkeleton(gltf.scene); root.add(bodyGroup);
     bodyGroup.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     stripPedestal(bodyGroup);
     keepLargestComponent(bodyGroup);
