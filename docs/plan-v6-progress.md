@@ -246,3 +246,19 @@ remain preserved. No benchmark holdouts were executed.
   the remaining limitations. Subscription/billing remains Phase 7.
 
 Release test and deployment evidence is recorded in the combined changelog.
+
+## V6-11 — construction-evidence record
+
+Scope: the next bounded V6-10 construction/fit-acceptance slice. It creates a
+local, exportable record of declared geometry evidence without widening the
+supported garment family or claiming physical approval.
+
+- The Export pane and Project menu download `berrystudio-construction-evidence.json`.
+  The record captures project identity/revision, roles, brief/program presence,
+  the existing declared-seam assessment and explicit null maker/sample fields.
+- Only the existing woven-skirt slice is assessed. Other drafts are recorded as
+  `not-applicable` with `constructionFamilyUnsupported`; every record keeps
+  `productionEligible: false`.
+- No maker review, fit, materials, grading, assembly, sewn sample, new billing
+  or provider operation is introduced. Contract:
+  [construction-evidence-record-contract.md](construction-evidence-record-contract.md).

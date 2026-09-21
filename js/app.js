@@ -16,6 +16,7 @@ import { mountImageStudio } from './image-studio-panel.js';
 import { mountPatternProgram } from './pattern-program-panel.js';
 import { briefMatchesStyle } from './design-brief.js';
 import { assessWovenSkirtConstruction } from './construction-acceptance.js';
+import { createConstructionEvidenceRecord } from './construction-evidence-record.js';
 import { Billboard } from './billboard.js';
 import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, exports nothing
 import './girls-leotards.js'; // side-effect only — adds the 100-pattern Girls' Gymnastics Leotards collection
@@ -2025,6 +2026,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     c.appendChild(el("div","help-note",T("fitChartD"))).style.marginTop="6px";
     const cp=el("button","big-btn ghost",T("checkPattern")); cp.style.marginTop="8px"; cp.onclick=()=>runCheckPattern(); c.appendChild(cp);
     const ws=el("button","big-btn ghost",T("walkSeam")); ws.style.marginTop="8px"; ws.onclick=()=>openWalkSeamModal(); c.appendChild(ws);
+    const evidence=el("button","big-btn ghost",T("constructionEvidenceExport")); evidence.style.marginTop="8px"; evidence.onclick=exportConstructionEvidence; c.appendChild(evidence);
+    c.appendChild(el("div","help-note",T("constructionEvidenceExportHint"))).style.marginTop="6px";
   }
 
   // WP-14: "walk the seam" — scans currently loaded pieces for a pair
@@ -2160,6 +2163,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     toast(T("exported")+" · "+F);
   }
   function download(name,type,data){ const b=new Blob([data],{type}); const u=URL.createObjectURL(b); const a=el("a");a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000); }
+  function exportConstructionEvidence(){
+    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
+    const report=createConstructionEvidenceRecord(projectPayload());
+    download("berrystudio-construction-evidence.json","application/json",JSON.stringify(report,null,2));
+    toast(T("constructionEvidenceExported"));
+  }
 
   // ---- Project menu actions ----
   function newProject(){
@@ -2448,6 +2457,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     { icon:IC.download,label:T("exportDXF"),     run:()=>exportAs("DXF") },
     { icon:IC.pdf,     label:T("savePDF"),       run:()=>exportAs("PDF") },
     { icon:IC.folder,  label:T("saveProject"),   run:()=>exportAs("JSON") },
+    { icon:IC.download,label:T("constructionEvidenceExport"), run:exportConstructionEvidence },
     { icon:IC.printer, label:T("patternSummary"),run:exportSummary },
     { icon:IC.printer, label:T("sewInstrTitle"), run:exportSewingInstructions },
     { icon:IC.printer, label:T("fitChartTitle"), run:openFitChartModal },
