@@ -1,5 +1,5 @@
 /* BerryStudio — service worker (offline-capable, update-friendly) */
-const CACHE = "berrystudio-v36";
+const CACHE = "berrystudio-v37";
 const ASSETS = [
   "./", "./index.html",
   "./css/styles.css",

@@ -2026,6 +2026,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     c.appendChild(el("div","help-note",T("fitChartD"))).style.marginTop="6px";
     const cp=el("button","big-btn ghost",T("checkPattern")); cp.style.marginTop="8px"; cp.onclick=()=>runCheckPattern(); c.appendChild(cp);
     const ws=el("button","big-btn ghost",T("walkSeam")); ws.style.marginTop="8px"; ws.onclick=()=>openWalkSeamModal(); c.appendChild(ws);
+    const reviewEvidence=el("button","big-btn ghost",T("constructionEvidenceReview")); reviewEvidence.style.marginTop="8px"; reviewEvidence.onclick=openConstructionEvidenceModal; c.appendChild(reviewEvidence);
     const evidence=el("button","big-btn ghost",T("constructionEvidenceExport")); evidence.style.marginTop="8px"; evidence.onclick=exportConstructionEvidence; c.appendChild(evidence);
     c.appendChild(el("div","help-note",T("constructionEvidenceExportHint"))).style.marginTop="6px";
   }
@@ -2168,6 +2169,40 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const report=createConstructionEvidenceRecord(projectPayload());
     download("berrystudio-construction-evidence.json","application/json",JSON.stringify(report,null,2));
     toast(T("constructionEvidenceExported"));
+  }
+  function openConstructionEvidenceModal(){
+    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
+    const report=createConstructionEvidenceRecord(projectPayload());
+    openModal(T("constructionEvidenceTitle"), "", true);
+    const body=$("#genericModal .modal-body");
+    const decisionKey={
+      'side-seam-checked':'constructionEvidenceChecked',
+      'needs-construction-evidence':'constructionEvidenceMissing',
+      'not-applicable':'constructionEvidenceUnavailable',
+    }[report.assessment.decision] || 'constructionEvidenceMissing';
+    body.appendChild(el("p","help-note",T(decisionKey)));
+    if(report.assessment.checks.length){
+      body.appendChild(el("h3",null,T("constructionEvidenceChecks")));
+      const list=el("ul");
+      for(const check of report.assessment.checks){
+        const [first,second]=check.lengthsCm.map(value=>value.toFixed(1));
+        list.appendChild(el("li",null,`${T("constructionEvidenceSeam")} ${check.seamId}: ${first} cm / ${second} cm · ${check.differenceMm.toFixed(1)} mm`));
+      }
+      body.appendChild(list);
+    }
+    if(report.assessment.blockers.length){
+      body.appendChild(el("h3",null,T("constructionEvidenceBlockers")));
+      const list=el("ul");
+      for(const blocker of report.assessment.blockers) list.appendChild(el("li",null,T(blocker)));
+      body.appendChild(list);
+    }
+    body.append(
+      el("p",null,`${T("constructionEvidenceMaker")}: ${T("constructionEvidenceNotRecorded")}`),
+      el("p",null,`${T("constructionEvidenceSample")}: ${T("constructionEvidenceNotRecorded")}`),
+      el("p",null,`${T("constructionEvidenceProduction")}: ${T("constructionEvidenceNotEligible")}`),
+      el("p","help-note",T("constructionEvidenceReviewHint")),
+    );
+    const close=el("button","big-btn ghost",T("okLbl")); close.onclick=()=>closeModal("#genericModal"); body.appendChild(close);
   }
 
   // ---- Project menu actions ----

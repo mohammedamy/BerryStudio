@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-09-21 — V6-12 in-app construction-evidence review
+
+V6-11 made declared geometry evidence portable, but required opening JSON to
+assess it. This release exposes the same limited evidence inside the Export
+pane before download, while preserving the boundary between a matched seam and
+an approved garment.
+
+### Added
+
+- Added an English/Arabic construction-evidence dialog with declared seam
+  lengths, millimetre difference and visible missing or unsupported evidence.
+- Show maker approval, sewn-sample approval and production eligibility as
+  explicitly absent/not eligible for every draft. The dialog cannot mutate a
+  project or create an approval.
+- Advanced the offline cache to v37 and extended browser coverage for both an
+  unsupported draft and a matched declared seam.
+
+### Verification
+
+- `npm test`: **367 passed, 0 failed**.
+- Cloth Lab: **893 tests passed across 34 files**; the embedded bundle built
+  successfully.
+- Complete CSP-active Playwright suite: **54 passed**, including both the
+  unsupported-draft and matched-declared-seam evidence review cases.
+- Root lint: **91 existing warnings, 0 errors**; Cloth Lab lint: **7 existing
+  warnings, 0 errors**. The changed app and translation files add no warning.
+- `git diff --check` passed. No temporary test-bypass marker or conflict marker
+  exists in application or test sources.
+- No physical maker/sample review, fitting, material validation, production
+  authorization, provider call or billing operation was performed.
+
 ## 2026-09-20 — V6-11 construction-evidence record
 
 Continues V6-10 with a portable local record for declared construction checks.
