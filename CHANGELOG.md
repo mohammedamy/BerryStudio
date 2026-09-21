@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-09-21 — Rigged-avatar grounding hotfix
+
+3D Preview shallow-cloned a rigged mannequin scene. A skinned mesh could then
+keep references to the cached source skeleton while the displayed clone was
+scaled and grounded, producing a visibly buried avatar.
+
+### Fixed
+
+- Load GLB avatars through Three.js `SkeletonUtils.clone`, which rebinds every
+  copied skinned mesh to the copied bone hierarchy before floor alignment.
+- Advanced the service-worker cache to v40.
+
+### Verification
+
+- `node --check js/three-view.js` and `git diff --check` passed.
+- The local headless host could not create a WebGL context after its Chromium
+  runtime was restored; GitHub Actions runs the production 3D smoke test with
+  its supported browser environment before publication.
+
 ## 2026-09-21 — Rigged human 3D avatars
 
 New BerryStudio projects previously opened with the procedural stylized body,
