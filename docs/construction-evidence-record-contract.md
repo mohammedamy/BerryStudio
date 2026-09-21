@@ -15,3 +15,11 @@ The record is a local download and is not sent to a provider or cloud service.
 It is not a tech pack, fit report, construction instruction, material test,
 grade validation, maker review, sewn-sample approval, or permission to cut or
 produce. Those decisions remain outside this release.
+
+## V6-12 in-app review
+
+The Export pane can render the same current-project evidence before it is
+downloaded. It shows declared seam lengths and their millimetre difference when
+they exist, or the explicit blockers when they do not. It always shows maker
+approval, sewn-sample approval and production eligibility as absent/not eligible.
+The panel does not persist an approval, change geometry or upload data.

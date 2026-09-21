@@ -262,3 +262,17 @@ supported garment family or claiming physical approval.
 - No maker review, fit, materials, grading, assembly, sewn sample, new billing
   or provider operation is introduced. Contract:
   [construction-evidence-record-contract.md](construction-evidence-record-contract.md).
+
+## V6-12 — in-app construction-evidence review
+
+Scope: make V6-11's local record legible before download, without treating a
+matched declared seam as construction, fit or production acceptance.
+
+- The Export pane opens an English/Arabic evidence review for the current
+  project. It displays checked seam lengths and millimetre difference where
+  present, or explicit missing/unsupported evidence blockers otherwise.
+- Maker approval, sewn-sample approval and production eligibility remain
+  displayed as not recorded/not eligible for every result. The review does not
+  persist status, mutate geometry or send data anywhere.
+- Cache v37 includes the UI revision. Contract:
+  [construction-evidence-record-contract.md](construction-evidence-record-contract.md).
