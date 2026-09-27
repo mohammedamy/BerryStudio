@@ -42,6 +42,8 @@ export function validatePatternProgram(program) {
       pieces.add(op.id);
     } else if (op.op === 'setPieceRole') {
       if (Object.keys(op).some(key => !['op','piece','role','cutOnFold','quantity'].includes(key)) || !pieces.has(op.piece) || !['skirt-front','skirt-back','waistband'].includes(op.role) || typeof op.cutOnFold !== 'boolean' || !Number.isInteger(op.quantity) || op.quantity < 1 || op.quantity > 4) fail('programInvalid');
+    } else if (op.op === 'setPieceConstruction') {
+      if (Object.keys(op).some(key => !['op','piece','notchPoints','edges'].includes(key)) || !pieces.has(op.piece) || !Array.isArray(op.notchPoints) || !op.notchPoints.every(pointName => name(pointName) && points.has(pointName)) || !Array.isArray(op.edges) || !op.edges.every(edge => edge && typeof edge === 'object' && Object.keys(edge).every(key => ['from','to','seamId'].includes(key)) && name(edge.from) && name(edge.to) && points.has(edge.from) && points.has(edge.to) && edge.from !== edge.to && typeof edge.seamId === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(edge.seamId))) fail('programInvalid');
     } else fail('programInvalid');
   }
   return true;
@@ -58,13 +60,18 @@ export function executePatternProgram(program, measurements) {
     else if (op.op === 'promotePiece') {
       const outline = op.pointLoop.map(key => points[key]); const grain = op.grain.map(key => points[key]);
       if (outline.some(value => !point(value)) || grain.some(value => !point(value))) fail('programInvalid');
-      pieces.push({ key:op.id, name:{en:op.name,ar:op.nameAr}, outline:clone(outline), grain:clone(grain), darts:[], notches:[], curves:[], visible:true, locked:false });
+      pieces.push({ key:op.id, name:{en:op.name,ar:op.nameAr}, outline:clone(outline), grain:clone(grain), darts:[], notches:[], curves:[], visible:true, locked:false, _pointIndex:Object.fromEntries(op.pointLoop.map((pointName,index)=>[pointName,index])) });
     } else {
       const piece = pieces.find(item => item.key === op.piece); if (!piece) fail('programInvalid');
-      piece.role = op.role; piece.cutOnFold = op.cutOnFold; piece.quantity = op.quantity;
+      if (op.op === 'setPieceRole') { piece.role = op.role; piece.cutOnFold = op.cutOnFold; piece.quantity = op.quantity; }
+      else {
+        piece.notches=op.notchPoints.map(pointName=>clone(points[pointName]));
+        piece.edges=op.edges.map(edge=>({fromIdx:piece._pointIndex[edge.from],toIdx:piece._pointIndex[edge.to],seamId:edge.seamId}));
+      }
     }
   }
   if (!pieces.length || pieces.some(piece => !piece.role)) fail('programInvalid');
+  pieces.forEach(piece=>delete piece._pointIndex);
   return {pieces,points:clone(points),lines:clone(lines),variables:Object.fromEntries(Object.entries(values).filter(([key]) => !Object.hasOwn(measurements,key)))};
 }
 
@@ -73,10 +80,10 @@ export function createWovenALineSkirtProgram(length) {
   return {version:1,family:'woven-a-line-skirt',operations:[
     {op:'defineVariable',name:'waistQuarter',formula:'waist/4+1'}, {op:'defineVariable',name:'hipQuarter',formula:'hips/4+2.5'},
     {op:'defineVariable',name:'hemQuarter',formula:'hipQuarter+8'}, {op:'defineVariable',name:'skirtLength',formula:String(skirtLength)}, {op:'defineVariable',name:'waistbandHeight',formula:'4'},
-    {op:'placePoint',name:'frontFoldWaist',x:'0',y:'0'}, {op:'placePoint',name:'frontSideWaist',x:'waistQuarter',y:'0'}, {op:'placePoint',name:'frontSideHem',x:'hemQuarter',y:'skirtLength'}, {op:'placePoint',name:'frontFoldHem',x:'0',y:'skirtLength'}, {op:'placePoint',name:'frontGrainTop',x:'waistQuarter/2',y:'5'}, {op:'placePoint',name:'frontGrainBottom',x:'waistQuarter/2',y:'skirtLength-5'},
-    {op:'lineBetween',name:'frontSideSeam',from:'frontSideWaist',to:'frontSideHem'}, {op:'promotePiece',id:'front',name:'A-line skirt front',nameAr:'أمام تنورة بقصة A',pointLoop:['frontFoldWaist','frontSideWaist','frontSideHem','frontFoldHem'],grain:['frontGrainTop','frontGrainBottom']}, {op:'setPieceRole',piece:'front',role:'skirt-front',cutOnFold:true,quantity:1},
-    {op:'placePoint',name:'backFoldWaist',x:'0',y:'skirtLength+12'}, {op:'placePoint',name:'backSideWaist',x:'waistQuarter',y:'skirtLength+12'}, {op:'placePoint',name:'backSideHem',x:'hemQuarter',y:'skirtLength*2+12'}, {op:'placePoint',name:'backFoldHem',x:'0',y:'skirtLength*2+12'}, {op:'placePoint',name:'backGrainTop',x:'waistQuarter/2',y:'skirtLength+17'}, {op:'placePoint',name:'backGrainBottom',x:'waistQuarter/2',y:'skirtLength*2+7'},
-    {op:'lineBetween',name:'backSideSeam',from:'backSideWaist',to:'backSideHem'}, {op:'promotePiece',id:'back',name:'A-line skirt back',nameAr:'خلف تنورة بقصة A',pointLoop:['backFoldWaist','backSideWaist','backSideHem','backFoldHem'],grain:['backGrainTop','backGrainBottom']}, {op:'setPieceRole',piece:'back',role:'skirt-back',cutOnFold:true,quantity:1},
+    {op:'placePoint',name:'frontFoldWaist',x:'0',y:'0'}, {op:'placePoint',name:'frontSideWaist',x:'waistQuarter',y:'0'}, {op:'placePoint',name:'frontSideNotch',x:'waistQuarter+(hemQuarter-waistQuarter)/2',y:'skirtLength/2'}, {op:'placePoint',name:'frontSideHem',x:'hemQuarter',y:'skirtLength'}, {op:'placePoint',name:'frontFoldHem',x:'0',y:'skirtLength'}, {op:'placePoint',name:'frontGrainTop',x:'waistQuarter/2',y:'5'}, {op:'placePoint',name:'frontGrainBottom',x:'waistQuarter/2',y:'skirtLength-5'},
+    {op:'lineBetween',name:'frontSideSeam',from:'frontSideWaist',to:'frontSideHem'}, {op:'promotePiece',id:'front',name:'A-line skirt front',nameAr:'أمام تنورة بقصة A',pointLoop:['frontFoldWaist','frontSideWaist','frontSideNotch','frontSideHem','frontFoldHem'],grain:['frontGrainTop','frontGrainBottom']}, {op:'setPieceRole',piece:'front',role:'skirt-front',cutOnFold:true,quantity:1}, {op:'setPieceConstruction',piece:'front',notchPoints:['frontSideNotch'],edges:[{from:'frontSideWaist',to:'frontSideHem',seamId:'skirt-side'}]},
+    {op:'placePoint',name:'backFoldWaist',x:'0',y:'skirtLength+12'}, {op:'placePoint',name:'backSideWaist',x:'waistQuarter',y:'skirtLength+12'}, {op:'placePoint',name:'backSideNotch',x:'waistQuarter+(hemQuarter-waistQuarter)/2',y:'skirtLength*1.5+12'}, {op:'placePoint',name:'backSideHem',x:'hemQuarter',y:'skirtLength*2+12'}, {op:'placePoint',name:'backFoldHem',x:'0',y:'skirtLength*2+12'}, {op:'placePoint',name:'backGrainTop',x:'waistQuarter/2',y:'skirtLength+17'}, {op:'placePoint',name:'backGrainBottom',x:'waistQuarter/2',y:'skirtLength*2+7'},
+    {op:'lineBetween',name:'backSideSeam',from:'backSideWaist',to:'backSideHem'}, {op:'promotePiece',id:'back',name:'A-line skirt back',nameAr:'خلف تنورة بقصة A',pointLoop:['backFoldWaist','backSideWaist','backSideNotch','backSideHem','backFoldHem'],grain:['backGrainTop','backGrainBottom']}, {op:'setPieceRole',piece:'back',role:'skirt-back',cutOnFold:true,quantity:1}, {op:'setPieceConstruction',piece:'back',notchPoints:['backSideNotch'],edges:[{from:'backSideWaist',to:'backSideHem',seamId:'skirt-side'}]},
     {op:'placePoint',name:'bandLeft',x:'hemQuarter+12',y:'0'}, {op:'placePoint',name:'bandRight',x:'hemQuarter+12+waist/2+2',y:'0'}, {op:'placePoint',name:'bandBottomRight',x:'hemQuarter+12+waist/2+2',y:'waistbandHeight'}, {op:'placePoint',name:'bandBottomLeft',x:'hemQuarter+12',y:'waistbandHeight'}, {op:'placePoint',name:'bandGrainTop',x:'hemQuarter+15',y:'waistbandHeight/2'}, {op:'placePoint',name:'bandGrainBottom',x:'hemQuarter+12+waist/2-1',y:'waistbandHeight/2'},
     {op:'promotePiece',id:'waistband',name:'Waistband',nameAr:'حزام الخصر',pointLoop:['bandLeft','bandRight','bandBottomRight','bandBottomLeft'],grain:['bandGrainTop','bandGrainBottom']}, {op:'setPieceRole',piece:'waistband',role:'waistband',cutOnFold:false,quantity:2},
   ]};
