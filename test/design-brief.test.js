@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {updateDesignBrief,prepareBriefDraft,briefMatchesStyle} from '../js/design-brief.js';
+import {updateDesignBrief,prepareBriefDraft,briefMatchesStyle,toggleDesignBriefFieldLock} from '../js/design-brief.js';
 import {Canvas} from '../js/canvas.js';
 import {migrateProject} from '../js/project-revisions.js';
 const defaults={waist:80,hips:100,chest:92};
@@ -54,6 +54,18 @@ test('follow-ups preserve unrelated choices and sleeve wording does not change g
   const updated=updateDesignBrief(result,'long');
   assert.equal(updated.fields.length.value,'long');
   assert.equal(updated.fields.family.value,'skirt');
+});
+test('field locks preserve a reviewed bilingual choice until the designer explicitly unlocks it',()=>{
+  for(const [lockedUpdate,unlockedUpdate] of [['waist 74 cm','waist 74 cm'],['خصر ٧٤ سم','خصر ٧٤ سم']]) {
+    const brief=toggleDesignBriefFieldLock(start(),'waist');
+    const blocked=updateDesignBrief(brief,lockedUpdate,lockedUpdate.startsWith('خصر')?'ar':'en');
+    assert.equal(blocked.fields.waist.value,72); assert.equal(blocked.fields.waist.locked,true);
+    assert.ok(blocked.issues.some(issue=>issue.field==='waist'&&issue.code==='locked'));
+    const unlocked=toggleDesignBriefFieldLock(blocked,'waist');
+    const revised=updateDesignBrief(unlocked,unlockedUpdate,unlockedUpdate.startsWith('خصر')?'ar':'en');
+    assert.equal(revised.fields.waist.value,74); assert.equal(revised.fields.waist.locked,false);
+  }
+  assert.throws(()=>toggleDesignBriefFieldLock(start(),'unknown'),/briefFieldMissing/);
 });
 test('provider results must confirm captured family and length before proposal review',()=>{
   const brief=start();

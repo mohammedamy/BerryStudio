@@ -12,7 +12,7 @@ const normalize = text => text.toLowerCase().replace(/[٠-٩]/g,c=>String(c.char
 function validateSession(session) {
   const record=value=>value && typeof value==='object' && !Array.isArray(value);
   const issuesValid=issues=>Array.isArray(issues) && issues.length<=20 && issues.every(i=>record(i) && typeof i.field==='string' && typeof i.code==='string');
-  const fieldsValid=fields=>record(fields) && Object.entries(fields).every(([key,field])=>record(field) && field.source==='user' && typeof field.turnId==='string' &&
+  const fieldsValid=fields=>record(fields) && Object.entries(fields).every(([key,field])=>record(field) && field.source==='user' && typeof field.turnId==='string' && (field.locked == null || typeof field.locked==='boolean') &&
     (Object.hasOwn(tokens,key) ? Object.hasOwn(tokens[key],field.value) : ['waist','hips','chest'].includes(key) && field.unit==='cm' && Number.isFinite(field.value) && field.value>0));
   if(!record(session) || session.version!==1 || !record(session.fields) || !Array.isArray(session.turns) || session.turns.length>60 || !Array.isArray(session.issues) || session.issues.length>20) throw new Error('briefVersion');
   for(const turn of session.turns) if(!record(turn) || !['user','assistant'].includes(turn.role) || (turn.role==='user' ? typeof turn.text!=='string' || turn.text.length>2000 : !fieldsValid(turn.fields) || !issuesValid(turn.issues))) throw new Error('briefVersion');
@@ -34,7 +34,12 @@ export function updateDesignBrief(previous, text, language = 'en') {
     if(unique.length!==1) { session.issues.push({field,code:'conflict',values:unique}); return; }
     const value=unique[0];
     if(unit && (!Number.isFinite(value) || value<=0)) { session.issues.push({field,code:'invalid',values:unique}); return; }
-    session.fields[field] = {value,source:'user',turnId,...(unit?{unit}:{})};
+    const existing=session.fields[field];
+    // A brief lock protects one accepted design choice from later free-text
+    // updates. The proposed new value is recorded as an issue, never applied;
+    // the designer must explicitly unlock it before revising that field.
+    if(existing?.locked && existing.value!==value) { session.issues.push({field,code:'locked'}); return; }
+    session.fields[field] = {value,source:'user',turnId,locked:existing?.locked===true,...(unit?{unit}:{})};
   };
   for(const [field,choices] of Object.entries(tokens)) {
     const source = field==='length' ? input.replace(/\b(?:long|short)[ -]sleeves?\b/g,'').replace(/(?:كم|أكمام)\s*(?:طويل[ةه]?|قصير[ةه]?)/gu,'') : input;
@@ -57,6 +62,17 @@ export function updateDesignBrief(previous, text, language = 'en') {
   }
   session.language=language==='ar'?'ar':'en';
   session.turns.push({id:crypto.randomUUID(),role:'assistant',language:session.language,fields:copy(session.fields),issues:copy(session.issues)});
+  return session;
+}
+
+// Locks are deliberately field-level and local to the saved brief. They do
+// not alter pattern geometry or the separate piece-lock system; this keeps a
+// conversational choice reviewable and reversible before a draft is proposed.
+export function toggleDesignBriefFieldLock(previous, field) {
+  validateSession(previous);
+  if(!Object.hasOwn(previous.fields,field)) throw new Error('briefFieldMissing');
+  const session=copy(previous);
+  session.fields[field].locked=!session.fields[field].locked;
   return session;
 }
 

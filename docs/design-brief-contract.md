@@ -10,6 +10,9 @@ The AI pane includes a separate English/Arabic **Design brief** section. Each
 submitted update and captured-choice response is saved on the current project.
 Follow-ups change recognized fields while keeping unrelated choices. Conflicting
 values remain unresolved until a later update supplies one corrected value.
+Each captured field can be explicitly locked by the designer. A later message
+that proposes a different value for a locked field records a visible locked
+issue and leaves that reviewed choice unchanged until the designer unlocks it.
 The interface lists captured choices and distinguishes supplied measurements
 from current-size defaults before enabling a draft request.
 
@@ -55,8 +58,9 @@ it does not establish that legacy paths reconcile all conflicting inputs.
 
 - Model-backed bilingual conversation, grounded advice linked to reviewed maker
   sources, design alternatives and explicit unsupported-intent detection.
-- Reviewed field-level locks and bounded in-place geometry-edit proposals beyond
-  the existing translate/rename/color command contract.
+- Bounded in-place geometry-edit proposals beyond the existing
+  translate/rename/color command contract. Brief field locks are implemented;
+  they protect only the saved brief and never mutate pattern geometry.
 - Broader input reconciliation, missing views, reference scale and permissioned
   real-image evaluation. Numeric-word parsing and arbitrary units are unsupported.
 - A versioned task evaluation measuring the complete conversational workflow;

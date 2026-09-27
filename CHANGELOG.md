@@ -1,5 +1,26 @@
 # Changelog
 
+## Plan 7 P7-07: reviewed bilingual brief locks
+
+Adds explicit field locks to the saved bilingual design brief. A locked choice
+cannot be overwritten by a later free-text message; the designer must unlock it
+before changing it. This is a local brief-review control, not model-backed
+advice, construction approval, maker approval or sewn-sample fit evidence.
+
+### Added
+
+- Lock and unlock controls for each captured brief field in English and Arabic.
+- A visible locked issue when later text proposes a different reviewed value.
+- Regression coverage for English and Arabic lock preservation and explicit
+unlock before revision.
+
+### Verification
+
+- `npm test`: 376 passed, 0 failed.
+- Focused brief and translation coverage: 9 passed, 0 failed.
+- `git diff --check` passed.
+- Service-worker cache advanced to v44.
+
 ## Plan 7 P7-06: avatar switching and simulation evidence
 
 Makes avatar replacement safer in Cloth Lab and states the boundary of the 3D

@@ -1,4 +1,4 @@
-import { updateDesignBrief, prepareBriefDraft } from './design-brief.js';
+import { updateDesignBrief, prepareBriefDraft, toggleDesignBriefFieldLock } from './design-brief.js';
 
 const node=(tag,text)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;return n;};
 export function mountDesignBrief(container,{t,language,getBrief,saveBrief,measurements,generate}) {
@@ -25,7 +25,13 @@ export function mountDesignBrief(container,{t,language,getBrief,saveBrief,measur
       const p=node('p',`${t(turn.role==='user'?'briefYou':'briefAssistant')}: ${text}`);p.dir='auto';history.append(p);
       for(const issue of turn.issues || []) history.append(node('p',`${t('brief_'+issue.field)}: ${t('brief_'+issue.code)}`));
     }
-    for(const [key,field] of Object.entries(brief.fields || {})) summary.append(node('p',`${t('brief_'+key)}: ${field.unit?`${field.value} ${field.unit}`:t('brief_'+field.value)}`));
+    for(const [key,field] of Object.entries(brief.fields || {})) {
+      const row=node('div'); row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px';
+      row.append(node('p',`${t('brief_'+key)}: ${field.unit?`${field.value} ${field.unit}`:t('brief_'+field.value)}`));
+      const lock=node('button',field.locked?t('briefUnlock'):t('briefLock')); lock.className='big-btn ghost'; lock.style.cssText='padding:4px 8px;font-size:12px';
+      lock.setAttribute('aria-pressed',String(!!field.locked)); lock.onclick=()=>{ saveBrief(toggleDesignBriefFieldLock(getBrief(),key)); paint(); };
+      row.append(lock); summary.append(row);
+    }
     for(const issue of prepared.issues) summary.append(node('p',`${t('brief_'+issue.field)}: ${t('brief_'+issue.code)}`));
     if(prepared.decision==='propose') {
       summary.append(node('p',t('briefSizeNote')));
