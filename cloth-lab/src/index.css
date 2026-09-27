@@ -87,6 +87,7 @@
 .cloth-lab-root .cl-sidebar > details { border-top:1px solid var(--border); }
 .cloth-lab-root .cl-preview { min-width:0; min-height:0; position:relative; overflow:auto; }
 .cloth-lab-root .cl-preview:has(canvas) { overflow:hidden; }
+.cloth-lab-root .cl-simulation-note { position:absolute; z-index:4; inset-inline:12px; bottom:10px; margin:0; max-width:620px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:color-mix(in srgb, var(--panel) 90%, transparent); color:var(--text-2); font-size:12px; line-height:1.4; pointer-events:none; }
 .cloth-lab-root .cl-preview-tools { position:absolute; top:12px; inset-inline-start:12px; z-index:4; display:flex; flex-wrap:wrap; gap:6px; max-width:calc(100% - 24px); }
 .cloth-lab-root .cl-pattern-svg { width:100%; height:250px; background:var(--bg); margin:12px 0; border-radius:8px; touch-action:manipulation; }
 .cloth-lab-root .cl-pattern-svg [role=button] { cursor:pointer; }

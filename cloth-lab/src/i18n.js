@@ -75,6 +75,7 @@ export const STRINGS = {
     poseWarnSeatedLeg: 'This avatar’s leg rig wasn’t recognized, so "Seated" only relaxes the arms — the legs stay standing.',
     poseWarnWalkNoClip: 'This avatar has no embedded animation clip — the "Walk" pose renders standing instead.',
     avatarLoadError: 'This custom avatar failed to load — showing the standard body instead.',
+    simulationIndicative: 'Simulation is indicative. Confirm material behaviour, construction and fit with a maker and sewn sample.',
   },
   ar: {
     title: 'بيري ستوديو ٣D — معمل القماش',
@@ -126,6 +127,7 @@ export const STRINGS = {
     poseWarnSeatedLeg: 'لم يُتعرّف على هيكل الساقين لهذا الشكل، لذا وضعية "جالسة" تُرخي الذراعين فقط — وتبقى الساقان في وضع الوقوف.',
     poseWarnWalkNoClip: 'لا يحتوي هذا الشكل على مقطع حركة مضمّن — لذا تُعرض وضعية "المشي" كوضعية وقوف بدلاً من ذلك.',
     avatarLoadError: 'تعذّر تحميل هذا الشكل المخصّص — يتم عرض الجسم الافتراضي بدلاً منه.',
+    simulationIndicative: 'المحاكاة استرشادية. أكّد سلوك الخامة والبناء والملاءمة مع صانع الباترون وعينة مخيطة.',
   },
 }
 
