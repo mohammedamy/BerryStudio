@@ -1,4 +1,5 @@
 import { assessWovenSkirtConstruction } from './construction-acceptance.js';
+import { createConstructionPacket } from './construction-packet.js';
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const skirtRoles = new Set(['skirt-front', 'skirt-back', 'waistband']);
@@ -24,6 +25,7 @@ export function createConstructionEvidenceRecord(project, { evaluatedAt = new Da
       patternProgramFamily: typeof project?.patternProgram?.family === 'string' ? project.patternProgram.family : null,
     },
     assessment,
+    packet: createConstructionPacket(project),
     approvals: { makerApproval: null, sampleApproval: null, productionEligible: false },
     limitations: [
       'This record measures only declared geometry evidence.',

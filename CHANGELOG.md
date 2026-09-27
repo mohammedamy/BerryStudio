@@ -1,5 +1,33 @@
 # Changelog
 
+## Plan 7 P7-02–P7-05: measurement-aware, configured A-line skirt drafting
+
+Implements the first bounded made-to-measure path in Plan 7: a saved measurement
+profile can feed an explicit woven A-line skirt configuration, which generates
+editable geometry, declared side-seam evidence, and an honest construction packet.
+This is not maker approval, fit approval, or production certification.
+
+### Added
+
+- Named measurement profiles with provenance, fit context, import/export, project
+  snapshots, and bilingual browser coverage.
+- A versioned woven A-line skirt configuration contract that rejects unsupported
+  options before the deterministic drafting program executes.
+- Typed construction operations for side-seam declarations and registration
+  notches, plus persisted configuration metadata on accepted drafts.
+- A construction-packet section in the evidence export with cut list, declared
+  seam lengths, ordered assembly guidance, and explicit unverified waistband,
+  closure, maker and sample states.
+
+### Verification
+
+- `npm test`: 375 passed, 0 failed.
+- Targeted construction packet/program checks: 8 passed, 0 failed.
+- `oxlint js`: existing warnings only, no errors; `git diff --check` passed.
+- P7-02's Chromium measurement-profile flow passed. P7-03's added browser
+  assertion is included but was not rerun in this worktree because its local
+  dependency directory is absent; CI remains the full release gate.
+
 ## WP-43: join the mf11 denim jacket collar band
 
 Adds explicit opening-front, folded-back and collar-band joins while preserving
