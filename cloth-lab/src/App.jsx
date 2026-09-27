@@ -333,6 +333,7 @@ function Workspace({ bodyOnly, lang, dims, measurements, onMeasurementsChange, f
         )}
         {debugView === 'seams' && !bodyOnly ? <SewingDesk editor={seamEditor} lang={lang} /> : <>
           <div className="cl-preview-tools"><button onClick={fitCamera}>{lang === 'ar' ? 'ملاءمة العرض' : 'Fit view'}</button><button onClick={() => zoomBy(1.2)} aria-label="Zoom in">+</button><button onClick={() => zoomBy(0.83)} aria-label="Zoom out">−</button>{debugView === 'cloth' && <><button onClick={() => setPaused(v => !v)}>{paused ? (lang === 'ar' ? 'تشغيل' : 'Resume') : (lang === 'ar' ? 'إيقاف مؤقت' : 'Pause')}</button><button onClick={() => { setPaused(false); setRestartVersion(v => v + 1) }}>{lang === 'ar' ? 'إعادة المعاينة' : 'Restart drape'}</button></>}</div>
+          <p className="cl-simulation-note">{t(lang, 'simulationIndicative')}</p>
           <SceneBoundary key={`${debugView}-${garment?.pieces?.length}`} lang={lang} onRecover={() => onViewChange('seams')}>
             <Canvas key={restartVersion} shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
               <Scene dims={dims} lang={lang} debugView={debugView} fabricId={fabricId} qualityTier={qualityTier} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} controlsRef={controlsRef} paused={paused} />

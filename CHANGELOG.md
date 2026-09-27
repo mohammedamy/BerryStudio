@@ -1,5 +1,30 @@
 # Changelog
 
+## Plan 7 P7-06: avatar switching and simulation evidence
+
+Makes avatar replacement safer in Cloth Lab and states the boundary of the 3D
+evidence in both English and Arabic. Simulation remains indicative; it is not
+maker approval, sample-fit approval, or production certification.
+
+### Fixed
+
+- Reset a previous mesh-derived collision rig as soon as the avatar URL changes,
+  so Cloth Lab cannot collide against a body that is no longer visible while a
+  replacement is loading or falls back to the procedural avatar.
+- Retry the GLB path after a bad custom URL by remounting the error boundary for
+  the newly selected URL.
+- Advance the service-worker cache to v43 so the updated 3D disclosure reaches
+  existing installs promptly.
+
+### Verification
+
+- `npm test`: 375 passed, 0 failed.
+- Root translation coverage and `git diff --check` passed.
+- Cloth Lab lint passed with its existing warnings only; embedded production
+  build passed.
+- See `docs/audits/2026-09-27-p7-06-avatar-confidence.md` for the automated
+  evidence and explicitly unverified device, export and sample checks.
+
 ## Plan 7 P7-02–P7-05: measurement-aware, configured A-line skirt drafting
 
 Implements the first bounded made-to-measure path in Plan 7: a saved measurement

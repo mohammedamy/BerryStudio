@@ -576,6 +576,7 @@ export const I18N = {
     v3dErrorBody: "We couldn't start the 3D preview — WebGL or a first-load connection may be missing.",
     v3dRetry: "Retry", v3dContinue2D: "Continue in 2D",
     v3dAvatarFailed: "Custom avatar couldn't load — showing the standard model instead.",
+    v3dIndicative: "3D preview is indicative. Confirm material behaviour, construction and fit with a maker and sewn sample.",
     copiedObj: "Copied", cutObj: "Cut", pastedObj: "Pasted",
   },
   ar: {
@@ -1096,6 +1097,7 @@ export const I18N = {
     v3dErrorBody: "تعذّر تشغيل معاينة الـ٣D — قد يكون WebGL أو الاتصال بالإنترنت غير متوفر.",
     v3dRetry: "إعادة المحاولة", v3dContinue2D: "المتابعة بعرض ٢D",
     v3dAvatarFailed: "تعذّر تحميل الشكل المخصّص — يتم عرض الشكل الافتراضي بدلًا منه.",
+    v3dIndicative: "المعاينة ثلاثية الأبعاد استرشادية. أكّد سلوك الخامة والبناء والملاءمة مع صانع الباترون وعينة مخيطة.",
     copiedObj: "تم النسخ", cutObj: "تم القص", pastedObj: "تم اللصق",
   }
 };

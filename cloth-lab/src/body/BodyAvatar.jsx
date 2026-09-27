@@ -1,4 +1,4 @@
-import { Component, Suspense, useEffect } from 'react'
+import { Component, Suspense, useEffect, useRef } from 'react'
 import Avatar from './Avatar'
 import GLBAvatar from './GLBAvatar'
 import { t } from '../i18n'
@@ -50,10 +50,25 @@ class AvatarErrorBoundary extends Component {
 // limitation possible) — GLBAvatar unmounting doesn't otherwise get a
 // chance to clear whatever it last reported.
 export default function BodyAvatar({ dims, lang = 'en', url, collisionRigRef, skinColor, pose, onPoseWarning }) {
-  useEffect(() => { if (!url && onPoseWarning) onPoseWarning(null) }, [url, onPoseWarning])
+  // A previous GLB can leave a mesh-derived collision rig in the shared Scene
+  // ref. Clear it during the URL-changing render so ClothMesh never collides
+  // against a body that is no longer on screen while the next GLB is loading,
+  // or after it falls back to the procedural body.
+  const lastUrlRef = useRef(undefined)
+  if (lastUrlRef.current !== url) {
+    lastUrlRef.current = url
+    if (collisionRigRef) collisionRigRef.current = null
+  }
+  useEffect(() => {
+    if (!url && onPoseWarning) onPoseWarning(null)
+  }, [url, onPoseWarning])
   if (!url) return <Avatar dims={dims} skinColor={skinColor} pose={pose} />
   return (
     <AvatarErrorBoundary
+      // Error boundaries retain their failure state for their whole mount.
+      // Keying by URL makes a valid later choice retry instead of keeping the
+      // procedural fallback that a previous bad custom URL selected.
+      key={url}
       fallback={<Avatar dims={dims} skinColor={skinColor} pose={pose} />}
       onLoadError={() => onPoseWarning && onPoseWarning(t(lang, 'avatarLoadError'))}
     >
