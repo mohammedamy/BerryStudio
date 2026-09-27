@@ -1,9 +1,10 @@
 import { prepareBriefDraft } from './design-brief.js';
-import { createWovenALineSkirtProgram, executePatternProgram } from './pattern-program.js';
+import { executePatternProgram } from './pattern-program.js';
+import { createWovenALineSkirtConfiguration, configurationToWovenALineSkirtProgram, summarizeWovenALineSkirtConfiguration } from './skirt-configurator.js';
 
 const node=(tag,text)=>{const element=document.createElement(tag);if(text!=null) element.textContent=text;return element;};
 
-export function mountPatternProgram(container,{t,getBrief,measurements,validate,review}) {
+export function mountPatternProgram(container,{t,getBrief,measurements,measurementProfileId,language,validate,review}) {
   const section=node('section'); section.className='pattern-program'; section.style.cssText='display:grid;gap:10px;margin-top:24px';
   section.append(node('h3',t('programTitle')),node('p',t('programScope')));
   const status=node('p'); status.setAttribute('aria-live','polite');
@@ -24,9 +25,10 @@ export function mountPatternProgram(container,{t,getBrief,measurements,validate,
       const next=prepared();
       if(next.decision!=='propose' || !next.prompt.endsWith('woven skirt')) { paint(); return; }
       const length=next.prompt.startsWith('short')?'short':next.prompt.startsWith('long')?'long':'regular';
-      const program=createWovenALineSkirtProgram(length), output=executePatternProgram(program,next.measurements), report=validate(output.pieces,next.measurements);
+      const configuration=createWovenALineSkirtConfiguration({length,measurementProfileId:measurementProfileId?.()||null});
+      const program=configurationToWovenALineSkirtProgram(configuration), output=executePatternProgram(program,next.measurements), report=validate(output.pieces,next.measurements);
       if(report.summary.fail) { status.textContent=t('programRejected'); return; }
-      review({pieces:output.pieces,colors:['#6d5efc','#00c2a8','#e2a52b'],summary:t('programReview'),brief:structuredClone(getBrief()),patternProgram:{version:1,family:program.family,operations:program.operations,measurements:next.measurements,provenance:next.provenance,validation:report}});
+      review({pieces:output.pieces,colors:['#6d5efc','#00c2a8','#e2a52b'],summary:`${t('programReview')} ${summarizeWovenALineSkirtConfiguration(configuration,language?.()||'en')}`,brief:structuredClone(getBrief()),patternConfiguration:configuration,patternProgram:{version:1,family:program.family,operations:program.operations,measurements:next.measurements,provenance:next.provenance,validation:report}});
     } catch { status.textContent=t('programRejected'); }
   };
   section.append(status,button); container.append(section); paint(); return paint;

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWovenALineSkirtProgram, executePatternProgram, validatePatternProgram } from '../js/pattern-program.js';
 import { Canvas } from '../js/canvas.js';
+import { assessWovenSkirtConstruction } from '../js/construction-acceptance.js';
 
 const measurements={waist:72,hips:98};
 test('woven A-line skirt program executes as three typed, editable pieces',()=>{
@@ -10,6 +11,8 @@ test('woven A-line skirt program executes as three typed, editable pieces',()=>{
   assert.deepEqual(result.pieces.map(piece=>piece.role),['skirt-front','skirt-back','waistband']);
   assert.equal(result.pieces[0].cutOnFold,true); assert.equal(result.pieces[2].quantity,2);
   assert.ok(result.lines.some(line=>line.name==='frontSideSeam'));
+  assert.deepEqual(result.pieces.slice(0,2).map(piece=>piece.notches.length),[1,1]);
+  assert.equal(assessWovenSkirtConstruction(result.pieces).decision,'side-seam-checked');
 });
 test('the program rejects executable fields, unknown references and bad formula values before output',()=>{
   const program=createWovenALineSkirtProgram('short');
@@ -21,8 +24,9 @@ test('the program rejects executable fields, unknown references and bad formula 
 test('accepted program provenance stays with the generated project without mutating source geometry',()=>{
   const output=executePatternProgram(createWovenALineSkirtProgram('long'),measurements);
   Canvas.loadPieces([],[],[],[],{}); Canvas.setHistory({undo:[],redo:[]});
-  Canvas.setPattern(output.pieces,['#123456'],{patternProgram:{version:1,family:'woven-a-line-skirt',operations:[],measurements,provenance:{waist:{source:'user'}}}});
+  Canvas.setPattern(output.pieces,['#123456'],{patternProgram:{version:1,family:'woven-a-line-skirt',operations:[],measurements,provenance:{waist:{source:'user'}}},patternConfiguration:{version:1,family:'woven-a-line-skirt',silhouette:'a-line',length:'long',waistband:'standard',closure:'none',fabric:'woven',seamAllowanceCm:1,measurementProfileId:null}});
   assert.equal(Canvas.snapshotState().patternProgram.family,'woven-a-line-skirt');
+  assert.equal(Canvas.snapshotState().patternConfiguration.length,'long');
   assert.equal(Canvas.getPieces().length,3);
 });
 

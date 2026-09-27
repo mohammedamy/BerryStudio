@@ -33,6 +33,14 @@ import { generateFromSpec, provenanceMapFromSpec, generateSVGPatternFromImage } 
 import { fuseStyle, mergeProvenance } from './ai-fusion.js';
 import { ImageProviders, IMAGE_PROVIDER_IDS } from './image-providers.js';
 import { MEAS_KEYS, renderMeasureFields } from './measure-form.js';
+import {
+  createMeasurementProfile,
+  updateMeasurementProfile,
+  snapshotMeasurementProfile,
+  createWorkingMeasurementSnapshot,
+  parseMeasurementProfiles,
+  serializeMeasurementProfiles,
+} from './measurement-profiles.js';
 import { consumeBodyFormHandoff } from './body-handoff.js';
 import { nest as nestTruePolygon, cancelNest } from './nesting.js';
 import { stepForSize, resolveGradedPieces } from './grading.js';
@@ -55,6 +63,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     lang: "en", theme: "intl", mode: "light",
     category: "women", size: "M", standard: "intl",
     kids: null, custom: {}, unitsCm: true,
+    measurementProfiles: [], selectedMeasurementProfileId: null,
     hoverHelp: true, highContrast: false, reduceMotion: false, cloudSync: false,
     onboarded: false, mine: [], aiEndpoint: "", aiImageEndpoint: "", fabric3d: "cotton", showMeasDiagram: false,
     // BerryStudio-Upgrade-Plan WP-1: provider layer config. Non-secret only —
@@ -167,6 +176,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     }
   }
   if(!Array.isArray(state.projects)) state.projects = [];
+  try { state.measurementProfiles = parseMeasurementProfiles(state.measurementProfiles); }
+  catch { state.measurementProfiles = []; state.selectedMeasurementProfileId = null; }
+  if(!state.measurementProfiles.some(profile=>profile.id===state.selectedMeasurementProfileId)) state.selectedMeasurementProfileId=null;
   let projectsReady = false;
   let storageWarningShown = false;
   // WP-17: honour the OS-level reduced-motion preference by default, but only
@@ -653,10 +665,96 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     drawGradeNest(canvas, outlinesBySize);
   }
 
+  function workingMeasurementSnapshot(name=T("workingMeasurements")){
+    return createWorkingMeasurementSnapshot({
+      name, category:state.category, units:state.unitsCm?"cm":"inch", measurements:currentMeas(),
+    });
+  }
+  function selectedMeasurementProfile(){ return state.measurementProfiles.find(profile=>profile.id===state.selectedMeasurementProfileId)||null; }
+  function applyMeasurementSnapshotToState(snapshot){
+    if(!snapshot?.measurements) return false;
+    state.category=snapshot.category||state.category;
+    state.unitsCm=snapshot.units!=="inch";
+    state.custom={...snapshot.measurements};
+    syncCategoryUI(); Canvas.setOpt("unitsCm",state.unitsCm); updateUnitsPill();
+    return true;
+  }
+  function applySelectedMeasurementProfile(){
+    const profile=selectedMeasurementProfile(); if(!profile) return;
+    const snapshot=snapshotMeasurementProfile(profile);
+    applyMeasurementSnapshotToState(snapshot);
+    const project=activeProject(); if(project) project.measurementProfileSnapshot=snapshot;
+    grade(); renderMeasurePane(); toast(T("measurementProfileApplied"));
+  }
+  function detachMeasurementProfile(){
+    state.selectedMeasurementProfileId=null;
+    const project=activeProject(); if(project) project.measurementProfileSnapshot=null;
+  }
+  function openMeasurementProfileEditor(profile=null){
+    openModal(profile?T("measurementProfileEdit"):T("measurementProfileNew"),"",true);
+    const body=$("#genericModal .modal-body"); body.innerHTML="";
+    let fieldSeq=0;
+    const addField=(text,node)=>{ const wrap=el("div","field"); const label=el("label",null,text); node.id=`measurementProfileField${fieldSeq++}`; label.htmlFor=node.id; wrap.appendChild(label); wrap.appendChild(node); body.appendChild(wrap); };
+    const input=(value="",type="text")=>{ const node=el("input","input"); node.type=type; node.value=value; return node; };
+    const name=input(profile?.name||""); addField(T("measurementProfileName"),name);
+    const source=el("select","select");
+    [["measured",T("profileSourceMeasured")],["size-chart",T("profileSourceChart")],["estimated",T("profileSourceEstimated")],["imported",T("profileSourceImported")]].forEach(([value,label])=>{const option=el("option",null,label);option.value=value;option.selected=(profile?.source||"measured")===value;source.appendChild(option);});
+    addField(T("measurementProfileSource"),source);
+    const notes=el("textarea","input"); notes.rows=3; notes.value=profile?.notes||""; addField(T("measurementProfileNotes"),notes);
+    const ease=input(profile?.easeCm??0,"number"); ease.step="0.1"; addField(T("measurementProfileEase"),ease);
+    const stretch=input(profile?.stretchPercent??0,"number"); stretch.step="0.1"; addField(T("measurementProfileStretch"),stretch);
+    const fit=el("select","select");
+    [["fitted",T("opt_fitted")],["regular",T("opt_regular")],["relaxed",T("opt_relaxed")]].forEach(([value,label])=>{const option=el("option",null,label);option.value=value;option.selected=(profile?.fitPreference||"regular")===value;fit.appendChild(option);});
+    addField(T("measurementProfileFit"),fit);
+    const shape=input(profile?.bodyShape||""); addField(T("measurementProfileBodyShape"),shape);
+    body.appendChild(el("div","help-note",T("measurementProfileCaptureHint")));
+    const saveBtn=el("button","big-btn",T("measurementProfileSave")); saveBtn.style.marginTop="12px";
+    saveBtn.onclick=()=>{ try{
+      const values={ name:name.value, units:state.unitsCm?"cm":"inch", category:state.category, source:source.value, notes:notes.value, easeCm:+ease.value||0, stretchPercent:+stretch.value||0, fitPreference:fit.value, bodyShape:shape.value, measurements:currentMeas() };
+      const saved=profile?updateMeasurementProfile(profile,values):createMeasurementProfile(values);
+      const index=state.measurementProfiles.findIndex(item=>item.id===saved.id);
+      if(index>=0) state.measurementProfiles[index]=saved; else state.measurementProfiles.push(saved);
+      state.selectedMeasurementProfileId=saved.id;
+      const snapshot=snapshotMeasurementProfile(saved); const project=activeProject(); if(project) project.measurementProfileSnapshot=snapshot;
+      save(); closeModal("#genericModal"); renderMeasurePane(); toast(T("measurementProfileSaved"));
+    } catch { toast(T("measurementProfileInvalid")); } };
+    body.appendChild(saveBtn);
+  }
+  function previewMeasurementProfile(profile){
+    if(!profile) return;
+    openModal(T("measurementProfilePreview"),"",true);
+    const body=$("#genericModal .modal-body"); body.innerHTML="";
+    body.appendChild(el("div","help-note",`${profile.name} · ${profile.units} · ${profile.category} · ${profile.source}`));
+    const table=el("div");
+    MEAS_KEYS.forEach(key=>{ const row=el("div","meas-row"); row.appendChild(el("label",null,T("m_"+key))); row.appendChild(el("strong",null,`${profile.measurements[key]} cm`)); table.appendChild(row); });
+    body.appendChild(table);
+    body.appendChild(el("div","help-note",`${T("measurementProfileEase")}: ${profile.easeCm} cm · ${T("measurementProfileStretch")}: ${profile.stretchPercent}% · ${T("measurementProfileFit")}: ${T("opt_"+profile.fitPreference)}`));
+    if(profile.notes) body.appendChild(el("p",null,profile.notes));
+  }
+
   // MEASURE PANE — the numeric fields + reference diagram themselves live in
   // js/measure-form.js (shared with the standalone BodyForm page, WP-10).
   function renderMeasurePane() {
     const c = $(".rail-pane[data-pane=measure]"); c.innerHTML="";
+    c.appendChild(el("div","section-title",IC.measure+T("measurementProfiles")));
+    c.appendChild(el("div","help-note",T("measurementProfilesHint")));
+    const profileSelect=el("select","select"); profileSelect.style.marginTop="10px";
+    const emptyOption=el("option",null,T("measurementProfileNone")); emptyOption.value=""; profileSelect.appendChild(emptyOption);
+    state.measurementProfiles.forEach(profile=>{ const option=el("option",null,profile.name); option.value=profile.id; option.selected=profile.id===state.selectedMeasurementProfileId; profileSelect.appendChild(option); });
+    profileSelect.onchange=()=>{ state.selectedMeasurementProfileId=profileSelect.value||null; save(); renderMeasurePane(); };
+    c.appendChild(profileSelect);
+    const profileActions=el("div"); profileActions.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px";
+    const newProfile=el("button","big-btn ghost",T("measurementProfileNew")); newProfile.onclick=()=>openMeasurementProfileEditor();
+    const editProfile=el("button","big-btn ghost",T("measurementProfileEdit")); editProfile.disabled=!selectedMeasurementProfile(); editProfile.onclick=()=>openMeasurementProfileEditor(selectedMeasurementProfile());
+    const applyProfile=el("button","big-btn",T("measurementProfileApply")); applyProfile.disabled=!selectedMeasurementProfile(); applyProfile.onclick=applySelectedMeasurementProfile;
+    const previewProfile=el("button","big-btn ghost",T("measurementProfilePreview")); previewProfile.disabled=!selectedMeasurementProfile(); previewProfile.onclick=()=>previewMeasurementProfile(selectedMeasurementProfile());
+    profileActions.append(newProfile,editProfile,applyProfile,previewProfile); c.appendChild(profileActions);
+    const transferActions=el("div"); transferActions.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px";
+    const exportProfiles=el("button","big-btn ghost",T("measurementProfileExport")); exportProfiles.disabled=!state.measurementProfiles.length; exportProfiles.onclick=()=>download("berrystudio-measurement-profiles.json","application/json",serializeMeasurementProfiles(state.measurementProfiles));
+    const importInput=el("input"); importInput.type="file"; importInput.accept=".json,application/json"; importInput.style.display="none";
+    importInput.onchange=()=>{ const file=importInput.files?.[0]; if(!file) return; const reader=new FileReader(); reader.onload=()=>{ try{ const imported=parseMeasurementProfiles(reader.result); const byId=new Map(state.measurementProfiles.map(profile=>[profile.id,profile])); imported.forEach(profile=>byId.set(profile.id,profile)); state.measurementProfiles=[...byId.values()]; save(); renderMeasurePane(); toast(T("measurementProfileImported")); } catch { toast(T("measurementProfileInvalid")); } }; reader.readAsText(file); };
+    const importProfiles=el("button","big-btn ghost",T("measurementProfileImport")); importProfiles.onclick=()=>importInput.click();
+    transferActions.append(exportProfiles,importProfiles); c.append(transferActions,importInput);
     c.appendChild(el("div","section-title",IC.measure+T("customMeas")));
     c.appendChild(el("div","help-note",T("liveUpdate")));
 
@@ -665,11 +763,11 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       measurements: currentMeas(), T, icon: IC.measure,
       showDiagram: state.showMeasDiagram,
       onToggleDiagram: (v)=>{ state.showMeasDiagram=v; save(); },
-      onFieldChange: (k,v)=>{ state.custom[k]=v; grade(); },
+      onFieldChange: (k,v)=>{ detachMeasurementProfile(); state.custom[k]=v; grade(); },
     });
 
     const b=el("button","big-btn",IC.check+T("applyMeas")); b.style.marginTop="14px"; b.onclick=()=>{grade();toast(T("graded"));}; c.appendChild(b);
-    const r=el("button","big-btn ghost",T("cancel")); r.style.marginTop="8px"; r.onclick=()=>{state.custom={};grade();renderMeasurePane();}; c.appendChild(r);
+    const r=el("button","big-btn ghost",T("cancel")); r.style.marginTop="8px"; r.onclick=()=>{detachMeasurementProfile();state.custom={};grade();renderMeasurePane();}; c.appendChild(r);
 
     // Custom Variables — named formulas usable in any construction point's X/Y.
     c.appendChild(el("div","section-title",IC.measure+T("varsTitle")));
@@ -1289,7 +1387,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       },
     });
     refreshPatternProgram=mountPatternProgram(c,{
-      t:T,getBrief:()=>Canvas.snapshotState().brief || null,measurements:currentMeas,
+      t:T,getBrief:()=>Canvas.snapshotState().brief || null,measurements:currentMeas,measurementProfileId:()=>state.selectedMeasurementProfileId,language:()=>state.lang,
       validate:(pieces,measurements)=>PatternValidator.run(pieces,{bodyChestCm:measurements.chest,seamAllowanceCm:state.seamCm||1,offsetPoly:Canvas.offsetPoly}),
       review:res=>{if(requireEntitlement()) reviewGeneratedPattern(res,'programDone');},
     });
@@ -2271,7 +2369,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   function initProjectTabs(){
     if(!state.projects.length){
       const p = { id: projectSeq++, title: state.loaded ? (L((PATTERNS[state.loaded]||{}).name)||T("untitledProject")) : T("untitledProject"), customTitle:false,
-        snapshot: Canvas.snapshotState(), history: Canvas.getHistory(), loaded: state.loaded, category: state.category, aiImage };
+        snapshot: Canvas.snapshotState(), history: Canvas.getHistory(), loaded: state.loaded, category: state.category, aiImage,
+        measurementProfileSnapshot: workingMeasurementSnapshot() };
       state.projects.push(p);
       state.activeProjectId = p.id;
     } else if(!activeProject()){
@@ -2293,6 +2392,13 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     Canvas.setHistory(target.history);
     state.loaded = target.loaded||null;
     if(target.category && target.category!==state.category){ state.category=target.category; syncCategoryUI(); }
+    if(target.measurementProfileSnapshot){
+      try {
+        target.measurementProfileSnapshot=snapshotMeasurementProfile(target.measurementProfileSnapshot,target.measurementProfileSnapshot.selectedAt);
+        applyMeasurementSnapshotToState(target.measurementProfileSnapshot);
+        state.selectedMeasurementProfileId=state.measurementProfiles.some(profile=>profile.id===target.measurementProfileSnapshot.id)?target.measurementProfileSnapshot.id:null;
+      } catch { target.measurementProfileSnapshot=workingMeasurementSnapshot(); state.selectedMeasurementProfileId=null; }
+    } else { target.measurementProfileSnapshot=workingMeasurementSnapshot(); state.selectedMeasurementProfileId=null; }
     aiImage = target.aiImage||null;
     if(Canvas.getPieces().length) hideEmpty(); else showEmpty();
     renderLayersPane(); renderAIPane(); renderSizePane(); renderMeasurePane();
@@ -2306,7 +2412,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     Canvas.setHistory({undo:[],redo:[]});
     state.loaded=null; aiImage=null;
     const p = { id: projectSeq++, title: T("untitledProject"), customTitle:false,
-      snapshot: Canvas.snapshotState(), history: Canvas.getHistory(), loaded:null, category: state.category, aiImage:null };
+      snapshot: Canvas.snapshotState(), history: Canvas.getHistory(), loaded:null, category: state.category, aiImage:null,
+      measurementProfileSnapshot: workingMeasurementSnapshot() };
     state.projects.push(p);
     state.activeProjectId = p.id;
     showEmpty(); renderLayersPane(); renderAIPane();
@@ -2359,6 +2466,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   function projectPayload(){
     const payload = migrateProject(Canvas.snapshotState());
     delete payload.view;
+    payload.measurementProfileSnapshot=activeProject()?.measurementProfileSnapshot||workingMeasurementSnapshot();
     return payload;
   }
   function reviewProjectChange(){
@@ -2376,7 +2484,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
   function reviewGeneratedPattern(res, doneToastKey){
     // Generated geometry is a new draft, never an in-place replacement.
-    const draft = migrateProject({pieces:res.pieces,...(res.patternProgram?{patternProgram:res.patternProgram}:{})});
+    const draft = migrateProject({pieces:res.pieces,...(res.patternProgram?{patternProgram:res.patternProgram}:{}),...(res.patternConfiguration?{patternConfiguration:res.patternConfiguration}:{})});
     openModal(T("reviewGeneratedTitle"), "", true);
     const body=$("#genericModal .modal-body");
     const hint=el("p"); hint.textContent=T("reviewGeneratedHint");
@@ -2396,7 +2504,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       if(!requireEntitlement()) return;
       accept.disabled=true;
       newProjectTab();
-      Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc'],{...(res.brief?{brief:res.brief}:{}),...(res.patternProgram?{patternProgram:res.patternProgram}:{})});
+      Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc'],{...(res.brief?{brief:res.brief}:{}),...(res.patternProgram?{patternProgram:res.patternProgram}:{}),...(res.patternConfiguration?{patternConfiguration:res.patternConfiguration}:{})});
       hideEmpty(); renderLayersPane(); renderAIAttrs(res);
       if(is3DActive()) build3D(res.colorInt);
       save(); closeModal("#genericModal"); toast(T(doneToastKey));
@@ -2409,6 +2517,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if(!data || typeof data !== "object") return false;
     try { data=migrateProject(data); } catch { return false; }
     if(!Canvas.loadPieces(data.pieces, data.texts, data.points, data.cons, data)) return false;
+    let measurementSnapshot;
+    try { measurementSnapshot=data.measurementProfileSnapshot?snapshotMeasurementProfile(data.measurementProfileSnapshot,data.measurementProfileSnapshot.selectedAt):workingMeasurementSnapshot(); }
+    catch { return false; }
+    const project=activeProject(); if(project) project.measurementProfileSnapshot=measurementSnapshot;
+    applyMeasurementSnapshotToState(measurementSnapshot);
+    state.selectedMeasurementProfileId=state.measurementProfiles.some(profile=>profile.id===measurementSnapshot.id)?measurementSnapshot.id:null;
     state.loaded=null; hideEmpty(); renderLayersPane();
     if(is3DActive()) build3D(); save();
     return true;
