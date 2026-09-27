@@ -25,9 +25,11 @@ test('a resolved woven skirt brief previews and accepts a typed program as a new
   await expect(page.locator('.project-tab')).toHaveCount(2);
   const state=await page.evaluate(()=>window.Canvas.snapshotState());
   expect(state.patternProgram.family).toBe('woven-a-line-skirt');
+  expect(state.patternConfiguration).toMatchObject({family:'woven-a-line-skirt',length:'regular',fabric:'woven'});
   expect(state.pieces.map(piece=>piece.role)).toEqual(['skirt-front','skirt-back','waistband']);
   expect(state.brief).toBeTruthy();
   await page.reload();
   await expect.poll(()=>page.evaluate(()=>window.Canvas.snapshotState().patternProgram?.family)).toBe('woven-a-line-skirt');
+  await expect.poll(()=>page.evaluate(()=>window.Canvas.snapshotState().patternConfiguration?.family)).toBe('woven-a-line-skirt');
   expect(await page.evaluate(()=>window.Canvas.snapshotState().brief)).toEqual(state.brief);
 });

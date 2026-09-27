@@ -1387,7 +1387,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       },
     });
     refreshPatternProgram=mountPatternProgram(c,{
-      t:T,getBrief:()=>Canvas.snapshotState().brief || null,measurements:currentMeas,
+      t:T,getBrief:()=>Canvas.snapshotState().brief || null,measurements:currentMeas,measurementProfileId:()=>state.selectedMeasurementProfileId,language:()=>state.lang,
       validate:(pieces,measurements)=>PatternValidator.run(pieces,{bodyChestCm:measurements.chest,seamAllowanceCm:state.seamCm||1,offsetPoly:Canvas.offsetPoly}),
       review:res=>{if(requireEntitlement()) reviewGeneratedPattern(res,'programDone');},
     });
@@ -2484,7 +2484,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
   function reviewGeneratedPattern(res, doneToastKey){
     // Generated geometry is a new draft, never an in-place replacement.
-    const draft = migrateProject({pieces:res.pieces,...(res.patternProgram?{patternProgram:res.patternProgram}:{})});
+    const draft = migrateProject({pieces:res.pieces,...(res.patternProgram?{patternProgram:res.patternProgram}:{}),...(res.patternConfiguration?{patternConfiguration:res.patternConfiguration}:{})});
     openModal(T("reviewGeneratedTitle"), "", true);
     const body=$("#genericModal .modal-body");
     const hint=el("p"); hint.textContent=T("reviewGeneratedHint");
@@ -2504,7 +2504,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       if(!requireEntitlement()) return;
       accept.disabled=true;
       newProjectTab();
-      Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc'],{...(res.brief?{brief:res.brief}:{}),...(res.patternProgram?{patternProgram:res.patternProgram}:{})});
+      Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc'],{...(res.brief?{brief:res.brief}:{}),...(res.patternProgram?{patternProgram:res.patternProgram}:{}),...(res.patternConfiguration?{patternConfiguration:res.patternConfiguration}:{})});
       hideEmpty(); renderLayersPane(); renderAIAttrs(res);
       if(is3DActive()) build3D(res.colorInt);
       save(); closeModal("#genericModal"); toast(T(doneToastKey));

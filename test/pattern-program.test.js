@@ -21,8 +21,9 @@ test('the program rejects executable fields, unknown references and bad formula 
 test('accepted program provenance stays with the generated project without mutating source geometry',()=>{
   const output=executePatternProgram(createWovenALineSkirtProgram('long'),measurements);
   Canvas.loadPieces([],[],[],[],{}); Canvas.setHistory({undo:[],redo:[]});
-  Canvas.setPattern(output.pieces,['#123456'],{patternProgram:{version:1,family:'woven-a-line-skirt',operations:[],measurements,provenance:{waist:{source:'user'}}}});
+  Canvas.setPattern(output.pieces,['#123456'],{patternProgram:{version:1,family:'woven-a-line-skirt',operations:[],measurements,provenance:{waist:{source:'user'}}},patternConfiguration:{version:1,family:'woven-a-line-skirt',silhouette:'a-line',length:'long',waistband:'standard',closure:'none',fabric:'woven',seamAllowanceCm:1,measurementProfileId:null}});
   assert.equal(Canvas.snapshotState().patternProgram.family,'woven-a-line-skirt');
+  assert.equal(Canvas.snapshotState().patternConfiguration.length,'long');
   assert.equal(Canvas.getPieces().length,3);
 });
 
