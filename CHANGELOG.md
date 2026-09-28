@@ -13,11 +13,14 @@ advice, construction approval, maker approval or sewn-sample fit evidence.
 - A visible locked issue when later text proposes a different reviewed value.
 - Regression coverage for English and Arabic lock preservation and explicit
 unlock before revision.
+- A versioned six-case local benchmark covering bilingual extraction, conflict
+  clarification, unsupported-intent abstention, missing choices and lock
+  preservation.
 
 ### Verification
 
-- `npm test`: 376 passed, 0 failed.
-- Focused brief and translation coverage: 9 passed, 0 failed.
+- `npm test`: 377 passed, 0 failed.
+- Focused brief and benchmark coverage: 8 passed, 0 failed.
 - `git diff --check` passed.
 - Service-worker cache advanced to v44.
 
