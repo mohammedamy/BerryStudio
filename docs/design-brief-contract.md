@@ -1,6 +1,6 @@
-# V6-07 — saved conversational brief foundation
+# P7-07 — saved conversational brief foundation
 
-Release scope on `codex/v6-07-conversational-brief`. This is
+Release scope on `codex/p7-07-copilot-locks`. This is
 the bounded local foundation of V6-07, not completion of the Phase 2 copilot
 acceptance gate or evidence of maker-approved fit.
 
@@ -54,7 +54,17 @@ The existing direct-generation controls and Quick Draft builder remain separate.
 The new reconciliation/validation gate is scoped to the saved-brief workflow;
 it does not establish that legacy paths reconcile all conflicting inputs.
 
-## Open V6-07 acceptance work
+## Local benchmark evidence
+
+`evaluation/p7-07/corpus.json` is a versioned, deterministic six-case
+regression corpus. It verifies English and Arabic supported extraction,
+conflict clarification, an unsupported stretch request, missing required
+choices, and a locked reviewed waist value that cannot change until explicitly
+unlocked. It is intentionally not a measure of hosted-model guidance,
+alternative quality, construction, maker acceptance, fit or production
+readiness.
+
+## Open P7-07 acceptance work
 
 - Model-backed bilingual conversation, grounded advice linked to reviewed maker
   sources, design alternatives and explicit unsupported-intent detection.
@@ -63,8 +73,9 @@ it does not establish that legacy paths reconcile all conflicting inputs.
   they protect only the saved brief and never mutate pattern geometry.
 - Broader input reconciliation, missing views, reference scale and permissioned
   real-image evaluation. Numeric-word parsing and arbitrary units are unsupported.
-- A versioned task evaluation measuring the complete conversational workflow;
-  the Phase 2 success target is unmeasured. V6-06's 24 held-outs stay untouched.
+- A provider-specific held-out evaluation measuring the complete conversational
+  workflow; the Phase 2 success target is unmeasured. V6-06's 24 held-outs
+  stay untouched.
 - Maker-reviewed blocks and construction evidence remain prerequisites for
   claiming pattern/fit quality. A validator pass is not sample approval.
 
