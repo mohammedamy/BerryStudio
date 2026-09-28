@@ -1,0 +1,44 @@
+{
+  "id": "p7-07-local-brief-foundation.v1",
+  "scope": "Deterministic local brief capture only. It does not evaluate hosted-model advice, maker acceptance, pattern fit, construction quality, or production readiness.",
+  "defaultsCm": { "waist": 80, "hips": 100, "chest": 92 },
+  "cases": [
+    {
+      "id": "en-supported-skirt",
+      "language": "en",
+      "messages": ["regular-length woven skirt, waist 72 cm, hips 98 cm"],
+      "expect": { "decision": "propose", "fields": { "family": "skirt", "length": "regular", "fabric": "woven", "waist": 72, "hips": 98 } }
+    },
+    {
+      "id": "ar-supported-skirt",
+      "language": "ar",
+      "messages": ["تنورة منسوجة بطول عادي، خصر ٧٢ سم، أرداف ٩٨ سم"],
+      "expect": { "decision": "propose", "fields": { "family": "skirt", "length": "regular", "fabric": "woven", "waist": 72, "hips": 98 } }
+    },
+    {
+      "id": "conflicting-measurement",
+      "language": "en",
+      "messages": ["regular-length woven skirt, waist 72 cm, hips 98 cm", "waist 70 cm and 90 cm"],
+      "expect": { "decision": "clarify", "issue": "conflict" }
+    },
+    {
+      "id": "unsupported-stretch",
+      "language": "ar",
+      "messages": ["تنورة منسوجة بطول عادي، خصر ٧٢ سم، أرداف ٩٨ سم", "مطاط"],
+      "expect": { "decision": "abstain", "issue": "unsupported" }
+    },
+    {
+      "id": "locked-choice-requires-unlock",
+      "language": "en",
+      "messages": ["regular-length woven skirt, waist 72 cm, hips 98 cm", "waist 74 cm"],
+      "lockBeforeMessage": { "messageIndex": 1, "field": "waist" },
+      "expect": { "decision": "clarify", "issue": "locked", "fields": { "waist": 72 } }
+    },
+    {
+      "id": "missing-required-choices",
+      "language": "ar",
+      "messages": ["تنورة منسوجة"],
+      "expect": { "decision": "clarify", "issue": "missing" }
+    }
+  ]
+}

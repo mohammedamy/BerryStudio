@@ -1,6 +1,6 @@
-# V6-07 — saved conversational brief foundation
+# P7-07 — saved conversational brief foundation
 
-Release scope on `codex/v6-07-conversational-brief`. This is
+Release scope on `codex/p7-07-copilot-locks`. This is
 the bounded local foundation of V6-07, not completion of the Phase 2 copilot
 acceptance gate or evidence of maker-approved fit.
 
@@ -10,8 +10,17 @@ The AI pane includes a separate English/Arabic **Design brief** section. Each
 submitted update and captured-choice response is saved on the current project.
 Follow-ups change recognized fields while keeping unrelated choices. Conflicting
 values remain unresolved until a later update supplies one corrected value.
+Each captured field can be explicitly locked by the designer. A later message
+that proposes a different value for a locked field records a visible locked
+issue and leaves that reviewed choice unchanged until the designer unlocks it.
 The interface lists captured choices and distinguishes supplied measurements
 from current-size defaults before enabling a draft request.
+
+For a complete woven brief, it also offers the two other supported length
+choices as local alternatives. Selecting one records a normal saved-brief turn
+and is therefore visible, undoable and subject to the same field lock as typed
+input. These are bounded alternatives only; they do not present model advice,
+construction guidance, fit guidance or a claim about what a maker should use.
 
 Supported captured fields are garment family (skirt/dress/trousers), garment
 length (short/regular/long), fabric (woven; stretch is explicitly unsupported),
@@ -51,16 +60,28 @@ The existing direct-generation controls and Quick Draft builder remain separate.
 The new reconciliation/validation gate is scoped to the saved-brief workflow;
 it does not establish that legacy paths reconcile all conflicting inputs.
 
-## Open V6-07 acceptance work
+## Local benchmark evidence
+
+`evaluation/p7-07/corpus.json` is a versioned, deterministic six-case
+regression corpus. It verifies English and Arabic supported extraction,
+conflict clarification, an unsupported stretch request, missing required
+choices, and a locked reviewed waist value that cannot change until explicitly
+unlocked. It is intentionally not a measure of hosted-model guidance,
+alternative quality, construction, maker acceptance, fit or production
+readiness.
+
+## Open P7-07 acceptance work
 
 - Model-backed bilingual conversation, grounded advice linked to reviewed maker
-  sources, design alternatives and explicit unsupported-intent detection.
-- Reviewed field-level locks and bounded in-place geometry-edit proposals beyond
-  the existing translate/rename/color command contract.
+  sources, richer design alternatives and explicit unsupported-intent detection.
+- Bounded in-place geometry-edit proposals beyond the existing
+  translate/rename/color command contract. Brief field locks are implemented;
+  they protect only the saved brief and never mutate pattern geometry.
 - Broader input reconciliation, missing views, reference scale and permissioned
   real-image evaluation. Numeric-word parsing and arbitrary units are unsupported.
-- A versioned task evaluation measuring the complete conversational workflow;
-  the Phase 2 success target is unmeasured. V6-06's 24 held-outs stay untouched.
+- A provider-specific held-out evaluation measuring the complete conversational
+  workflow; the Phase 2 success target is unmeasured. V6-06's 24 held-outs
+  stay untouched.
 - Maker-reviewed blocks and construction evidence remain prerequisites for
   claiming pattern/fit quality. A validator pass is not sample approval.
 

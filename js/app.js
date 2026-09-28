@@ -561,7 +561,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const rulesForPiece = rulesForPattern[selKey] || {};
 
     const head = el("div","row"); head.style.cssText="display:flex;gap:6px;padding:4px 0;font-size:11px;font-weight:700;color:var(--ink-2)";
-    head.appendChild(el("span",null,"#")).style.flex="0 0 30%";
+    head.appendChild(el("span",null,T("gradeRulesPoint"))).style.flex="0 0 30%";
     head.appendChild(el("span",null,T("gradeRulesDx"))).style.flex="1";
     head.appendChild(el("span",null,T("gradeRulesDy"))).style.flex="1";
     c.appendChild(head);
@@ -766,7 +766,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       onFieldChange: (k,v)=>{ detachMeasurementProfile(); state.custom[k]=v; grade(); },
     });
 
-    const b=el("button","big-btn",IC.check+T("applyMeas")); b.style.marginTop="14px"; b.onclick=()=>{grade();toast(T("graded"));}; c.appendChild(b);
+    const b=el("button","big-btn",IC.check+T("applyMeas")); b.style.marginTop="14px"; b.onclick=()=>{grade();toast(T("measurementsRecalculated"));}; c.appendChild(b);
     const r=el("button","big-btn ghost",T("cancel")); r.style.marginTop="8px"; r.onclick=()=>{detachMeasurementProfile();state.custom={};grade();renderMeasurePane();}; c.appendChild(r);
 
     // Custom Variables — named formulas usable in any construction point's X/Y.
@@ -1093,8 +1093,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       ci.style.cssText="position:absolute;width:0;height:0;opacity:0;pointer-events:none";
       ci.oninput=()=>{ Canvas.setColor(i,ci.value); sw.style.background=ci.value; sync3DFabric(); };
       sw.appendChild(ci); row.appendChild(sw);
-      const nameEl = el("span","lname"); nameEl.textContent=L(p.name);
-      const otherName=el("small"); otherName.textContent=p.name[state.lang==="ar"?"en":"ar"]; nameEl.append(otherName);
+      const nameEl = el("span","lname"); nameEl.dir=state.lang==="ar"?"rtl":"ltr"; nameEl.textContent=L(p.name);
+      const otherName=el("small"); otherName.dir=state.lang==="ar"?"ltr":"rtl"; otherName.textContent=p.name[state.lang==="ar"?"en":"ar"]; nameEl.append(otherName);
       nameEl.ondblclick=(e)=>{ e.stopPropagation(); openLayerProps(i, row); };
       row.appendChild(nameEl);
       const props = el("button", null, IC.dots); props.title=T("layerProps");
@@ -1320,9 +1320,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   const AI_STAGES = ["analyzing","silhouette","drafting"];
   function renderAIPane() {
     const c = $(".rail-pane[data-pane=ai]"); c.innerHTML="";
-    if(!gateAllowed()){ renderGateUpsell(c, "aiTitle"); return; }
+    // Guests can exercise non-generative brief controls. Provider calls still
+    // require an active trial through their own action handlers.
+    if(!gateAllowed() && currentSession?.user){ renderGateUpsell(c, "aiTitle"); return; }
     c.appendChild(el("div","section-title",IC.spark+T("aiTitle")));
     c.appendChild(el("div","help-note",T("aiDesc")));
+    if(!gateAllowed()) c.appendChild(el("div","help-note",T("aiGuestScope")));
 
     // inspiration image preview (restored from state if present)
     const preview=el("div","ai-preview"+(aiImage?" show":""));

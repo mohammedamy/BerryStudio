@@ -360,8 +360,8 @@ button { cursor: pointer; border: none; background: none; }
 .range:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
 .range::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--brand); box-shadow: var(--shadow-1); cursor: pointer; }
 .range::-moz-range-thumb { width: 18px; height: 18px; border: none; border-radius: 50%; background: var(--brand); cursor: pointer; }
-.layer .lname { flex: 1; font-size: 12.5px; font-weight: 600; }
-.layer .lname small { display:block; color: var(--ink-2); font-weight:500; font-size:10px; }
+.layer .lname { flex: 1; font-size: 12.5px; font-weight: 600; unicode-bidi:isolate; }
+.layer .lname small { display:block; color: var(--ink-2); font-weight:500; font-size:10px; unicode-bidi:isolate; margin-top:2px; }
 .layer button { color: var(--ink-2); width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; }
 .layer button:hover { background: var(--panel); color: var(--ink); }
 .layer button svg { width: 15px; height: 15px; }

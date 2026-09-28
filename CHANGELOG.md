@@ -1,5 +1,55 @@
 # Changelog
 
+## Review follow-up: guest brief access and Arabic panel clarity
+
+Addresses verified usability findings from the external product review without
+changing generation entitlement or representing unverified 3D/browser reports
+as production defects.
+
+### Fixed
+
+- Signed-out visitors can explore the local guided prompt and saved-brief
+  controls; every provider request and AI generation remains gated by the
+  active-trial check.
+- Explain the guest boundary in the AI panel before any action is attempted.
+- Isolate alternate-language layer names so Arabic and Latin scripts cannot
+  merge visually, and replace raw grading headers with localized directional
+  labels.
+- Make measurement behavior explicit: values update the pattern as entered;
+  the remaining button repeats the current calculation.
+
+### Verification
+
+- `npm test`: 378 passed, 0 failed.
+- `node --check js/app.js`, entitlement and bilingual-key coverage passed.
+- Service-worker cache advanced to v46.
+
+## Plan 7 P7-07: reviewed bilingual brief locks
+
+Adds explicit field locks to the saved bilingual design brief. A locked choice
+cannot be overwritten by a later free-text message; the designer must unlock it
+before changing it. This is a local brief-review control, not model-backed
+advice, construction approval, maker approval or sewn-sample fit evidence.
+
+### Added
+
+- Lock and unlock controls for each captured brief field in English and Arabic.
+- A visible locked issue when later text proposes a different reviewed value.
+- Regression coverage for English and Arabic lock preservation and explicit
+unlock before revision.
+- A versioned six-case local benchmark covering bilingual extraction, conflict
+  clarification, unsupported-intent abstention, missing choices and lock
+  preservation.
+- Two explicit, local length alternatives for a complete woven brief. Selecting
+  one writes a normal saved revision and cannot override a reviewed lock.
+
+### Verification
+
+- `npm test`: 378 passed, 0 failed.
+- Focused brief, translation and benchmark coverage: 11 passed, 0 failed.
+- `git diff --check` passed.
+- Service-worker cache advanced to v45.
+
 ## Plan 7 P7-06: avatar switching and simulation evidence
 
 Makes avatar replacement safer in Cloth Lab and states the boundary of the 3D
