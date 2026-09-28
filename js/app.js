@@ -1395,6 +1395,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         if(!result.ok) throw new Error(result.error || 'imageStudioFailed');
         return result.image;
       },
+      useSelected:concept=>{ aiImage=concept.image; save(); toast(T('imageStudioSelectedForPattern')); },
     });
     refreshPatternProgram=mountPatternProgram(c,{
       t:T,getBrief:()=>Canvas.snapshotState().brief || null,getStudio:()=>Canvas.snapshotState().imageStudio || null,category:()=>state.category,measurements:currentMeas,measurementProfileId:()=>state.selectedMeasurementProfileId,language:()=>state.lang,

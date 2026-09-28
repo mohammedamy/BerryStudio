@@ -6,6 +6,10 @@ Direct image-to-SVG imports now abstain before canvas mutation when an imported
 outline is open or self-intersecting. The interface explains the abstention and
 states that a passing import still requires designer and maker review.
 
+Selected Image Studio concepts can now be deliberately used as the image
+reference for the gated AI pattern flow, retaining the existing selected-concept
+review step rather than silently using a generated image.
+
 ### Verification
 
 - `npm test`: 380 passed, 0 failed.
