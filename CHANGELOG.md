@@ -10,10 +10,13 @@ Selected Image Studio concepts can now be deliberately used as the image
 reference for the gated AI pattern flow, retaining the existing selected-concept
 review step rather than silently using a generated image.
 
+Accepted direct-SVG imports retain an immutable `ai-svg-image` source marker
+and geometry-validation summary on every imported piece for later review.
+
 ### Verification
 
-- `npm test`: 380 passed, 0 failed.
-- Direct-SVG, translation and syntax coverage: 13 passed, 0 failed.
+- `npm test`: 381 passed, 0 failed.
+- Direct-SVG and provenance coverage: 12 passed, 0 failed.
 
 ## Plan 7 P7-03: bounded basic woven dress
 

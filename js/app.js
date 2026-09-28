@@ -1739,7 +1739,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     try{
       const res = await generateSVGPatternFromImage({ adapter, cfg, imageDataURL: aiImage });
       if(!res.ok){ toast(T(classifySVGFailReason(res.reason))); return; }
-      const n = Canvas.importPieces(res.pieces);
+      const n = Canvas.importPieces(res.pieces, {kind:'ai-svg-image', validation:res.validation.summary});
       hideEmpty(); renderLayersPane();
       if(is3DActive()) build3D();
       save();
