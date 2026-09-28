@@ -1,0 +1,9 @@
+{
+  "id": "p7-08-local-image-studio-foundation.v1",
+  "scope": "Local Image Studio state only. It does not evaluate provider image quality, rights ownership, fashion usefulness, maker approval, fit, or production readiness.",
+  "cases": [
+    { "id": "text-concept", "mode": "text-to-image", "expectsReference": false },
+    { "id": "reference-variation", "mode": "image-to-image", "expectsReference": true },
+    { "id": "invalid-result-preserves-prior-state", "mode": "recovery", "expectsReference": true }
+  ]
+}
