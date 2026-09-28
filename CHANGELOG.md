@@ -16,13 +16,15 @@ unlock before revision.
 - A versioned six-case local benchmark covering bilingual extraction, conflict
   clarification, unsupported-intent abstention, missing choices and lock
   preservation.
+- Two explicit, local length alternatives for a complete woven brief. Selecting
+  one writes a normal saved revision and cannot override a reviewed lock.
 
 ### Verification
 
-- `npm test`: 377 passed, 0 failed.
-- Focused brief and benchmark coverage: 8 passed, 0 failed.
+- `npm test`: 378 passed, 0 failed.
+- Focused brief, translation and benchmark coverage: 11 passed, 0 failed.
 - `git diff --check` passed.
-- Service-worker cache advanced to v44.
+- Service-worker cache advanced to v45.
 
 ## Plan 7 P7-06: avatar switching and simulation evidence
 

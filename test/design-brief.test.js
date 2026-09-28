@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {updateDesignBrief,prepareBriefDraft,briefMatchesStyle,toggleDesignBriefFieldLock} from '../js/design-brief.js';
+import {applyBriefAlternative,getBriefAlternatives,updateDesignBrief,prepareBriefDraft,briefMatchesStyle,toggleDesignBriefFieldLock} from '../js/design-brief.js';
 import {Canvas} from '../js/canvas.js';
 import {migrateProject} from '../js/project-revisions.js';
 const defaults={waist:80,hips:100,chest:92};
@@ -66,6 +66,19 @@ test('field locks preserve a reviewed bilingual choice until the designer explic
     assert.equal(revised.fields.waist.value,74); assert.equal(revised.fields.waist.locked,false);
   }
   assert.throws(()=>toggleDesignBriefFieldLock(start(),'unknown'),/briefFieldMissing/);
+});
+test('bounded length alternatives are saved revisions and cannot bypass a reviewed lock',()=>{
+  const source=start();
+  assert.deepEqual(getBriefAlternatives(source).map(item=>item.id),['length:short','length:long']);
+  const locked=toggleDesignBriefFieldLock(source,'length');
+  const blocked=applyBriefAlternative(locked,'length:long');
+  assert.equal(blocked.fields.length.value,'regular');
+  assert.ok(blocked.issues.some(issue=>issue.code==='locked'&&issue.field==='length'));
+  const revised=applyBriefAlternative(toggleDesignBriefFieldLock(blocked,'length'),'length:long');
+  assert.equal(revised.fields.length.value,'long');
+  const arabic=updateDesignBrief(null,'تنورة منسوجة بطول عادي، خصر ٧٢ سم، أرداف ٩٨ سم','ar');
+  assert.equal(applyBriefAlternative(arabic,'length:short').fields.length.value,'short');
+  assert.throws(()=>applyBriefAlternative(source,'length:regular'),/briefAlternativeInvalid/);
 });
 test('provider results must confirm captured family and length before proposal review',()=>{
   const brief=start();

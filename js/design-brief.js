@@ -76,6 +76,32 @@ export function toggleDesignBriefFieldLock(previous, field) {
   return session;
 }
 
+// These are deliberately bounded alternatives, not model advice. Selecting one
+// creates the same auditable saved-brief turn as a typed choice, and locks are
+// still enforced by updateDesignBrief before any captured field can change.
+export function getBriefAlternatives(session) {
+  validateSession(session);
+  const { family, length, fabric } = session.fields;
+  if (!family || !length || !fabric || fabric.value !== 'woven') return [];
+  return ['short', 'regular', 'long'].filter(value => value !== length.value).map(value => ({
+    id: `length:${value}`,
+    field: 'length',
+    value,
+  }));
+}
+
+export function applyBriefAlternative(previous, id) {
+  validateSession(previous);
+  const alternative = getBriefAlternatives(previous).find(item => item.id === id);
+  if (!alternative) throw new Error('briefAlternativeInvalid');
+  const { family, fabric } = previous.fields;
+  const arabic = previous.language === 'ar';
+  const copy = arabic
+    ? `${{ short: 'قصير', regular: 'طول عادي', long: 'طويل' }[alternative.value]} منسوجة ${ { skirt: 'تنورة', dress: 'فستان', trousers: 'سروال' }[family.value] }`
+    : `${alternative.value === 'regular' ? 'regular-length' : alternative.value} ${fabric.value} ${family.value}`;
+  return updateDesignBrief(previous, copy, previous.language);
+}
+
 export function prepareBriefDraft(session, defaults) {
   validateSession(session);
   const issues=copy(session.issues);

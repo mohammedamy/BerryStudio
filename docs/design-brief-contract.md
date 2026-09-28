@@ -16,6 +16,12 @@ issue and leaves that reviewed choice unchanged until the designer unlocks it.
 The interface lists captured choices and distinguishes supplied measurements
 from current-size defaults before enabling a draft request.
 
+For a complete woven brief, it also offers the two other supported length
+choices as local alternatives. Selecting one records a normal saved-brief turn
+and is therefore visible, undoable and subject to the same field lock as typed
+input. These are bounded alternatives only; they do not present model advice,
+construction guidance, fit guidance or a claim about what a maker should use.
+
 Supported captured fields are garment family (skirt/dress/trousers), garment
 length (short/regular/long), fabric (woven; stretch is explicitly unsupported),
 and waist/hips/chest. Numeric centimetres and inches, including Arabic digits,
@@ -67,7 +73,7 @@ readiness.
 ## Open P7-07 acceptance work
 
 - Model-backed bilingual conversation, grounded advice linked to reviewed maker
-  sources, design alternatives and explicit unsupported-intent detection.
+  sources, richer design alternatives and explicit unsupported-intent detection.
 - Bounded in-place geometry-edit proposals beyond the existing
   translate/rename/color command contract. Brief field locks are implemented;
   they protect only the saved brief and never mutate pattern geometry.

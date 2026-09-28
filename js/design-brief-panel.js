@@ -1,4 +1,4 @@
-import { updateDesignBrief, prepareBriefDraft, toggleDesignBriefFieldLock } from './design-brief.js';
+import { applyBriefAlternative, getBriefAlternatives, updateDesignBrief, prepareBriefDraft, toggleDesignBriefFieldLock } from './design-brief.js';
 
 const node=(tag,text)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;return n;};
 export function mountDesignBrief(container,{t,language,getBrief,saveBrief,measurements,generate}) {
@@ -31,6 +31,16 @@ export function mountDesignBrief(container,{t,language,getBrief,saveBrief,measur
       const lock=node('button',field.locked?t('briefUnlock'):t('briefLock')); lock.className='big-btn ghost'; lock.style.cssText='padding:4px 8px;font-size:12px';
       lock.setAttribute('aria-pressed',String(!!field.locked)); lock.onclick=()=>{ saveBrief(toggleDesignBriefFieldLock(getBrief(),key)); paint(); };
       row.append(lock); summary.append(row);
+    }
+    const alternatives=getBriefAlternatives(brief);
+    if(alternatives.length) {
+      const alternativesTitle=node('p',t('briefAlternatives')); summary.append(alternativesTitle);
+      for(const alternative of alternatives) {
+        const option=node('button',t(`briefAlternative_${alternative.value}`)); option.className='big-btn ghost'; option.style.cssText='padding:4px 8px;font-size:12px';
+        option.onclick=()=>{ try { saveBrief(applyBriefAlternative(getBrief(),alternative.id)); paint(); } catch(e) { error.textContent=t(e.message); } };
+        summary.append(option);
+      }
+      summary.append(node('p',t('briefAlternativesScope')));
     }
     for(const issue of prepared.issues) summary.append(node('p',`${t('brief_'+issue.field)}: ${t('brief_'+issue.code)}`));
     if(prepared.decision==='propose') {
