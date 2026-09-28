@@ -49,7 +49,13 @@ for(const [name, profile, user, allowed] of [
     for(const pane of ['ai','builder']) {
       await page.locator(`#railTabs button[data-pane="${pane}"]`).click();
       const gate=page.locator(`.rail-pane[data-pane="${pane}"]`).getByRole('button',{name:/^(Sign in|Upgrade)$/});
-      if(allowed) await expect(gate).toHaveCount(0); else await expect(gate).toBeVisible();
+      // Signed-out visitors can explore local Design Brief controls, but
+      // generation is still checked at its action handler. Expired and
+      // missing-profile accounts remain gated, as does Quick Draft.
+      const guestBriefPlayground = pane==='ai' && !user;
+      if(allowed || guestBriefPlayground) await expect(gate).toHaveCount(0);
+      else await expect(gate).toBeVisible();
+      if(guestBriefPlayground) await expect(page.locator(`.rail-pane[data-pane="${pane}"]`)).toContainText('Starting an AI generation');
     }
     await expect(page.locator('#patternCanvas')).toBeVisible();
   });
