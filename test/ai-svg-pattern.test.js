@@ -41,9 +41,18 @@ test('generateSVGPatternFromImage sends the exact prompt as `system`, attaches t
   const res = await generateSVGPatternFromImage({ adapter, cfg: {}, imageDataURL: 'data:image/png;base64,AAA' });
   assert.equal(res.ok, true);
   assert.equal(res.pieces.length, 1);
+  assert.equal(res.validation.perPiece[0].checks.selfIntersection.status, 'pass');
   assert.equal(adapter.calls[0].system, SVG_PATTERN_PROMPT);
   assert.deepEqual(adapter.calls[0].images, ['data:image/png;base64,AAA']);
   assert.equal(adapter.calls[0].maxTokens, 8192);
+});
+
+test('generateSVGPatternFromImage abstains when parsed provider geometry fails validation', async () => {
+  const bowtie = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="10cm" height="10cm"><polygon points="0,0 8,8 0,8 8,0"/></svg>';
+  const res = await generateSVGPatternFromImage({ adapter: mockAdapter([{ ok: true, text: bowtie }]), cfg: {}, imageDataURL: 'data:image/png;base64,AAA' });
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'validation-failed');
+  assert.ok(res.validation.summary.fail > 0);
 });
 
 test('generateSVGPatternFromImage retries once with a corrective nudge when the first reply has no extractable SVG', async () => {

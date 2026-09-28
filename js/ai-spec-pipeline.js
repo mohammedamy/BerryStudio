@@ -568,5 +568,17 @@ export async function generateSVGPatternFromImage({ adapter, cfg, imageDataURL, 
   if (!svg) return { ok: false, reason: 'no-svg-in-reply' };
   const parsed = parseSVGPattern(svg);
   if (!parsed.pieces.length) return { ok: false, reason: 'no-shapes', warnings: parsed.warnings, svg };
-  return { ok: true, pieces: parsed.pieces, warnings: parsed.warnings, svg };
+  // Direct image-to-SVG output is still untrusted provider material. Keep it
+  // outside the canvas unless the same geometry gate used by deterministic
+  // paths reports no failures; warnings remain visible for review.
+  const validation = PatternValidator.run(parsed.pieces, {});
+  // Imported SVGs do not necessarily carry authored grainlines or allowance
+  // metadata, so those checks cannot be a truthful hard gate here. Closed,
+  // non-self-intersecting outlines are mandatory before a provider result may
+  // reach the canvas.
+  const mandatoryFailure = validation.perPiece.some(item =>
+    ['closedOutline', 'selfIntersection'].some(check => item.checks[check]?.status === 'fail')
+  );
+  if (mandatoryFailure) return { ok: false, reason: 'validation-failed', warnings: parsed.warnings, validation, svg };
+  return { ok: true, pieces: parsed.pieces, warnings: parsed.warnings, validation, svg };
 }
