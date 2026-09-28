@@ -1,5 +1,17 @@
 # Changelog
 
+## Plan 7 P7-08: local Image Studio evidence
+
+Adds a versioned local regression benchmark for text concepts, reference-guided
+variations, and invalid-result recovery. It measures project-state boundaries,
+not provider quality, image rights, fashion utility, fit, construction, or
+production readiness.
+
+### Verification
+
+- `npm test`: 379 passed, 0 failed.
+- Focused Image Studio and benchmark coverage: 4 passed, 0 failed.
+
 ## Review follow-up: guest brief access and Arabic panel clarity
 
 Addresses verified usability findings from the external product review without
