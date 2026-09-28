@@ -724,12 +724,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if(!profile) return;
     openModal(T("measurementProfilePreview"),"",true);
     const body=$("#genericModal .modal-body"); body.innerHTML="";
-    body.appendChild(el("div","help-note",`${profile.name} · ${profile.units} · ${profile.category} · ${profile.source}`));
+    const summary=el("div","help-note"); summary.textContent=`${profile.name} · ${profile.units} · ${profile.category} · ${profile.source}`; body.appendChild(summary);
     const table=el("div");
-    MEAS_KEYS.forEach(key=>{ const row=el("div","meas-row"); row.appendChild(el("label",null,T("m_"+key))); row.appendChild(el("strong",null,`${profile.measurements[key]} cm`)); table.appendChild(row); });
+    MEAS_KEYS.forEach(key=>{ const row=el("div","meas-row"); const label=el("label"); label.textContent=T("m_"+key); const value=el("strong"); value.textContent=`${profile.measurements[key]} cm`; row.append(label,value); table.appendChild(row); });
     body.appendChild(table);
-    body.appendChild(el("div","help-note",`${T("measurementProfileEase")}: ${profile.easeCm} cm · ${T("measurementProfileStretch")}: ${profile.stretchPercent}% · ${T("measurementProfileFit")}: ${T("opt_"+profile.fitPreference)}`));
-    if(profile.notes) body.appendChild(el("p",null,profile.notes));
+    const context=el("div","help-note"); context.textContent=`${T("measurementProfileEase")}: ${profile.easeCm} cm · ${T("measurementProfileStretch")}: ${profile.stretchPercent}% · ${T("measurementProfileFit")}: ${T("opt_"+profile.fitPreference)}`; body.appendChild(context);
+    if(profile.notes){ const notes=el("p"); notes.textContent=profile.notes; body.appendChild(notes); }
   }
 
   // MEASURE PANE — the numeric fields + reference diagram themselves live in
@@ -740,7 +740,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     c.appendChild(el("div","help-note",T("measurementProfilesHint")));
     const profileSelect=el("select","select"); profileSelect.style.marginTop="10px";
     const emptyOption=el("option",null,T("measurementProfileNone")); emptyOption.value=""; profileSelect.appendChild(emptyOption);
-    state.measurementProfiles.forEach(profile=>{ const option=el("option",null,profile.name); option.value=profile.id; option.selected=profile.id===state.selectedMeasurementProfileId; profileSelect.appendChild(option); });
+    state.measurementProfiles.forEach(profile=>{ const option=el("option"); option.textContent=profile.name; option.value=profile.id; option.selected=profile.id===state.selectedMeasurementProfileId; profileSelect.appendChild(option); });
     profileSelect.onchange=()=>{ state.selectedMeasurementProfileId=profileSelect.value||null; save(); renderMeasurePane(); };
     c.appendChild(profileSelect);
     const profileActions=el("div"); profileActions.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px";
@@ -2359,6 +2359,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     p.loaded = state.loaded;
     p.category = state.category;
     p.aiImage = aiImage;
+    // Named-profile snapshots are immutable evidence. Working snapshots,
+    // however, must follow every size/standard/category/manual edit so a
+    // tab switch or JSON export can never retain stale measurements.
+    if(!p.measurementProfileSnapshot || String(p.measurementProfileSnapshot.id||"").startsWith("working-")) {
+      p.measurementProfileSnapshot=workingMeasurementSnapshot();
+    }
     // Auto-title from the loaded library pattern's own name, like a
     // browser tab's title tracking the page — unless the user has
     // explicitly renamed this tab (double-click), which always wins.
@@ -2469,7 +2475,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   function projectPayload(){
     const payload = migrateProject(Canvas.snapshotState());
     delete payload.view;
-    payload.measurementProfileSnapshot=activeProject()?.measurementProfileSnapshot||workingMeasurementSnapshot();
+    const snapshot=activeProject()?.measurementProfileSnapshot;
+    payload.measurementProfileSnapshot=snapshot && !String(snapshot.id||"").startsWith("working-") ? snapshot : workingMeasurementSnapshot();
     return payload;
   }
   function reviewProjectChange(){
@@ -2519,10 +2526,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   function applyProjectPayload(data){
     if(!data || typeof data !== "object") return false;
     try { data=migrateProject(data); } catch { return false; }
-    if(!Canvas.loadPieces(data.pieces, data.texts, data.points, data.cons, data)) return false;
     let measurementSnapshot;
     try { measurementSnapshot=data.measurementProfileSnapshot?snapshotMeasurementProfile(data.measurementProfileSnapshot,data.measurementProfileSnapshot.selectedAt):workingMeasurementSnapshot(); }
     catch { return false; }
+    // Validate every project-domain field before replacing the live canvas;
+    // a rejected measurement snapshot must leave current work untouched.
+    if(!Canvas.loadPieces(data.pieces, data.texts, data.points, data.cons, data)) return false;
     const project=activeProject(); if(project) project.measurementProfileSnapshot=measurementSnapshot;
     applyMeasurementSnapshotToState(measurementSnapshot);
     state.selectedMeasurementProfileId=state.measurementProfiles.some(profile=>profile.id===measurementSnapshot.id)?measurementSnapshot.id:null;
@@ -3714,7 +3723,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     }
     Canvas.recomputeConstruction();   // re-resolve any formula-driven construction points to the new measurements
     refreshDesignBrief?.();
-    updateGradeLbl(); updateStageChips(); renderSizePane(); save();
+    updateGradeLbl(); updateStageChips(); renderSizePane(); renderMeasurePane(); save();
   }
 
   // ================= 3D =================
