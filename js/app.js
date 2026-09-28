@@ -1708,6 +1708,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if(r==="no-image") return "aiSvgNeedImage";
     if(r==="no-svg-in-reply") return "aiSvgFailNoSvg";
     if(r==="no-shapes") return "aiSvgFailNoShapes";
+    if(r==="validation-failed") return "aiSvgFailValidation";
     if(/\b401\b|\b403\b|unauthor|invalid.{0,12}key|api.?key/i.test(r)) return "aiSvgFailAuth";
     if(/\b429\b|rate.?limit/i.test(r)) return "aiSvgFailRateLimit";
     if(/fetch|network|timeout|abort|dns|offline/i.test(r)) return "aiSvgFailNetwork";

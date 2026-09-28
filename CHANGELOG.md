@@ -1,5 +1,16 @@
 # Changelog
 
+## Plan 7 P7-09: mandatory direct-SVG geometry gate
+
+Direct image-to-SVG imports now abstain before canvas mutation when an imported
+outline is open or self-intersecting. The interface explains the abstention and
+states that a passing import still requires designer and maker review.
+
+### Verification
+
+- `npm test`: 380 passed, 0 failed.
+- Direct-SVG, translation and syntax coverage: 13 passed, 0 failed.
+
 ## Plan 7 P7-03: bounded basic woven dress
 
 The configurator now supports a basic woven A-line dress assembled from typed,
@@ -72,7 +83,6 @@ designer reviews and accepts that draft.
   unrelated resource-heavy tests timed out; its serial rerun passed all but
   the bundled-avatar check, which requires CDN modules unavailable to this
   local browser. GitHub Actions remains the networked release gate.
-
 ## Plan 7 P7-08: local Image Studio evidence
 
 Adds a versioned local regression benchmark for text concepts, reference-guided

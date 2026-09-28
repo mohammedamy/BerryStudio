@@ -365,7 +365,7 @@ export const I18N = {
     // prompt asking for the finished pattern as raw SVG, then imports it
     // via the same pipeline as a hand-picked SVG file.
     aiSvgTitle: "SVG Pattern Import (Direct)",
-    aiSvgDesc: "Uses the reference image above and asks your configured AI provider to draft the finished technical flat pattern itself, as SVG — then imports the pieces it draws straight onto the canvas. Different from \"Generate\" above: that always drafts through this app's own engine; this imports whatever the AI draws, as-is.",
+    aiSvgDesc: "Uses the reference image above and asks your configured AI provider to draft a technical flat pattern as SVG. Closed, non-self-intersecting outlines are required before import; imported pieces still need designer and maker review. Different from \"Generate\" above: that drafts through this app's own engine.",
     aiSvgGenerate: "Generate & Import as Pattern Pieces",
     aiSvgNeedImage: "Upload a reference image above first.",
     aiSvgNeedProvider: "Configure a real AI provider in Settings first — the default has no endpoint.",
@@ -375,6 +375,7 @@ export const I18N = {
     aiSvgFailNetwork: "Couldn't reach your AI provider (network issue).",
     aiSvgFailNoSvg: "The AI didn't return usable SVG pattern markup — try a clearer reference image, or a different provider/model.",
     aiSvgFailNoShapes: "The AI's SVG didn't contain any closed shapes to import — try a clearer reference image.",
+    aiSvgFailValidation: "The AI's SVG has invalid outline geometry, so nothing was imported. Try a clearer technical flat or review the design manually.",
     aiSvgFailGeneric: "Couldn't generate a pattern from that image — try again.",
     // Project Tabs — multiple independent patterns open at once, switched
     // like browser tabs (see js/app.js's renderProjectTabs()).
@@ -912,7 +913,7 @@ export const I18N = {
     importPatternDone: "تم استيراد {n} قطعة", importPatternPartial: "تم استيراد {n} قطعة، وتم تخطي بعض الأشكال",
     importPatternNone: "لم يتم العثور على أشكال مغلقة للاستيراد", importPatternFail: "تعذّرت قراءة ملف SVG/DXF هذا",
     aiSvgTitle: "استيراد باترون SVG (مباشر)",
-    aiSvgDesc: "يستخدم الصورة المرجعية أعلاه ويطلب من مزوّد الذكاء الاصطناعي المُهيَّأ رسم الباترون التقني النهائي بنفسه، كملف SVG — ثم يستورد القطع التي يرسمها مباشرة إلى اللوحة. يختلف عن \"توليد\" أعلاه: ذلك يرسم دائمًا عبر محرك التطبيق الخاص؛ هذا يستورد ما يرسمه الذكاء الاصطناعي كما هو.",
+    aiSvgDesc: "يستخدم الصورة المرجعية أعلاه ويطلب من مزوّد الذكاء الاصطناعي المُهيَّأ رسم باترون تقني كملف SVG. يلزم أن تكون الحدود مغلقة وغير متقاطعة قبل الاستيراد، وتبقى القطع المستوردة بحاجة إلى مراجعة المصمم والصانع. يختلف عن «توليد» أعلاه: فهو يرسم عبر محرك التطبيق الخاص.",
     aiSvgGenerate: "توليد واستيراد كقطع باترون",
     aiSvgNeedImage: "ارفعي صورة مرجعية أعلاه أولاً.",
     aiSvgNeedProvider: "هيّئي مزوّد ذكاء اصطناعي حقيقي في الإعدادات أولاً — الافتراضي بلا نقطة اتصال.",
@@ -922,6 +923,7 @@ export const I18N = {
     aiSvgFailNetwork: "تعذّر الوصول إلى مزوّد الذكاء الاصطناعي (مشكلة في الشبكة).",
     aiSvgFailNoSvg: "لم يُرجع الذكاء الاصطناعي كود SVG صالحًا للباترون — جرّبي صورة مرجعية أوضح، أو مزوّدًا/نموذجًا مختلفًا.",
     aiSvgFailNoShapes: "لم يحتوِ SVG الذي أنشأه الذكاء الاصطناعي على أي أشكال مغلقة للاستيراد — جرّبي صورة مرجعية أوضح.",
+    aiSvgFailValidation: "يحتوي SVG الذي أنشأه الذكاء الاصطناعي على حدود غير صالحة، لذلك لم يُستورد شيء. جرّبي رسماً تقنياً أوضح أو راجعي التصميم يدوياً.",
     aiSvgFailGeneric: "تعذّر توليد باترون من هذه الصورة — حاولي مجددًا.",
     untitledProject: "بلا عنوان", newTab: "علامة تبويب جديدة", closeTab: "إغلاق علامة التبويب",
     lastTabCantClose: "لا يمكن إغلاق آخر علامة تبويب", newTabOpened: "تم فتح علامة تبويب جديدة",
