@@ -1,5 +1,17 @@
 # Changelog
 
+## Plan 7 P7-03: explicit woven A-line configuration review
+
+The initial made-to-measure configurator now presents its supported length as
+an explicit, bilingual choice before draft review. The choice is serialized
+with the accepted draft; unsupported silhouettes, closures, pockets, and
+configuration shapes continue to be rejected rather than guessed.
+
+### Verification
+
+- `npm test`: 383 passed, 0 failed.
+- `npm run lint -- --quiet`: passed.
+
 ## Plan 7 P7-09: bounded text-and-image proposal provenance
 
 Begins the multimodal drafting path without treating an image as hidden pattern,

@@ -9,11 +9,18 @@ export function mountPatternProgram(container,{t,getBrief,getStudio,category,mea
   const section=node('section'); section.className='pattern-program'; section.style.cssText='display:grid;gap:10px;margin-top:24px';
   section.append(node('h3',t('programTitle')),node('p',t('programScope')));
   const status=node('p'); status.setAttribute('aria-live','polite');
+  const form=node('div'); form.className='pattern-configuration'; form.style.cssText='display:grid;gap:6px';
+  const label=node('label',t('programLength')); const length=node('select'); length.name='pattern-length';
+  for(const value of ['short','regular','long']) { const option=node('option',t(`programLength_${value}`)); option.value=value; length.append(option); }
+  label.append(length); form.append(label);
+  const specification=node('p'); specification.className='help-note';
+  const pieces=node('p'); pieces.className='help-note'; pieces.textContent=t('programPieces'); form.append(specification,pieces);
   const button=node('button',t('programDraft')); button.className='big-btn'; button.type='button';
   const prepared=()=>{ if(container.querySelector('#briefMessage')?.value.trim()) throw new Error('unsaved'); return prepareBriefDraft(getBrief(),measurements()); };
   container.addEventListener('input', paint);
   function paint(){
     status.textContent=''; button.disabled=true;
+    try { specification.textContent=summarizeWovenALineSkirtConfiguration(createWovenALineSkirtConfiguration({length:length.value,measurementProfileId:measurementProfileId?.()||null}),language?.()||'en'); } catch { specification.textContent=''; }
     try {
       const next=prepared();
       if(next.decision!=='propose') { status.textContent=t('programNeedBrief'); return; }
@@ -25,8 +32,7 @@ export function mountPatternProgram(container,{t,getBrief,getStudio,category,mea
     try {
       const next=prepared();
       if(next.decision!=='propose' || !next.prompt.endsWith('woven skirt')) { paint(); return; }
-      const length=next.prompt.startsWith('short')?'short':next.prompt.startsWith('long')?'long':'regular';
-      const configuration=createWovenALineSkirtConfiguration({length,measurementProfileId:measurementProfileId?.()||null});
+      const configuration=createWovenALineSkirtConfiguration({length:length.value,measurementProfileId:measurementProfileId?.()||null});
       const program=configurationToWovenALineSkirtProgram(configuration), output=executePatternProgram(program,next.measurements), report=validate(output.pieces,next.measurements);
       if(report.summary.fail) { status.textContent=t('programRejected'); return; }
       const multimodalProposal=prepareMultimodalProposal({brief:getBrief(),measurements:next.measurements,studio:getStudio?.()||null,category:category?.()||null});
@@ -34,5 +40,6 @@ export function mountPatternProgram(container,{t,getBrief,getStudio,category,mea
       review({pieces:output.pieces,colors:['#6d5efc','#00c2a8','#e2a52b'],summary:`${t('programReview')} ${summarizeWovenALineSkirtConfiguration(configuration,language?.()||'en')}`,brief:structuredClone(getBrief()),multimodalProposal,patternConfiguration:configuration,patternProgram:{version:1,family:program.family,operations:program.operations,measurements:next.measurements,provenance:next.provenance,validation:report}});
     } catch { status.textContent=t('programRejected'); }
   };
-  section.append(status,button); container.append(section); paint(); return paint;
+  length.addEventListener('change',paint);
+  section.append(form,status,button); container.append(section); paint(); return paint;
 }
