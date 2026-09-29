@@ -1,5 +1,34 @@
 # Changelog
 
+## Plan 7 P7-09: bounded text-and-image proposal provenance
+
+Begins the multimodal drafting path without treating an image as hidden pattern,
+construction, size, scale, or fit evidence. A selected Image Studio reference
+can accompany the already-supported woven A-line skirt path only after the
+designer reviews and accepts that draft.
+
+### Added
+
+- A validated, serializable multimodal proposal record that preserves selected
+  reference provenance and per-field brief provenance with an accepted draft.
+- Explicit English and Arabic review disclosures for unresolved construction,
+  scale, back-view, and fit evidence; image-only input asks for a complete
+  supported brief instead of fabricating geometry.
+- Project-import validation that rejects malformed multimodal provenance before
+  it can persist, and service-worker cache revision v47 including the new module.
+- Updated Plan 7 evidence to record the deployed P7-02 snapshot round-trip fix
+  as resolved.
+
+### Verification
+
+- `npm test`: 383 passed, 0 failed.
+- `npm run lint`: completed with existing warnings only and no errors.
+- Focused P7-09 provenance, import, bilingual-key and Chromium profile tests
+  passed. The full local parallel browser suite reached 43 passed before
+  unrelated resource-heavy tests timed out; its serial rerun passed all but
+  the bundled-avatar check, which requires CDN modules unavailable to this
+  local browser. GitHub Actions remains the networked release gate.
+
 ## Plan 7 P7-08: local Image Studio evidence
 
 Adds a versioned local regression benchmark for text concepts, reference-guided

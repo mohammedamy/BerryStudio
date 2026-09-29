@@ -1397,7 +1397,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       },
     });
     refreshPatternProgram=mountPatternProgram(c,{
-      t:T,getBrief:()=>Canvas.snapshotState().brief || null,measurements:currentMeas,measurementProfileId:()=>state.selectedMeasurementProfileId,language:()=>state.lang,
+      t:T,getBrief:()=>Canvas.snapshotState().brief || null,getStudio:()=>Canvas.snapshotState().imageStudio || null,category:()=>state.category,measurements:currentMeas,measurementProfileId:()=>state.selectedMeasurementProfileId,language:()=>state.lang,
       validate:(pieces,measurements)=>PatternValidator.run(pieces,{bodyChestCm:measurements.chest,seamAllowanceCm:state.seamCm||1,offsetPoly:Canvas.offsetPoly}),
       review:res=>{if(requireEntitlement()) reviewGeneratedPattern(res,'programDone');},
     });
@@ -2509,6 +2509,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const summary=el("p"); summary.textContent=typeof res.summary==='string'?res.summary:'';
     const acceptance=(res.style?.type==='skirt' || res.patternProgram) ? assessWovenSkirtConstruction(draft.pieces) : null;
     body.append(hint, summary);
+    if(res.multimodalProposal?.reference) {
+      const evidence=el("section","help-note");
+      const title=el("strong"); title.textContent=T('multimodalEvidenceTitle'); evidence.append(title);
+      for(const issue of res.multimodalProposal.issues||[]) {
+        if(issue.field!=='reference') continue;
+        const line=el("p"); line.textContent=T(`multimodal_${issue.code}`); evidence.append(line);
+      }
+      body.append(evidence);
+    }
     if(acceptance) {
       const evidence=el("p","help-note");
       evidence.textContent=acceptance.decision==='side-seam-checked' ? T('constructionEvidenceReady') : `${T('constructionEvidenceMissing')}: ${acceptance.blockers.map(key=>T(key)).join(', ')}`;
@@ -2522,7 +2531,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       if(!requireEntitlement()) return;
       accept.disabled=true;
       newProjectTab();
-      Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc'],{...(res.brief?{brief:res.brief}:{}),...(res.patternProgram?{patternProgram:res.patternProgram}:{}),...(res.patternConfiguration?{patternConfiguration:res.patternConfiguration}:{})});
+      Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc'],{...(res.brief?{brief:res.brief}:{}),...(res.patternProgram?{patternProgram:res.patternProgram}:{}),...(res.patternConfiguration?{patternConfiguration:res.patternConfiguration}:{}),...(res.multimodalProposal?{multimodalProposal:res.multimodalProposal}:{})});
       hideEmpty(); renderLayersPane(); renderAIAttrs(res);
       if(is3DActive()) build3D(res.colorInt);
       save(); closeModal("#genericModal"); toast(T(doneToastKey));
