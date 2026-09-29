@@ -198,6 +198,7 @@ export const Canvas = (() => {
     if(context?.brief) projectData.brief=JSON.parse(JSON.stringify(context.brief));
     if(context?.patternProgram) projectData.patternProgram=JSON.parse(JSON.stringify(context.patternProgram));
     if(context?.patternConfiguration) projectData.patternConfiguration=JSON.parse(JSON.stringify(context.patternConfiguration));
+    if(context?.multimodalProposal) projectData.multimodalProposal=JSON.parse(JSON.stringify(context.multimodalProposal));
     projectMeta = { ...projectMeta, revision: projectMeta.revision + 1, status: 'draft', approval: null };
     pieces = layoutPieces(rawPieces);
     pieces.forEach((p, i) => p.color = colors[i % colors.length]);
