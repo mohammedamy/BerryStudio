@@ -670,6 +670,13 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       name, category:state.category, units:state.unitsCm?"cm":"inch", measurements:currentMeas(),
     });
   }
+  function isWorkingMeasurementSnapshot(snapshot){ return !snapshot || String(snapshot.id||"").startsWith("working-"); }
+  function currentWorkingMeasurementSnapshot(snapshot){
+    const measurements=currentMeas(), units=state.unitsCm?"cm":"inch";
+    const unchanged=snapshot && isWorkingMeasurementSnapshot(snapshot) && snapshot.category===state.category && snapshot.units===units &&
+      MEAS_KEYS.every(key=>snapshot.measurements?.[key]===measurements[key]);
+    return unchanged?snapshot:createWorkingMeasurementSnapshot({name:T("workingMeasurements"),category:state.category,units,measurements});
+  }
   function selectedMeasurementProfile(){ return state.measurementProfiles.find(profile=>profile.id===state.selectedMeasurementProfileId)||null; }
   function applyMeasurementSnapshotToState(snapshot){
     if(!snapshot?.measurements) return false;
@@ -2362,8 +2369,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // Named-profile snapshots are immutable evidence. Working snapshots,
     // however, must follow every size/standard/category/manual edit so a
     // tab switch or JSON export can never retain stale measurements.
-    if(!p.measurementProfileSnapshot || String(p.measurementProfileSnapshot.id||"").startsWith("working-")) {
-      p.measurementProfileSnapshot=workingMeasurementSnapshot();
+    if(isWorkingMeasurementSnapshot(p.measurementProfileSnapshot)) {
+      p.measurementProfileSnapshot=currentWorkingMeasurementSnapshot(p.measurementProfileSnapshot);
     }
     // Auto-title from the loaded library pattern's own name, like a
     // browser tab's title tracking the page — unless the user has
@@ -2475,8 +2482,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   function projectPayload(){
     const payload = migrateProject(Canvas.snapshotState());
     delete payload.view;
-    const snapshot=activeProject()?.measurementProfileSnapshot;
-    payload.measurementProfileSnapshot=snapshot && !String(snapshot.id||"").startsWith("working-") ? snapshot : workingMeasurementSnapshot();
+    const project=activeProject(), snapshot=project?.measurementProfileSnapshot;
+    payload.measurementProfileSnapshot=isWorkingMeasurementSnapshot(snapshot)?currentWorkingMeasurementSnapshot(snapshot):snapshot;
+    if(project) project.measurementProfileSnapshot=payload.measurementProfileSnapshot;
     return payload;
   }
   function reviewProjectChange(){
