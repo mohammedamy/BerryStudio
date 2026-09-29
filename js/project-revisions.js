@@ -2,6 +2,7 @@
 import { ensureClothPieceIds } from './cloth-workflow-contract.js';
 import { validateMultimodalProposal } from './multimodal-proposal.js';
 import { validateWovenALineSkirtConfiguration } from './skirt-configurator.js';
+import { validateWovenBasicBodiceConfiguration } from './bodice-configurator.js';
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -36,7 +37,11 @@ export function migrateProject(input) {
     catch { fail('projectInvalid'); }
   }
   if (source.patternConfiguration != null) {
-    try { validateWovenALineSkirtConfiguration(source.patternConfiguration); }
+    try {
+      if(source.patternConfiguration.family==='woven-a-line-skirt') validateWovenALineSkirtConfiguration(source.patternConfiguration);
+      else if(source.patternConfiguration.family==='woven-basic-bodice') validateWovenBasicBodiceConfiguration(source.patternConfiguration);
+      else fail('projectInvalid');
+    }
     catch { fail('projectInvalid'); }
   }
   const result = clone(source);

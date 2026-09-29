@@ -1,5 +1,20 @@
 # Changelog
 
+## Plan 7 P7-03: bounded basic woven bodice
+
+The made-to-measure configurator now accepts a complete woven-bodice brief
+and produces a deterministic, editable front and back bodice draft. This
+second family has a versioned persisted configuration, with only a round
+neckline, sleeveless construction, no closure, 4 cm ease and 1 cm seam
+allowance currently permitted. Other bodice options and dresses are explicitly
+out of scope rather than inferred.
+
+### Verification
+
+- `npm test`: 386 passed, 0 failed.
+- `npm run lint -- --quiet`: passed.
+- `npx playwright test e2e/pattern-program.spec.js`: 3 passed.
+
 ## Plan 7 P7-03: explicit woven A-line configuration review
 
 The initial made-to-measure configurator now presents its supported length as
