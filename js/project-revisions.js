@@ -1,6 +1,7 @@
 // V6 project storage and bounded command contract. All operations are pure.
 import { ensureClothPieceIds } from './cloth-workflow-contract.js';
 import { validateMultimodalProposal } from './multimodal-proposal.js';
+import { validateWovenALineSkirtConfiguration } from './skirt-configurator.js';
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -32,6 +33,10 @@ export function migrateProject(input) {
   if (source.projectMeta != null && (!record(source.projectMeta) || typeof source.projectMeta.id !== 'string' || !source.projectMeta.id || !Number.isSafeInteger(source.projectMeta.revision) || source.projectMeta.revision < 0)) fail('projectInvalid');
   if (source.multimodalProposal != null) {
     try { validateMultimodalProposal(source.multimodalProposal); }
+    catch { fail('projectInvalid'); }
+  }
+  if (source.patternConfiguration != null) {
+    try { validateWovenALineSkirtConfiguration(source.patternConfiguration); }
     catch { fail('projectInvalid'); }
   }
   const result = clone(source);

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { migrateProject, previewCommands, acceptCommands } from '../js/project-revisions.js';
 import { Canvas } from '../js/canvas.js';
+import { createWovenALineSkirtConfiguration } from '../js/skirt-configurator.js';
 
 const legacy = () => ({version:1, pieces:[{name:{en:'Front',ar:'أمام'},outline:[[0,0],[10,0],[10,10]],darts:[[[1,1],[2,2],[3,1]]],grain:[[4,2],[4,8]],notches:[[0,3]],curves:[{from:0,c1:[2,-1],c2:[8,-1]}],color:'#112233'}],variables:{waist:'72'}});
 const command = (p, extra={}) => ({type:'translate',pieceId:p.pieces[0].clothLabId,dx:3,dy:2,...extra});
@@ -25,6 +26,8 @@ test('unsupported versions and malformed geometry fail before mutation', () => {
     assert.throws(()=>migrateProject(input),/projectInvalid/);
   }
   assert.throws(()=>migrateProject({...legacy(),projectMeta:{id:'x',revision:-1}}),/projectInvalid/);
+  assert.equal(migrateProject({...legacy(),patternConfiguration:createWovenALineSkirtConfiguration({length:'long'})}).patternConfiguration.length,'long');
+  assert.throws(()=>migrateProject({...legacy(),patternConfiguration:{version:1,family:'woven-a-line-skirt',length:'midi'}}),/projectInvalid/);
 });
 test('preview/reject leave the design unchanged; accept translates all attached geometry', () => {
   const p=migrateProject(legacy()), original=structuredClone(p);
