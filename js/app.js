@@ -2507,7 +2507,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const body=$("#genericModal .modal-body");
     const hint=el("p"); hint.textContent=T("reviewGeneratedHint");
     const summary=el("p"); summary.textContent=typeof res.summary==='string'?res.summary:'';
-    const acceptance=(res.style?.type==='skirt' || res.patternProgram) ? assessWovenSkirtConstruction(draft.pieces) : null;
+    const acceptance=(res.style?.type==='skirt' || res.patternProgram?.family==='woven-a-line-skirt') ? assessWovenSkirtConstruction(draft.pieces) : null;
     body.append(hint, summary);
     if(res.patternConfiguration) {
       const configuration=el('section','help-note');

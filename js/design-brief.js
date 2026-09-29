@@ -1,7 +1,7 @@
 // Bounded local brief capture. This is not an LLM or construction/fit approval.
 const copy = value => JSON.parse(JSON.stringify(value));
 const tokens = {
-  family: { skirt: /\bskirt\b|تنورة|جيبة/u, dress: /\bdress\b|فستان/u, trousers: /\b(?:trousers|pants)\b|بنطلون|سروال/u },
+  family: { skirt: /\bskirt\b|تنورة|جيبة/u, bodice: /\b(?:bodice|top)\b|صدّار|صدارة/u, dress: /\bdress\b|فستان/u, trousers: /\b(?:trousers|pants)\b|بنطلون|سروال/u },
   length: { short: /\b(?:short|mini)\b|قصير/u, regular: /\b(?:regular|medium|knee)[ -]length\b|طول عادي|طول متوسط/u, long: /\b(?:long|maxi)\b|طويل/u },
   fabric: { woven: /\bwoven\b|منسوج/u, stretch: /\b(?:stretch|knit|jersey)\b|مطاط|تريكو/u },
 };
@@ -115,7 +115,7 @@ export function prepareBriefDraft(session, defaults) {
     if(supplied) measurements[field]=supplied.value;
     provenance[field]=supplied ? copy(supplied) : {value:measurements[field],unit:'cm',source:'current-size'};
   }
-  const required=session.fields.family?.value==='dress'?['waist','hips','chest']:['waist','hips'];
+  const required=session.fields.family?.value==='dress'?['waist','hips','chest']:session.fields.family?.value==='bodice'?['waist','chest']:['waist','hips'];
   for(const field of required) if(!Number.isFinite(measurements[field]) || measurements[field]<=0) issues.push({field,code:'invalid'});
   if(issues.length) return {decision:issues.some(i=>i.code==='invalid'||i.code==='unsupported')?'abstain':'clarify',issues};
   const {family,length,fabric}=session.fields;

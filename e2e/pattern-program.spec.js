@@ -47,3 +47,18 @@ test('a non-default supported length shows a reviewable configuration diff befor
   await page.getByRole('button',{name:'Accept as new project',exact:true}).click();
   expect(await page.evaluate(()=>window.Canvas.snapshotState().patternConfiguration.length)).toBe('long');
 });
+
+test('a basic woven bodice brief previews and accepts only the bounded bodice program',async({page})=>{
+  await start(page);
+  const brief=page.locator('.design-brief');
+  await brief.locator('#briefMessage').fill('regular-length woven bodice, chest 92 cm, waist 74 cm');
+  await brief.getByRole('button',{name:'Update brief',exact:true}).click();
+  const program=page.locator('.pattern-program');
+  await expect(program.getByText('Ready to create a typed basic woven bodice program.',{exact:true})).toBeVisible();
+  await program.getByRole('button',{name:'Preview bodice program',exact:true}).click();
+  await page.getByRole('button',{name:'Accept as new project',exact:true}).click();
+  const state=await page.evaluate(()=>window.Canvas.snapshotState());
+  expect(state.patternProgram.family).toBe('woven-basic-bodice');
+  expect(state.patternConfiguration).toMatchObject({family:'woven-basic-bodice',neckline:'round',sleeve:'sleeveless'});
+  expect(state.pieces.map(piece=>piece.role)).toEqual(['bodice-front','bodice-back']);
+});

@@ -24,7 +24,11 @@ function evaluate(source, lookup) {
 }
 
 export function validatePatternProgram(program) {
-  if (!program || program.version !== 1 || Object.keys(program).some(key => !['version','family','operations'].includes(key)) || program.family !== 'woven-a-line-skirt' || !Array.isArray(program.operations) || program.operations.length < 1 || program.operations.length > 60) fail('programInvalid');
+  const rolesByFamily={
+    'woven-a-line-skirt':['skirt-front','skirt-back','waistband'],
+    'woven-basic-bodice':['bodice-front','bodice-back'],
+  };
+  if (!program || program.version !== 1 || Object.keys(program).some(key => !['version','family','operations'].includes(key)) || !Object.hasOwn(rolesByFamily,program.family) || !Array.isArray(program.operations) || program.operations.length < 1 || program.operations.length > 60) fail('programInvalid');
   const known = new Set(['waist','hips','chest','height','inseam']); const points = new Set(); const pieces = new Set();
   for (const op of program.operations) {
     if (!op || typeof op !== 'object' || Array.isArray(op)) fail('programInvalid');
@@ -41,7 +45,7 @@ export function validatePatternProgram(program) {
       if (Object.keys(op).some(key => !['op','id','name','nameAr','pointLoop','grain'].includes(key)) || !name(op.id) || typeof op.name !== 'string' || !op.name.trim() || op.name.length > 120 || typeof op.nameAr !== 'string' || !op.nameAr.trim() || op.nameAr.length > 120 || !Array.isArray(op.pointLoop) || op.pointLoop.length < 3 || op.pointLoop.length > 20 || new Set(op.pointLoop).size !== op.pointLoop.length || !op.pointLoop.every(p => name(p) && points.has(p)) || !Array.isArray(op.grain) || op.grain.length !== 2 || !op.grain.every(p => name(p) && points.has(p)) || pieces.has(op.id)) fail('programInvalid');
       pieces.add(op.id);
     } else if (op.op === 'setPieceRole') {
-      if (Object.keys(op).some(key => !['op','piece','role','cutOnFold','quantity'].includes(key)) || !pieces.has(op.piece) || !['skirt-front','skirt-back','waistband'].includes(op.role) || typeof op.cutOnFold !== 'boolean' || !Number.isInteger(op.quantity) || op.quantity < 1 || op.quantity > 4) fail('programInvalid');
+      if (Object.keys(op).some(key => !['op','piece','role','cutOnFold','quantity'].includes(key)) || !pieces.has(op.piece) || !rolesByFamily[program.family].includes(op.role) || typeof op.cutOnFold !== 'boolean' || !Number.isInteger(op.quantity) || op.quantity < 1 || op.quantity > 4) fail('programInvalid');
     } else if (op.op === 'setPieceConstruction') {
       if (Object.keys(op).some(key => !['op','piece','notchPoints','edges'].includes(key)) || !pieces.has(op.piece) || !Array.isArray(op.notchPoints) || !op.notchPoints.every(pointName => name(pointName) && points.has(pointName)) || !Array.isArray(op.edges) || !op.edges.every(edge => edge && typeof edge === 'object' && Object.keys(edge).every(key => ['from','to','seamId'].includes(key)) && name(edge.from) && name(edge.to) && points.has(edge.from) && points.has(edge.to) && edge.from !== edge.to && typeof edge.seamId === 'string' && /^[a-z][a-z0-9_-]{0,63}$/.test(edge.seamId))) fail('programInvalid');
     } else fail('programInvalid');
@@ -51,7 +55,8 @@ export function validatePatternProgram(program) {
 
 export function executePatternProgram(program, measurements) {
   validatePatternProgram(program);
-  if (!measurements || !['waist','hips'].every(key => Number.isFinite(measurements[key]) && measurements[key] > 20 && measurements[key] < 200)) fail('programMeasurements');
+  const required=program.family==='woven-a-line-skirt'?['waist','hips']:['chest','waist'];
+  if (!measurements || !required.every(key => Number.isFinite(measurements[key]) && measurements[key] > 20 && measurements[key] < 200)) fail('programMeasurements');
   const values = Object.assign(Object.create(null), measurements), points = Object.create(null), lines = [], pieces = [];
   for (const op of program.operations) {
     if (op.op === 'defineVariable') values[op.name] = evaluate(op.formula, key => values[key]);
@@ -86,5 +91,15 @@ export function createWovenALineSkirtProgram(length) {
     {op:'lineBetween',name:'backSideSeam',from:'backSideWaist',to:'backSideHem'}, {op:'promotePiece',id:'back',name:'A-line skirt back',nameAr:'خلف تنورة بقصة A',pointLoop:['backFoldWaist','backSideWaist','backSideNotch','backSideHem','backFoldHem'],grain:['backGrainTop','backGrainBottom']}, {op:'setPieceRole',piece:'back',role:'skirt-back',cutOnFold:true,quantity:1}, {op:'setPieceConstruction',piece:'back',notchPoints:['backSideNotch'],edges:[{from:'backSideWaist',to:'backSideHem',seamId:'skirt-side'}]},
     {op:'placePoint',name:'bandLeft',x:'hemQuarter+12',y:'0'}, {op:'placePoint',name:'bandRight',x:'hemQuarter+12+waist/2+2',y:'0'}, {op:'placePoint',name:'bandBottomRight',x:'hemQuarter+12+waist/2+2',y:'waistbandHeight'}, {op:'placePoint',name:'bandBottomLeft',x:'hemQuarter+12',y:'waistbandHeight'}, {op:'placePoint',name:'bandGrainTop',x:'hemQuarter+15',y:'waistbandHeight/2'}, {op:'placePoint',name:'bandGrainBottom',x:'hemQuarter+12+waist/2-1',y:'waistbandHeight/2'},
     {op:'promotePiece',id:'waistband',name:'Waistband',nameAr:'حزام الخصر',pointLoop:['bandLeft','bandRight','bandBottomRight','bandBottomLeft'],grain:['bandGrainTop','bandGrainBottom']}, {op:'setPieceRole',piece:'waistband',role:'waistband',cutOnFold:false,quantity:2},
+  ]};
+}
+
+export function createWovenBasicBodiceProgram() {
+  return {version:1,family:'woven-basic-bodice',operations:[
+    {op:'defineVariable',name:'chestQuarter',formula:'chest/4+2'}, {op:'defineVariable',name:'waistQuarter',formula:'waist/4+2'}, {op:'defineVariable',name:'bodiceLength',formula:'42'},
+    {op:'placePoint',name:'frontNeck',x:'0',y:'8'}, {op:'placePoint',name:'frontShoulder',x:'3',y:'0'}, {op:'placePoint',name:'frontArmhole',x:'chestQuarter-3',y:'0'}, {op:'placePoint',name:'frontUnderarm',x:'chestQuarter',y:'12'}, {op:'placePoint',name:'frontSideWaist',x:'waistQuarter',y:'bodiceLength'}, {op:'placePoint',name:'frontFoldWaist',x:'0',y:'bodiceLength'}, {op:'placePoint',name:'frontGrainTop',x:'waistQuarter/2',y:'12'}, {op:'placePoint',name:'frontGrainBottom',x:'waistQuarter/2',y:'bodiceLength-5'},
+    {op:'promotePiece',id:'front',name:'Basic woven bodice front',nameAr:'أمام صدّار منسوج أساسي',pointLoop:['frontNeck','frontShoulder','frontArmhole','frontUnderarm','frontSideWaist','frontFoldWaist'],grain:['frontGrainTop','frontGrainBottom']}, {op:'setPieceRole',piece:'front',role:'bodice-front',cutOnFold:true,quantity:1}, {op:'setPieceConstruction',piece:'front',notchPoints:['frontUnderarm'],edges:[{from:'frontUnderarm',to:'frontSideWaist',seamId:'bodice-side'}]},
+    {op:'placePoint',name:'backNeck',x:'0',y:'55'}, {op:'placePoint',name:'backShoulder',x:'3',y:'55'}, {op:'placePoint',name:'backArmhole',x:'chestQuarter-3',y:'55'}, {op:'placePoint',name:'backUnderarm',x:'chestQuarter',y:'67'}, {op:'placePoint',name:'backSideWaist',x:'waistQuarter',y:'bodiceLength+55'}, {op:'placePoint',name:'backFoldWaist',x:'0',y:'bodiceLength+55'}, {op:'placePoint',name:'backGrainTop',x:'waistQuarter/2',y:'67'}, {op:'placePoint',name:'backGrainBottom',x:'waistQuarter/2',y:'bodiceLength+50'},
+    {op:'promotePiece',id:'back',name:'Basic woven bodice back',nameAr:'خلف صدّار منسوج أساسي',pointLoop:['backNeck','backShoulder','backArmhole','backUnderarm','backSideWaist','backFoldWaist'],grain:['backGrainTop','backGrainBottom']}, {op:'setPieceRole',piece:'back',role:'bodice-back',cutOnFold:true,quantity:1}, {op:'setPieceConstruction',piece:'back',notchPoints:['backUnderarm'],edges:[{from:'backUnderarm',to:'backSideWaist',seamId:'bodice-side'}]},
   ]};
 }
