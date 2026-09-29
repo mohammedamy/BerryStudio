@@ -58,6 +58,15 @@ export function summarizeWovenALineSkirtConfiguration(config, language = 'en') {
     : `${labels[config.length]} ${labels[config.silhouette]} skirt, ${labels[config.waistband]}, ${labels[config.fabric]}, ${config.seamAllowanceCm} cm seam allowance`;
 }
 
+// A review record is deliberately data, not UI text, so the same controlled
+// selection can be rendered in either language and stored beside a revision.
+export function diffWovenALineSkirtConfiguration(before, after) {
+  validateWovenALineSkirtConfiguration(before); validateWovenALineSkirtConfiguration(after);
+  return ['silhouette', 'length', 'waistband', 'closure', 'fabric', 'seamAllowanceCm']
+    .filter(field => before[field] !== after[field])
+    .map(field => ({ field, before: before[field], after: after[field] }));
+}
+
 export function serializeWovenALineSkirtConfiguration(config) {
   validateWovenALineSkirtConfiguration(config);
   return copy(config);

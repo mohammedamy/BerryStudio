@@ -1,7 +1,7 @@
 import { prepareBriefDraft } from './design-brief.js';
 import { prepareMultimodalProposal } from './multimodal-proposal.js';
 import { executePatternProgram } from './pattern-program.js';
-import { createWovenALineSkirtConfiguration, configurationToWovenALineSkirtProgram, summarizeWovenALineSkirtConfiguration } from './skirt-configurator.js';
+import { createWovenALineSkirtConfiguration, configurationToWovenALineSkirtProgram, diffWovenALineSkirtConfiguration, summarizeWovenALineSkirtConfiguration } from './skirt-configurator.js';
 
 const node=(tag,text)=>{const element=document.createElement(tag);if(text!=null) element.textContent=text;return element;};
 
@@ -35,11 +35,12 @@ export function mountPatternProgram(container,{t,getBrief,getStudio,category,mea
       const next=prepared();
       if(next.decision!=='propose' || !next.prompt.endsWith('woven skirt')) { paint(); return; }
       const configuration=createWovenALineSkirtConfiguration({length:length.value,measurementProfileId:measurementProfileId?.()||null});
+      const baseline=createWovenALineSkirtConfiguration({measurementProfileId:measurementProfileId?.()||null});
       const program=configurationToWovenALineSkirtProgram(configuration), output=executePatternProgram(program,next.measurements), report=validate(output.pieces,next.measurements);
       if(report.summary.fail) { status.textContent=t('programRejected'); return; }
       const multimodalProposal=prepareMultimodalProposal({brief:getBrief(),measurements:next.measurements,studio:getStudio?.()||null,category:category?.()||null});
       if(multimodalProposal.decision!=='propose') { status.textContent=t('programRejected'); return; }
-      review({pieces:output.pieces,colors:['#6d5efc','#00c2a8','#e2a52b'],summary:`${t('programReview')} ${summarizeWovenALineSkirtConfiguration(configuration,language?.()||'en')}`,brief:structuredClone(getBrief()),multimodalProposal,patternConfiguration:configuration,patternProgram:{version:1,family:program.family,operations:program.operations,measurements:next.measurements,provenance:next.provenance,validation:report}});
+      review({pieces:output.pieces,colors:['#6d5efc','#00c2a8','#e2a52b'],summary:`${t('programReview')} ${summarizeWovenALineSkirtConfiguration(configuration,language?.()||'en')}`,brief:structuredClone(getBrief()),multimodalProposal,patternConfiguration:configuration,configurationDiff:diffWovenALineSkirtConfiguration(baseline,configuration),patternProgram:{version:1,family:program.family,operations:program.operations,measurements:next.measurements,provenance:next.provenance,validation:report}});
     } catch { status.textContent=t('programRejected'); }
   };
   length.addEventListener('change',paint);
