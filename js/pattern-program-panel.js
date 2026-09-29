@@ -11,7 +11,9 @@ export function mountPatternProgram(container,{t,getBrief,getStudio,category,mea
   const status=node('p'); status.setAttribute('aria-live','polite');
   const form=node('div'); form.className='pattern-configuration'; form.style.cssText='display:grid;gap:6px';
   const label=node('label',t('programLength')); const length=node('select'); length.name='pattern-length';
-  for(const value of ['short','regular','long']) { const option=node('option',t(`programLength_${value}`)); option.value=value; length.append(option); }
+  // Keep the established neutral configuration as the initial selection;
+  // alternate lengths require an intentional change before review.
+  for(const value of ['regular','short','long']) { const option=node('option',t(`programLength_${value}`)); option.value=value; length.append(option); }
   label.append(length); form.append(label);
   const specification=node('p'); specification.className='help-note';
   const pieces=node('p'); pieces.className='help-note'; pieces.textContent=t('programPieces'); form.append(specification,pieces);
