@@ -7,6 +7,9 @@ an explicit, bilingual choice before draft review. The choice is serialized
 with the accepted draft; unsupported silhouettes, closures, pockets, and
 configuration shapes continue to be rejected rather than guessed.
 
+The review now shows the exact change against the neutral regular-length
+configuration before the designer accepts a generated draft.
+
 ### Verification
 
 - `npm test`: 383 passed, 0 failed.

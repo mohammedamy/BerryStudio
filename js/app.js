@@ -2509,6 +2509,14 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const summary=el("p"); summary.textContent=typeof res.summary==='string'?res.summary:'';
     const acceptance=(res.style?.type==='skirt' || res.patternProgram) ? assessWovenSkirtConstruction(draft.pieces) : null;
     body.append(hint, summary);
+    if(res.patternConfiguration) {
+      const configuration=el('section','help-note');
+      const title=el('strong'); title.textContent=T('configurationReviewTitle'); configuration.append(title);
+      const changes=res.configurationDiff||[];
+      if(!changes.length) configuration.append(el('p','',T('configurationReviewBaseline')));
+      for(const change of changes) configuration.append(el('p','',`${T(`configurationField_${change.field}`)}: ${T(`programLength_${change.before}`)} → ${T(`programLength_${change.after}`)}`));
+      body.append(configuration);
+    }
     if(res.multimodalProposal?.reference) {
       const evidence=el("section","help-note");
       const title=el("strong"); title.textContent=T('multimodalEvidenceTitle'); evidence.append(title);

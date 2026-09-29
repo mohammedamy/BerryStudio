@@ -33,3 +33,17 @@ test('a resolved woven skirt brief previews and accepts a typed program as a new
   await expect.poll(()=>page.evaluate(()=>window.Canvas.snapshotState().patternConfiguration?.family)).toBe('woven-a-line-skirt');
   expect(await page.evaluate(()=>window.Canvas.snapshotState().brief)).toEqual(state.brief);
 });
+
+test('a non-default supported length shows a reviewable configuration diff before acceptance',async({page})=>{
+  await start(page);
+  const brief=page.locator('.design-brief');
+  await brief.locator('#briefMessage').fill('knee length woven skirt, waist 72 cm, hips 98 cm');
+  await brief.getByRole('button',{name:'Update brief',exact:true}).click();
+  const program=page.locator('.pattern-program');
+  await program.locator('select[name="pattern-length"]').selectOption('long');
+  await program.getByRole('button',{name:'Preview skirt program',exact:true}).click();
+  await expect(page.getByText('Configuration changes',{exact:true})).toBeVisible();
+  await expect(page.getByText('Length: Regular — 60 cm → Long — 85 cm',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Accept as new project',exact:true}).click();
+  expect(await page.evaluate(()=>window.Canvas.snapshotState().patternConfiguration.length)).toBe('long');
+});

@@ -4,6 +4,7 @@ import {
   createWovenALineSkirtConfiguration,
   validateWovenALineSkirtConfiguration,
   configurationToWovenALineSkirtProgram,
+  diffWovenALineSkirtConfiguration,
   summarizeWovenALineSkirtConfiguration,
 } from '../js/skirt-configurator.js';
 import { executePatternProgram } from '../js/pattern-program.js';
@@ -15,6 +16,13 @@ test('the first configurator family has deterministic supported defaults and a p
   assert.match(summarizeWovenALineSkirtConfiguration(config, 'ar'), /قصة A/);
   const output = executePatternProgram(configurationToWovenALineSkirtProgram(config), { waist: 72, hips: 98 });
   assert.equal(output.pieces.length, 3);
+});
+
+test('configuration diffs are deterministic and include only changed supported fields', () => {
+  const base=createWovenALineSkirtConfiguration();
+  const changed=createWovenALineSkirtConfiguration({length:'long'});
+  assert.deepEqual(diffWovenALineSkirtConfiguration(base,changed),[{field:'length',before:'regular',after:'long'}]);
+  assert.deepEqual(diffWovenALineSkirtConfiguration(base,base),[]);
 });
 
 test('unsupported garment choices never reach the drafting program', () => {
