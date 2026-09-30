@@ -27,6 +27,7 @@ export function validatePatternProgram(program) {
   const rolesByFamily={
     'woven-a-line-skirt':['skirt-front','skirt-back','waistband'],
     'woven-basic-bodice':['bodice-front','bodice-back'],
+    'woven-basic-dress':['bodice-front','bodice-back','skirt-front','skirt-back'],
   };
   if (!program || program.version !== 1 || Object.keys(program).some(key => !['version','family','operations'].includes(key)) || !Object.hasOwn(rolesByFamily,program.family) || !Array.isArray(program.operations) || program.operations.length < 1 || program.operations.length > 60) fail('programInvalid');
   const known = new Set(['waist','hips','chest','height','inseam']); const points = new Set(); const pieces = new Set();
@@ -55,7 +56,7 @@ export function validatePatternProgram(program) {
 
 export function executePatternProgram(program, measurements) {
   validatePatternProgram(program);
-  const required=program.family==='woven-a-line-skirt'?['waist','hips']:['chest','waist'];
+  const required=program.family==='woven-basic-bodice'?['chest','waist']:['waist','hips','chest'].filter(key=>program.family!=='woven-a-line-skirt'||key!=='chest');
   if (!measurements || !required.every(key => Number.isFinite(measurements[key]) && measurements[key] > 20 && measurements[key] < 200)) fail('programMeasurements');
   const values = Object.assign(Object.create(null), measurements), points = Object.create(null), lines = [], pieces = [];
   for (const op of program.operations) {
@@ -101,5 +102,22 @@ export function createWovenBasicBodiceProgram() {
     {op:'promotePiece',id:'front',name:'Basic woven bodice front',nameAr:'أمام صدّار منسوج أساسي',pointLoop:['frontNeck','frontShoulder','frontArmhole','frontUnderarm','frontSideWaist','frontFoldWaist'],grain:['frontGrainTop','frontGrainBottom']}, {op:'setPieceRole',piece:'front',role:'bodice-front',cutOnFold:true,quantity:1}, {op:'setPieceConstruction',piece:'front',notchPoints:['frontUnderarm'],edges:[{from:'frontUnderarm',to:'frontSideWaist',seamId:'bodice-side'}]},
     {op:'placePoint',name:'backNeck',x:'0',y:'55'}, {op:'placePoint',name:'backShoulder',x:'3',y:'55'}, {op:'placePoint',name:'backArmhole',x:'chestQuarter-3',y:'55'}, {op:'placePoint',name:'backUnderarm',x:'chestQuarter',y:'67'}, {op:'placePoint',name:'backSideWaist',x:'waistQuarter',y:'bodiceLength+55'}, {op:'placePoint',name:'backFoldWaist',x:'0',y:'bodiceLength+55'}, {op:'placePoint',name:'backGrainTop',x:'waistQuarter/2',y:'67'}, {op:'placePoint',name:'backGrainBottom',x:'waistQuarter/2',y:'bodiceLength+50'},
     {op:'promotePiece',id:'back',name:'Basic woven bodice back',nameAr:'خلف صدّار منسوج أساسي',pointLoop:['backNeck','backShoulder','backArmhole','backUnderarm','backSideWaist','backFoldWaist'],grain:['backGrainTop','backGrainBottom']}, {op:'setPieceRole',piece:'back',role:'bodice-back',cutOnFold:true,quantity:1}, {op:'setPieceConstruction',piece:'back',notchPoints:['backUnderarm'],edges:[{from:'backUnderarm',to:'backSideWaist',seamId:'bodice-side'}]},
+  ]};
+}
+
+export function createWovenBasicDressProgram(length) {
+  const skirtLength=({short:45,regular:60,long:85})[length]; if(!skirtLength) fail('programInvalid');
+  const panel=(id,role,name,nameAr,prefix,y,top,bottom,sideSeam)=>[
+    {op:'placePoint',name:`${prefix}Neck`,x:'0',y:String(y)}, {op:'placePoint',name:`${prefix}Shoulder`,x:'3',y:String(y)}, {op:'placePoint',name:`${prefix}Armhole`,x:'chestQuarter-3',y:String(y)}, {op:'placePoint',name:`${prefix}Underarm`,x:'chestQuarter',y:String(y+12)}, {op:'placePoint',name:`${prefix}SideWaist`,x:'waistQuarter',y:String(y+42)}, {op:'placePoint',name:`${prefix}FoldWaist`,x:'0',y:String(y+42)}, {op:'placePoint',name:`${prefix}GrainTop`,x:'waistQuarter/2',y:String(y+12)}, {op:'placePoint',name:`${prefix}GrainBottom`,x:'waistQuarter/2',y:String(y+37)},
+    {op:'promotePiece',id,name,nameAr,pointLoop:[`${prefix}Neck`,`${prefix}Shoulder`,`${prefix}Armhole`,`${prefix}Underarm`,`${prefix}SideWaist`,`${prefix}FoldWaist`],grain:[`${prefix}GrainTop`,`${prefix}GrainBottom`]}, {op:'setPieceRole',piece:id,role,cutOnFold:true,quantity:1}, {op:'setPieceConstruction',piece:id,notchPoints:[`${prefix}Underarm`],edges:[{from:`${prefix}Underarm`,to:`${prefix}SideWaist`,seamId:sideSeam}]},
+  ];
+  const skirt=(id,role,name,nameAr,prefix,y,sideSeam)=>[
+    {op:'placePoint',name:`${prefix}FoldWaist`,x:'0',y:String(y)}, {op:'placePoint',name:`${prefix}SideWaist`,x:'waistQuarter',y:String(y)}, {op:'placePoint',name:`${prefix}SideNotch`,x:'waistQuarter+(hemQuarter-waistQuarter)/2',y:`${y}+skirtLength/2`}, {op:'placePoint',name:`${prefix}SideHem`,x:'hemQuarter',y:`${y}+skirtLength`}, {op:'placePoint',name:`${prefix}FoldHem`,x:'0',y:`${y}+skirtLength`}, {op:'placePoint',name:`${prefix}GrainTop`,x:'waistQuarter/2',y:`${y}+5`}, {op:'placePoint',name:`${prefix}GrainBottom`,x:'waistQuarter/2',y:`${y}+skirtLength-5`},
+    {op:'promotePiece',id,name,nameAr,pointLoop:[`${prefix}FoldWaist`,`${prefix}SideWaist`,`${prefix}SideNotch`,`${prefix}SideHem`,`${prefix}FoldHem`],grain:[`${prefix}GrainTop`,`${prefix}GrainBottom`]}, {op:'setPieceRole',piece:id,role,cutOnFold:true,quantity:1}, {op:'setPieceConstruction',piece:id,notchPoints:[`${prefix}SideNotch`],edges:[{from:`${prefix}SideWaist`,to:`${prefix}SideHem`,seamId:sideSeam}]},
+  ];
+  return {version:1,family:'woven-basic-dress',operations:[
+    {op:'defineVariable',name:'chestQuarter',formula:'chest/4+2'}, {op:'defineVariable',name:'waistQuarter',formula:'waist/4+2'}, {op:'defineVariable',name:'hemQuarter',formula:'hips/4+10'}, {op:'defineVariable',name:'skirtLength',formula:String(skirtLength)},
+    ...panel('bodiceFront','bodice-front','Basic woven dress bodice front','أمام صدّار فستان منسوج أساسي','bf',0,0,0,'dress-bodice-side'), ...panel('bodiceBack','bodice-back','Basic woven dress bodice back','خلف صدّار فستان منسوج أساسي','bb',55,0,0,'dress-bodice-side'),
+    ...skirt('skirtFront','skirt-front','Basic woven dress skirt front','أمام تنورة فستان منسوج أساسي','sf',110,'dress-skirt-side'), ...skirt('skirtBack','skirt-back','Basic woven dress skirt back','خلف تنورة فستان منسوج أساسي','sb',110+skirtLength+15,'dress-skirt-side'),
   ]};
 }

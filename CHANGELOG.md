@@ -1,5 +1,19 @@
 # Changelog
 
+## Plan 7 P7-03: bounded basic woven dress
+
+The configurator now supports a basic woven A-line dress assembled from typed,
+editable bodice and skirt pieces. Length is an explicit short, regular, or long
+selection and the review shows any non-default length change before acceptance.
+The only permitted construction remains sleeveless with a round neckline, no
+closure and a 1 cm seam allowance; unimplemented dress choices are rejected.
+
+### Verification
+
+- `npm test`: 388 passed, 0 failed.
+- `npm run lint -- --quiet`: passed.
+- `npx playwright test e2e/pattern-program.spec.js`: 4 passed.
+
 ## Plan 7 P7-03: bounded basic woven bodice
 
 The made-to-measure configurator now accepts a complete woven-bodice brief
