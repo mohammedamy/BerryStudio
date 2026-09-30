@@ -62,3 +62,20 @@ test('a basic woven bodice brief previews and accepts only the bounded bodice pr
   expect(state.patternConfiguration).toMatchObject({family:'woven-basic-bodice',neckline:'round',sleeve:'sleeveless'});
   expect(state.pieces.map(piece=>piece.role)).toEqual(['bodice-front','bodice-back']);
 });
+
+test('a basic woven dress brief reviews its selected length before acceptance',async({page})=>{
+  await start(page);
+  const brief=page.locator('.design-brief');
+  await brief.locator('#briefMessage').fill('knee length woven dress, chest 92 cm, waist 74 cm, hips 100 cm');
+  await brief.getByRole('button',{name:'Update brief',exact:true}).click();
+  const program=page.locator('.pattern-program');
+  await expect(program.getByText('Ready to create a typed basic woven dress program.',{exact:true})).toBeVisible();
+  await program.locator('select[name="pattern-length"]').selectOption('long');
+  await program.getByRole('button',{name:'Preview dress program',exact:true}).click();
+  await expect(page.getByText('Length: Regular — 60 cm → Long — 85 cm',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Accept as new project',exact:true}).click();
+  const state=await page.evaluate(()=>window.Canvas.snapshotState());
+  expect(state.patternProgram.family).toBe('woven-basic-dress');
+  expect(state.patternConfiguration).toMatchObject({family:'woven-basic-dress',length:'long'});
+  expect(state.pieces.map(piece=>piece.role)).toEqual(['bodice-front','bodice-back','skirt-front','skirt-back']);
+});
