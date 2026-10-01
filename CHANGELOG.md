@@ -15,8 +15,12 @@ and geometry-validation summary on every imported piece for later review.
 
 ### Verification
 
-- `npm test`: 381 passed, 0 failed.
-- Direct-SVG and provenance coverage: 12 passed, 0 failed.
+- `npm test`: 390 passed, 0 failed.
+- `npm run lint -- --quiet`: passed.
+- `npx playwright test e2e/image-studio.spec.js e2e/pattern-program.spec.js`:
+  8 passed.
+- Service-worker cache advanced to v48 so offline clients receive the updated
+  pipeline, canvas, translations, and Image Studio controls.
 
 ## Plan 7 P7-03: bounded basic woven dress
 
@@ -90,6 +94,7 @@ designer reviews and accepts that draft.
   unrelated resource-heavy tests timed out; its serial rerun passed all but
   the bundled-avatar check, which requires CDN modules unavailable to this
   local browser. GitHub Actions remains the networked release gate.
+
 ## Plan 7 P7-08: local Image Studio evidence
 
 Adds a versioned local regression benchmark for text concepts, reference-guided
