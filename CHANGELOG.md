@@ -29,6 +29,11 @@ limitations. A separate blank synthesis template structures affinity themes,
 the workflow journey, jobs-to-be-done and impact/effort decisions without
 embedding identifiable research material.
 
+A local session initializer now creates deterministic not-run records from
+explicit pseudonymous IDs, language, role and participant slot. It applies the
+protocol's odd/even counterbalancing, never pre-confirms consent or outcomes,
+and refuses to overwrite an existing record.
+
 ## Plan 7 P7-09: mandatory direct-SVG geometry gate
 
 Direct image-to-SVG imports now abstain before canvas mutation when an imported

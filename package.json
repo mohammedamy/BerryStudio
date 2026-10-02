@@ -8,6 +8,7 @@
     "test": "node --test test/*.test.js",
     "evaluate:v6": "node scripts/evaluate-v6.mjs",
     "evaluate:v6:browser": "playwright test --config playwright.evaluation.config.js",
+    "pilot:new-session": "node scripts/create-pilot-session.mjs",
     "pilot:summary": "node scripts/summarize-pilot.mjs",
     "test:e2e": "playwright test",
     "test:cloth-gpu": "playwright test --config playwright.cloth.config.js",

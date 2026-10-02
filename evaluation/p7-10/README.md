@@ -43,13 +43,27 @@ a results report.
 ## Local reporting workflow
 
 Raw records and generated reports are ignored by Git. Create the local folders,
-copy one fresh template per requested session, then summarize them explicitly:
+initialize one not-run record per requested session, then summarize them
+explicitly:
 
 ```sh
 mkdir -p evaluation/p7-10/private evaluation/p7-10/reports
-cp evaluation/p7-10/session-template.json evaluation/p7-10/private/session-01.json
+npm run pilot:new-session -- \
+  --session-id session-01 \
+  --participant-id pilot-01 \
+  --participant-number 1 \
+  --role designer-maker \
+  --language en \
+  --output evaluation/p7-10/private/session-01.json
 npm run pilot:summary -- --input-dir evaluation/p7-10/private --end-date 2026-10-31
 ```
+
+The participant number selects the declared odd/even counterbalanced task and
+sequence assignment; it is not written to the record. The initializer always
+creates a `not-run`, consent-unconfirmed record with no outcomes and refuses to
+overwrite an existing file. Confirm consent externally and update the local
+record only when the session actually begins. `session-template.json` remains a
+reference for the complete shape.
 
 To render a human-readable report, add `--format markdown`; to save it, add
 `--output evaluation/p7-10/reports/summary.md`. JSON remains the default. The
