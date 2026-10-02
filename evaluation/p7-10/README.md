@@ -4,6 +4,11 @@ This directory defines the first P7-10 evidence boundary. It does **not** claim
 that a pilot has run, that participants have been recruited, or that any exit
 gate has passed.
 
+The moderated research plan and script are in `protocol.md`. `task-set.json`
+contains the two bilingual, counterbalanced briefs. Every session record binds
+its normal-workflow baseline and BerryStudio outcome to those task IDs and the
+assigned sequence so timing comparisons remain auditable.
+
 Use `session-template.json` once per requested pilot session. Replace the
 placeholder participant and reviewer values with stable pseudonymous IDs; do
 not store names, email addresses, recordings, consent forms, or other personal

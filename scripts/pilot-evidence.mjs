@@ -3,6 +3,7 @@ const clone = value => JSON.parse(JSON.stringify(value));
 const ROLES = new Set(['designer', 'maker', 'designer-maker']);
 const LANGUAGES = new Set(['en', 'ar']);
 const STATUSES = new Set(['not-run', 'abandoned', 'completed']);
+const SEQUENCES = new Set(['baseline-first', 'berry-first']);
 const MAKER_VERDICTS = new Set(['pending', 'major-rework', 'minor-rework', 'accepted-draft']);
 const SAMPLE_STATUSES = new Set(['not-made', 'in-progress', 'made-unreviewed', 'maker-reviewed', 'fit-reviewed']);
 const DEFECT_SEVERITIES = new Set(['minor', 'major', 'critical']);
@@ -29,6 +30,13 @@ export function validatePilotSession(input) {
   requireValue(typeof input.participantId === 'string' && /^[a-z0-9][a-z0-9_-]{2,63}$/i.test(input.participantId), 'Invalid pseudonymous participantId');
   requireValue(ROLES.has(input.role), 'Invalid pilot role');
   requireValue(LANGUAGES.has(input.language), 'Invalid pilot language');
+  const comparison = input.comparison;
+  requireValue(comparison && typeof comparison === 'object' && !Array.isArray(comparison), 'Missing task comparison');
+  requireValue(typeof comparison.protocolId === 'string' && /^[a-z0-9][a-z0-9._-]{2,79}$/i.test(comparison.protocolId), 'Invalid protocolId');
+  requireValue(typeof comparison.baselineTaskId === 'string' && /^[a-z0-9][a-z0-9._-]{2,79}$/i.test(comparison.baselineTaskId), 'Invalid baselineTaskId');
+  requireValue(typeof comparison.berryTaskId === 'string' && /^[a-z0-9][a-z0-9._-]{2,79}$/i.test(comparison.berryTaskId), 'Invalid berryTaskId');
+  requireValue(comparison.baselineTaskId !== comparison.berryTaskId, 'Baseline and BerryStudio tasks must differ');
+  requireValue(SEQUENCES.has(comparison.sequence), 'Invalid comparison sequence');
   requireValue(STATUSES.has(input.status), 'Invalid pilot status');
   requireValue(input.startedAt === null || isIsoInstant(input.startedAt), 'Invalid startedAt');
   requireValue(input.completedAt === null || isIsoInstant(input.completedAt), 'Invalid completedAt');
@@ -129,6 +137,7 @@ export function summarizePilotSessions(inputSessions, { pilotEndDate = null } = 
   const criticalDataLoss = sessions.flatMap(session => session.defects.map(defect => ({ sessionId: session.sessionId, ...defect })))
     .filter(defect => defect.severity === 'critical' && defect.type === 'data-loss');
   const cohortReady = participantIds.size >= 8;
+  const executionReady = cohortReady && counts.executed >= 8;
   const unaidedRate = counts.requested ? counts.unaidedReviewedExports / counts.requested : null;
   const medianTimeReduction = median(reductions);
 
@@ -154,7 +163,8 @@ export function summarizePilotSessions(inputSessions, { pilotEndDate = null } = 
     }
   }
 
-  const groupBy = field => Object.fromEntries([...new Set(sessions.map(session => session[field]))].sort().map(value => [value, outcomeCounts(sessions.filter(session => session[field] === value))]));
+  const groupBy = selector => Object.fromEntries([...new Set(sessions.map(selector))].sort().map(value => [value, outcomeCounts(sessions.filter(session => selector(session) === value))]));
+  const countValues = selector => Object.fromEntries([...new Set(sessions.map(selector))].sort().map(value => [value, sessions.filter(session => selector(session) === value).length]));
   return {
     schema: 'berrystudio.pilot-summary.v1',
     participantCount: participantIds.size,
@@ -168,14 +178,19 @@ export function summarizePilotSessions(inputSessions, { pilotEndDate = null } = 
     criticalDataLossDefects: criticalDataLoss,
     makerReviewedSessionCount: sessions.filter(session => session.makerReview.verdict !== 'pending').length,
     sampleStatusCounts: Object.fromEntries([...SAMPLE_STATUSES].map(status => [status, sessions.filter(session => session.sampleStatus === status).length])),
-    byLanguage: groupBy('language'),
-    byRole: groupBy('role'),
+    byLanguage: groupBy(session => session.language),
+    byRole: groupBy(session => session.role),
+    bySequence: groupBy(session => session.comparison.sequence),
+    taskAssignments: {
+      baseline: countValues(session => session.comparison.baselineTaskId),
+      berryStudio: countValues(session => session.comparison.berryTaskId),
+    },
     weeklyActivity,
     gates: {
       cohortSize8To12: participantIds.size < 8 ? 'insufficient-evidence' : participantIds.size <= 12 ? 'pass' : 'fail',
-      unaidedReviewedExportAtLeast80Percent: assessment(cohortReady, unaidedRate !== null && unaidedRate >= 0.8),
+      unaidedReviewedExportAtLeast80Percent: assessment(executionReady, unaidedRate !== null && unaidedRate >= 0.8),
       medianTimeReductionAtLeast30Percent: assessment(cohortReady && timed.length >= 8, medianTimeReduction !== null && medianTimeReduction >= 0.3),
-      noCriticalDataLossDefect: criticalDataLoss.length ? 'fail' : assessment(cohortReady && counts.executed >= 8, true),
+      noCriticalDataLossDefect: criticalDataLoss.length ? 'fail' : assessment(executionReady, true),
     },
     limitations: [
       'This summary reports submitted pilot records; it does not recruit participants or observe sessions.',

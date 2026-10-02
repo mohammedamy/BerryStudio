@@ -8,6 +8,12 @@ const session = (id, overrides = {}) => ({
   participantId: `pilot-${id}`,
   role: 'designer-maker',
   language: id % 2 ? 'ar' : 'en',
+  comparison: {
+    protocolId: 'p7-10-woven-skirt-comparison-v1',
+    baselineTaskId: id % 2 ? 'skirt-a' : 'skirt-b',
+    berryTaskId: id % 2 ? 'skirt-b' : 'skirt-a',
+    sequence: id % 2 ? 'baseline-first' : 'berry-first',
+  },
   status: 'completed',
   startedAt: '2026-10-01T09:00:00.000Z',
   completedAt: '2026-10-01T10:00:00.000Z',
@@ -31,6 +37,7 @@ test('pilot records reject false unaided, not-run and maker-review claims', () =
   assert.throws(() => validatePilotSession(session(1, { outcome: { reviewedExport: true, unaided: true, baselineMinutes: 100, completionMinutes: 60, assistanceEvents: 1 } })), /assisted session/);
   assert.throws(() => validatePilotSession(session(2, { status: 'not-run', startedAt: null, completedAt: null })), /Not-run sessions cannot claim an outcome/);
   assert.throws(() => validatePilotSession(session(3, { makerReview: { verdict: 'accepted-draft', reviewerId: null, reviewedAt: null, evidence: [] } })), /named reviewer/);
+  assert.throws(() => validatePilotSession(session(4, { comparison: { protocolId: 'p7-10-v1', baselineTaskId: 'same-task', berryTaskId: 'same-task', sequence: 'baseline-first' } })), /must differ/);
 });
 
 test('not-run sessions remain in the completion denominator', () => {
@@ -46,7 +53,7 @@ test('not-run sessions remain in the completion denominator', () => {
   assert.equal(summary.requested, 8);
   assert.equal(summary.unaidedReviewedExports, 6);
   assert.equal(summary.unaidedReviewedExportRatePerRequestedSession, 0.75);
-  assert.equal(summary.gates.unaidedReviewedExportAtLeast80Percent, 'fail');
+  assert.equal(summary.gates.unaidedReviewedExportAtLeast80Percent, 'insufficient-evidence');
   assert.equal(summary.gates.medianTimeReductionAtLeast30Percent, 'insufficient-evidence');
 });
 
@@ -77,6 +84,8 @@ test('eight complete real records can satisfy declared numeric gates', () => {
   assert.equal(summary.gates.medianTimeReductionAtLeast30Percent, 'pass');
   assert.equal(summary.gates.noCriticalDataLossDefect, 'pass');
   assert.deepEqual(summary.byLanguage.en, { requested: 4, executed: 4, completed: 4, reviewedExports: 4, unaidedReviewedExports: 4 });
+  assert.equal(summary.bySequence['baseline-first'].requested, 4);
+  assert.deepEqual(summary.taskAssignments.baseline, { 'skirt-a': 4, 'skirt-b': 4 });
   assert.deepEqual(summary.weeklyActivity.at(-1), { startDate: '2026-09-25', endDate: '2026-10-01', activeParticipants: 8, activeRate: 1 });
 });
 

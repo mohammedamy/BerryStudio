@@ -4,6 +4,12 @@
   "participantId": "replace-pseudonymous-participant-id",
   "role": "designer-maker",
   "language": "en",
+  "comparison": {
+    "protocolId": "p7-10-woven-skirt-comparison-v1",
+    "baselineTaskId": "skirt-a",
+    "berryTaskId": "skirt-b",
+    "sequence": "baseline-first"
+  },
   "status": "not-run",
   "startedAt": null,
   "completedAt": null,

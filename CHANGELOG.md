@@ -14,6 +14,10 @@ explicit-input reporting command produces a deterministic aggregate without
 participant IDs or timestamps. It refuses report overwrites and identifies
 invalid files without echoing their contents.
 
+The pilot now has a moderated bilingual protocol and two matched,
+counterbalanced woven-skirt tasks. Session evidence records the protocol, both
+task IDs and order so time comparisons can be audited by task and sequence.
+
 ## Plan 7 P7-09: mandatory direct-SVG geometry gate
 
 Direct image-to-SVG imports now abstain before canvas mutation when an imported
