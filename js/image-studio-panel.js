@@ -2,7 +2,7 @@ import { appendStudioConcept, emptyImageStudio, selectStudioConcept, setStudioSo
 
 const node = (tag, text) => { const element = document.createElement(tag); if (text != null) element.textContent = text; return element; };
 
-export function mountImageStudio(container, { t, getStudio, saveStudio, provider, generate, projectKey }) {
+export function mountImageStudio(container, { t, getStudio, saveStudio, provider, generate, projectKey, useSelected }) {
   const section = node('section'); section.className = 'image-studio'; section.style.cssText = 'display:grid;gap:10px;margin-top:24px';
   section.append(node('h3', t('imageStudioTitle')), node('p', t('imageStudioScope')));
   const capability = node('p'); capability.className = 'help-note';
@@ -16,6 +16,7 @@ export function mountImageStudio(container, { t, getStudio, saveStudio, provider
   const cancel = node('button', t('imageStudioCancel')); cancel.className = 'big-btn ghost'; cancel.type = 'button'; cancel.hidden = true;
   const status = node('p'); status.setAttribute('aria-live', 'polite');
   const gallery = node('div'); gallery.className = 'image-studio-gallery'; gallery.style.cssText = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px';
+  const useConcept = node('button', t('imageStudioUseSelected')); useConcept.className = 'big-btn ghost'; useConcept.type = 'button';
   let uploaded = null, requestId = 0, busy = false;
   const currentStudio = () => {
     const studio = getStudio() || emptyImageStudio();
@@ -47,6 +48,9 @@ export function mountImageStudio(container, { t, getStudio, saveStudio, provider
       button.disabled = busy; button.setAttribute('aria-pressed', String(studio.selectedId === concept.id)); button.append(image); button.onclick = () => { try { saveStudio(selectStudioConcept(studio, concept.id)); paint(); } catch(error) { status.textContent=t(error.message); } };
       gallery.append(button);
     }
+    const selected=studio.concepts.find(concept=>concept.id===studio.selectedId);
+    useConcept.hidden=!selected; useConcept.disabled=busy;
+    useConcept.onclick=()=>{ if(!selected) return; try { useSelected?.(selected); status.textContent=t('imageStudioSelectedForPattern'); } catch(error) { status.textContent=t(error.message); } };
   }
   upload.onclick = () => file.click();
   file.onchange = () => {
@@ -79,6 +83,6 @@ export function mountImageStudio(container, { t, getStudio, saveStudio, provider
   };
   const remove = node('button', t('removeImg')); remove.type = 'button'; remove.className = 'big-btn ghost';
   remove.onclick = () => { if(busy) return; try { const studio=currentStudio(); studio.source=null; saveStudio(studio); paint(); } catch(error) { status.textContent=t(error.message); } };
-  section.append(capability, sourcePreview, remove, rights, file, upload, promptLabel, prompt, generateButton, cancel, status, gallery);
+  section.append(capability, sourcePreview, remove, rights, file, upload, promptLabel, prompt, generateButton, cancel, status, gallery, useConcept);
   container.append(section); paint(); return paint;
 }

@@ -1395,6 +1395,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         if(!result.ok) throw new Error(result.error || 'imageStudioFailed');
         return result.image;
       },
+      useSelected:concept=>{ aiImage=concept.image; save(); toast(T('imageStudioSelectedForPattern')); },
     });
     refreshPatternProgram=mountPatternProgram(c,{
       t:T,getBrief:()=>Canvas.snapshotState().brief || null,getStudio:()=>Canvas.snapshotState().imageStudio || null,category:()=>state.category,measurements:currentMeas,measurementProfileId:()=>state.selectedMeasurementProfileId,language:()=>state.lang,
@@ -1708,6 +1709,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if(r==="no-image") return "aiSvgNeedImage";
     if(r==="no-svg-in-reply") return "aiSvgFailNoSvg";
     if(r==="no-shapes") return "aiSvgFailNoShapes";
+    if(r==="validation-failed") return "aiSvgFailValidation";
     if(/\b401\b|\b403\b|unauthor|invalid.{0,12}key|api.?key/i.test(r)) return "aiSvgFailAuth";
     if(/\b429\b|rate.?limit/i.test(r)) return "aiSvgFailRateLimit";
     if(/fetch|network|timeout|abort|dns|offline/i.test(r)) return "aiSvgFailNetwork";
@@ -1737,7 +1739,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     try{
       const res = await generateSVGPatternFromImage({ adapter, cfg, imageDataURL: aiImage });
       if(!res.ok){ toast(T(classifySVGFailReason(res.reason))); return; }
-      const n = Canvas.importPieces(res.pieces);
+      const n = Canvas.importPieces(res.pieces, {kind:'ai-svg-image', validation:res.validation.summary});
       hideEmpty(); renderLayersPane();
       if(is3DActive()) build3D();
       save();

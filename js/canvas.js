@@ -1875,7 +1875,7 @@ export const Canvas = (() => {
   // pieces' relative layout intact instead of scattering them. Every new
   // piece lands group-selected (multiSelected) so it's immediately obvious
   // in the Layers pane which ones just arrived. Returns the count imported.
-  function importPieces(newPieces){
+  function importPieces(newPieces, sourceProvenance=null){
     if (!Array.isArray(newPieces) || !newPieces.length) return 0;
     pushUndo();
     let ox=8, oy=8;
@@ -1899,6 +1899,7 @@ export const Canvas = (() => {
         desc:{ en:"", ar:"" }, outline, curves, darts:[], notches:[],
         grain: gBot-gTop>4 ? [[gx,gTop+2],[gx,gBot-2]] : [[gx,gTop],[gx,gBot]],
         visible:true, locked:false,
+        ...(sourceProvenance ? {sourceProvenance:JSON.parse(JSON.stringify(sourceProvenance))} : {}),
         color:["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][(startIdx+i)%6],
       });
     });

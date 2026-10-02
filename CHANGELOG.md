@@ -1,5 +1,27 @@
 # Changelog
 
+## Plan 7 P7-09: mandatory direct-SVG geometry gate
+
+Direct image-to-SVG imports now abstain before canvas mutation when an imported
+outline is open or self-intersecting. The interface explains the abstention and
+states that a passing import still requires designer and maker review.
+
+Selected Image Studio concepts can now be deliberately used as the image
+reference for the gated AI pattern flow, retaining the existing selected-concept
+review step rather than silently using a generated image.
+
+Accepted direct-SVG imports retain an immutable `ai-svg-image` source marker
+and geometry-validation summary on every imported piece for later review.
+
+### Verification
+
+- `npm test`: 390 passed, 0 failed.
+- `npm run lint -- --quiet`: passed.
+- `npx playwright test e2e/image-studio.spec.js e2e/pattern-program.spec.js`:
+  8 passed.
+- Service-worker cache advanced to v48 so offline clients receive the updated
+  pipeline, canvas, translations, and Image Studio controls.
+
 ## Plan 7 P7-03: bounded basic woven dress
 
 The configurator now supports a basic woven A-line dress assembled from typed,
