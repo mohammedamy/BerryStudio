@@ -23,6 +23,12 @@ not-run slots cannot claim it. Cohort preflight reports and gates language,
 professional-role, matched-task and sequence coverage before pilot outcomes are
 interpreted.
 
+Pilot summaries can now render deterministic Markdown with explicit
+denominators, gate states, cohort splits, maker/sample counts, defects and
+limitations. A separate blank synthesis template structures affinity themes,
+the workflow journey, jobs-to-be-done and impact/effort decisions without
+embedding identifiable research material.
+
 ## Plan 7 P7-09: mandatory direct-SVG geometry gate
 
 Direct image-to-SVG imports now abstain before canvas mutation when an imported

@@ -28,10 +28,11 @@ const withDirectory = async callback => {
 
 test('pilot summary arguments require an explicit input directory', () => {
   assert.throws(() => parsePilotSummaryArgs([]), /--input-dir is required/);
-  assert.deepEqual(parsePilotSummaryArgs(['--input-dir', 'records', '--end-date', '2026-10-01', '--output', 'report.json']), {
-    inputDir: 'records', pilotEndDate: '2026-10-01', output: 'report.json',
+  assert.deepEqual(parsePilotSummaryArgs(['--input-dir', 'records', '--end-date', '2026-10-01', '--format', 'markdown', '--output', 'report.md']), {
+    inputDir: 'records', pilotEndDate: '2026-10-01', format: 'markdown', output: 'report.md',
   });
   assert.throws(() => parsePilotSummaryArgs(['--surprise', 'yes']), /Unknown argument/);
+  assert.throws(() => parsePilotSummaryArgs(['--input-dir', 'records', '--format', 'html']), /json or markdown/);
 });
 
 test('local record files are loaded in deterministic filename order', () => withDirectory(async directory => {
@@ -50,6 +51,25 @@ test('the CLI aggregate omits participant identifiers and is byte-deterministic'
   assert.equal(first.summary.gates.unaidedReviewedExportAtLeast80Percent, 'pass');
   assert.doesNotMatch(first.json, /pilot-[1-8]/);
   assert.doesNotMatch(first.json, /generatedAt/);
+}));
+
+test('Markdown reporting is deterministic, denominator-explicit and privacy bounded', () => withDirectory(async directory => {
+  for (let index = 1; index <= 8; index++) await writeFile(join(directory, `${index}.json`), JSON.stringify(record(index)));
+  const first = await runPilotSummary({ inputDir: directory, pilotEndDate: '2026-10-01', format: 'markdown' });
+  const second = await runPilotSummary({ inputDir: directory, pilotEndDate: '2026-10-01', format: 'markdown' });
+  assert.equal(first.rendered, second.rendered);
+  assert.match(first.markdown, /All computed pilot gates pass/);
+  assert.match(first.markdown, /100\.0% \(8\/8\)/);
+  assert.match(first.markdown, /Maker-reviewed sessions: \*\*0\/8 requested\*\*/);
+  assert.doesNotMatch(first.markdown, /pilot-[1-8]/);
+  assert.doesNotMatch(first.markdown, /generatedAt/);
+}));
+
+test('Markdown never labels an undersized cohort as passing', () => withDirectory(async directory => {
+  await writeFile(join(directory, 'one.json'), JSON.stringify(record(1)));
+  const result = await runPilotSummary({ inputDir: directory, format: 'markdown' });
+  assert.match(result.markdown, /Status: Insufficient evidence/);
+  assert.doesNotMatch(result.markdown, /Status: All computed pilot gates pass/);
 }));
 
 test('output creation refuses to overwrite an existing report', () => withDirectory(async directory => {

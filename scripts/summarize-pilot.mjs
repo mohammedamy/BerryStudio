@@ -3,21 +3,24 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { summarizePilotSessions } from './pilot-evidence.mjs';
+import { renderPilotSummaryMarkdown } from './pilot-report.mjs';
 
-const usage = 'Usage: npm run pilot:summary -- --input-dir <directory> [--end-date YYYY-MM-DD] [--output <file>]';
+const usage = 'Usage: npm run pilot:summary -- --input-dir <directory> [--end-date YYYY-MM-DD] [--format json|markdown] [--output <file>]';
 
 export function parsePilotSummaryArgs(argv) {
-  const options = { inputDir: null, pilotEndDate: null, output: null };
+  const options = { inputDir: null, pilotEndDate: null, format: 'json', output: null };
   for (let index = 0; index < argv.length; index++) {
     const flag = argv[index];
-    if (!['--input-dir', '--end-date', '--output'].includes(flag)) throw new Error(`Unknown argument: ${flag}\n${usage}`);
+    if (!['--input-dir', '--end-date', '--format', '--output'].includes(flag)) throw new Error(`Unknown argument: ${flag}\n${usage}`);
     const value = argv[++index];
     if (!value || value.startsWith('--')) throw new Error(`Missing value for ${flag}\n${usage}`);
     if (flag === '--input-dir') options.inputDir = value;
     if (flag === '--end-date') options.pilotEndDate = value;
+    if (flag === '--format') options.format = value;
     if (flag === '--output') options.output = value;
   }
   if (!options.inputDir) throw new Error(`--input-dir is required\n${usage}`);
+  if (!['json', 'markdown'].includes(options.format)) throw new Error(`--format must be json or markdown\n${usage}`);
   return options;
 }
 
@@ -42,7 +45,8 @@ export async function loadPilotSessions(inputDir) {
   return sessions;
 }
 
-export async function runPilotSummary({ inputDir, pilotEndDate = null, output = null }) {
+export async function runPilotSummary({ inputDir, pilotEndDate = null, format = 'json', output = null }) {
+  if (!['json', 'markdown'].includes(format)) throw new Error('--format must be json or markdown');
   const sessions = await loadPilotSessions(inputDir);
   let summary;
   try {
@@ -57,14 +61,16 @@ export async function runPilotSummary({ inputDir, pilotEndDate = null, output = 
     throw error;
   }
   const json = `${JSON.stringify(summary, null, 2)}\n`;
-  if (output) await writeFile(resolve(output), json, { encoding: 'utf8', flag: 'wx' });
-  return { summary, json };
+  const markdown = renderPilotSummaryMarkdown(summary);
+  const rendered = format === 'markdown' ? markdown : json;
+  if (output) await writeFile(resolve(output), rendered, { encoding: 'utf8', flag: 'wx' });
+  return { summary, json, markdown, rendered };
 }
 
 async function main() {
   const options = parsePilotSummaryArgs(process.argv.slice(2));
-  const { json } = await runPilotSummary(options);
-  if (!options.output) process.stdout.write(json);
+  const { rendered } = await runPilotSummary(options);
+  if (!options.output) process.stdout.write(rendered);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

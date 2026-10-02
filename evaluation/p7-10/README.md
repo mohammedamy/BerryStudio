@@ -51,8 +51,14 @@ cp evaluation/p7-10/session-template.json evaluation/p7-10/private/session-01.js
 npm run pilot:summary -- --input-dir evaluation/p7-10/private --end-date 2026-10-31
 ```
 
-To save a report, add `--output evaluation/p7-10/reports/summary.json`. The
+To render a human-readable report, add `--format markdown`; to save it, add
+`--output evaluation/p7-10/reports/summary.md`. JSON remains the default. The
 command refuses to overwrite an existing report. Aggregates contain no
 participant IDs or generation timestamp, so the same inputs produce the same
 bytes. Critical-defect evidence identifiers and summaries remain present for
 auditability; review them before sharing a report outside the pilot team.
+
+Use `synthesis-template.md` after the quantitative record set has been reviewed.
+It separates observations, affinity themes, journey stages, jobs-to-be-done,
+maker/sample evidence and impact/effort prioritization. It is a blank research
+deliverable, not a results claim.
