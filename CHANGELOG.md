@@ -1,5 +1,14 @@
 # Changelog
 
+## Plan 7 P7-10: professional-pilot evidence boundary
+
+Adds a versioned, pseudonymous pilot-session record and deterministic summary
+for the planned 8–12 designer/maker pilot. The scorecard keeps not-run sessions
+in its completion denominator, reports paired timing and weekly activity, keeps
+maker/sample evidence separate, and returns `insufficient-evidence` instead of
+passing a gate before enough real participants exist. No pilot outcome or user
+research result is claimed by this implementation.
+
 ## Plan 7 P7-09: mandatory direct-SVG geometry gate
 
 Direct image-to-SVG imports now abstain before canvas mutation when an imported
