@@ -30,3 +30,20 @@ The session schema is `berrystudio.pilot-session.v1`; aggregate output is
 `berrystudio.pilot-summary.v1`. Tests use synthetic records solely to verify
 math and validation. They are not pilot evidence and must never be copied into
 a results report.
+
+## Local reporting workflow
+
+Raw records and generated reports are ignored by Git. Create the local folders,
+copy one fresh template per requested session, then summarize them explicitly:
+
+```sh
+mkdir -p evaluation/p7-10/private evaluation/p7-10/reports
+cp evaluation/p7-10/session-template.json evaluation/p7-10/private/session-01.json
+npm run pilot:summary -- --input-dir evaluation/p7-10/private --end-date 2026-10-31
+```
+
+To save a report, add `--output evaluation/p7-10/reports/summary.json`. The
+command refuses to overwrite an existing report. Aggregates contain no
+participant IDs or generation timestamp, so the same inputs produce the same
+bytes. Critical-defect evidence identifiers and summaries remain present for
+auditability; review them before sharing a report outside the pilot team.

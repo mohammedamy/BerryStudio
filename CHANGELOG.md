@@ -9,6 +9,11 @@ maker/sample evidence separate, and returns `insufficient-evidence` instead of
 passing a gate before enough real participants exist. No pilot outcome or user
 research result is claimed by this implementation.
 
+Raw pilot records and generated reports now have Git exclusions, and an
+explicit-input reporting command produces a deterministic aggregate without
+participant IDs or timestamps. It refuses report overwrites and identifies
+invalid files without echoing their contents.
+
 ## Plan 7 P7-09: mandatory direct-SVG geometry gate
 
 Direct image-to-SVG imports now abstain before canvas mutation when an imported
