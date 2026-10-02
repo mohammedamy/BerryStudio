@@ -13,6 +13,7 @@ const record = id => ({
     baselineTaskId: id % 2 ? 'skirt-a' : 'skirt-b', berryTaskId: id % 2 ? 'skirt-b' : 'skirt-a',
     sequence: id % 2 ? 'baseline-first' : 'berry-first',
   },
+  consentConfirmed: true,
   startedAt: '2026-10-01T09:00:00.000Z', completedAt: '2026-10-01T10:00:00.000Z',
   outcome: { reviewedExport: true, unaided: true, baselineMinutes: 100, completionMinutes: 60, assistanceEvents: 0 },
   activityDates: ['2026-10-01'], defects: [],

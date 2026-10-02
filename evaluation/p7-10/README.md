@@ -24,6 +24,10 @@ and creates a denominator-preserving summary. Important rules:
 - maker verdicts require a pseudonymous reviewer, timestamp and evidence;
 - sample status is reported separately and never inferred from geometry;
 - cohorts below eight participants produce `insufficient-evidence`, not pass;
+- executed sessions require external consent to be confirmed in the local
+  record; scheduled not-run records cannot claim consent;
+- cohort preflight checks English/Arabic, designer/maker, task and sequence
+  coverage before outcomes are interpreted;
 - any critical data-loss defect fails that gate immediately.
 
 The summary reports English/Arabic and role counts separately, retains the

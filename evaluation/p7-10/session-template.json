@@ -10,6 +10,7 @@
     "berryTaskId": "skirt-b",
     "sequence": "baseline-first"
   },
+  "consentConfirmed": false,
   "status": "not-run",
   "startedAt": null,
   "completedAt": null,

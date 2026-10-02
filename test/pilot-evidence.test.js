@@ -14,6 +14,7 @@ const session = (id, overrides = {}) => ({
     berryTaskId: id % 2 ? 'skirt-b' : 'skirt-a',
     sequence: id % 2 ? 'baseline-first' : 'berry-first',
   },
+  consentConfirmed: true,
   status: 'completed',
   startedAt: '2026-10-01T09:00:00.000Z',
   completedAt: '2026-10-01T10:00:00.000Z',
@@ -35,9 +36,10 @@ test('pilot session validation preserves an honest completed record', () => {
 
 test('pilot records reject false unaided, not-run and maker-review claims', () => {
   assert.throws(() => validatePilotSession(session(1, { outcome: { reviewedExport: true, unaided: true, baselineMinutes: 100, completionMinutes: 60, assistanceEvents: 1 } })), /assisted session/);
-  assert.throws(() => validatePilotSession(session(2, { status: 'not-run', startedAt: null, completedAt: null })), /Not-run sessions cannot claim an outcome/);
+  assert.throws(() => validatePilotSession(session(2, { status: 'not-run', startedAt: null, completedAt: null })), /Not-run sessions cannot claim confirmed consent/);
   assert.throws(() => validatePilotSession(session(3, { makerReview: { verdict: 'accepted-draft', reviewerId: null, reviewedAt: null, evidence: [] } })), /named reviewer/);
   assert.throws(() => validatePilotSession(session(4, { comparison: { protocolId: 'p7-10-v1', baselineTaskId: 'same-task', berryTaskId: 'same-task', sequence: 'baseline-first' } })), /must differ/);
+  assert.throws(() => validatePilotSession(session(5, { consentConfirmed: false })), /require confirmed consent/);
 });
 
 test('not-run sessions remain in the completion denominator', () => {
@@ -45,7 +47,7 @@ test('not-run sessions remain in the completion denominator', () => {
   rows[6].outcome.unaided = false;
   rows[6].outcome.assistanceEvents = 2;
   rows[7] = session(8, {
-    status: 'not-run', startedAt: null, completedAt: null,
+    status: 'not-run', consentConfirmed: false, startedAt: null, completedAt: null,
     outcome: { reviewedExport: null, unaided: null, baselineMinutes: null, completionMinutes: null, assistanceEvents: 0 },
     activityDates: [],
   });
@@ -67,7 +69,7 @@ test('small synthetic-looking samples never pass the pilot gates', () => {
 
 test('scheduled but unexecuted cohorts cannot pass the no-data-loss gate', () => {
   const rows = Array.from({ length: 8 }, (_, index) => session(index + 1, {
-    status: 'not-run', startedAt: null, completedAt: null,
+    status: 'not-run', consentConfirmed: false, startedAt: null, completedAt: null,
     outcome: { reviewedExport: null, unaided: null, baselineMinutes: null, completionMinutes: null, assistanceEvents: 0 },
     activityDates: [],
   }));
@@ -80,6 +82,7 @@ test('scheduled but unexecuted cohorts cannot pass the no-data-loss gate', () =>
 test('eight complete real records can satisfy declared numeric gates', () => {
   const summary = summarizePilotSessions(Array.from({ length: 8 }, (_, index) => session(index + 1)), { pilotEndDate: '2026-10-01' });
   assert.equal(summary.gates.cohortSize8To12, 'pass');
+  assert.equal(summary.gates.protocolCoverage, 'pass');
   assert.equal(summary.gates.unaidedReviewedExportAtLeast80Percent, 'pass');
   assert.equal(summary.gates.medianTimeReductionAtLeast30Percent, 'pass');
   assert.equal(summary.gates.noCriticalDataLossDefect, 'pass');
@@ -102,4 +105,15 @@ test('invalid calendar dates and cohorts above the declared 8–12 range are rej
   assert.throws(() => validatePilotSession(session(1, { activityDates: ['2026-02-31'] })), /Invalid activityDates/);
   const summary = summarizePilotSessions(Array.from({ length: 13 }, (_, index) => session(index + 1)));
   assert.equal(summary.gates.cohortSize8To12, 'fail');
+});
+
+test('cohort preflight fails missing language, role and counterbalance coverage without inventing outcomes', () => {
+  const rows = Array.from({ length: 8 }, (_, index) => session(index + 1, {
+    language: 'en', role: 'designer',
+    comparison: { protocolId: 'p7-10-woven-skirt-comparison-v1', baselineTaskId: 'skirt-a', berryTaskId: 'skirt-b', sequence: 'baseline-first' },
+  }));
+  const summary = summarizePilotSessions(rows);
+  assert.equal(summary.cohortCoverage.arabicSessions, 0);
+  assert.equal(summary.cohortCoverage.makerCapableParticipants, 0);
+  assert.equal(summary.gates.protocolCoverage, 'fail');
 });

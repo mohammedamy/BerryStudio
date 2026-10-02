@@ -18,6 +18,11 @@ The pilot now has a moderated bilingual protocol and two matched,
 counterbalanced woven-skirt tasks. Session evidence records the protocol, both
 task IDs and order so time comparisons can be audited by task and sequence.
 
+Executed records now require external consent confirmation, while planned
+not-run slots cannot claim it. Cohort preflight reports and gates language,
+professional-role, matched-task and sequence coverage before pilot outcomes are
+interpreted.
+
 ## Plan 7 P7-09: mandatory direct-SVG geometry gate
 
 Direct image-to-SVG imports now abstain before canvas mutation when an imported

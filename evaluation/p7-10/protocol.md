@@ -38,6 +38,8 @@ Look, or fit claims. Findings do not advance P7-11 automatically.
 - Ask permission separately before recording; a refusal does not exclude the
   session.
 - Assign only the pseudonymous participant and session IDs to repository data.
+- Set `consentConfirmed` only after that external confirmation; a scheduled
+  not-run record keeps it false.
 
 ### 2. Context — 10 minutes
 

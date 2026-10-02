@@ -37,6 +37,7 @@ export function validatePilotSession(input) {
   requireValue(typeof comparison.berryTaskId === 'string' && /^[a-z0-9][a-z0-9._-]{2,79}$/i.test(comparison.berryTaskId), 'Invalid berryTaskId');
   requireValue(comparison.baselineTaskId !== comparison.berryTaskId, 'Baseline and BerryStudio tasks must differ');
   requireValue(SEQUENCES.has(comparison.sequence), 'Invalid comparison sequence');
+  requireValue(typeof input.consentConfirmed === 'boolean', 'Invalid consent confirmation');
   requireValue(STATUSES.has(input.status), 'Invalid pilot status');
   requireValue(input.startedAt === null || isIsoInstant(input.startedAt), 'Invalid startedAt');
   requireValue(input.completedAt === null || isIsoInstant(input.completedAt), 'Invalid completedAt');
@@ -51,11 +52,13 @@ export function validatePilotSession(input) {
   requireValue(Number.isSafeInteger(outcome.assistanceEvents) && outcome.assistanceEvents >= 0, 'Invalid assistanceEvents');
 
   if (input.status === 'not-run') {
+    requireValue(input.consentConfirmed === false, 'Not-run sessions cannot claim confirmed consent');
     requireValue(input.startedAt === null && input.completedAt === null, 'Not-run sessions cannot have timestamps');
     requireValue(outcome.reviewedExport === null && outcome.unaided === null, 'Not-run sessions cannot claim an outcome');
     requireValue(outcome.baselineMinutes === null && outcome.completionMinutes === null, 'Not-run sessions cannot claim timing');
     requireValue(outcome.assistanceEvents === 0, 'Not-run sessions cannot record assistance');
   } else {
+    requireValue(input.consentConfirmed === true, 'Executed sessions require confirmed consent');
     requireValue(isIsoInstant(input.startedAt), 'Executed sessions require startedAt');
   }
   if (input.status === 'completed') {
@@ -165,6 +168,45 @@ export function summarizePilotSessions(inputSessions, { pilotEndDate = null } = 
 
   const groupBy = selector => Object.fromEntries([...new Set(sessions.map(selector))].sort().map(value => [value, outcomeCounts(sessions.filter(session => selector(session) === value))]));
   const countValues = selector => Object.fromEntries([...new Set(sessions.map(selector))].sort().map(value => [value, sessions.filter(session => selector(session) === value).length]));
+  const languageCounts = countValues(session => session.language);
+  const roleCounts = countValues(session => session.role);
+  const protocolCounts = countValues(session => session.comparison.protocolId);
+  const sequenceCounts = countValues(session => session.comparison.sequence);
+  const baselineTaskCounts = countValues(session => session.comparison.baselineTaskId);
+  const berryTaskCounts = countValues(session => session.comparison.berryTaskId);
+  const assignedTaskIds = new Set([
+    ...Object.keys(baselineTaskCounts),
+    ...Object.keys(berryTaskCounts),
+  ]);
+  const isBalanced = countsByValue => {
+    const values = Object.values(countsByValue);
+    return values.length === 2 && Math.max(...values) - Math.min(...values) <= 1;
+  };
+  const cohortCoverage = {
+    englishSessions: languageCounts.en || 0,
+    arabicSessions: languageCounts.ar || 0,
+    designerCapableParticipants: new Set(sessions.filter(session => ['designer', 'designer-maker'].includes(session.role)).map(session => session.participantId)).size,
+    makerCapableParticipants: new Set(sessions.filter(session => ['maker', 'designer-maker'].includes(session.role)).map(session => session.participantId)).size,
+    protocolCounts,
+    sequenceCounts,
+    baselineTaskCounts,
+    berryTaskCounts,
+    oneProtocol: Object.keys(protocolCounts).length === 1,
+    twoMatchedTasks: assignedTaskIds.size === 2 && [...assignedTaskIds].every(id => baselineTaskCounts[id] && berryTaskCounts[id]),
+    sequenceBalanced: isBalanced(sequenceCounts),
+    baselineTasksBalanced: isBalanced(baselineTaskCounts),
+    berryTasksBalanced: isBalanced(berryTaskCounts),
+  };
+  const coveragePassed = participantIds.size >= 8 && participantIds.size <= 12
+    && cohortCoverage.englishSessions >= 4
+    && cohortCoverage.arabicSessions >= 4
+    && cohortCoverage.designerCapableParticipants >= 4
+    && cohortCoverage.makerCapableParticipants >= 4
+    && cohortCoverage.oneProtocol
+    && cohortCoverage.twoMatchedTasks
+    && cohortCoverage.sequenceBalanced
+    && cohortCoverage.baselineTasksBalanced
+    && cohortCoverage.berryTasksBalanced;
   return {
     schema: 'berrystudio.pilot-summary.v1',
     participantCount: participantIds.size,
@@ -176,18 +218,21 @@ export function summarizePilotSessions(inputSessions, { pilotEndDate = null } = 
     medianTimeReduction,
     criticalDataLossDefectCount: criticalDataLoss.length,
     criticalDataLossDefects: criticalDataLoss,
+    consentConfirmedSessionCount: sessions.filter(session => session.consentConfirmed).length,
     makerReviewedSessionCount: sessions.filter(session => session.makerReview.verdict !== 'pending').length,
     sampleStatusCounts: Object.fromEntries([...SAMPLE_STATUSES].map(status => [status, sessions.filter(session => session.sampleStatus === status).length])),
     byLanguage: groupBy(session => session.language),
     byRole: groupBy(session => session.role),
     bySequence: groupBy(session => session.comparison.sequence),
     taskAssignments: {
-      baseline: countValues(session => session.comparison.baselineTaskId),
-      berryStudio: countValues(session => session.comparison.berryTaskId),
+      baseline: baselineTaskCounts,
+      berryStudio: berryTaskCounts,
     },
+    cohortCoverage,
     weeklyActivity,
     gates: {
       cohortSize8To12: participantIds.size < 8 ? 'insufficient-evidence' : participantIds.size <= 12 ? 'pass' : 'fail',
+      protocolCoverage: participantIds.size < 8 ? 'insufficient-evidence' : coveragePassed ? 'pass' : 'fail',
       unaidedReviewedExportAtLeast80Percent: assessment(executionReady, unaidedRate !== null && unaidedRate >= 0.8),
       medianTimeReductionAtLeast30Percent: assessment(cohortReady && timed.length >= 8, medianTimeReduction !== null && medianTimeReduction >= 0.3),
       noCriticalDataLossDefect: criticalDataLoss.length ? 'fail' : assessment(executionReady, true),
