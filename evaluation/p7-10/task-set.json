@@ -1,0 +1,45 @@
+{
+  "schema": "berrystudio.pilot-tasks.v1",
+  "protocolId": "p7-10-woven-skirt-comparison-v1",
+  "family": "woven-a-line-skirt",
+  "tasks": [
+    {
+      "id": "skirt-a",
+      "language": {
+        "en": "Create a made-to-measure regular-length woven A-line skirt for the supplied profile. Review the configuration, keep the default supported construction, inspect the pieces and construction packet, then export the reviewed project JSON and SVG.",
+        "ar": "أنشئ تنورة منسوجة بقصة A وطول عادي حسب المقاسات المزوّدة. راجع الإعدادات، واحتفظ بالبناء الافتراضي المدعوم، وافحص قطع الباترون وحزمة التنفيذ، ثم صدّر ملف المشروع JSON وملف SVG بعد المراجعة."
+      },
+      "measurementsCm": {
+        "chest": 88, "waist": 72, "hips": 98, "shoulder": 38,
+        "backLen": 40, "sleeve": 58, "neck": 36, "bicep": 28,
+        "inseam": 76, "thigh": 56, "height": 164
+      },
+      "configuration": { "length": "regular" }
+    },
+    {
+      "id": "skirt-b",
+      "language": {
+        "en": "Create a made-to-measure long woven A-line skirt for the supplied profile. Review the changed length, keep the remaining supported construction unchanged, inspect the pieces and construction packet, then export the reviewed project JSON and SVG.",
+        "ar": "أنشئ تنورة منسوجة بقصة A وطول طويل حسب المقاسات المزوّدة. راجع تغيير الطول، واحتفظ ببقية البناء المدعوم دون تغيير، وافحص قطع الباترون وحزمة التنفيذ، ثم صدّر ملف المشروع JSON وملف SVG بعد المراجعة."
+      },
+      "measurementsCm": {
+        "chest": 92, "waist": 76, "hips": 102, "shoulder": 39,
+        "backLen": 41, "sleeve": 59, "neck": 37, "bicep": 30,
+        "inseam": 78, "thigh": 58, "height": 168
+      },
+      "configuration": { "length": "long" }
+    }
+  ],
+  "completionCriteria": [
+    "named measurement profile selected and reviewed",
+    "supported skirt configuration reviewed and accepted",
+    "generated pieces and construction limitations inspected",
+    "project JSON exported",
+    "SVG exported",
+    "participant states that the export is ready for maker review"
+  ],
+  "assignments": [
+    { "participantNumberParity": "odd", "baselineTaskId": "skirt-a", "berryTaskId": "skirt-b", "sequence": "baseline-first" },
+    { "participantNumberParity": "even", "baselineTaskId": "skirt-b", "berryTaskId": "skirt-a", "sequence": "berry-first" }
+  ]
+}

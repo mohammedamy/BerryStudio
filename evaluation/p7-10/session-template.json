@@ -1,0 +1,33 @@
+{
+  "schema": "berrystudio.pilot-session.v1",
+  "sessionId": "replace-session-id",
+  "participantId": "replace-pseudonymous-participant-id",
+  "role": "designer-maker",
+  "language": "en",
+  "comparison": {
+    "protocolId": "p7-10-woven-skirt-comparison-v1",
+    "baselineTaskId": "skirt-a",
+    "berryTaskId": "skirt-b",
+    "sequence": "baseline-first"
+  },
+  "consentConfirmed": false,
+  "status": "not-run",
+  "startedAt": null,
+  "completedAt": null,
+  "outcome": {
+    "reviewedExport": null,
+    "unaided": null,
+    "baselineMinutes": null,
+    "completionMinutes": null,
+    "assistanceEvents": 0
+  },
+  "activityDates": [],
+  "defects": [],
+  "makerReview": {
+    "verdict": "pending",
+    "reviewerId": null,
+    "reviewedAt": null,
+    "evidence": []
+  },
+  "sampleStatus": "not-made"
+}

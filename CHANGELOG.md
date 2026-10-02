@@ -1,5 +1,39 @@
 # Changelog
 
+## Plan 7 P7-10: professional-pilot evidence boundary
+
+Adds a versioned, pseudonymous pilot-session record and deterministic summary
+for the planned 8–12 designer/maker pilot. The scorecard keeps not-run sessions
+in its completion denominator, reports paired timing and weekly activity, keeps
+maker/sample evidence separate, and returns `insufficient-evidence` instead of
+passing a gate before enough real participants exist. No pilot outcome or user
+research result is claimed by this implementation.
+
+Raw pilot records and generated reports now have Git exclusions, and an
+explicit-input reporting command produces a deterministic aggregate without
+participant IDs or timestamps. It refuses report overwrites and identifies
+invalid files without echoing their contents.
+
+The pilot now has a moderated bilingual protocol and two matched,
+counterbalanced woven-skirt tasks. Session evidence records the protocol, both
+task IDs and order so time comparisons can be audited by task and sequence.
+
+Executed records now require external consent confirmation, while planned
+not-run slots cannot claim it. Cohort preflight reports and gates language,
+professional-role, matched-task and sequence coverage before pilot outcomes are
+interpreted.
+
+Pilot summaries can now render deterministic Markdown with explicit
+denominators, gate states, cohort splits, maker/sample counts, defects and
+limitations. A separate blank synthesis template structures affinity themes,
+the workflow journey, jobs-to-be-done and impact/effort decisions without
+embedding identifiable research material.
+
+A local session initializer now creates deterministic not-run records from
+explicit pseudonymous IDs, language, role and participant slot. It applies the
+protocol's odd/even counterbalancing, never pre-confirms consent or outcomes,
+and refuses to overwrite an existing record.
+
 ## Plan 7 P7-09: mandatory direct-SVG geometry gate
 
 Direct image-to-SVG imports now abstain before canvas mutation when an imported
