@@ -118,6 +118,14 @@ export const PATTERN_SPECIFIC_THUMBS = {
   'mf01': 'mf01.jpg',
   'mf02': 'mf02.jpg',
   'mf03': 'mf03.jpg',
+  'mf04': 'mf04.jpg',
+  'mf05': 'mf05.jpg',
+  'mf06': 'mf06.jpg',
+  'mf07': 'mf07.jpg',
+  'mf08': 'mf08.jpg',
+  'mf09': 'mf09.jpg',
+  'mf10': 'mf10.jpg',
+  'mf11': 'mf11.jpg',
   'mu01': 'mu01.jpg',
 
   // Girls — unique finished garment photographs (each seen once)
@@ -187,7 +195,19 @@ export const PATTERN_SPECIFIC_THUMBS = {
   'bf07': 'bf07.jpg',
   'bf08': 'bf08.jpg',
   'bf09': 'bf09.jpg',
+  'bf10': 'bf10.jpg',
+  'bf11': 'bf11.jpg',
+  'bf12': 'bf12.jpg',
+  'bf13': 'bf13.jpg',
+  'bf14': 'bf14.jpg',
+  'bf15': 'bf15.jpg',
+  'bf16': 'bf16.jpg',
   'bu01': 'bu01.jpg',
+  'bu02': 'bu02.jpg',
+  'bu03': 'bu03.jpg',
+  'bu04': 'bu04.jpg',
+  'bu05': 'bu05.jpg',
+  'bu06': 'bu06.jpg',
 };
 
 /**
