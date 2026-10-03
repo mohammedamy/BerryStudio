@@ -1,5 +1,5 @@
 /* BerryStudio — service worker (offline-capable, update-friendly) */
-const CACHE = "berrystudio-v57";
+const CACHE = "berrystudio-v58";
 const ASSETS = [
   "./", "./index.html",
   "./css/styles.css",
@@ -93,7 +93,14 @@ const ASSETS = [
   "./assets/thumbnails/g24.jpg",
   "./assets/thumbnails/gf01.jpg",
   "./assets/thumbnails/gf02.jpg",
+  "./assets/thumbnails/gf03.jpg",
+  "./assets/thumbnails/gf04.jpg",
+  "./assets/thumbnails/gf05.jpg",
   "./assets/thumbnails/gf06.jpg",
+  "./assets/thumbnails/gf07.jpg",
+  "./assets/thumbnails/gf08.jpg",
+  "./assets/thumbnails/gf09.jpg",
+  "./assets/thumbnails/gf10.jpg",
   "./assets/thumbnails/girls_dress.jpg",
   "./assets/thumbnails/gu01.jpg",
   "./assets/thumbnails/gy001.jpg",
@@ -168,6 +175,15 @@ const ASSETS = [
   "./assets/thumbnails/w22.jpg",
   "./assets/thumbnails/w23.jpg",
   "./assets/thumbnails/wb01.jpg",
+  "./assets/thumbnails/wb02.jpg",
+  "./assets/thumbnails/wb03.jpg",
+  "./assets/thumbnails/wb04.jpg",
+  "./assets/thumbnails/wb05.jpg",
+  "./assets/thumbnails/wb06.jpg",
+  "./assets/thumbnails/wb07.jpg",
+  "./assets/thumbnails/wb08.jpg",
+  "./assets/thumbnails/wb09.jpg",
+  "./assets/thumbnails/wb10.jpg",
   "./assets/thumbnails/wf01.jpg",
   "./assets/thumbnails/wf02.jpg",
   "./assets/thumbnails/wf03.jpg",
@@ -187,6 +203,10 @@ const ASSETS = [
   "./assets/thumbnails/womens_dress.jpg",
   "./assets/thumbnails/wu01.jpg",
   "./assets/thumbnails/wu02.jpg",
+  "./assets/thumbnails/wu03.jpg",
+  "./assets/thumbnails/wu04.jpg",
+  "./assets/thumbnails/wu05.jpg",
+  "./assets/thumbnails/wu06.jpg",
 ];
 // Deliberately NOT precached: js/workers/local-model-worker.js — it's only
 // ever instantiated on demand (WP-2 Routes B/C), and its own dynamic import
