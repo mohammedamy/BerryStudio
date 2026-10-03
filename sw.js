@@ -1,9 +1,9 @@
 /* BerryStudio — service worker (offline-capable, update-friendly) */
-const CACHE = "berrystudio-v50";
+const CACHE = "berrystudio-v51";
 const ASSETS = [
   "./", "./index.html",
   "./css/styles.css",
-  "./js/i18n.js", "./js/data.js", "./js/canvas.js", "./js/three-view.js", "./js/ai.js", "./js/billboard.js", "./js/library.js", "./js/fancy-patterns.js", "./js/validate.js",
+  "./js/i18n.js", "./js/data.js", "./js/canvas.js", "./js/three-view.js", "./js/ai.js", "./js/billboard.js", "./js/library.js", "./js/girls-leotards.js", "./js/underwear-library.js", "./js/reference-patterns.js", "./js/pattern-flat.js", "./js/fancy-patterns.js", "./js/validate.js",
   "./js/ai-keystore.js", "./js/capability-probe.js", "./js/ai-providers.js", "./js/schema-validate.js", "./js/ai-spec-pipeline.js", "./js/ai-fusion.js", "./js/image-providers.js", "./js/thumbnails.js", "./js/app.js",
   "./js/vendor/pattern-spec-validate.generated.js",
   "./js/cloth-workflow-contract.js", "./js/responsive-workspace.js",
@@ -92,7 +92,8 @@ const ASSETS = [
 // of the ML runtime must never be triggered by a service-worker precache.
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  self.skipWaiting();
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
 });
 
 self.addEventListener("activate", (e) => {

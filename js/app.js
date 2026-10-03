@@ -5254,8 +5254,11 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     });
     window.addEventListener("pagehide", save);
     document.addEventListener("visibilitychange", ()=>{ if(document.hidden) save(); });
-    // register SW
-    if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+    // register SW with active update check and reload on controller change
+    if("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").then(r=>{ r.update().catch(()=>{}); }).catch(()=>{});
+      navigator.serviceWorker.addEventListener("controllerchange", ()=>{ window.location.reload(); });
+    }
     // onboarding first run
     if(!state.onboarded) setTimeout(startOnboarding,400);
     // load default pattern so app looks alive, then restore last view —
