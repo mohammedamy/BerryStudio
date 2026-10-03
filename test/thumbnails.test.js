@@ -27,6 +27,24 @@ test('every assigned photo in PATTERN_SPECIFIC_THUMBS is unique (zero repetition
   const values = Object.values(PATTERN_SPECIFIC_THUMBS);
   const unique = new Set(values);
   assert.equal(unique.size, values.length, `Expected all assigned photos to be unique, but found ${values.length - unique.size} duplicate(s)`);
+  assert.ok(unique.size >= 68, `Expected at least 68 unique lookbook photos, got ${unique.size}`);
+});
+
+test('no generic archetype fallback filenames are used in PATTERN_SPECIFIC_THUMBS', () => {
+  const genericPrefixes = ['women_', 'men_', 'girls_', 'boys_'];
+  for (const [id, file] of Object.entries(PATTERN_SPECIFIC_THUMBS)) {
+    // Base garments named exactly like the pattern (e.g. girls_dress.jpg for girls_dress) are valid
+    if (file === `${id}.jpg`) continue;
+    const isGeneric = genericPrefixes.some(p => file.startsWith(p));
+    assert.ok(!isGeneric, `Pattern ${id} must not use generic archetype thumbnail ${file}`);
+  }
+});
+
+test('ghost mannequin intimate garments and leotard are assigned unique dedicated photos', () => {
+  const intimate = ['wu01', 'wb01', 'mu01', 'bu01', 'gu01', 'gy001'];
+  for (const id of intimate) {
+    assert.equal(PATTERN_SPECIFIC_THUMBS[id], `${id}.jpg`, `Expected ${id} to map to ${id}.jpg`);
+  }
 });
 
 test('getPatternThumbnail respects custom item.thumb override', () => {
