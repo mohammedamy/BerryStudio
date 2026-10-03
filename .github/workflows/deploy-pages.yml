@@ -166,7 +166,7 @@ jobs:
         run: |
           set -e
           mkdir -p _site
-          cp -r index.html body.html 3d-test.html privacy.html css icons js env schema manifest.webmanifest sw.js docs avatars _site/
+          cp -r index.html body.html 3d-test.html privacy.html css icons js env schema manifest.webmanifest sw.js docs avatars assets _site/
           mkdir -p _site/cloth-lab
           cp -r cloth-lab/dist/. _site/cloth-lab/
           mkdir -p _site/cloth-lab/dist-embed

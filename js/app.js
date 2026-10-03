@@ -25,6 +25,7 @@ import { FancyGen } from './fancy-patterns.js';
 import './reference-patterns.js'; // side-effect only — adds the 12-pattern Phase 2 reference set (docs/plan 4.md)
 import { PatternValidator } from './validate.js';
 import { renderPatternFlat } from './pattern-flat.js';
+import { getPatternThumbnail } from './thumbnails.js';
 import { AIProviders, AI_PROVIDER_IDS, getProvider, loadLocalModelFromFile, restoreLocalModelFromCache, runOnnxTestInference, loadSegmentationModel, runSegmentationOn } from './ai-providers.js';
 import { getModelFileMeta, clearModelFile } from './workers/model-file-cache.js';
 import { KeyStore } from './ai-keystore.js';
@@ -1211,7 +1212,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
           // glyphs) stays the fallback for whatever it can't yet — same
           // as it always has been for state.mine below.
           const flatSvg = renderPatternFlat(x.id, x);
-          card.appendChild(el("div","lib-thumb", flatSvg || LIB_ICONS[x.type] || (x.cat==="men"?LIB_ICONS.shirt:LIB_ICONS.dress)));
+          const fallbackSvg = flatSvg || LIB_ICONS[x.type] || (x.cat==="men"?LIB_ICONS.shirt:LIB_ICONS.dress);
+          const thumbSrc = getPatternThumbnail(x, p);
+          const thumbEl = el("div","lib-thumb",`<img src="${thumbSrc}" alt="${L(p.name)}" loading="lazy" class="lib-thumb-img" onerror="this.onerror=null;this.parentElement.innerHTML=\`${fallbackSvg.replace(/`/g, '\\`')}\`;">`);
+          card.appendChild(thumbEl);
           card.appendChild(el("div","lib-meta",`<div class="t">${L(p.name)}</div><div class="s">${L(x.tag)} · ${T(x.cat)}</div>`));
           card.onclick=()=>loadLibraryPattern(x.id);
           grid.appendChild(card);
