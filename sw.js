@@ -1,5 +1,5 @@
 /* BerryStudio — service worker (offline-capable, update-friendly) */
-const CACHE = "berrystudio-v53";
+const CACHE = "berrystudio-v54";
 const ASSETS = [
   "./", "./index.html",
   "./css/styles.css",
@@ -21,7 +21,14 @@ const ASSETS = [
   // Unique lookbook pattern photographs (each seen once)
   "./assets/thumbnails/abaya.jpg",
   "./assets/thumbnails/b01.jpg",
+  "./assets/thumbnails/b02.jpg",
+  "./assets/thumbnails/b03.jpg",
+  "./assets/thumbnails/b04.jpg",
+  "./assets/thumbnails/b05.jpg",
   "./assets/thumbnails/b06.jpg",
+  "./assets/thumbnails/b07.jpg",
+  "./assets/thumbnails/b08.jpg",
+  "./assets/thumbnails/b09.jpg",
   "./assets/thumbnails/b11.jpg",
   "./assets/thumbnails/bf01.jpg",
   "./assets/thumbnails/bf02.jpg",
@@ -39,6 +46,19 @@ const ASSETS = [
   "./assets/thumbnails/g09.jpg",
   "./assets/thumbnails/g10.jpg",
   "./assets/thumbnails/g11.jpg",
+  "./assets/thumbnails/g12.jpg",
+  "./assets/thumbnails/g13.jpg",
+  "./assets/thumbnails/g14.jpg",
+  "./assets/thumbnails/g15.jpg",
+  "./assets/thumbnails/g16.jpg",
+  "./assets/thumbnails/g17.jpg",
+  "./assets/thumbnails/g18.jpg",
+  "./assets/thumbnails/g19.jpg",
+  "./assets/thumbnails/g20.jpg",
+  "./assets/thumbnails/g21.jpg",
+  "./assets/thumbnails/g22.jpg",
+  "./assets/thumbnails/g23.jpg",
+  "./assets/thumbnails/g24.jpg",
   "./assets/thumbnails/gf01.jpg",
   "./assets/thumbnails/gf02.jpg",
   "./assets/thumbnails/gf06.jpg",
