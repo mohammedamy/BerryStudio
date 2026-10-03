@@ -174,7 +174,7 @@ function firstNonEmpty(pieces, roles) {
 // classifyLegacy's own fallback is.
 const FRONT_NAME_RE = /front/i;
 function selectParts(pieces) {
-  let core = firstNonEmpty(pieces, ['bodice-front-center', 'front-panel', 'brief-front', 'shorts-front', 'bodice-front-side']);
+  let core = firstNonEmpty(pieces, ['bodice-front-center', 'front-panel', 'brief-front', 'shorts-front', 'bodice-front-side', 'cup']);
   if (!core.length) {
     // A skirt/hip-only pattern (no bodice at all) — the skirt panel IS
     // the silhouette, not an accessory stacked below something else.
@@ -187,7 +187,7 @@ function selectParts(pieces) {
     core = firstNonEmpty(pieces, ['skirt-front-gore', 'hip-panel-front', 'godet', 'trouser-front']);
   }
   if (!core.length) {
-    const other = pieces.filter((p) => (!p.role || p.role === 'other') && p.name && FRONT_NAME_RE.test(p.name.en || ''));
+    const other = pieces.filter((p) => (!p.role || p.role === 'other' || p.role === 'band') && p.name && FRONT_NAME_RE.test(p.name.en || ''));
     core = other.slice(0, 1);
   }
   return {

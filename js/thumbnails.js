@@ -53,15 +53,9 @@ export const ARCHETYPE_IMAGES = {
 };
 
 export const PATTERN_SPECIFIC_THUMBS = {
-  // Base archetypes
+  // Women — unique finished garment photographs (each seen once)
   'womens_dress': 'women_dress.jpg',
   'abaya': 'women_abaya.jpg',
-  'mens_shirt': 'men_shirt.jpg',
-  'thobe': 'men_thobe.jpg',
-  'girls_dress': 'girls_dress.jpg',
-  'boys_trousers': 'boys_trousers.jpg',
-
-  // Women's unique per-pattern lookbook photos
   'w01': 'w01.jpg',
   'w02': 'w02.jpg',
   'w03': 'w03.jpg',
@@ -85,8 +79,19 @@ export const PATTERN_SPECIFIC_THUMBS = {
   'w21': 'w21.jpg',
   'w22': 'w22.jpg',
   'w23': 'w23.jpg',
+  'wf01': 'women_gown.jpg',
+  'wf06': 'women_top.jpg',
+  'wf08': 'women_suit.jpg',
+  'wf09': 'women_coat.jpg',
+  'wf11': 'women_skirt.jpg',
+  'wf12': 'women_jacket.jpg',
+  'wf16': 'women_trousers.jpg',
+  'wu01': 'women_underwear.jpg',
+  'wb01': 'women_bra.jpg',
 
-  // Men's unique per-pattern lookbook photos
+  // Men — unique finished garment photographs (each seen once)
+  'mens_shirt': 'men_shirt.jpg',
+  'thobe': 'men_thobe.jpg',
   'm01': 'm01.jpg',
   'm02': 'm02.jpg',
   'm03': 'm03.jpg',
@@ -94,97 +99,55 @@ export const PATTERN_SPECIFIC_THUMBS = {
   'm05': 'm05.jpg',
   'm06': 'm06.jpg',
   'm07': 'm07.jpg',
+  'm10': 'men_top.jpg',
+  'm14': 'men_trousers.jpg',
   'm22': 'men_shorts.jpg',
+  'mf01': 'men_suit.jpg',
+  'mf02': 'men_coat.jpg',
+  'mf03': 'men_jacket.jpg',
+  'mu01': 'men_underwear.jpg',
 
-  // Boys
-  'b03': 'boys_trousers.jpg',
-  'b07': 'boys_trousers.jpg',
-  'b13': 'boys_trousers.jpg',
-  'b21': 'boys_trousers.jpg',
+  // Girls — unique finished garment photographs (each seen once)
+  'girls_dress': 'girls_dress.jpg',
+  'gf01': 'girls_skirt.jpg',
+  'gf02': 'girls_gown.jpg',
+  'gf06': 'girls_coat.jpg',
+  'g02': 'girls_top.jpg',
+  'g04': 'girls_trousers.jpg',
+  'gy001': 'girls_leotard.jpg',
+  'gu01': 'girls_underwear.jpg',
+
+  // Boys — unique finished garment photographs (each seen once)
+  'boys_trousers': 'boys_trousers.jpg',
+  'b01': 'boys_shirt.jpg',
+  'b06': 'boys_top.jpg',
+  'b11': 'boys_thobe.jpg',
+  'bf01': 'boys_suit.jpg',
+  'bf02': 'boys_jacket.jpg',
+  'bf03': 'boys_coat.jpg',
+  'bu01': 'boys_underwear.jpg',
 };
 
 /**
- * Resolves the appropriate high-res human model thumbnail image URL
- * for any pattern entry in the BerryStudio library.
+ * Resolves the unique high-res human model thumbnail image URL
+ * for a pattern entry. If the pattern does not have an exclusive
+ * dedicated photograph, returns null so the pattern renders its
+ * own unique technical CAD flat, guaranteeing zero repeated thumbnails.
  *
  * @param {Object} item Library item descriptor { id, cat, tag, type, thumb? }
  * @param {Object} [pattern] The PATTERNS[item.id] object if available
- * @returns {string} Relative URL to the high-res thumbnail image
+ * @returns {string|null} Relative URL to the photo, or null for flat rendering
  */
 export function getPatternThumbnail(item, pattern) {
-  if (!item) return THUMBNAIL_BASE + ARCHETYPE_IMAGES['women_dress'];
+  if (!item) return null;
   if (item.thumb) return item.thumb;
 
   if (PATTERN_SPECIFIC_THUMBS[item.id]) {
     return THUMBNAIL_BASE + PATTERN_SPECIFIC_THUMBS[item.id];
   }
 
-  const cat = item.cat || (pattern && pattern.category) || 'women';
-  const type = item.type || 'dress';
-  const nameEn = (pattern && pattern.name && (pattern.name.en || pattern.name)) || '';
-  const tagEn = (item.tag && (item.tag.en || item.tag)) || '';
-  const isShorts = /short/i.test(nameEn) || /short/i.test(tagEn);
-
-  let filename = '';
-
-  if (cat === 'women') {
-    switch (type) {
-      case 'dress': filename = 'women_dress.jpg'; break;
-      case 'robe': filename = 'women_abaya.jpg'; break;
-      case 'gown': filename = 'women_gown.jpg'; break;
-      case 'top': filename = 'women_top.jpg'; break;
-      case 'skirt': filename = 'women_skirt.jpg'; break;
-      case 'trousers': filename = 'women_trousers.jpg'; break;
-      case 'suit': filename = 'women_suit.jpg'; break;
-      case 'coat': filename = 'women_coat.jpg'; break;
-      case 'jacket': filename = 'women_jacket.jpg'; break;
-      case 'underwear': filename = 'women_underwear.jpg'; break;
-      case 'bra': filename = 'women_bra.jpg'; break;
-      default: filename = 'women_dress.jpg';
-    }
-  } else if (cat === 'men') {
-    switch (type) {
-      case 'shirt': filename = 'men_shirt.jpg'; break;
-      case 'robe': filename = 'men_thobe.jpg'; break;
-      case 'trousers': filename = isShorts ? 'men_shorts.jpg' : 'men_trousers.jpg'; break;
-      case 'top': filename = 'men_top.jpg'; break;
-      case 'jacket': filename = 'men_jacket.jpg'; break;
-      case 'coat': filename = 'men_coat.jpg'; break;
-      case 'suit': filename = 'men_suit.jpg'; break;
-      case 'underwear': filename = 'men_underwear.jpg'; break;
-      default: filename = 'men_shirt.jpg';
-    }
-  } else if (cat === 'girls') {
-    switch (type) {
-      case 'dress': filename = 'girls_dress.jpg'; break;
-      case 'gown': filename = 'girls_gown.jpg'; break;
-      case 'skirt': filename = 'girls_skirt.jpg'; break;
-      case 'top': filename = 'girls_top.jpg'; break;
-      case 'trousers': filename = 'girls_trousers.jpg'; break;
-      case 'coat': filename = 'girls_coat.jpg'; break;
-      case 'leotard': filename = 'girls_leotard.jpg'; break;
-      case 'underwear':
-      case 'bra': filename = 'girls_underwear.jpg'; break;
-      case 'suit': filename = 'girls_dress.jpg'; break;
-      default: filename = 'girls_dress.jpg';
-    }
-  } else if (cat === 'boys') {
-    switch (type) {
-      case 'shirt': filename = 'boys_shirt.jpg'; break;
-      case 'top': filename = 'boys_top.jpg'; break;
-      case 'trousers': filename = 'boys_trousers.jpg'; break;
-      case 'robe': filename = 'boys_thobe.jpg'; break;
-      case 'jacket': filename = 'boys_jacket.jpg'; break;
-      case 'coat': filename = 'boys_coat.jpg'; break;
-      case 'suit': filename = 'boys_suit.jpg'; break;
-      case 'underwear': filename = 'boys_underwear.jpg'; break;
-      default: filename = 'boys_top.jpg';
-    }
-  } else {
-    filename = 'women_dress.jpg';
-  }
-
-  return THUMBNAIL_BASE + filename;
+  // Never repeat archetype photos — return null so pattern renders its own unique flat!
+  return null;
 }
 
 if (typeof window !== 'undefined') {

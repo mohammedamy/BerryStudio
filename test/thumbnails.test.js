@@ -8,36 +8,25 @@ import '../js/library.js';
 import '../js/girls-leotards.js';
 import '../js/fancy-patterns.js';
 import '../js/underwear-library.js';
-import { getPatternThumbnail, ARCHETYPE_IMAGES } from '../js/thumbnails.js';
+import { getPatternThumbnail, ARCHETYPE_IMAGES, PATTERN_SPECIFIC_THUMBS } from '../js/thumbnails.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 
-test('all archetype images exist on disk in assets/thumbnails', () => {
-  for (const [key, filename] of Object.entries(ARCHETYPE_IMAGES)) {
+test('all assigned images exist on disk in assets/thumbnails', () => {
+  for (const [key, filename] of Object.entries(PATTERN_SPECIFIC_THUMBS)) {
     const fullPath = path.join(projectRoot, 'assets/thumbnails', filename);
-    assert.ok(fs.existsSync(fullPath), `Archetype image missing for ${key}: ${fullPath}`);
+    assert.ok(fs.existsSync(fullPath), `Thumbnail image missing for ${key}: ${fullPath}`);
     const stats = fs.statSync(fullPath);
     assert.ok(stats.size > 1000, `Thumbnail ${filename} is too small (${stats.size} bytes)`);
   }
 });
 
-test('every single pattern in LIBRARY (308 patterns) resolves to a valid existing high-res thumbnail', () => {
-  assert.ok(LIBRARY.length >= 300, `Expected at least 300 patterns, found ${LIBRARY.length}`);
-
-  let resolvedCount = 0;
-  for (const item of LIBRARY) {
-    const pattern = PATTERNS[item.id];
-    const thumbUrl = getPatternThumbnail(item, pattern);
-    assert.ok(thumbUrl && typeof thumbUrl === 'string', `Failed to get thumb for ${item.id}`);
-
-    const fullPath = path.join(projectRoot, thumbUrl);
-    assert.ok(fs.existsSync(fullPath), `Thumb file does not exist for ${item.id}: ${fullPath}`);
-    resolvedCount++;
-  }
-
-  assert.equal(resolvedCount, LIBRARY.length);
+test('every assigned photo in PATTERN_SPECIFIC_THUMBS is unique (zero repetitions)', () => {
+  const values = Object.values(PATTERN_SPECIFIC_THUMBS);
+  const unique = new Set(values);
+  assert.equal(unique.size, values.length, `Expected all assigned photos to be unique, but found ${values.length - unique.size} duplicate(s)`);
 });
 
 test('getPatternThumbnail respects custom item.thumb override', () => {
@@ -45,17 +34,30 @@ test('getPatternThumbnail respects custom item.thumb override', () => {
   assert.equal(getPatternThumbnail(custom), 'assets/custom.jpg');
 });
 
-test('getPatternThumbnail correctly differentiates men trousers vs shorts', () => {
-  const genericPants = { id: 'm14', cat: 'men', type: 'trousers', tag: { en: 'Formal Straight Trousers' } };
-  const specificPants = { id: 'm01', cat: 'men', type: 'trousers', tag: { en: 'Trousers' } };
-  const shorts = { id: 'm22', cat: 'men', type: 'trousers', tag: { en: 'Shorts' } };
-
-  assert.ok(getPatternThumbnail(genericPants).includes('men_trousers.jpg'));
-  assert.ok(getPatternThumbnail(specificPants).includes('m01.jpg'));
-  assert.ok(getPatternThumbnail(shorts).includes('men_shorts.jpg'));
+test('getPatternThumbnail returns null for unassigned patterns to avoid duplicate thumbnails', () => {
+  const unassigned = { id: 'gy045', cat: 'girls', type: 'leotard' };
+  assert.equal(getPatternThumbnail(unassigned), null);
 });
 
-test('getPatternThumbnail maps athletic gymnastics leotard correctly', () => {
-  const leotard = { id: 'gl01', cat: 'girls', type: 'leotard', tag: { en: 'Leotard' } };
-  assert.ok(getPatternThumbnail(leotard).includes('girls_leotard.jpg'));
+test('every single pattern in LIBRARY (308 patterns) has either an exclusive photo or a unique flat', async () => {
+  const { renderPatternFlat } = await import('../js/pattern-flat.js');
+  assert.ok(LIBRARY.length >= 300, `Expected at least 300 patterns, found ${LIBRARY.length}`);
+
+  let resolvedCount = 0;
+  for (const item of LIBRARY) {
+    const pattern = PATTERNS[item.id];
+    const thumbUrl = getPatternThumbnail(item, pattern);
+    const flatSvg = renderPatternFlat(item.id, item);
+
+    assert.ok(thumbUrl || flatSvg, `Pattern ${item.id} has neither a photo nor a flat`);
+    if (thumbUrl) {
+      const fullPath = path.join(projectRoot, thumbUrl);
+      assert.ok(fs.existsSync(fullPath), `Thumb file does not exist for ${item.id}: ${fullPath}`);
+    } else {
+      assert.ok(flatSvg.startsWith('<svg'), `Flat SVG is invalid for ${item.id}`);
+    }
+    resolvedCount++;
+  }
+
+  assert.equal(resolvedCount, LIBRARY.length);
 });

@@ -1214,7 +1214,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
           const flatSvg = renderPatternFlat(x.id, x);
           const fallbackSvg = flatSvg || LIB_ICONS[x.type] || (x.cat==="men"?LIB_ICONS.shirt:LIB_ICONS.dress);
           const thumbSrc = getPatternThumbnail(x, p);
-          const thumbEl = el("div","lib-thumb",`<img src="${thumbSrc}" alt="${L(p.name)}" loading="lazy" class="lib-thumb-img" onerror="this.onerror=null;this.parentElement.innerHTML=\`${fallbackSvg.replace(/`/g, '\\`')}\`;">`);
+          const thumbEl = el("div","lib-thumb", thumbSrc
+            ? `<img src="${thumbSrc}" alt="${L(p.name)}" loading="lazy" class="lib-thumb-img" onerror="this.onerror=null;this.parentElement.innerHTML=\`${fallbackSvg.replace(/`/g, '\\`')}\`;">`
+            : fallbackSvg);
           card.appendChild(thumbEl);
           card.appendChild(el("div","lib-meta",`<div class="t">${L(p.name)}</div><div class="s">${L(x.tag)} · ${T(x.cat)}</div>`));
           card.onclick=()=>loadLibraryPattern(x.id);
