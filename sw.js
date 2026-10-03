@@ -1,5 +1,5 @@
 /* BerryStudio — service worker (offline-capable, update-friendly) */
-const CACHE = "berrystudio-v58";
+const CACHE = "berrystudio-v59";
 const ASSETS = [
   "./", "./index.html",
   "./css/styles.css",
@@ -101,8 +101,19 @@ const ASSETS = [
   "./assets/thumbnails/gf08.jpg",
   "./assets/thumbnails/gf09.jpg",
   "./assets/thumbnails/gf10.jpg",
+  "./assets/thumbnails/gf11.jpg",
+  "./assets/thumbnails/gf12.jpg",
+  "./assets/thumbnails/gf13.jpg",
+  "./assets/thumbnails/gf14.jpg",
+  "./assets/thumbnails/gf15.jpg",
+  "./assets/thumbnails/gf16.jpg",
   "./assets/thumbnails/girls_dress.jpg",
   "./assets/thumbnails/gu01.jpg",
+  "./assets/thumbnails/gu02.jpg",
+  "./assets/thumbnails/gu03.jpg",
+  "./assets/thumbnails/gu04.jpg",
+  "./assets/thumbnails/gu05.jpg",
+  "./assets/thumbnails/gu06.jpg",
   "./assets/thumbnails/gy001.jpg",
   "./assets/thumbnails/m01.jpg",
   "./assets/thumbnails/m02.jpg",
