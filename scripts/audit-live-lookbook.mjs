@@ -155,12 +155,44 @@ async function main() {
 
   console.log(`\n================ CATALOG AUDIT RESULTS ================`);
   console.log(`Total Catalog Cards (excluding saved drafts): ${catalogStats.totalCatalogCards}`);
-  console.log(`Successfully Loaded Lookbook Photos: ${catalogStats.loadedCount} / 308`);
+  console.log(`Successfully Loaded Lookbook Photos: ${catalogStats.loadedCount} / 320`);
   console.log(`Broken or Unloaded Images: ${catalogStats.brokenCount}`);
   if (catalogStats.brokenCount > 0) {
     console.log('Broken items:', catalogStats.broken);
   }
   console.log(`=======================================================\n`);
+
+  // Specific inspection of Reference Patterns (tail 3 of each category)
+  const refCategories = ['women', 'men', 'girls', 'boys'];
+  for (const cat of refCategories) {
+    const label = cat.charAt(0).toUpperCase() + cat.slice(1);
+    const catBtn = libPane.locator(`.seg button:has-text("${label}")`).first();
+    if (await catBtn.isVisible()) {
+      await catBtn.click();
+      await page.waitForTimeout(400);
+
+      // Scroll the library pane right to the bottom to bring the last 3 reference patterns into view
+      await page.evaluate(() => {
+        const pane = document.querySelector('.rail-pane[data-pane="library"]');
+        if (pane) pane.scrollTop = pane.scrollHeight;
+        const grid = document.querySelector('.rail-pane[data-pane="library"] .lib-grid');
+        if (grid) grid.scrollTop = grid.scrollHeight;
+      });
+      await page.waitForTimeout(300);
+
+      // Eagerly decode all visible images
+      await page.evaluate(async () => {
+        const imgs = Array.from(document.querySelectorAll('.rail-pane[data-pane="library"] .lib-thumb img'));
+        imgs.forEach(i => { i.removeAttribute('loading'); i.loading = 'eager'; });
+        await Promise.all(imgs.slice(-6).map(img => img.decode().catch(() => null)));
+      });
+      await page.waitForTimeout(300);
+
+      const shotRefPath = resolve(ARTIFACTS_DIR, `catalog_tail_${cat}.png`);
+      await page.screenshot({ path: shotRefPath, fullPage: false });
+      console.log(`Saved screenshot: catalog_tail_${cat}.png`);
+    }
+  }
 
   // Capture Category Shots with images rendered
   const categories = ['all', 'women', 'men', 'boys', 'girls'];
@@ -183,45 +215,20 @@ async function main() {
     console.log(`Saved screenshot: catalog_${cat}.png`);
   }
 
-  // Gymnastics Leotard search lookbook
-  console.log('Capturing Gymnastics Leotards lookbook...');
-  // Select "Girls" category
-  const girlsBtn = libPane.locator(`.seg button:has-text("Girls")`).first();
-  await girlsBtn.click();
-  await page.waitForTimeout(300);
-
-  const searchInput = libPane.locator('input[placeholder*="Search"], input[placeholder*="ابحث"]').first();
-  await searchInput.fill('Leotard');
-  await page.waitForTimeout(400);
-
-  await page.evaluate(async () => {
-    const imgs = Array.from(document.querySelectorAll('.rail-pane[data-pane="library"] .lib-thumb img'));
-    imgs.forEach(i => { i.removeAttribute('loading'); i.loading = 'eager'; });
-    await Promise.all(imgs.slice(0, 20).map(img => img.decode().catch(() => null)));
-  });
-  await page.waitForTimeout(300);
-
-  const shotLeotardPath = resolve(ARTIFACTS_DIR, 'catalog_search_leotard.png');
-  await page.screenshot({ path: shotLeotardPath, fullPage: false });
-  console.log(`Saved screenshot: catalog_search_leotard.png`);
-
-  // Pattern Selection: Boys Tuxedo / Sherwani
-  console.log('Testing pattern selection: Boys Tuxedo / Suit...');
-  // Clear search and select Boys category
-  await searchInput.fill('');
-  await searchInput.dispatchEvent('input');
-  await page.waitForTimeout(400);
-
-  const boysBtn = libPane.locator(`.seg button:has-text("Boys")`).first();
-  await boysBtn.click();
+  // Reference Pattern Selection: Women's Tiered Shirtdress (ref_w_shirtdress - the last card in Women)
+  console.log('Testing pattern selection: Women Tailored Shirt Dress (ref_w_shirtdress)...');
+  const womenBtn = libPane.locator(`.seg button:has-text("Women")`).first();
+  await womenBtn.click();
   await page.waitForTimeout(500);
-  await page.waitForSelector('.rail-pane[data-pane="library"] .lib-card', { timeout: 10000 });
 
-  const firstBoysCard = libPane.locator('.lib-card').first();
-  const selectedName = await firstBoysCard.locator('.lib-meta .t').textContent();
-  console.log(`Selecting pattern: "${selectedName}"...`);
-  await firstBoysCard.click();
-  await page.waitForTimeout(1000);
+  // The last card in Women is ref_w_shirtdress
+  const shirtdressCard = libPane.locator('.lib-card').last();
+  await shirtdressCard.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  const selectedName = await shirtdressCard.locator('.lib-meta .t').textContent();
+  console.log(`Selecting reference pattern: "${selectedName}"...`);
+  await shirtdressCard.click();
+  await page.waitForTimeout(1500);
 
   const piecesCount = await page.evaluate(() => window.Canvas?.getPieces?.().length ?? 0);
   console.log(`Pattern loaded into 2D canvas with ${piecesCount} pieces.`);
