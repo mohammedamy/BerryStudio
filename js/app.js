@@ -5256,8 +5256,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     document.addEventListener("visibilitychange", ()=>{ if(document.hidden) save(); });
     // register SW with active update check and reload on controller change
     if("serviceWorker" in navigator) {
+      const hadController = !!navigator.serviceWorker.controller;
+      let refreshing = false;
       navigator.serviceWorker.register("sw.js").then(r=>{ r.update().catch(()=>{}); }).catch(()=>{});
-      navigator.serviceWorker.addEventListener("controllerchange", ()=>{ window.location.reload(); });
+      navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+        if (hadController && !refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
     }
     // onboarding first run
     if(!state.onboarded) setTimeout(startOnboarding,400);

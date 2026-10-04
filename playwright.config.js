@@ -36,5 +36,6 @@ export default defineConfig({
     // csp.spec.js explicitly disables it and verifies real visitor policy.
     // Passing this broad suite alone is not evidence of CSP compatibility.
     bypassCSP: true,
+    serviceWorkers: 'block',
   },
 });
