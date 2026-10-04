@@ -1244,13 +1244,13 @@ export let FancyGen;
 
   def("wf01", "women", "Princess-Seam Ball Gown", "فستان سهرة بقصات أميرة",
     "Gown", "فستان سهرة", "gown",
-    "A dramatic floor-length gown with curved princess seams and a gored, full skirt.",
-    "فستان سهرة طويل بقصات أميرة منحنية وتنورة كاملة بقطع مروحية.",
+    "A dramatic floor-length gown with curved princess seams, a sweetheart neckline, and a gored, full skirt.",
+    "فستان سهرة طويل بقصات أميرة منحنية وخط رقبة على شكل قلب وتنورة كاملة بقطع مروحية.",
     (m) => {
-      const b = princessBodice(m, { neckline: "scoop", hipY: m.backLen*0.98+6, hemY: m.backLen*0.98+8 });
+      const b = princessBodice(m, { neckline: "sweetheart", hipY: m.backLen*0.98+6, hemY: m.backLen*0.98+8 });
       const waistW = q(m.waist), hemLen = m.height*0.86 - b.hemY, hemW = q(m.hips)*1.9;
       return [
-        { key:"bodiceFC", name:{en:"Bodice Front Center",ar:"مقدمة الصدرية الوسطى"}, desc:{en:"Center front panel with a curved scoop neckline.",ar:"لوحة المقدمة الوسطى بخط رقبة منحنٍ."}, ...b.meta.frontCenter, outline:b.frontCenter, grain:[[2,10],[2,b.hemY-4]] },
+        { key:"bodiceFC", name:{en:"Bodice Front Center",ar:"مقدمة الصدرية الوسطى"}, desc:{en:"Center front panel with a curved sweetheart neckline.",ar:"لوحة المقدمة الوسطى بخط رقبة على شكل قلب."}, ...b.meta.frontCenter, outline:b.frontCenter, grain:[[2,10],[2,b.hemY-4]] },
         { key:"bodiceFS", name:{en:"Bodice Front Side",ar:"جانب الصدرية الأمامي"}, desc:{en:"Curved side panel joined at the princess seam.",ar:"لوحة جانبية منحنية تلتقي بخط قصة الأميرة."}, ...b.meta.frontSide, outline:b.frontSide, grain:[[4,10],[4,b.hemY-4]] },
         { key:"bodiceBC", name:{en:"Bodice Back Center",ar:"خلفية الصدرية الوسطى"}, desc:{en:"Center back panel.",ar:"لوحة الخلفية الوسطى."}, ...b.meta.backCenter, outline:b.backCenter, grain:[[2,10],[2,b.hemY-4]] },
         { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel.",ar:"لوحة جانبية خلفية منحنية."}, ...b.meta.backSide, outline:b.backSide, grain:[[4,10],[4,b.hemY-4]] },
