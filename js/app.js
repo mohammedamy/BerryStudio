@@ -5195,6 +5195,40 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // 3d controls
     $("#spinToggle").onchange=e=>View3D.setSpin(e.target.checked);
     $("#walkToggle").onchange=e=>View3D.setWalk(e.target.checked);
+    const tensionToggle = $("#tensionToggle");
+    const tensionHud = $("#v3dTensionHud");
+    if (tensionToggle) {
+      tensionToggle.onchange = e => {
+        const on = e.target.checked;
+        View3D.setTensionMap(on);
+        if (tensionHud) tensionHud.classList.toggle("hidden", !on);
+      };
+    }
+    const fabricSelect = $("#v3dFabricSelect");
+    if (fabricSelect) {
+      fabricSelect.onchange = e => {
+        View3D.setFabricPreset(e.target.value);
+      };
+    }
+    const exportObjBtn = $("#v3dExportObjBtn");
+    if (exportObjBtn) {
+      exportObjBtn.onclick = () => {
+        const cat = state.category || "garment";
+        View3D.exportOBJ(`${cat}_3d_model.obj`);
+        toast(T("objExported"));
+      };
+    }
+    View3D.setTensionMetricsCallback(m => {
+      const peak = $("#v3dPeakStrain");
+      const ease = $("#v3dAvgEase");
+      const badge = $("#v3dFitBadge");
+      if (peak) peak.textContent = (m.peakStrain || 0) + "%";
+      if (ease) ease.textContent = (m.avgEase || 0) + " cm";
+      if (badge) {
+        badge.className = `v3d-fit-badge badge-${(m.status || "").replace(/^fit/, "").toLowerCase()}`;
+        badge.textContent = T(m.status) || m.status;
+      }
+    });
     document.addEventListener("keydown",keys);
     window.addEventListener("resize",()=>{if(is3DActive())View3D.resize();});
     // 3D Cloth Lab bridge: cloth-lab posts {type:"clothlab:ready"} once its

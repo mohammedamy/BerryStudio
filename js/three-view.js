@@ -21,6 +21,10 @@ export const View3D = (() => {
   // over the spin toggle's own saved value, never the other way around.
   let reduceMotion = false;
   let host, curCategory = "women", curH = 1.7;
+  let curMeasurements = null, lastDims = null;
+  let tensionMapEnabled = false;
+  let lastTensionMetrics = { avgEase: 4.5, peakStrain: 0.0, status: "fitOptimal", fabric: "cotton" };
+  let onTensionMetricsUpdate = () => {};
   let onLoading = () => {};
   let onAvatarIssue = () => {};
   let onFatalError = () => {};
@@ -287,14 +291,17 @@ export const View3D = (() => {
   // two separate 3D views agree on what each fabric looks like, same as
   // every other field in this table already does.
   const FABRIC = {
-    cotton:  { rough: 0.85, metal: 0.0,  sheen: 0.2, clear: 0.0,  om: 1 },
-    denim:   { rough: 0.9,  metal: 0.02, sheen: 0.1, clear: 0.0,  om: 1 },
-    silk:    { rough: 0.26, metal: 0.05, sheen: 0.9, clear: 0.15, om: 0.98, anisotropy: 0.6, anisoRot: 0 },
-    satin:   { rough: 0.2,  metal: 0.12, sheen: 0.85,clear: 0.22, om: 1, anisotropy: 0.5, anisoRot: 0 },
-    chiffon: { rough: 0.5,  metal: 0.0,  sheen: 0.45,clear: 0.0,  om: 0.55, transmission: 0.18 },
-    wool:    { rough: 0.96, metal: 0.0,  sheen: 0.08,clear: 0.0,  om: 1 },
-    linen:   { rough: 0.82, metal: 0.0,  sheen: 0.15,clear: 0.0,  om: 1 },
-    leather: { rough: 0.4,  metal: 0.2,  sheen: 0.2, clear: 0.35, om: 1 },
+    cotton:  { label: 'Cotton Poplin', massDensity: 150, structStiff: 0.96, bendStiff: 0.35, maxStrain: 1.05, damping: 0.970, friction: 0.90, rough: 0.85, metal: 0.0,  sheen: 0.2,  clear: 0.0,  om: 1 },
+    denim:   { label: 'Denim',         massDensity: 400, structStiff: 0.98, bendStiff: 0.80, maxStrain: 1.03, damping: 0.930, friction: 0.96, rough: 0.9,  metal: 0.02, sheen: 0.1,  clear: 0.0,  om: 1 },
+    silk:    { label: 'Silk Charmeuse',massDensity: 60,  structStiff: 0.94, bendStiff: 0.15, maxStrain: 1.07, damping: 0.980, friction: 0.80, rough: 0.26, metal: 0.05, sheen: 0.9,  clear: 0.15, om: 0.98, anisotropy: 0.6, anisoRot: 0 },
+    satin:   { label: 'Satin',         massDensity: 90,  structStiff: 0.95, bendStiff: 0.20, maxStrain: 1.06, damping: 0.980, friction: 0.82, rough: 0.2,  metal: 0.12, sheen: 0.85, clear: 0.22, om: 1,    anisotropy: 0.5, anisoRot: 0 },
+    chiffon: { label: 'Chiffon',       massDensity: 30,  structStiff: 0.92, bendStiff: 0.10, maxStrain: 1.08, damping: 0.985, friction: 0.75, rough: 0.5,  metal: 0.0,  sheen: 0.45, clear: 0.0,  om: 0.55, transmission: 0.18 },
+    wool:    { label: 'Wool Crepe',    massDensity: 300, structStiff: 0.97, bendStiff: 0.58, maxStrain: 1.04, damping: 0.950, friction: 0.93, rough: 0.96, metal: 0.0,  sheen: 0.08, clear: 0.0,  om: 1 },
+    linen:   { label: 'Linen',         massDensity: 170, structStiff: 0.96, bendStiff: 0.42, maxStrain: 1.05, damping: 0.970, friction: 0.87, rough: 0.82, metal: 0.0,  sheen: 0.15, clear: 0.0,  om: 1 },
+    leather: { label: 'Leather',       massDensity: 550, structStiff: 0.98, bendStiff: 0.92, maxStrain: 1.02, damping: 0.900, friction: 0.97, rough: 0.4,  metal: 0.2,  sheen: 0.2,  clear: 0.35, om: 1 },
+    jersey:  { label: 'Cotton Jersey', massDensity: 180, structStiff: 0.90, bendStiff: 0.22, maxStrain: 1.18, damping: 0.965, friction: 0.88, rough: 0.7,  metal: 0.0,  sheen: 0.18, clear: 0.0,  om: 1 },
+    scuba:   { label: 'Scuba Knit',    massDensity: 260, structStiff: 0.91, bendStiff: 0.45, maxStrain: 1.14, damping: 0.955, friction: 0.85, rough: 0.35, metal: 0.0,  sheen: 0.35, clear: 0.05, om: 1 },
+    tulle:   { label: 'Tulle',         massDensity: 18,  structStiff: 0.80, bendStiff: 0.06, maxStrain: 1.12, damping: 0.988, friction: 0.55, rough: 0.55, metal: 0.0,  sheen: 0.3,  clear: 0.0,  om: 0.35, transmission: 0.12 },
   };
   // One fabric slot per garment part — the procedural body only has 4 named mesh
   // groups (bodice/sleeve/skirt/trousers). Each slot now holds a real `front` and
@@ -597,11 +604,13 @@ export const View3D = (() => {
   // ---------- procedural body ----------
   function buildProcedural(category, m) {
     curCategory = category;
+    curMeasurements = m;
     disposeObject3D(bodyGroup); disposeObject3D(garmentGroup);
     root.clear(); limbs = {};
     bodyGroup = new THREE.Group(); root.add(bodyGroup);
 
     const d0 = computeBodyDims(category, m);
+    lastDims = d0;
     const { female, kid, H, headH, neckTopY, shoulderY, hipY, chestR, waistR, hipR, shoulderHalf, neckR, span } = d0;
     curH = H;
     const skin = skinMat(category);
@@ -1024,7 +1033,9 @@ export const View3D = (() => {
     // AVATAR_LANDMARK_OVERRIDES above; boy2 got a one-off measured
     // correction instead because its default fit wasn't "approximate", it
     // was fully swallowed (see that table's own comment).
-    buildGarment(category, m, computeBodyDims(category, m, AVATAR_LANDMARK_OVERRIDES[avatarId]));
+    curCategory = category; curMeasurements = m;
+    lastDims = computeBodyDims(category, m, AVATAR_LANDMARK_OVERRIDES[avatarId]);
+    buildGarment(category, m, lastDims);
     controls.target.set(0, H * 0.5, 0); frameCamera(H);
   }
 
@@ -1032,6 +1043,8 @@ export const View3D = (() => {
   let buildToken = 0;
   async function build(category, m, opts) {
     if (!ready) return;
+    curCategory = category;
+    curMeasurements = m;
     opts = opts || {};
     if (typeof opts === "number") opts = { color: opts };   // back-compat
     if (opts.parts) {
@@ -1067,13 +1080,18 @@ export const View3D = (() => {
       if (avatarURLs[category]) {
         try {
           await loadGLB(category, m, pct => { if (token === buildToken) onLoading(true, { progress: pct }); });
-          applyFabric();
+          if (tensionMapEnabled) applyTensionHeatmap();
+          else applyFabric();
         } catch (e) {
           if (token === buildToken) onAvatarIssue(category, e);
           buildProcedural(category, m);
+          if (tensionMapEnabled) applyTensionHeatmap();
+          else applyFabric();
         }
       } else {
         buildProcedural(category, m);
+        if (tensionMapEnabled) applyTensionHeatmap();
+        else applyFabric();
       }
     } catch (e) {
       console.error("[View3D] avatar build failed:", e);
@@ -1122,9 +1140,322 @@ export const View3D = (() => {
   // so this traversal and applyPieceVisibility() below don't need to change.
   function applyFabric() {
     if (!garmentGroup) return;
-    garmentGroup.traverse(o => { if (o.isMesh && fabricState[o.name]) o.material = fabricMat(o.name, o.userData.side || "front"); });
+    if (tensionMapEnabled) {
+      applyTensionHeatmap();
+      return;
+    }
+    garmentGroup.traverse(o => {
+      if (o.isMesh && fabricState[o.name]) {
+        o.material = fabricMat(o.name, o.userData.side || "front");
+        o.userData.origMat = o.material;
+      }
+    });
     // sleeves live under the arm groups
-    Object.values(limbs).forEach(g => g.traverse(o => { if (o.isMesh && o.name === "sleeve") o.material = fabricMat("sleeve", "front"); }));
+    Object.values(limbs).forEach(g => g.traverse(o => {
+      if (o.isMesh && o.name === "sleeve") {
+        o.material = fabricMat("sleeve", "front");
+        o.userData.origMat = o.material;
+      }
+    }));
+  }
+
+  // ---------- Tension Simulation, Heatmap & 3D OBJ Export ----------
+  function computeTensionHeatmapColor(easeCm, fPreset) {
+    let r = 0, g = 0, b = 0;
+    const stiffRatio = (fPreset.structStiff || 0.95) / (fPreset.maxStrain || 1.05);
+
+    if (easeCm >= 8.0) {
+      // Loose ease: Cool Blue (0.15, 0.40, 0.95) to Soft Cyan
+      const t = Math.min(1, (easeCm - 8.0) / 8.0);
+      r = 0.15 * (1 - t) + 0.10 * t;
+      g = 0.45 * (1 - t) + 0.70 * t;
+      b = 0.95;
+    } else if (easeCm >= 3.0) {
+      // Optimal ease: Emerald / Vibrant Green (0.10, 0.82, 0.35)
+      const t = (easeCm - 3.0) / 5.0;
+      r = 0.10 * (1 - t) + 0.15 * t;
+      g = 0.82 * (1 - t) + 0.65 * t;
+      b = 0.35 * (1 - t) + 0.95 * t;
+    } else if (easeCm >= 0.8) {
+      // Snug fit: Emerald Green to Golden Amber (0.96, 0.75, 0.10)
+      const t = (3.0 - easeCm) / 2.2;
+      r = 0.10 * (1 - t) + 0.96 * t;
+      g = 0.82 * (1 - t) + 0.75 * t;
+      b = 0.35 * (1 - t) + 0.10 * t;
+    } else {
+      // High Strain / Compression: Golden Amber to Crimson Red (0.95, 0.18, 0.15)
+      const t = Math.min(1, Math.max(0, (0.8 - easeCm) / 1.8 * stiffRatio));
+      r = 0.96 * (1 - t) + 0.95 * t;
+      g = 0.75 * (1 - t) + 0.18 * t;
+      b = 0.10 * (1 - t) + 0.15 * t;
+    }
+    return [r, g, b];
+  }
+
+  function computeVertexStrain(easeCm, fPreset) {
+    const stiffRatio = (fPreset.structStiff || 0.95) / (fPreset.maxStrain || 1.05);
+    if (easeCm < 0) {
+      return Math.min(100, (Math.abs(easeCm) / 5.0) * 100 * stiffRatio);
+    }
+    if (easeCm < 2.0) {
+      return ((2.0 - easeCm) / 2.0) * 5.0 * stiffRatio;
+    }
+    return 0.0;
+  }
+
+  function applyTensionHeatmap() {
+    if (!garmentGroup || !ready) return;
+    const d = lastDims || computeBodyDims(curCategory, curMeasurements || { height: 170, chest: 92, waist: 72, hips: 98, shoulder: 40, neck: 36, bicep: 28, thigh: 54 });
+    const currentFabricKey = fabricState.bodice?.front?.material || "cotton";
+    const fPreset = FABRIC[currentFabricKey] || FABRIC.cotton;
+
+    let totalEase = 0;
+    let vertexCount = 0;
+    let maxStrainPct = 0;
+    let minEase = 999;
+
+    const processMesh = (mesh) => {
+      if (!mesh || !mesh.isMesh || !mesh.geometry) return;
+      const geo = mesh.geometry;
+      const pos = geo.attributes.position;
+      if (!pos) return;
+
+      const count = pos.count;
+      let colAttr = geo.attributes.color;
+      if (!colAttr || colAttr.count !== count) {
+        colAttr = new THREE.Float32BufferAttribute(new Float32Array(count * 3), 3);
+        geo.setAttribute("color", colAttr);
+      }
+      const colArray = colAttr.array;
+
+      mesh.updateMatrixWorld(true);
+      const isSleeve = mesh.name === "sleeve";
+      const isTrousers = mesh.name === "trousers";
+
+      const v = new THREE.Vector3();
+      for (let i = 0; i < count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+        const y = v.y;
+        let bodyR = d.waistR;
+        let garmentR = Math.hypot(v.x, v.z);
+
+        if (isSleeve) {
+          bodyR = d.upperR;
+          garmentR = Math.hypot(pos.getX(i), pos.getZ(i));
+        } else if (isTrousers) {
+          if (y < d.hipY) {
+            const legCenterSign = v.x >= 0 ? 1 : -1;
+            const legCenterX = legCenterSign * d.hipR * 0.5;
+            garmentR = Math.hypot(v.x - legCenterX, v.z);
+            const legFrac = Math.max(0, Math.min(1, (d.hipY - y) / (d.hipY || 1)));
+            bodyR = d.thighR * (1.3 - legFrac * 0.4);
+          } else {
+            bodyR = d.hipR;
+          }
+        } else {
+          if (y > d.waistR && y <= d.shoulderY) {
+            const frac = Math.max(0, Math.min(1, (y - d.hipY - d.span * 0.44) / (d.span * 0.32 || 1)));
+            bodyR = d.waistR + (d.chestR - d.waistR) * frac;
+          } else if (y <= d.waistR) {
+            const frac = Math.max(0, Math.min(1, (d.hipY + d.span * 0.44 - y) / (d.span * 0.44 || 1)));
+            bodyR = d.waistR + (d.hipR - d.waistR) * frac;
+          }
+        }
+
+        const easeCm = (garmentR - bodyR) * 100;
+        totalEase += easeCm;
+        vertexCount++;
+        if (easeCm < minEase) minEase = easeCm;
+
+        const strainPct = computeVertexStrain(easeCm, fPreset);
+        if (strainPct > maxStrainPct) maxStrainPct = strainPct;
+
+        const [r, g, b] = computeTensionHeatmapColor(easeCm, fPreset);
+        colArray[i * 3] = r;
+        colArray[i * 3 + 1] = g;
+        colArray[i * 3 + 2] = b;
+      }
+
+      colAttr.needsUpdate = true;
+
+      if (!mesh.userData.origMat) {
+        mesh.userData.origMat = mesh.material;
+      }
+      if (!mesh.userData.tensionMat) {
+        mesh.userData.tensionMat = new THREE.MeshStandardMaterial({
+          vertexColors: true,
+          roughness: 0.6,
+          metalness: 0.05,
+          side: THREE.DoubleSide
+        });
+      }
+      mesh.material = mesh.userData.tensionMat;
+    };
+
+    garmentGroup.traverse(o => { if (o.isMesh) processMesh(o); });
+    Object.values(limbs).forEach(g => g.traverse(o => { if (o.isMesh && o.name === "sleeve") processMesh(o); }));
+
+    const avgEase = vertexCount > 0 ? (totalEase / vertexCount) : 4.5;
+    let status = "fitOptimal";
+    if (maxStrainPct > 5 || minEase < 0) status = "fitTight";
+    else if (minEase < 2.0) status = "fitSnug";
+    else if (avgEase > 10.0) status = "fitLoose";
+
+    lastTensionMetrics = {
+      avgEase: parseFloat(avgEase.toFixed(1)),
+      peakStrain: parseFloat(maxStrainPct.toFixed(1)),
+      status,
+      fabric: currentFabricKey
+    };
+
+    onTensionMetricsUpdate(lastTensionMetrics);
+  }
+
+  function restoreOriginalMaterials() {
+    if (!garmentGroup) return;
+    garmentGroup.traverse(o => {
+      if (o.isMesh) {
+        if (o.userData.origMat) o.material = o.userData.origMat;
+        else if (fabricState[o.name]) o.material = fabricMat(o.name, o.userData.side || "front");
+      }
+    });
+    Object.values(limbs).forEach(g => g.traverse(o => {
+      if (o.isMesh && o.name === "sleeve") {
+        if (o.userData.origMat) o.material = o.userData.origMat;
+        else o.material = fabricMat("sleeve", "front");
+      }
+    }));
+  }
+
+  function setTensionMap(v) {
+    tensionMapEnabled = !!v;
+    if (tensionMapEnabled) {
+      applyTensionHeatmap();
+    } else {
+      restoreOriginalMaterials();
+    }
+  }
+
+  function setFabricPreset(key) {
+    if (!FABRIC[key]) return;
+    Object.values(fabricState).forEach(st => {
+      if (st.front) st.front.material = key;
+      if (st.back) st.back.material = key;
+    });
+    if (tensionMapEnabled) {
+      applyTensionHeatmap();
+    } else {
+      applyFabric();
+    }
+  }
+
+  function exportOBJ(filename = "garment_3d.obj") {
+    if (!garmentGroup) return null;
+    let obj = "# BerryStudio 3D Garment Mesh Export\n";
+    obj += `# Generated: ${new Date().toISOString()}\n`;
+    obj += `# Category: ${curCategory}\n\n`;
+
+    let vOffset = 1;
+    let vnOffset = 1;
+    let vtOffset = 1;
+
+    const exportMesh = (mesh, name) => {
+      if (!mesh || !mesh.isMesh || !mesh.geometry) return;
+      const geo = mesh.geometry;
+      const pos = geo.attributes.position;
+      if (!pos) return;
+
+      mesh.updateMatrixWorld(true);
+      const matrixWorld = mesh.matrixWorld;
+      const normalMatrix = new THREE.Matrix3().getNormalMatrix(matrixWorld);
+
+      obj += `o ${name || mesh.name || "garment_piece"}\n`;
+
+      const norm = geo.attributes.normal;
+      const uv = geo.attributes.uv;
+      const idx = geo.index;
+
+      const v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(matrixWorld);
+        obj += `v ${v.x.toFixed(5)} ${v.y.toFixed(5)} ${v.z.toFixed(5)}\n`;
+      }
+
+      if (norm) {
+        const n = new THREE.Vector3();
+        for (let i = 0; i < norm.count; i++) {
+          n.fromBufferAttribute(norm, i).applyMatrix3(normalMatrix).normalize();
+          obj += `vn ${n.x.toFixed(4)} ${n.y.toFixed(4)} ${n.z.toFixed(4)}\n`;
+        }
+      }
+
+      if (uv) {
+        for (let i = 0; i < uv.count; i++) {
+          obj += `vt ${uv.getX(i).toFixed(4)} ${uv.getY(i).toFixed(4)}\n`;
+        }
+      }
+
+      const hasNorm = !!norm;
+      const hasUv = !!uv;
+      const triCount = idx ? idx.count / 3 : pos.count / 3;
+
+      for (let t = 0; t < triCount; t++) {
+        const i0 = (idx ? idx.getX(t * 3) : t * 3) + vOffset;
+        const i1 = (idx ? idx.getX(t * 3 + 1) : t * 3 + 1) + vOffset;
+        const i2 = (idx ? idx.getX(t * 3 + 2) : t * 3 + 2) + vOffset;
+
+        if (hasUv && hasNorm) {
+          const u0 = (idx ? idx.getX(t * 3) : t * 3) + vtOffset;
+          const u1 = (idx ? idx.getX(t * 3 + 1) : t * 3 + 1) + vtOffset;
+          const u2 = (idx ? idx.getX(t * 3 + 2) : t * 3 + 2) + vtOffset;
+          const n0 = (idx ? idx.getX(t * 3) : t * 3) + vnOffset;
+          const n1 = (idx ? idx.getX(t * 3 + 1) : t * 3 + 1) + vnOffset;
+          const n2 = (idx ? idx.getX(t * 3 + 2) : t * 3 + 2) + vnOffset;
+          obj += `f ${i0}/${u0}/${n0} ${i1}/${u1}/${n1} ${i2}/${u2}/${n2}\n`;
+        } else if (hasNorm) {
+          const n0 = (idx ? idx.getX(t * 3) : t * 3) + vnOffset;
+          const n1 = (idx ? idx.getX(t * 3 + 1) : t * 3 + 1) + vnOffset;
+          const n2 = (idx ? idx.getX(t * 3 + 2) : t * 3 + 2) + vnOffset;
+          obj += `f ${i0}//${n0} ${i1}//${n1} ${i2}//${n2}\n`;
+        } else {
+          obj += `f ${i0} ${i1} ${i2}\n`;
+        }
+      }
+
+      vOffset += pos.count;
+      if (norm) vnOffset += norm.count;
+      if (uv) vtOffset += uv.count;
+      obj += "\n";
+    };
+
+    garmentGroup.traverse(o => {
+      if (o.isMesh && o.visible) exportMesh(o, `${o.name}_${o.userData.side || "mesh"}`);
+    });
+
+    Object.entries(limbs).forEach(([limbName, group]) => {
+      group.traverse(o => {
+        if (o.isMesh && o.visible && o.name === "sleeve") {
+          exportMesh(o, `sleeve_${limbName}`);
+        }
+      });
+    });
+
+    if (typeof document !== "undefined" && typeof Blob !== "undefined") {
+      try {
+        const blob = new Blob([obj], { type: "text/plain;charset=utf-8" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      } catch (e) {
+        console.warn("[View3D] Blob download failed:", e);
+      }
+    }
+
+    return obj;
   }
   let lastPieceVis = null;
   function setPieceVisibility(pieces) { lastPieceVis = pieces; applyPieceVisibility(); }
@@ -1235,6 +1566,15 @@ export const View3D = (() => {
     setAvatarIssueCallback: cb => onAvatarIssue = cb || (() => {}),
     setFatalErrorCallback: cb => onFatalError = cb || (() => {}),
     setAvatarURL, isReady: () => ready, retryInit,
+    // 3D Tension Simulation & Wavefront OBJ Export
+    setTensionMap,
+    getTensionMap: () => tensionMapEnabled,
+    setFabricPreset,
+    getFabricPreset: () => fabricState.bodice?.front?.material || "cotton",
+    getFabricPresets: () => FABRIC,
+    getTensionMetrics: () => lastTensionMetrics,
+    setTensionMetricsCallback: cb => onTensionMetricsUpdate = cb || (() => {}),
+    exportOBJ,
   };
 })();
 // TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.

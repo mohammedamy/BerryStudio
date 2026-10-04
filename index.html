@@ -176,9 +176,60 @@
             </div>
           </div>
           <p data-i18n="v3dIndicative" style="position:absolute;inset-inline:16px;bottom:14px;z-index:2;margin:0;max-width:560px;padding:8px 10px;border-radius:9px;background:color-mix(in srgb,var(--panel) 88%,transparent);border:1px solid var(--line);font-size:12px;line-height:1.4;color:var(--ink-2);pointer-events:none">3D preview is indicative. Confirm material behaviour, construction and fit with a maker and sewn sample.</p>
-          <div style="position:absolute;inset-inline-start:16px;top:16px;display:flex;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 14px;box-shadow:var(--shadow-2)">
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700"><input type="checkbox" id="spinToggle" checked> 360°</label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700"><input type="checkbox" id="walkToggle" checked> Walk</label>
+          <div class="v3d-toolbar" role="toolbar" aria-label="3D Preview Controls">
+            <label class="v3d-btn-label"><input type="checkbox" id="spinToggle" checked> <span data-i18n="v3dSpin">360°</span></label>
+            <label class="v3d-btn-label"><input type="checkbox" id="walkToggle" checked> <span data-i18n="v3dWalk">Walk</span></label>
+            <span class="v3d-sep"></span>
+            <label class="v3d-btn-label v3d-tension-label" title="Visualize fit strain and ease distribution">
+              <input type="checkbox" id="tensionToggle">
+              <span data-i18n="tensionMap">Tension Heatmap</span>
+            </label>
+            <div class="v3d-select-wrap">
+              <label for="v3dFabricSelect" class="sr-only" data-i18n="fabricPreset">Fabric</label>
+              <select id="v3dFabricSelect" class="v3d-select" title="Fabric Physics & Material Preset">
+                <option value="cotton">Cotton Poplin</option>
+                <option value="silk">Silk Charmeuse</option>
+                <option value="satin">Satin</option>
+                <option value="denim">Denim</option>
+                <option value="jersey">Cotton Jersey</option>
+                <option value="wool">Wool Crepe</option>
+                <option value="linen">Linen</option>
+                <option value="scuba">Scuba Knit</option>
+                <option value="chiffon">Chiffon</option>
+                <option value="leather">Leather</option>
+                <option value="tulle">Tulle</option>
+              </select>
+            </div>
+            <button id="v3dExportObjBtn" class="v3d-btn" title="Export 3D Garment as Wavefront OBJ" aria-label="Export 3D Model">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span data-i18n="export3D">3D OBJ</span>
+            </button>
+          </div>
+
+          <div id="v3dTensionHud" class="v3d-tension-hud hidden" aria-live="polite">
+            <div class="v3d-hud-title" data-i18n="fitTensionAnalysis">Fit Tension & Strain</div>
+            <div class="v3d-hud-bar">
+              <div class="v3d-gradient-bar"></div>
+              <div class="v3d-hud-labels">
+                <span data-i18n="fitLoose">Loose (>10cm)</span>
+                <span data-i18n="fitOptimal">Optimal (4-8cm)</span>
+                <span data-i18n="fitSnug">Snug (0-3cm)</span>
+                <span data-i18n="fitTight">High Strain (<0cm)</span>
+              </div>
+            </div>
+            <div class="v3d-hud-metrics">
+              <div class="v3d-metric">
+                <span class="v3d-metric-label">Peak Strain:</span>
+                <strong id="v3dPeakStrain">0.0%</strong>
+              </div>
+              <div class="v3d-metric">
+                <span class="v3d-metric-label">Avg Ease:</span>
+                <strong id="v3dAvgEase">4.5 cm</strong>
+              </div>
+              <div class="v3d-metric">
+                <span id="v3dFitBadge" class="v3d-fit-badge badge-optimal" data-i18n="fitOptimal">Optimal</span>
+              </div>
+            </div>
           </div>
         </div>
 
