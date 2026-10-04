@@ -27,7 +27,7 @@ test('every assigned photo in PATTERN_SPECIFIC_THUMBS is unique (zero repetition
   const values = Object.values(PATTERN_SPECIFIC_THUMBS);
   const unique = new Set(values);
   assert.equal(unique.size, values.length, `Expected all assigned photos to be unique, but found ${values.length - unique.size} duplicate(s)`);
-  assert.ok(unique.size >= 219, `Expected at least 219 unique lookbook photos, got ${unique.size}`);
+  assert.ok(unique.size >= 239, `Expected at least 239 unique lookbook photos, got ${unique.size}`);
 });
 
 test('no generic archetype fallback filenames are used in PATTERN_SPECIFIC_THUMBS', () => {
@@ -48,7 +48,9 @@ test('ghost mannequin intimate garments and leotard are assigned unique dedicate
     'bu01', 'bu02', 'bu03', 'bu04', 'bu05', 'bu06',
     'gu01', 'gu02', 'gu03', 'gu04', 'gu05', 'gu06',
     'gb01', 'gb02', 'gb03', 'gb04', 'gb05', 'gb06', 'gb07', 'gb08', 'gb09', 'gb10',
-    'gy001', 'gy002', 'gy003', 'gy004', 'gy005', 'gy006', 'gy007', 'gy008', 'gy009', 'gy010', 'gy011'
+    'gy001', 'gy002', 'gy003', 'gy004', 'gy005', 'gy006', 'gy007', 'gy008', 'gy009', 'gy010', 'gy011',
+    'gy012', 'gy013', 'gy014', 'gy015', 'gy016', 'gy017', 'gy018', 'gy019', 'gy020', 'gy021',
+    'gy022', 'gy023', 'gy024', 'gy025', 'gy026', 'gy027', 'gy028', 'gy029', 'gy030', 'gy031'
   ];
   for (const id of intimate) {
     assert.equal(PATTERN_SPECIFIC_THUMBS[id], `${id}.jpg`, `Expected ${id} to map to ${id}.jpg`);
