@@ -359,7 +359,7 @@ export function convertAppPattern(payload) {
       // placementHints comment.
       const isSkirt = cls.startsWith('skirt')
       const outline = isFoldPiece(local) ? unfoldPiece(local) : local
-      rawPieces.push({ id: p.id, label: p.label, outline, color: p.color })
+      rawPieces.push({ id: p.id, label: p.label, outline, color: p.color, darts: p.darts })
       roles[p.id] = slotKey
       // Code-review fix: see the metadata path's own matching comment
       // below — a genuinely tiny outline can leave
@@ -436,7 +436,7 @@ export function convertAppPattern(payload) {
       : declaredPlacement
 
     if (SLEEVE_ROLES.has(schemaRole)) {
-      sleeves.push({ id: p.id, label, outline: cutOnFold ? unfoldPiece(local) : local, color: p.color, bilateral: bilateral !== false && !cutOnFold })
+      sleeves.push({ id: p.id, label, outline: cutOnFold ? unfoldPiece(local) : local, color: p.color, bilateral: bilateral !== false && !cutOnFold, darts: p.darts })
       continue
     }
 
@@ -447,7 +447,7 @@ export function convertAppPattern(payload) {
         { id: p.id + '_r', outline }, { id: p.id + '_l', outline: mirrorOutline(outline) },
       ] : [{ id: p.id, outline }]
       for (const copy of copies) {
-        rawPieces.push({ id: copy.id, label: p.label, outline: copy.outline, color: p.color })
+        rawPieces.push({ id: copy.id, label: p.label, outline: copy.outline, color: p.color, darts: p.darts })
         roles[copy.id] = internalRole
         const copyEdges = copy.id.endsWith('_l') && bilateral && !cutOnFold && edges ? mirrorEdgeIndices(edges, local.length) : edges
         const tagged = bilateral && !cutOnFold ? copyEdges?.map(e => ({ ...e, seamId: e.seamId ? e.seamId + (copy.id.endsWith('_r') ? '_R' : '_L') : e.seamId })) : copyEdges
@@ -462,7 +462,7 @@ export function convertAppPattern(payload) {
       // trusting the DECLARATION (no isFoldPiece re-derivation) since the
       // generator that authored this outline already knows it's a half.
       const outline = unfoldPiece(local)
-      rawPieces.push({ id: p.id, label: p.label, outline, color: p.color })
+      rawPieces.push({ id: p.id, label: p.label, outline, color: p.color, darts: p.darts })
       roles[p.id] = placement
       if (princessSeamId) {
         // Post-unfold, the shape's own rightSide/leftSide split (found the
@@ -544,8 +544,8 @@ export function convertAppPattern(payload) {
     if (bilateral) {
       const rId = p.id + '_r', lId = p.id + '_l'
       const n = local.length
-      rawPieces.push({ id: rId, label: p.label, outline: local, color: p.color })
-      rawPieces.push({ id: lId, label: p.label, outline: mirrorOutline(local), color: p.color })
+      rawPieces.push({ id: rId, label: p.label, outline: local, color: p.color, darts: p.darts })
+      rawPieces.push({ id: lId, label: p.label, outline: mirrorOutline(local), color: p.color, darts: (p.darts || []).map(d => d.map(([x, y]) => [-x, y])) })
       roles[rId] = placement
       roles[lId] = placement
       if (edges && edges.length && !UNSEAMED_BILATERAL_ROLES.has(schemaRole)) {
@@ -592,7 +592,7 @@ export function convertAppPattern(payload) {
     // every other branch uses, instead of unconditionally "not
     // auto-seamed" the way this comment used to read before that piece
     // could actually declare a real one.
-    rawPieces.push({ id: p.id, label: p.label, outline: local, color: p.color })
+    rawPieces.push({ id: p.id, label: p.label, outline: local, color: p.color, darts: p.darts })
     roles[p.id] = placement
     if (autoTorsoSeams && (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack')) {
       // See the cutOnFold branch's own matching comment: only register
@@ -616,12 +616,12 @@ export function convertAppPattern(payload) {
   // shape; an unstitched-but-correctly-placed sleeve drapes plausibly from
   // gravity+placement alone, safer than guessing a seam location).
   for (const s of sleeves) {
-    const copies = s.bilateral === false ? [{ id: s.id, outline: s.outline, suffix: '' }] : [
-      { id: s.id + '_r', outline: s.outline, suffix: ' (R)' },
-      { id: s.id + '_l', outline: mirrorOutline(s.outline), suffix: ' (L)' },
+    const copies = s.bilateral === false ? [{ id: s.id, outline: s.outline, suffix: '', darts: s.darts }] : [
+      { id: s.id + '_r', outline: s.outline, suffix: ' (R)', darts: s.darts },
+      { id: s.id + '_l', outline: mirrorOutline(s.outline), suffix: ' (L)', darts: (s.darts || []).map(d => d.map(([x, y]) => [-x, y])) },
     ]
     for (const copy of copies) {
-      rawPieces.push({ id: copy.id, label: s.label, outline: copy.outline, color: s.color })
+      rawPieces.push({ id: copy.id, label: s.label, outline: copy.outline, color: s.color, darts: copy.darts })
       roles[copy.id] = 'sleeve'
       const tube = sleeveTubeEdges(copy.outline)
       if (tube) {

@@ -20,31 +20,8 @@ export function validOutline(outline) {
   return Math.abs(area) > 1e-6
 }
 
-// A boundary dart is [apex, mouthA, mouthB], the root editor's contract.
-// Only cut mouths on the SAME straight boundary segment. Internal/curved
-// darts require explicit geometry authoring rather than an invented fold.
-export function cutBoundaryDart(outline, dart) {
-  if (!Array.isArray(dart) || dart.length !== 3 || !dart.every(p => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))) throw new Error('Dart needs an apex and two mouth points.')
-  const [apex, a, b] = dart
-  for (let i = 0; i < outline.length; i++) {
-    const p = outline[i], q = outline[(i + 1) % outline.length]
-    const dx = q[0] - p[0], dy = q[1] - p[1], len2 = dx * dx + dy * dy
-    if (len2 < 1e-10) continue
-    const project = v => { const t = ((v[0] - p[0]) * dx + (v[1] - p[1]) * dy) / len2; return Math.abs((v[0] - p[0]) * dy - (v[1] - p[1]) * dx) / Math.sqrt(len2) < 0.01 && t > 1e-5 && t < 1 - 1e-5 ? t : null }
-    const ta = project(a), tb = project(b)
-    if (ta === null || tb === null || Math.abs(ta - tb) < 1e-5) continue
-    // Apex must lie inside the polygon and away from the mouth segment.
-    let inside = false
-    for (let j = 0, k = outline.length - 1; j < outline.length; k = j++) {
-      const u = outline[j], v = outline[k]
-      if ((u[1] > apex[1]) !== (v[1] > apex[1]) && apex[0] < (v[0] - u[0]) * (apex[1] - u[1]) / (v[1] - u[1]) + u[0]) inside = !inside
-    }
-    if (!inside) throw new Error('Dart apex must be inside its piece.')
-    const first = ta < tb ? a : b, last = ta < tb ? b : a
-    return { outline: [...outline.slice(0, i + 1), first.slice(), apex.slice(), last.slice(), ...outline.slice(i + 1)], segment: i, from: i + 1, apex: i + 2, to: i + 3, remap: index => index > i ? index + 3 : index }
-  }
-  throw new Error('The dart mouth must lie inside one straight outline edge. Adjust it in the pattern editor, or keep it as a marking.')
-}
+export { cutBoundaryDart } from '../pattern/dartCut.js'
+import { cutBoundaryDart } from '../pattern/dartCut.js'
 
 export function planPattern(payload, answers = {}) {
   const inventory = [], questions = [], prepared = [], problems = []

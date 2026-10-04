@@ -58,6 +58,19 @@ describe('current-pattern planning', () => {
     expect(plan.imported.rawPieces[0].sourceId).toBe(p.id)
     expect(() => triangulateAll(finalize(plan),plan.imported.seamInstructions)).not.toThrow()
   })
+  it('cuts and sews multiple boundary darts on the same piece', () => {
+    const p = piece({
+      outline: [[0,0],[30,0],[30,30],[0,30]],
+      darts: [
+        [[8, 20], [6, 30], [10, 30]],
+        [[22, 20], [20, 30], [24, 30]],
+      ]
+    })
+    const plan = planPattern(payload([p]), answer(p, { darts: 'close' }))
+    expect(plan.problems).toEqual([])
+    expect(plan.imported.seamInstructions.filter(s => s.id.includes('dart'))).toHaveLength(2)
+    expect(() => triangulateAll(finalize(plan), plan.imported.seamInstructions)).not.toThrow()
+  })
   it('does not pretend an internal dart has been sewn', () => {
     const p=piece({darts:[[[10,10],[8,20],[12,20]]]})
     const plan=planPattern(payload([p]),answer(p,{darts:'close'}))

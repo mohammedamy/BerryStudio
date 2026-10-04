@@ -164,7 +164,7 @@ import {
       const backW = gorePanel(qw * 0.48, qh * 0.54, qh * 0.64, hipDrop, hemLen - hipDrop);
       // Small back waist dart: real suppression, distinct from the gore
       // shaping itself — placed just off-center on the back gore.
-      const backDart = [[qw * 0.24, 0], [qw * 0.24 - 1.5, 8], [qw * 0.24 + 1.5, 8]];
+      const backDart = [[qw * 0.24, 8], [qw * 0.24 - 1.5, 0], [qw * 0.24 + 1.5, 0]];
       const sideW = qw * 0.5, sideHipW = qh * 0.56, sideHemW = qh * 0.66;
       const sideGore = sideGorePanel(sideW, sideHipW, sideHemW, hipDrop, hemLen - hipDrop);
       const waistCirc = (qw * 0.52 * 2) + (qw * 0.48 * 2) + (sideW * 2);
@@ -435,7 +435,7 @@ import {
       const riseLen = 27, legLen = m.inseam;
       const front = legPanel(qw * 0.52 + 0.5, qh * 0.58 + 1, qt * 1.5, riseLen, legLen, true);
       const back = legPanel(qw * 0.48 + 0.5, qh * 0.54 + 1, qt * 1.5, riseLen, legLen, false);
-      const frontDart = [[qw * 0.3, 1], [qw * 0.3 - 1.5, 9], [qw * 0.3 + 1.5, 9]];
+      const frontDart = [[qw * 0.3, 9], [qw * 0.3 - 1.5, 0], [qw * 0.3 + 1.5, 0]];
       const waistCirc = (qw * 0.52 + 0.5 + qw * 0.2) * 2 + (qw * 0.48 + 0.5 + qw * 0.2) * 2;
       const waistband = bandPc(waistCirc / 2, 4);
       const fly = bandPc(3.5, riseLen - 4);
