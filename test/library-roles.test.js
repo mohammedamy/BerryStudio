@@ -81,7 +81,8 @@ const ROLE_VOCABULARY = new Set([
 const KNOWN_INVALID_ROLE_COUNTS = { 'cape-sleeve': 2 };
 // WP-43 adds mf05's missing trouser waistband, using the existing role.
 // Fitting w23 to lookbook thumbnail adds the long bishop sleeve as photographed (+1 piece).
-const BASELINE = { total: 2172, valid: 2168, none: 2, roleslessPatterns: 1 };
+// Fitting g15 to lookbook thumbnail removes sleeve to match sleeveless dress as photographed (-1 piece).
+const BASELINE = { total: 2171, valid: 2167, none: 2, roleslessPatterns: 1 };
 
 test('every declared piece role is in the 53-value vocabulary, except the two documented pre-existing exceptions', () => {
   const ids = Object.keys(PATTERNS);
