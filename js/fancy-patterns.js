@@ -1924,10 +1924,10 @@ export let FancyGen;
       ];
     });
 
-  def("wf13", "women", "Ruffled Off-Shoulder Ball Gown", "فستان سهرة بكشكش وكتف مكشوف",
+  def("wf13", "women", "Ruffled Tulle Tiered Ball Gown", "فستان سهرة تول مكشكش بطبقات",
     "Gown", "فستان سهرة", "gown",
-    "A romantic ball gown with a ruffled off-shoulder neckline and a tiered tulle-look skirt.",
-    "فستان سهرة رومانسي بخط كتف مكشوف مكشكش وتنورة بطبقات تول.",
+    "An enchanting lavender tulle ball gown showcasing a dramatic off-the-shoulder ruffled neckline, a sculpted boned bodice, and a multi-tiered gathered tulle skirt that cascades into a sweeping floor-length silhouette with side godets.",
+    "فستان سهرة ساحر من التول البنفسجي الفاتح يتميز بخط عنق مكشوف الكتفين ومزدان بكشاكش درامية، وصدرية مقواة منحوتة، وتنورة تول متعددة الطبقات منسدلة بقوام واسع يلامس الأرض مع مروحات جانبية.",
     (m) => {
       const b = princessBodice(m, { neckline:"offshoulder", hipY:m.backLen*0.98+4, hemY:m.backLen*0.98+6 });
       const waistW = q(m.waist), tierLen = (m.height*0.85 - b.hemY) / 3;
@@ -1947,10 +1947,10 @@ export let FancyGen;
       ];
     });
 
-  def("wf14", "women", "Cape-Back Evening Jumpsuit", "أفرول سهرة بكاب خلفي",
+  def("wf14", "women", "Cape-Back Evening Jumpsuit", "أفرول سهرة أبيض بكاب خلفي",
     "Jumpsuit", "أفرول", "suit",
-    "A tailored evening jumpsuit with a dramatic detachable-look cape falling from the back.",
-    "أفرول سهرة مفصّل بكاب خلفي درامي يبدو قابلًا للفصل، منسدل من الظهر.",
+    "A statuesque ivory crepe evening jumpsuit designed with a clean sleeveless high-neck bodice, a dramatic floor-sweeping back cape falling gracefully from the shoulders, a tailored waist sash, and fluid wide-leg palazzo trousers with side pockets.",
+    "أفرول سهرة عاجي مهيب من الكريب مصمم بصدرية بلا أكمام وياقة مرتفعة نظيفة، وكاب خلفي درامي طويل ينسدل بنعومة من الكتفين حتى الأرض، وحزام خصر مفصّل، وبنطلون بالاتزو واسع الساق مع جيوب جانبية.",
     (m) => {
       const jb = jacketFrontBack(m, m.backLen*0.55, { hemFlareF:0.95 });
       const neckArc = jb.frontNeckLen + jb.backNeckLen;
@@ -1970,10 +1970,10 @@ export let FancyGen;
       ];
     });
 
-  def("wf15", "women", "Empire-Waist Bridal Gown", "فستان زفاف بخصر إمبراطوري",
+  def("wf15", "women", "Empire Lace Bridal Gown", "فستان زفاف دانتيل بخصر إمبراطوري",
     "Gown", "فستان سهرة", "gown",
-    "A bridal gown with an empire waist, long lace-ready sleeves, and a flowing train.",
-    "فستان زفاف بخصر إمبراطوري وأكمام طويلة جاهزة للدانتيل وذيل انسيابي.",
+    "A romantic bridal gown featuring a delicate sweetheart lace bodice with scalloped cap sleeves, an elevated empire waist defined by a delicate sash, and a flowing A-line chiffon skirt extending into a graceful chapel train with side gores.",
+    "فستان زفاف رومانسي يتميز بصدرية من الدانتيل الناعم بفتحة عنق على شكل قلب وأكمام كاب قصيرة بحواف مقوسة، وخصر إمبراطوري مرتفع يحدده حزام رقيق، وتنورة شيفون متسعة بقصة A تمتد إلى ذيل مصلى ناعم مع مروحات جانبية.",
     (m) => {
       const b = princessBodice(m, { neckline:"scoop", bustY:m.backLen*0.32, waistY:m.backLen*0.5, hipY:m.backLen*0.98+8, hemY:m.backLen*0.98+10 });
       const waistW = q(m.chest)*0.85, hemLen = m.height*0.95 - b.hemY, hemW = q(m.hips)*2.1;
@@ -1992,10 +1992,10 @@ export let FancyGen;
       ];
     });
 
-  def("wf16", "women", "Tailored Pantsuit", "بدلة نسائية مفصّلة",
+  def("wf16", "women", "Tailored Navy Wool Pantsuit", "بدلة نسائية مفصّلة من الصوف الكحلي",
     "Suit", "بدلة", "suit",
-    "A sharply tailored blazer and matching straight-leg trousers, fully lined.",
-    "بليزر مفصّل بدقة مع بنطلون مستقيم مطابق، مبطّن بالكامل.",
+    "A commanding navy blue wool pantsuit featuring a single-breasted blazer with sharp peaked lapels, structured shoulders, full back lining, flap hip pockets, and matching high-waisted straight-leg trousers with pressed crease lines.",
+    "بدلة رسمية راقية من الصوف الكحلي تتميز بجاكيت بليزر بزر واحد وياقة مدببة حادة، وأكتاف مهيكلة، وبطانة كاملة للظهر، وجيوب ورك بغطاء، وبنطلون مطابق عالي الخصر مستقيم الساق مع كسرات مكوية أنيقة.",
     (m) => {
       const len = m.backLen*1.45;
       const jb = jacketFrontBack(m, len, { hemFlareF:0.98 });
@@ -2019,10 +2019,10 @@ export let FancyGen;
 
   // ================= MEN — 10 more professional designs =================
 
-  def("mf07", "men", "Double-Breasted Overcoat", "معطف بصفين من الأزرار",
+  def("mf07", "men", "Camel Hair Double-Breasted Overcoat", "معطف صوف جملي فاخر بصفين من الأزرار",
     "Coat", "معطف", "coat",
-    "A long double-breasted overcoat with a wide collar, epaulettes and a tie belt.",
-    "معطف طويل بصفين من الأزرار وياقة عريضة وشرائط كتف وحزام يُربط.",
+    "A luxurious men's camel hair double-breasted overcoat tailored with broad peak lapels, a classic six-button closure, structured two-piece sleeves, welt chest and flapped ticket pockets, a self-fabric tie belt, and a deep center back walking vent.",
+    "معطف رجالي فاخر من شعر الجمل بصفين من الأزرار مفصّل بياقات عريضة مدببة، وإغلاق كلاسيكي بستة أزرار، وأكمام مهيكلة من قطعتين، وجيب صدر مطوي وجيوب تذاكر بغطاء، وحزام خصر يُربط، وفتحة مشي عميقة في منتصف الظهر.",
     (m) => {
       const len = m.backLen*1.7;
       const jb = jacketFrontBack(m, len, { hemFlareF:1.05, closureX:q(m.chest)*0.28 });
@@ -2042,10 +2042,10 @@ export let FancyGen;
       ];
     });
 
-  def("mf08", "men", "Four-Pocket Safari Jacket", "جاكيت سفاري بأربعة جيوب",
+  def("mf08", "men", "Four-Pocket Safari Field Jacket", "جاكيت سفاري ميداني بأربعة جيوب",
     "Jacket", "جاكيت", "jacket",
-    "A utilitarian safari jacket with four patch pockets, a belted waist and epaulettes.",
-    "جاكيت سفاري عملي بأربعة جيوب ملصقة وخصر بحزام وشرائط كتف.",
+    "A rugged olive green cotton safari field jacket crafted with a notched camp collar, buttoned shoulder epaulettes, four flapped pleated cargo pockets, a buckled self-fabric waist belt, and tailored two-piece sleeves with button cuffs.",
+    "جاكيت سفاري ميداني متين من القطن الزيتي مصمم بياقة كامب مشقوقة، وشرائط كتف عسكرية بأزرار، وأربعة جيوب كارجو ذات كسرات وأغطية، وحزام خصر بإبزيم من نفس القماش، وأكمام مفصّلة من قطعتين بأساور أزرار.",
     (m) => {
       const len = m.backLen*1.15;
       const jb = jacketFrontBack(m, len, { hemFlareF:0.95, closureX:q(m.chest)*0.1 });
@@ -2065,10 +2065,10 @@ export let FancyGen;
       ];
     });
 
-  def("mf09", "men", "Classic Trench Coat", "معطف ترنش كلاسيكي",
+  def("mf09", "men", "Classic Gabardine Trench Coat", "معطف ترنش كلاسيكي من الغابردين",
     "Coat", "معطف", "coat",
-    "A classic double-breasted trench coat with a storm collar, gun flap and belt.",
-    "معطف ترنش كلاسيكي بصفين من الأزرار وياقة عاصفة وغطاء كتف وحزام.",
+    "A timeless tan cotton gabardine double-breasted trench coat equipped with a wide convertible storm collar, protective shoulder epaulettes, a right gun storm flap, a buckled waist tie belt, angled welt hip pockets, and a back storm shield yoke.",
+    "معطف ترنش كلاسيكي من قطن الغابردين البيج بصفين من الأزرار مزود بياقة عاصفة قابلة للتحويل، وشرائط كتف عسكرية، وغطاء عاصفة أمامي، وحزام خصر بإبزيم، وجيوب ورك مائلة مطوية، وكوة ظهر واقية من المطر.",
     (m) => {
       const len = m.backLen*1.6;
       const jb = jacketFrontBack(m, len, { hemFlareF:1.02, closureX:q(m.chest)*0.24 });
@@ -2088,10 +2088,10 @@ export let FancyGen;
       ];
     });
 
-  def("mf10", "men", "Formal Sherwani Coat", "معطف شيرواني رسمي",
+  def("mf10", "men", "Embroidered Velvet Sherwani Coat", "معطف شيرواني مخملي مطرز",
     "Coat", "معطف", "coat",
-    "A long formal sherwani coat with a Nehru collar and flared side godets.",
-    "معطف شيرواني رسمي طويل بياقة نهرو ومروحات اتساع جانبية.",
+    "A majestic royal emerald green velvet sherwani coat embellished with intricate gold zardozi embroidery along the standing Nehru collar, button placket, and sleeve cuffs, featuring structured two-piece sleeves and flared hem godets.",
+    "معطف شيرواني ملكي مهيب من المخمل الأخضر الزمردي مزين بتطريز زردوزي ذهبي متقن على طول ياقة نهرو الواقفة وفتحة الأزرار وأساور الأكمام، ويتميز بأكمام مهيكلة من قطعتين ومروحات اتساع جانبية عند الحاشية.",
     (m) => {
       const len = m.backLen*1.85;
       const qc = q(m.chest), qw = q(m.waist);
@@ -2111,10 +2111,10 @@ export let FancyGen;
       ];
     });
 
-  def("mf11", "men", "Classic Denim Jacket", "جاكيت جينز كلاسيكي",
+  def("mf11", "men", "Classic Denim Trucker Jacket", "جاكيت جينز تراكر كلاسيكي",
     "Jacket", "جاكيت", "jacket",
-    "A trucker-style denim jacket with a shoulder yoke, chest pockets and a ribbed hem.",
-    "جاكيت جينز بطراز تراكر بكوة كتف وجيوب صدر وحاشية من الريب.",
+    "An iconic medium-wash denim trucker jacket featuring pointed western chest yokes, button-flap chest pockets, vertical side welt hand pockets, a pointed collar with stand, button-cuff sleeves, and a banded waistband with adjustment tabs.",
+    "جاكيت جينز تراكر كلاسيكي بلون أزرق مغسول يتميز بكوات صدر غربية مدببة، وجيوب صدر بغطاء وزر، وجيوب يد جانبية مطوية، وياقة قميص بقاعدة، وأكمام بأساور وأزرار، وحزام خصر مزود بأشرطة تعديل المقاس.",
     (m) => {
       const len = m.backLen*0.95;
       const jb = jacketFrontBack(m, len, { hemFlareF:0.92, closureX:q(m.chest)*0.08 });
@@ -2149,10 +2149,10 @@ export let FancyGen;
       ];
     });
 
-  def("mf12", "men", "Pinstripe Three-Piece Suit", "بدلة مخططة من ثلاث قطع",
+  def("mf12", "men", "Pinstripe Three-Piece Wool Suit", "بدلة صوفية مخططة من ثلاث قطع",
     "Suit", "بدلة", "suit",
-    "A boardroom-ready pinstripe suit — jacket, vest and trousers, fully lined.",
-    "بدلة مخططة جاهزة لقاعات الاجتماعات — جاكيت وصدرية وبنطلون، مبطّنة بالكامل.",
+    "A sharp executive navy blue pinstripe wool three-piece suit comprising a single-breasted two-button peak-lapel jacket, a matching five-button pointed waistcoat, and flat-front creased trousers with a tailored waistband.",
+    "بدلة رسمية تنفيذية أنيقة من الصوف الكحلي المخطط مكونة من ثلاث قطع تشمل جاكيت بزرين وياقة مدببة، وصدرية مطابقة بخمسة أزرار مدببة الحواشي، وبنطلون بمقدمة مستوية وكسرة مكوية مع حزام خصر مفصّل.",
     (m) => {
       const jLen = m.backLen*1.55, vLen = m.backLen*1.05;
       const jb = jacketFrontBack(m, jLen, { hemFlareF:1.0 });
