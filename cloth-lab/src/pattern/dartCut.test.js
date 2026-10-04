@@ -7,6 +7,14 @@ import { assembleCloth } from '../cloth/assemble.js'
 describe('dartCut — WP-69 3D dart geometry engine', () => {
   const square = [[0, 0], [20, 0], [20, 30], [0, 30]]
 
+  it('resolves apex and mouth points correctly regardless of input order', () => {
+    const dart = [[10, 20], [8, 30], [12, 30]]
+    const res = resolveDartPoints(square, dart)
+    expect(res.apex).toEqual([10, 20])
+    expect(res.mouthA).toEqual([8, 30])
+    expect(res.mouthB).toEqual([12, 30])
+  })
+
   it('cuts a standard straight-edge interior boundary dart', () => {
     const dart = [[10, 20], [8, 30], [12, 30]]
     const cut = cutBoundaryDart(square, dart)

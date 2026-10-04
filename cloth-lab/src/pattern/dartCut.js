@@ -294,10 +294,10 @@ export function measureApex3DVolume(cloth, apexSimParticle, triangulatedPiece) {
     const v1 = renderVertexToSimParticle[renderTriangles[t + 1]]
     const v2 = renderVertexToSimParticle[renderTriangles[t + 2]]
 
-    let pApex, pB, pC
-    if (v0 === apexSimParticle) { pApex = v0; pB = v1; pC = v2 }
-    else if (v1 === apexSimParticle) { pApex = v1; pB = v0; pC = v2 }
-    else if (v2 === apexSimParticle) { pApex = v2; pB = v0; pC = v1 }
+    let pB, pC
+    if (v0 === apexSimParticle) { pB = v1; pC = v2 }
+    else if (v1 === apexSimParticle) { pB = v0; pC = v2 }
+    else if (v2 === apexSimParticle) { pB = v0; pC = v1 }
     else continue
 
     neighbors.add(pB)
