@@ -8,6 +8,7 @@ import '../js/library.js';
 import '../js/girls-leotards.js';
 import '../js/fancy-patterns.js';
 import '../js/underwear-library.js';
+import '../js/reference-patterns.js';
 import { getPatternThumbnail, ARCHETYPE_IMAGES, PATTERN_SPECIFIC_THUMBS } from '../js/thumbnails.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -27,7 +28,7 @@ test('every assigned photo in PATTERN_SPECIFIC_THUMBS is unique (zero repetition
   const values = Object.values(PATTERN_SPECIFIC_THUMBS);
   const unique = new Set(values);
   assert.equal(unique.size, values.length, `Expected all assigned photos to be unique, but found ${values.length - unique.size} duplicate(s)`);
-  assert.equal(unique.size, 308, `Expected all 308 patterns to have unique lookbook photos, got ${unique.size}`);
+  assert.equal(unique.size, 320, `Expected all 320 patterns to have unique lookbook photos, got ${unique.size}`);
 });
 
 test('no generic archetype fallback filenames are used in PATTERN_SPECIFIC_THUMBS', () => {
@@ -74,7 +75,7 @@ test('getPatternThumbnail returns null for unassigned patterns to avoid duplicat
   assert.equal(getPatternThumbnail(unassigned), null);
 });
 
-test('every single pattern in LIBRARY (308 patterns) has either an exclusive photo or a unique flat', async () => {
+test('every single pattern in LIBRARY (320 patterns) has either an exclusive photo or a unique flat', async () => {
   const { renderPatternFlat } = await import('../js/pattern-flat.js');
   assert.ok(LIBRARY.length >= 300, `Expected at least 300 patterns, found ${LIBRARY.length}`);
 

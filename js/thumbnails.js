@@ -111,6 +111,9 @@ export const PATTERN_SPECIFIC_THUMBS = {
   'wb08': 'wb08.jpg',
   'wb09': 'wb09.jpg',
   'wb10': 'wb10.jpg',
+  'ref_w_blouse': 'ref_w_blouse.jpg',
+  'ref_w_skirt': 'ref_w_skirt.jpg',
+  'ref_w_shirtdress': 'ref_w_shirtdress.jpg',
 
   // Men — unique finished garment photographs (each seen once)
   'mens_shirt': 'mens_shirt.jpg',
@@ -160,6 +163,9 @@ export const PATTERN_SPECIFIC_THUMBS = {
   'mu04': 'mu04.jpg',
   'mu05': 'mu05.jpg',
   'mu06': 'mu06.jpg',
+  'ref_m_tee': 'ref_m_tee.jpg',
+  'ref_m_trousers': 'ref_m_trousers.jpg',
+  'ref_m_shirt': 'ref_m_shirt.jpg',
 
   // Girls — unique finished garment photographs (each seen once)
   'girls_dress': 'girls_dress.jpg',
@@ -319,6 +325,9 @@ export const PATTERN_SPECIFIC_THUMBS = {
   'gb08': 'gb08.jpg',
   'gb09': 'gb09.jpg',
   'gb10': 'gb10.jpg',
+  'ref_g_top': 'ref_g_top.jpg',
+  'ref_g_skirt': 'ref_g_skirt.jpg',
+  'ref_g_shirtdress': 'ref_g_shirtdress.jpg',
 
   // Boys — unique finished garment photographs (each seen once)
   'boys_trousers': 'boys_trousers.jpg',
@@ -368,7 +377,11 @@ export const PATTERN_SPECIFIC_THUMBS = {
   'bu04': 'bu04.jpg',
   'bu05': 'bu05.jpg',
   'bu06': 'bu06.jpg',
+  'ref_b_tee': 'ref_b_tee.jpg',
+  'ref_b_shorts': 'ref_b_shorts.jpg',
+  'ref_b_shirt': 'ref_b_shirt.jpg',
 };
+
 
 /**
  * Resolves the unique high-res human model thumbnail image URL
