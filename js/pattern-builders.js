@@ -260,9 +260,11 @@ export function princessPanel(opts) {
   const bBustX = chest * 0.55, bWaistX = waist * 0.47, bHipX = hips * 0.54;
   const sideX = chest * 1.06;
 
-  function centerPanel(bustX, waistX, hipX, neckDepthY) {
+  function centerPanel(bustX, waistX, hipX, neckDepthY, isFront = false) {
     const shoulderPt = [shoulderX, topY];
-    const neckSeg = [[0, neckDepthY], [shoulderX * 0.5, neckDepthY - 2], shoulderPt];
+    const neckSeg = (isFront && opts.squareNeck)
+      ? [[0, neckDepthY], [shoulderX * 0.7, neckDepthY], shoulderPt]
+      : [[0, neckDepthY], [shoulderX * 0.5, neckDepthY - 2], shoulderPt];
     const neckPts = qBez(...neckSeg, 6);
     const princess = princessCurve(shoulderPt, bustX, bustY, waistX, waistY, hipX, hipY);
     const outline = [[0, neckDepthY], ...neckPts.slice(0, -1), ...princess.points, [hipX, hemY], [0, hemY]];
@@ -298,9 +300,9 @@ export function princessPanel(opts) {
     return outline;
   }
 
-  const frontCenter = centerPanel(fBustX, fWaistX, fHipX, necklineY);
+  const frontCenter = centerPanel(fBustX, fWaistX, fHipX, necklineY, true);
   const frontSide = sidePanel(frontCenter);
-  const backCenter = centerPanel(bBustX, bWaistX, bHipX, necklineY * 0.45);
+  const backCenter = centerPanel(bBustX, bWaistX, bHipX, necklineY * 0.45, false);
   const backSide = sidePanel(backCenter);
   return { frontCenter, frontSide, backCenter, backSide, hemY, sideX, shoulderX };
 }
@@ -309,10 +311,12 @@ export function princessPanel(opts) {
 // armhole, straight below the underarm to the hem, on the fold.
 // Suppression comes from a separate waist dart the caller adds — a
 // genuinely different suppression method from princessPanel() above.
-export function plainBodicePanel(shoulderX, necklineY, chestX, underarmY, waistX, waistY, hipX, hipY, hemX, hemY) {
+export function plainBodicePanel(shoulderX, necklineY, chestX, underarmY, waistX, waistY, hipX, hipY, hemX, hemY, squareNeck = false) {
   const topY = -1;
   const shoulderPt = [shoulderX, topY];
-  const neckSeg = [[0, necklineY], [shoulderX * 0.5, necklineY - 2], shoulderPt];
+  const neckSeg = squareNeck
+    ? [[0, necklineY], [shoulderX * 0.7, necklineY], shoulderPt]
+    : [[0, necklineY], [shoulderX * 0.5, necklineY - 2], shoulderPt];
   const neckPts = qBez(...neckSeg, 5);
   const underarmPt = [chestX, underarmY];
   const armSeg = [shoulderPt, [shoulderX + (chestX - shoulderX) * 0.6, topY + underarmY * 0.12], underarmPt];

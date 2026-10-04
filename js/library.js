@@ -112,7 +112,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
           outline: bandPc(waist * 2.2, 4), darts: [], notches: [], grain: [[2, 1], [2, 3]], role: 'wrap-tie' },
       );
     } else if (suppression === 'princess') {
-      const b = princessPanel({ chest, waist, hips, backLen: m.backLen, necklineDepth, hemBelowHip: opts.hemBelowHip });
+      const b = princessPanel({ chest, waist, hips, backLen: m.backLen, necklineDepth, hemBelowHip: opts.hemBelowHip, squareNeck: opts.squareNeck });
       pieces.push(
         { key: 'front_center', name: { en: `${opts.nameEn} Front Center`, ar: `وسط مقدمة ${opts.nameAr}` }, desc: { en: 'Center-front panel; princess seam carries all bust shaping.', ar: 'لوحة وسط المقدمة؛ يحمل خط الأميرة كامل تشكيل الصدر.' },
           outline: b.frontCenter, darts: [], notches: [b.frontCenter[b.frontCenter.bustNotchIdx], b.frontCenter[b.frontCenter.waistNotchIdx]],
@@ -140,8 +140,8 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
     } else {
       const shoulderX = chest * 0.27;
       const hemY = m.backLen + 20 + opts.hemBelowHip;
-      const front = plainBodicePanel(shoulderX, necklineDepth, chest + 3, m.backLen * 0.3, waist + 3, m.backLen, hips + 3, m.backLen + 20, hips + 3, hemY);
-      const back = plainBodicePanel(shoulderX, necklineDepth * 0.45, chest + 2, m.backLen * 0.3, waist + 2, m.backLen, hips + 2, m.backLen + 20, hips + 2, hemY);
+      const front = plainBodicePanel(shoulderX, necklineDepth, chest + 3, m.backLen * 0.3, waist + 3, m.backLen, hips + 3, m.backLen + 20, hips + 3, hemY, opts.squareNeck);
+      const back = plainBodicePanel(shoulderX, necklineDepth * 0.45, chest + 2, m.backLen * 0.3, waist + 2, m.backLen, hips + 2, m.backLen + 20, hips + 2, hemY, false);
       const darts = suppression === 'darted';
       pieces.push(
         { key: 'front', name: { en: `${opts.nameEn} Front`, ar: `مقدمة ${opts.nameAr}` }, desc: { en: darts ? 'Center-front panel with a single waist dart.' : 'Center-front panel, deliberately un-darted for a relaxed cut.', ar: darts ? 'لوحة المقدمة مع بنسة خصر واحدة.' : 'لوحة المقدمة بدون بنسة عمدًا لقصة مريحة.' },
@@ -441,10 +441,10 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
 
   /* ---------------- WOMEN (23 new + womens_dress + abaya = 25) ---------------- */
   const WOMEN = [
-    entry("w01", "women", "A-Line Midi Dress", "فستان ميدي بقصة A", { type: "dress", lengthF: 1.10, flareF: 1.40, fitF: 1.00, sleeveLenF: 0.50, sleeveWideF: 1.00 }),
-    entry("w02", "women", "Wrap Maxi Dress", "فستان طويل ملفوف", { type: "dress", lengthF: 1.45, flareF: 1.15, fitF: 0.95, sleeveLenF: 0.80, sleeveWideF: 1.00 }),
-    entry("w03", "women", "Puff-Sleeve Blouse", "بلوزة بأكمام منفوشة", { type: "top", lengthF: 0.75, flareF: 1.05, fitF: 1.00, sleeveLenF: 1.00, sleeveWideF: 1.60 }),
-    entry("w04", "women", "Sleeveless Shift Dress", "فستان مستقيم بدون أكمام", { type: "dress", lengthF: 1.00, flareF: 1.00, fitF: 0.95, sleeveLenF: 0, sleeveWideF: 1.00 }),
+    entry("w01", "women", "A-Line Midi Dress", "فستان ميدي بقصة A", { type: "dress", lengthF: 1.12, flareF: 1.35, fitF: 0.98, sleeveLenF: 0.48, sleeveWideF: 0.95 }),
+    entry("w02", "women", "Wrap Maxi Dress", "فستان طويل ملفوف", { type: "dress", lengthF: 1.50, flareF: 1.45, fitF: 0.92, sleeveLenF: 0.75, sleeveWideF: 1.15 }),
+    entry("w03", "women", "Puff-Sleeve Blouse", "بلوزة بأكمام منفوشة", { type: "top", lengthF: 0.72, flareF: 1.05, fitF: 0.98, sleeveLenF: 0.55, sleeveWideF: 1.35, squareNeck: true }),
+    entry("w04", "women", "Sleeveless Shift Dress", "فستان مستقيم بدون أكمام", { type: "dress", lengthF: 0.88, flareF: 0.98, fitF: 0.98, sleeveLenF: 0, sleeveWideF: 1.00 }),
     entry("w05", "women", "Pleated Midi Skirt", "تنورة ميدي مكسّرة", { type: "skirt", lengthF: 1.10, flareF: 1.50, fitF: 1.00 }),
     entry("w06", "women", "Wide-Leg Trousers", "بنطلون واسع الساق", { type: "trousers", lengthF: 1.00, flareF: 1.70, fitF: 1.10 }),
     entry("w07", "women", "Fitted Pencil Skirt", "تنورة قلم ضيقة", { type: "skirt", lengthF: 0.95, flareF: 0.85, fitF: 0.85 }),
@@ -559,6 +559,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
     const circle = s.type === 'skirt' && s.flareF >= 1.55;
     const cargo = /cargo/i.test(e.name.en);
     const tie = /kaftan|kandura|jubba|abaya/i.test(e.name.en) || idx % 2 === 0;
+    const squareNeck = !!s.squareNeck || /square/i.test(e.name.en);
     PATTERNS[e.id] = {
       id: e.id,
       category: e.category,
@@ -568,7 +569,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         ar: `${e.name.ar}: باترون حقيقي مُصمَّم فرديًا (راجع تعليق js/library.js لقواعد اختيار الإنشاء). السماحية والطول والاتساع مُدرَّجة من قياسات الجسم.`,
       },
       pieces: (m) => {
-        const opts = { id: e.id, nameEn: e.name.en, nameAr: e.name.ar, lengthF: s.lengthF, flareF: s.flareF, fitF: s.fitF, sleeveLenF: s.sleeveLenF, sleeveWideF: s.sleeveWideF, wrap, pleated, straight, circle, cargo, tie };
+        const opts = { id: e.id, nameEn: e.name.en, nameAr: e.name.ar, lengthF: s.lengthF, flareF: s.flareF, fitF: s.fitF, sleeveLenF: s.sleeveLenF, sleeveWideF: s.sleeveWideF, wrap, pleated, straight, circle, cargo, tie, squareNeck };
         if (s.type === 'dress' || s.type === 'top') {
           const hemBelowHip = s.type === 'dress' ? Math.max(20, m.height * 0.28 * s.lengthF) : Math.max(4, m.backLen * 0.35 * s.lengthF);
           return bodiceFamily(m, { ...opts, hemBelowHip });

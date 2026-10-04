@@ -79,11 +79,12 @@ export const PATTERNS = {
   womens_dress: {
     id: "womens_dress",
     category: "women",
-    name: { en: "Women's Fitted Dress", ar: "فستان حريمي بقصة ضيقة" },
-    desc: { en: "Classic darted sheath dress block.", ar: "بلوك فستان كلاسيكي ببنسات." },
+    name: { en: "Fit & Flare Midi Dress", ar: "فستان ميدي متسع الخصر" },
+    desc: { en: "Fit-and-flare midi dress with boat neck, 3/4 sleeves, and flared skirt.", ar: "فستان ميدي أنيق بخصر مجسم وفتحة قارب وأكمام ثلاثة أرباع وتنورة متسعة." },
     pieces: (m) => {
       const cF = q(m.chest) + 1, wF = q(m.waist) + 2, hF = q(m.hips) + 1.5;
       const len = m.backLen + 58; // waist->hem
+      const sleeve34Len = Math.round(m.sleeve * 0.72);
       return [
         {
           key:"front_bodice",
@@ -112,11 +113,11 @@ export const PATTERNS = {
         },
         {
           key:"sleeve",
-          name:{en:"Set-in Sleeve",ar:"كم مركّب"},
-          desc:{en:"Fitted sleeve eased into the armhole.",ar:"كم ضيق يُركّب في فتحة الإبط."},
-          outline:[[0,0],[q(m.bicep),-6],[q(m.bicep)*2,0],[q(m.bicep)*2-1,m.sleeve],[1,m.sleeve]],
+          name:{en:"3/4 Sleeve",ar:"كم ثلاثة أرباع"},
+          desc:{en:"Fitted 3/4 sleeve ending below the elbow.",ar:"كم ضيق ثلاثة أرباع ينتهي أسفل الكوع."},
+          outline:[[0,0],[q(m.bicep),-6],[q(m.bicep)*2,0],[q(m.bicep)*2-1,sleeve34Len],[1,sleeve34Len]],
           notches:[[q(m.bicep),-6]],
-          grain:[[q(m.bicep),4],[q(m.bicep),m.sleeve-4]],
+          grain:[[q(m.bicep),4],[q(m.bicep),sleeve34Len-4]],
           role:"sleeve", bilateral:true,
         },
         {
@@ -136,7 +137,7 @@ export const PATTERNS = {
     id: "mens_shirt",
     category: "men",
     name: { en: "Men's Classic Shirt", ar: "قميص رجالي كلاسيكي" },
-    desc: { en: "Tailored button-down shirt block.", ar: "بلوك قميص مفصّل بأزرار." },
+    desc: { en: "Tailored button-down dress shirt with spread collar and cuffs.", ar: "قميص رجالي مفصّل بأزرار وياقة ممتدة وأساور أزرار." },
     pieces: (m) => {
       const cF = q(m.chest) + 3, len = m.backLen + 32;
       return [
@@ -179,9 +180,9 @@ export const PATTERNS = {
   abaya: {
     id:"abaya", category:"women",
     name:{en:"Classic Abaya",ar:"عباية كلاسيكية"},
-    desc:{en:"Flowing open-front abaya block.",ar:"بلوك عباية مفتوحة انسيابية."},
+    desc:{en:"Flowing open-front abaya block with bishop sleeves.",ar:"بلوك عباية مفتوحة انسيابية بأكمام واسعة."},
     pieces:(m)=>{
-      const w=q(m.chest)+10, len=m.height-20;
+      const w=q(m.chest)+10, len=m.height-18;
       return [
         { key:"front", name:{en:"Abaya Front",ar:"مقدمة العباية"},
           desc:{en:"Open front panel with draped fall.",ar:"بنل أمامي مفتوح بانسدال."},
@@ -196,8 +197,8 @@ export const PATTERNS = {
           // half), so it deliberately gets no chestEdgeIndices hint — only
           // this cut-on-fold back does.
           role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[1] },
-        { key:"sleeve", name:{en:"Wide Sleeve",ar:"كم واسع"},
-          desc:{en:"Loose flared sleeve.",ar:"كم واسع منسدل."},
+        { key:"sleeve", name:{en:"Bishop Sleeve",ar:"كم واسع بأساور"},
+          desc:{en:"Loose flared bishop sleeve with wrist gathering.",ar:"كم واسع منسدل مع كشكشة عند المعصم."},
           outline:[[0,0],[q(m.bicep)+8,-8],[q(m.bicep)*2+16,0],[q(m.bicep)*2+20,m.sleeve],[-4,m.sleeve]],
           grain:[[q(m.bicep)+8,4],[q(m.bicep)+8,m.sleeve-4]],
           role:"sleeve", bilateral:true },
@@ -208,8 +209,8 @@ export const PATTERNS = {
   /* -------- MEN'S THOBE -------- */
   thobe: {
     id:"thobe", category:"men",
-    name:{en:"Men's Thobe",ar:"ثوب رجالي"},
-    desc:{en:"Traditional Gulf thobe block.",ar:"بلوك الثوب الخليجي التقليدي."},
+    name:{en:"Men's Classic Thobe",ar:"ثوب رجالي كلاسيكي"},
+    desc:{en:"Traditional Gulf thobe with stand collar, chest placket, and patch pockets.",ar:"ثوب خليجي تقليدي بياقة قائمة وحاشية صدر وجيوب رقعة."},
     pieces:(m)=>{
       const w=q(m.chest)+6, len=m.height-16;
       return [
@@ -247,7 +248,7 @@ export const PATTERNS = {
   girls_dress: {
     id:"girls_dress", category:"girls",
     name:{en:"Girls' Party Dress",ar:"فستان بناتي للحفلات"},
-    desc:{en:"Gathered-skirt girls dress.",ar:"فستان بناتي بتنورة مكشكشة."},
+    desc:{en:"Gathered-skirt girls party dress with short puff sleeves.",ar:"فستان بناتي للحفلات بتنورة مكشكشة وأكمام قصيرة منفوشة."},
     pieces:(m)=>{
       const cF=q(m.chest)+1.5, bod=m.backLen;
       return [
@@ -281,8 +282,8 @@ export const PATTERNS = {
   /* -------- BOYS TROUSERS -------- */
   boys_trousers: {
     id:"boys_trousers", category:"boys",
-    name:{en:"Boys' Trousers",ar:"بنطلون ولادي"},
-    desc:{en:"Straight-leg kids trouser block.",ar:"بلوك بنطلون ولادي مستقيم."},
+    name:{en:"Boys' Chino Trousers",ar:"بنطلون تشينو ولادي"},
+    desc:{en:"Straight-leg khaki chino trousers with waistband.",ar:"بنطلون كلاسيكي مستقيم من خامة الكاكي بحزام خصر."},
     pieces:(m)=>{
       const w=q(m.hips)+2;
       return [
