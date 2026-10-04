@@ -1460,8 +1460,8 @@ export let FancyGen;
 
   def("mf05", "men", "Three-Piece Suit Ensemble", "بدلة رسمية من ثلاث قطع",
     "Suit", "بدلة", "suit",
-    "A full three-piece suit — jacket, vest and trousers — with tailored curves throughout.",
-    "بدلة كاملة من ثلاث قطع — جاكيت وصدرية وبنطلون — بقصات مفصّلة منحنية.",
+    "A tailored navy three-piece suit ensemble comprising a single-breasted two-button notch-lapel jacket, matching five-button pointed vest, and flat-front creased trousers.",
+    "طقم بدلة رسمية كحلية مفصّلة من ثلاث قطع يشتمل على جاكيت بزرين وياقة مشقوقة وصدرية بخمسة أزرار وبنطلون مفصل بمكواة أمامية.",
     (m) => {
       const jLen = m.backLen*1.55, vLen = m.backLen*1.05;
       const jb = jacketFrontBack(m, jLen, { hemFlareF:1.0 });
@@ -1488,38 +1488,38 @@ export let FancyGen;
         { ...foldMirrorEdge(waistband.length, 1, 2), seamId: 'mf05WaistFront_L' },
       ];
       return [
-        { key:"jacketFront", name:{en:"Jacket Front",ar:"مقدمة الجاكيت"}, desc:{en:"Tailored suit jacket front.",ar:"مقدمة جاكيت البدلة المفصّلة."}, role:"front-panel", outline:jb.front, grain:[[4,10],[4,jLen*0.6]] },
-        { key:"jacketBack", name:{en:"Jacket Back",ar:"خلفية الجاكيت"}, desc:{en:"Tailored suit jacket back.",ar:"خلفية جاكيت البدلة المفصّلة."}, role:"back-panel", cutOnFold:true, outline:jb.back, grain:[[4,10],[4,jLen*0.6]] },
+        { key:"jacketFront", name:{en:"Jacket Front",ar:"مقدمة الجاكيت"}, desc:{en:"Tailored suit jacket front with notch lapel break line.",ar:"مقدمة جاكيت البدلة المفصّلة بخط ثنية الياقة المشقوقة."}, role:"front-panel", outline:jb.front, grain:[[4,10],[4,jLen*0.6]] },
+        { key:"jacketBack", name:{en:"Jacket Back",ar:"خلفية الجاكيت"}, desc:{en:"Tailored suit jacket back panel with center vent.",ar:"خلفية جاكيت البدلة المفصّلة بفتحة تهوية وسطى."}, role:"back-panel", cutOnFold:true, outline:jb.back, grain:[[4,10],[4,jLen*0.6]] },
         { key:"sleeveU", name:{en:"Jacket Sleeve Upper",ar:"الكم العلوي للجاكيت"}, desc:{en:"Outer jacket sleeve panel.",ar:"اللوحة الخارجية لكم الجاكيت."}, role:"sleeve-upper", bilateral:true, outline:sl.upper, grain:[[q(m.bicep)*0.5,4],[q(m.bicep)*0.5,m.sleeve*0.5]] },
         { key:"sleeveD", name:{en:"Jacket Sleeve Under",ar:"الكم السفلي للجاكيت"}, desc:{en:"Inner jacket sleeve panel.",ar:"اللوحة الداخلية لكم الجاكيت."}, role:"sleeve-under", bilateral:true, outline:sl.under, grain:[[q(m.bicep)*0.3,4],[q(m.bicep)*0.3,m.sleeve*0.5]] },
-        { key:"collar", name:{en:"Jacket Collar",ar:"ياقة الجاكيت"}, desc:{en:"Notch-ready jacket collar.",ar:"ياقة جاكيت جاهزة للفتحة."}, role:"collar", outline:shawlCollar(neckArc, 20), grain:[[4,4],[4,14]] },
+        { key:"collar", name:{en:"Notch Lapel Collar",ar:"ياقة الصدر المشقوقة"}, desc:{en:"Notched collar for the tailored suit jacket.",ar:"ياقة مشقوقة لجاكيت البدلة المفصّلة."}, role:"collar", outline:shawlCollar(neckArc, 20), grain:[[4,4],[4,14]] },
         { key:"facing", name:{en:"Jacket Facing",ar:"بطانة الجاكيت"}, desc:{en:"Curved front facing.",ar:"بطانة أمامية منحنية."}, role:"lapel-facing", outline:lapelFacing(neckArc, jLen*0.5), grain:[[4,4],[4,jLen*0.3]] },
-        { key:"vestFront", name:{en:"Vest Front",ar:"مقدمة الصدرية"}, desc:{en:"Fitted sleeveless vest front.",ar:"مقدمة صدرية ضيقة بلا أكمام."}, role:"front-panel", outline:vb.front, grain:[[3,8],[3,vLen*0.6]] },
+        { key:"vestFront", name:{en:"Vest Front",ar:"مقدمة الصدرية"}, desc:{en:"Tailored V-neck waistcoat front with pointed bottom points.",ar:"مقدمة صدرية مفصّلة بفتحة رقبة V وزوايا سفلية مدببة."}, role:"front-panel", outline:vb.front, grain:[[3,8],[3,vLen*0.6]] },
         { key:"vestBack", name:{en:"Vest Back",ar:"خلفية الصدرية"}, desc:{en:"Vest back, often cut in lining fabric.",ar:"خلفية الصدرية، تُقص عادة من قماش البطانة."}, role:"back-panel", cutOnFold:true, outline:vb.back, grain:[[3,8],[3,vLen*0.6]] },
-        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Front leg panel with a curved crotch seam.",ar:"لوحة الساق الأمامية بخط تفصيل منحنٍ."}, role:"trouser-front", bilateral:true, outline:trouserFront, grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
-        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Back leg panel with a deeper curved seat curve.",ar:"لوحة الساق الخلفية بمنحنى مقعد أعمق."}, role:"trouser-back", bilateral:true, outline:trouserBack, grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserFront", name:{en:"Trouser Front",ar:"مقدمة البنطلون"}, desc:{en:"Flat-front suit trouser leg panel with center crease line.",ar:"لوحة ساق البنطلون الأمامية المستوية مع خط المكواة الأوسط."}, role:"trouser-front", bilateral:true, outline:trouserFront, grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
+        { key:"trouserBack", name:{en:"Trouser Back",ar:"خلفية البنطلون"}, desc:{en:"Tailored trouser back leg panel with shaped seat curve.",ar:"لوحة ساق البنطلون الخلفية المفصّلة مع انحناء المقعد المريح."}, role:"trouser-back", bilateral:true, outline:trouserBack, grain:[[qw*0.3,10],[qw*0.3,m.inseam*0.6]] },
         { key:"trouserWaistband", name:{en:"Trouser Waistband",ar:"حزام خصر البنطلون"}, desc:{en:"Waistband cut on the center-back fold, joined to all four leg-waist edges.",ar:"حزام خصر يُقص على طية منتصف الظهر ويُخاط بحواف خصر قطع الساق الأربع."}, role:"waistband", cutOnFold:true, outline:waistband, edges:waistbandEdges, notches:[[backWaist,0]], grain:[[1,2],[bandLength-1,2]] },
       ];
     });
 
   def("mf06", "men", "Structured Peacoat", "معطف بحري مهيكل",
     "Coat", "معطف", "coat",
-    "A classic structured peacoat with a wide collar, back yoke and flap pockets.",
-    "معطف بحري كلاسيكي مهيكل بياقة عريضة وكوة ظهر وجيوب بأغطية.",
+    "A classic double-breasted navy wool peacoat featuring an ulster convertible collar, vertical handwarmer welt pockets, flap hip pockets, and a reinforced back yoke.",
+    "معطف بحري كلاسيكي من الصوف الكحلي بصفين من الأزرار وياقة عريضة قابلة للتحويل وجيوب تدفئة رأسية مطوية وجيوب ورك بغطاء وكوة ظهر معززة.",
     (m) => {
       const len = m.backLen*1.85;
       const jb = jacketFrontBack(m, len, { hemFlareF:1.02, closureX:q(m.chest)*0.22 });
       const neckArc = jb.frontNeckLen + jb.backNeckLen;
       const sl = sleeve2pc(m.bicep, m.sleeve+2);
       return [
-        { key:"front", name:{en:"Coat Front",ar:"مقدمة المعطف"}, desc:{en:"Double-layered front with a wide lapel.",ar:"مقدمة مزدوجة الطبقة بياقة عريضة."}, role:"front-panel", outline:jb.front, grain:[[5,10],[5,len*0.6]] },
-        { key:"back", name:{en:"Coat Back",ar:"خلفية المعطف"}, desc:{en:"Back panel joined below the yoke.",ar:"لوحة خلفية توصل أسفل الكوة."}, role:"back-panel", cutOnFold:true, outline:jb.back, grain:[[5,10],[5,len*0.6]] },
+        { key:"front", name:{en:"Coat Front",ar:"مقدمة المعطف"}, desc:{en:"Double-breasted coat front with wide ulster lapel.",ar:"مقدمة معطف بصفين من الأزرار وياقة أولستر عريضة."}, role:"front-panel", outline:jb.front, grain:[[5,10],[5,len*0.6]] },
+        { key:"back", name:{en:"Coat Back",ar:"خلفية المعطف"}, desc:{en:"Structured wool back panel joined below the yoke.",ar:"لوحة خلفية صوفية مهيكلة توصل أسفل الكوة."}, role:"back-panel", cutOnFold:true, outline:jb.back, grain:[[5,10],[5,len*0.6]] },
         { key:"sleeveU", name:{en:"Sleeve Upper",ar:"الكم العلوي"}, desc:{en:"Outer sleeve panel.",ar:"اللوحة الخارجية للكم."}, role:"sleeve-upper", bilateral:true, outline:sl.upper, grain:[[q(m.bicep)*0.5,4],[q(m.bicep)*0.5,m.sleeve*0.5]] },
         { key:"sleeveD", name:{en:"Sleeve Under",ar:"الكم السفلي"}, desc:{en:"Inner sleeve panel.",ar:"اللوحة الداخلية للكم."}, role:"sleeve-under", bilateral:true, outline:sl.under, grain:[[q(m.bicep)*0.3,4],[q(m.bicep)*0.3,m.sleeve*0.5]] },
-        { key:"collar", name:{en:"Wide Collar",ar:"ياقة عريضة"}, desc:{en:"Wide curved storm collar.",ar:"ياقة عاصفة عريضة منحنية."}, role:"collar", outline:shawlCollar(neckArc*1.05, 20), grain:[[4,4],[4,14]] },
+        { key:"collar", name:{en:"Convertible Ulster Collar",ar:"ياقة أولستر عريضة"}, desc:{en:"Wide convertible collar standing or folding flat.",ar:"ياقة عريضة قابلة للتحويل تنتصب أو تنثني منبسطة."}, role:"collar", outline:shawlCollar(neckArc*1.05, 20), grain:[[4,4],[4,14]] },
         { key:"facing", name:{en:"Front Facing",ar:"بطانة المقدمة"}, desc:{en:"Curved facing along the front edge.",ar:"بطانة منحنية على حافة المقدمة."}, role:"lapel-facing", outline:lapelFacing(neckArc, len*0.45), grain:[[4,4],[4,len*0.28]] },
-        { key:"chestPocket", name:{en:"Chest Pocket",ar:"جيب الصدر"}, desc:{en:"Welt chest pocket.",ar:"جيب صدر مطوي."}, role:"pocket", outline:pocketPc(10,3.5), grain:[[5,1],[5,2.5]] },
-        { key:"hipFlap", name:{en:"Hip Flap Pocket",ar:"جيب ورك بغطاء"}, desc:{en:"Flap-covered hip pocket.",ar:"جيب ورك مغطى بغطاء."}, role:"pocket", outline:pocketPc(14,5.5), grain:[[6,1.5],[6,3.5]] },
+        { key:"chestPocket", name:{en:"Vertical Slash Pocket",ar:"جيب تدفئة رأسي"}, desc:{en:"Vertical welt handwarmer pocket welt.",ar:"شريط جيب تدفئة رأسي مطوي لليدين."}, role:"pocket", outline:pocketPc(10,3.5), grain:[[5,1],[5,2.5]] },
+        { key:"hipFlap", name:{en:"Flap Hip Pocket",ar:"جيب ورك بغطاء"}, desc:{en:"Reinforced pocket flap covering the lower hip pocket.",ar:"غطاء جيب مقوى يغطي جيب الورك السفلي."}, role:"pocket", outline:pocketPc(14,5.5), grain:[[6,1.5],[6,3.5]] },
         { key:"backYoke", name:{en:"Back Yoke",ar:"كوة الظهر"}, desc:{en:"Curved shoulder yoke reinforcing the back.",ar:"كوة كتف منحنية تعزز الظهر."}, role:"yoke", outline:yokePc(q(m.shoulder)*1.3, 10), grain:[[6,2],[6,7]] },
       ];
     });
@@ -1528,8 +1528,8 @@ export let FancyGen;
 
   def("gf01", "girls", "Princess Party Gown", "فستان حفلة أميرة",
     "Gown", "فستان سهرة", "gown",
-    "A twirl-ready party gown with a princess-seam bodice and a tiered tulle-look skirt.",
-    "فستان حفلة قابل للدوران بصدرية بقصات أميرة وتنورة بطبقات تول.",
+    "A lilac lace and tulle princess party gown with floral embroidered bodice, delicate lace cap sleeves, satin waist bow sash, and a voluminous three-tier ruffle skirt.",
+    "فستان حفلة أميرة بنفسجي فاتح من الدانتيل والتول بصدرية مطرزة بالزهور وأكمام قصيرة رقيقة وحزام خصر ستان بفيونكة وتنورة كشكش ثلاثية الطبقات.",
     (m) => {
       const b = princessBodice(m, { neckline:"scoop", hipY:m.backLen*0.9+4, hemY:m.backLen*0.9+6 });
       const waistW = q(m.waist), tierLen = (m.height*0.62 - b.hemY)/3;
@@ -1539,18 +1539,18 @@ export let FancyGen;
         { key:"bodiceFS", name:{en:"Bodice Front Side",ar:"جانب الصدرية الأمامي"}, desc:{en:"Curved side panel.",ar:"لوحة جانبية منحنية."}, ...b.meta.frontSide, outline:b.frontSide, grain:[[3,8],[3,b.hemY-3]] },
         { key:"bodiceBC", name:{en:"Bodice Back Center",ar:"خلفية الصدرية الوسطى"}, desc:{en:"Center back panel.",ar:"لوحة الخلفية الوسطى."}, ...b.meta.backCenter, outline:b.backCenter, grain:[[2,8],[2,b.hemY-3]] },
         { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel.",ar:"لوحة جانبية خلفية منحنية."}, ...b.meta.backSide, outline:b.backSide, grain:[[3,8],[3,b.hemY-3]] },
-        { key:"tier1", name:{en:"Skirt Tier 1",ar:"طبقة التنورة الأولى"}, desc:{en:"Top tier gathered at the waist.",ar:"الطبقة العلوية مجمّعة عند الخصر."}, role:"tier", outline:tierPc(t1w, t2w, tierLen), grain:[[5,3],[5,tierLen-5]] },
-        { key:"tier2", name:{en:"Skirt Tier 2",ar:"طبقة التنورة الثانية"}, desc:{en:"Middle tier.",ar:"الطبقة الوسطى."}, role:"tier", outline:tierPc(t2w, t3w, tierLen), grain:[[5,3],[5,tierLen-5]] },
-        { key:"tier3", name:{en:"Skirt Tier 3",ar:"طبقة التنورة الثالثة"}, desc:{en:"Hem tier, fullest of the three.",ar:"طبقة الحاشية، الأوسع من الثلاث."}, role:"tier", outline:tierPc(t3w, t3w*1.3, tierLen), grain:[[5,3],[5,tierLen-5]] },
-        { key:"sleeve", name:{en:"Cap Sleeve",ar:"كم قصير"}, desc:{en:"Puffed curved cap sleeve.",ar:"كم قصير منتفخ منحنٍ."}, role:"cap-sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.3, 1.2), grain:[[q(m.bicep)*0.5,3],[q(m.bicep)*0.5,m.sleeve*0.24]] },
-        { key:"sash", name:{en:"Waist Sash",ar:"حزام الخصر"}, desc:{en:"Bow sash tying at the back.",ar:"حزام بفيونكة يُربط خلفيًا."}, role:"sash", outline:sashPc(waistW*0.4, 40), grain:[[6,1.5],[25,1.5]] },
+        { key:"tier1", name:{en:"Skirt Tier 1 (Upper Ruffle)",ar:"طبقة التنورة الأولى (الكشكش العلوي)"}, desc:{en:"Top tiered tulle ruffle gathered at the waist seam.",ar:"طبقة كشكش تول علوية مجمّعة عند خط الخصر."}, role:"tier", outline:tierPc(t1w, t2w, tierLen), grain:[[5,3],[5,tierLen-5]] },
+        { key:"tier2", name:{en:"Skirt Tier 2 (Middle Ruffle)",ar:"طبقة التنورة الثانية (الكشكش الأوسط)"}, desc:{en:"Full middle tulle ruffle tier creating skirt volume.",ar:"طبقة كشكش تول وسطى تمنح التنورة حجماً ممتلئاً."}, role:"tier", outline:tierPc(t2w, t3w, tierLen), grain:[[5,3],[5,tierLen-5]] },
+        { key:"tier3", name:{en:"Skirt Tier 3 (Hem Flounce)",ar:"طبقة التنورة الثالثة (كشكش الحاشية)"}, desc:{en:"Sweeping hem tier creating a voluminous ballgown flare.",ar:"طبقة حاشية ممتدة تمنح التنورة اتساع سهرة كروي فاخر."}, role:"tier", outline:tierPc(t3w, t3w*1.3, tierLen), grain:[[5,3],[5,tierLen-5]] },
+        { key:"sleeve", name:{en:"Lace Cap Sleeve",ar:"كم كاب دانتيل"}, desc:{en:"Delicate scalloped cap sleeve with subtle shoulder gathers.",ar:"كم كاب رقيق بأطراف صدفيّة وكسرات خفيفة عند الكتف."}, role:"cap-sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.3, 1.2), grain:[[q(m.bicep)*0.5,3],[q(m.bicep)*0.5,m.sleeve*0.24]] },
+        { key:"sash", name:{en:"Waist Bow Sash",ar:"حزام خصر بفيونكة"}, desc:{en:"Satin waistband sash tied with a center-front bow.",ar:"حزام خصر ستان يُربط بفيونكة في منتصف الأمام."}, role:"sash", outline:sashPc(waistW*0.4, 40), grain:[[6,1.5],[25,1.5]] },
       ];
     });
 
   def("gf02", "girls", "Butterfly-Sleeve Ball Gown", "فستان سهرة بأكمام فراشة",
     "Gown", "فستان سهرة", "gown",
-    "A ball gown with dramatic butterfly sleeves and a full gored skirt.",
-    "فستان سهرة بأكمام فراشة درامية وتنورة كاملة الاتساع.",
+    "An ice blue gala ball gown featuring ethereal sheer butterfly flutter sleeves, an embroidered bodice with waist bow, and a voluminous flared skirt.",
+    "فستان سهرة أزرق جليدي فاخر بأكمام فراشة أثيرية شفافة وصدرية مطرزة بفيونكة خصر وتنورة واسعة متألقة.",
     (m) => {
       const b = princessBodice(m, { neckline:"sweetheart", hipY:m.backLen*0.9+4, hemY:m.backLen*0.9+6 });
       const waistW = q(m.waist), hemLen = m.height*0.6 - b.hemY, hemW = q(m.hips)*2.0;
@@ -1559,94 +1559,94 @@ export let FancyGen;
         { key:"bodiceFS", name:{en:"Bodice Front Side",ar:"جانب الصدرية الأمامي"}, desc:{en:"Curved side panel.",ar:"لوحة جانبية منحنية."}, ...b.meta.frontSide, outline:b.frontSide, grain:[[3,8],[3,b.hemY-3]] },
         { key:"bodiceBC", name:{en:"Bodice Back Center",ar:"خلفية الصدرية الوسطى"}, desc:{en:"Center back panel.",ar:"لوحة الخلفية الوسطى."}, ...b.meta.backCenter, outline:b.backCenter, grain:[[2,8],[2,b.hemY-3]] },
         { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel.",ar:"لوحة جانبية خلفية منحنية."}, ...b.meta.backSide, outline:b.backSide, grain:[[3,8],[3,b.hemY-3]] },
-        { key:"sleeve", name:{en:"Butterfly Sleeve",ar:"كم فراشة"}, desc:{en:"Wide winged sleeve with a curved edge.",ar:"كم عريض بجناحين وحافة منحنية."}, role:"butterfly-sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.32, 1.6), grain:[[q(m.bicep)*0.6,3],[q(m.bicep)*0.6,m.sleeve*0.25]] },
-        { key:"facing", name:{en:"Neckline Facing",ar:"بطانة خط الرقبة"}, desc:{en:"Curved facing finishing the neckline.",ar:"بطانة منحنية لتشطيب خط الرقبة."}, role:"lapel-facing", outline:[[0,0],...qBez([0,0],[q(m.chest)*0.4,3],[q(m.chest)*0.7,1],6),[q(m.chest)*0.7,5],[0,5]], grain:[[3,2],[q(m.chest)*0.4,2]] },
-        { key:"skirtF", name:{en:"Skirt Front Gore",ar:"مروحة التنورة الأمامية"}, desc:{en:"Front gore.",ar:"مروحة أمامية."}, role:"skirt-front-gore", outline:gorePanel(waistW*0.55, hemW*0.3, hemLen, 6), grain:[[3,8],[3,hemLen-8]] },
-        { key:"skirtB", name:{en:"Skirt Back Gore",ar:"مروحة التنورة الخلفية"}, desc:{en:"Back gore.",ar:"مروحة خلفية."}, role:"skirt-back-gore", outline:gorePanel(waistW*0.55, hemW*0.32, hemLen, 6), grain:[[3,8],[3,hemLen-8]] },
-        { key:"skirtSL", name:{en:"Skirt Side Gore Left",ar:"مروحة التنورة الجانبية اليسرى"}, desc:{en:"Side gore.",ar:"مروحة جانبية."}, role:"skirt-side-gore-left", outline:gorePanel(waistW*0.45, hemW*0.32, hemLen, 7), grain:[[3,8],[3,hemLen-8]] },
-        { key:"skirtSR", name:{en:"Skirt Side Gore Right",ar:"مروحة التنورة الجانبية اليمنى"}, desc:{en:"Side gore.",ar:"مروحة جانبية."}, role:"skirt-side-gore-right", outline:gorePanel(waistW*0.45, hemW*0.32, hemLen, 7), grain:[[3,8],[3,hemLen-8]] },
+        { key:"sleeve", name:{en:"Double Butterfly Sleeve",ar:"كم فراشة مزدوج"}, desc:{en:"Flowing winged butterfly sleeve draping gracefully from the shoulder.",ar:"كم فراشة انسيابي مجنح ينسدل بأناقة من الكتف."}, role:"butterfly-sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.32, 1.6), grain:[[q(m.bicep)*0.6,3],[q(m.bicep)*0.6,m.sleeve*0.25]] },
+        { key:"facing", name:{en:"Jewel Neckline Facing",ar:"بطانة فتحة الرقبة الدائرية"}, desc:{en:"Curved neckline facing finishing the clean jewel neckline.",ar:"بطانة منحنية لتشطيب فتحة الرقبة الدائرية النظيفة."}, role:"lapel-facing", outline:[[0,0],...qBez([0,0],[q(m.chest)*0.4,3],[q(m.chest)*0.7,1],6),[q(m.chest)*0.7,5],[0,5]], grain:[[3,2],[q(m.chest)*0.4,2]] },
+        { key:"skirtF", name:{en:"Skirt Front Panel",ar:"لوحة التنورة الأمامية"}, desc:{en:"Full flared front skirt panel with wide sweeping hem.",ar:"لوحة تنورة أمامية متسعة مع حاشية انسيابية واسعة."}, role:"skirt-front-gore", outline:gorePanel(waistW*0.55, hemW*0.3, hemLen, 6), grain:[[3,8],[3,hemLen-8]] },
+        { key:"skirtB", name:{en:"Skirt Back Panel",ar:"لوحة التنورة الخلفية"}, desc:{en:"Full flared back skirt panel balancing the silhouette.",ar:"لوحة تنورة خلفية متسعة توازن قوام الفستان."}, role:"skirt-back-gore", outline:gorePanel(waistW*0.55, hemW*0.32, hemLen, 6), grain:[[3,8],[3,hemLen-8]] },
+        { key:"skirtSL", name:{en:"Skirt Side Gore Left",ar:"مروحة التنورة الجانبية اليسرى"}, desc:{en:"Side gore flare panel.",ar:"لوحة مروحة جانبية متسعة."}, role:"skirt-side-gore-left", outline:gorePanel(waistW*0.45, hemW*0.32, hemLen, 7), grain:[[3,8],[3,hemLen-8]] },
+        { key:"skirtSR", name:{en:"Skirt Side Gore Right",ar:"مروحة التنورة الجانبية اليمنى"}, desc:{en:"Side gore flare panel.",ar:"لوحة مروحة جانبية متسعة."}, role:"skirt-side-gore-right", outline:gorePanel(waistW*0.45, hemW*0.32, hemLen, 7), grain:[[3,8],[3,hemLen-8]] },
       ];
     });
 
   def("gf03", "girls", "Fairy-Tale Cape Dress", "فستان بكاب حكاية خرافية",
     "Gown", "فستان سهرة", "gown",
-    "A storybook gown with a sweeping attached cape and a full curved skirt.",
-    "فستان مستوحى من الحكايات بكاب منسدل وتنورة كاملة منحنية.",
+    "A storybook lavender fairy-tale gown with silver embroidered bodice contour, a sweeping floor-length sheer organza cape, and a full satin twirl skirt.",
+    "فستان حكايات خرافية بنفسجي بصدرية محددة بتطريز فضي وكاب أورجانزا شفاف طويل منسدل وتنورة ستان واسعة للدوران.",
     (m) => {
       const b = princessBodice(m, { neckline:"scoop", hipY:m.backLen*0.9+4, hemY:m.backLen*0.9+6 });
       const waistW = q(m.waist), hemLen = m.height*0.6 - b.hemY, hemW = q(m.hips)*1.9;
       return [
-        { key:"bodiceFC", name:{en:"Bodice Front Center",ar:"مقدمة الصدرية الوسطى"}, desc:{en:"Center front panel.",ar:"لوحة المقدمة الوسطى."}, ...b.meta.frontCenter, outline:b.frontCenter, grain:[[2,8],[2,b.hemY-3]] },
+        { key:"bodiceFC", name:{en:"Embroidered Bodice Front",ar:"مقدمة الصدرية المطرزة"}, desc:{en:"Sweetheart-shaped center front bodice with metallic trim.",ar:"مقدمة صدرية بشكل قلب محددة بشريط تطريز معدني."}, ...b.meta.frontCenter, outline:b.frontCenter, grain:[[2,8],[2,b.hemY-3]] },
         { key:"bodiceFS", name:{en:"Bodice Front Side",ar:"جانب الصدرية الأمامي"}, desc:{en:"Curved side panel.",ar:"لوحة جانبية منحنية."}, ...b.meta.frontSide, outline:b.frontSide, grain:[[3,8],[3,b.hemY-3]] },
         { key:"bodiceBC", name:{en:"Bodice Back Center",ar:"خلفية الصدرية الوسطى"}, desc:{en:"Center back panel.",ar:"لوحة الخلفية الوسطى."}, ...b.meta.backCenter, outline:b.backCenter, grain:[[2,8],[2,b.hemY-3]] },
         { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel.",ar:"لوحة جانبية خلفية منحنية."}, ...b.meta.backSide, outline:b.backSide, grain:[[3,8],[3,b.hemY-3]] },
-        { key:"cape", name:{en:"Attached Cape",ar:"كاب متصل"}, desc:{en:"Sweeping cape draping from the shoulders.",ar:"كاب منسدل من الكتفين."}, role:"cape", cutOnFold:true, outline:capePc(q(m.shoulder)*0.85, 42), grain:[[5,5],[5,30]] },
+        { key:"cape", name:{en:"Flowing Organza Cape",ar:"كاب أورجانزا منسدل"}, desc:{en:"Floor-length sheer organza cape attached at shoulder gathers.",ar:"كاب أورجانزا شفاف بطول الأرض متصل عند كسرات الكتف."}, role:"cape", cutOnFold:true, outline:capePc(q(m.shoulder)*0.85, 42), grain:[[5,5],[5,30]] },
         { key:"skirtF", name:{en:"Skirt Front Gore",ar:"مروحة التنورة الأمامية"}, desc:{en:"Front gore.",ar:"مروحة أمامية."}, role:"skirt-front-gore", outline:gorePanel(waistW*0.55, hemW*0.3, hemLen, 5), grain:[[3,8],[3,hemLen-8]] },
         { key:"skirtB", name:{en:"Skirt Back Gore",ar:"مروحة التنورة الخلفية"}, desc:{en:"Back gore.",ar:"مروحة خلفية."}, role:"skirt-back-gore", outline:gorePanel(waistW*0.55, hemW*0.32, hemLen, 5), grain:[[3,8],[3,hemLen-8]] },
         { key:"skirtSL", name:{en:"Skirt Side Gore Left",ar:"مروحة التنورة الجانبية اليسرى"}, desc:{en:"Side gore.",ar:"مروحة جانبية."}, role:"skirt-side-gore-left", outline:gorePanel(waistW*0.45, hemW*0.3, hemLen, 6), grain:[[3,8],[3,hemLen-8]] },
         { key:"skirtSR", name:{en:"Skirt Side Gore Right",ar:"مروحة التنورة الجانبية اليمنى"}, desc:{en:"Side gore.",ar:"مروحة جانبية."}, role:"skirt-side-gore-right", outline:gorePanel(waistW*0.45, hemW*0.3, hemLen, 6), grain:[[3,8],[3,hemLen-8]] },
-        { key:"sash", name:{en:"Waist Sash",ar:"حزام الخصر"}, desc:{en:"Bow sash at the waist.",ar:"حزام بفيونكة عند الخصر."}, role:"sash", outline:sashPc(waistW*0.4, 38), grain:[[6,1.5],[24,1.5]] },
+        { key:"sash", name:{en:"Contoured Waist Sash",ar:"حزام الخصر المحدد"}, desc:{en:"Embroidered waist sash defining the fairytale silhouette.",ar:"حزام خصر مطرز يبرز قوام الحكايات الخرافية."}, role:"sash", outline:sashPc(waistW*0.4, 38), grain:[[6,1.5],[24,1.5]] },
       ];
     });
 
   def("gf04", "girls", "Tiered Ruffle Party Dress", "فستان حفلة بطبقات كشكش",
     "Dress", "فستان", "dress",
-    "A playful party dress with a princess-seam bodice and four ruffled tiers.",
-    "فستان حفلة مرح بصدرية بقصات أميرة وأربع طبقات من الكشكش.",
+    "A joyful peach party dress featuring a clean sleeveless fitted bodice, a satin ribbon waist bow sash, and four tiered cascading ruffle skirt flounces.",
+    "فستان حفلة مرح بلون خوخي بصدرية مفصّلة بلا أكمام وحزام خصر ستان بفيونكة وتنورة بأربع طبقات كشكش متدرجة.",
     (m) => {
       const b = princessBodice(m, { neckline:"round", hipY:m.backLen*0.9+4, hemY:m.backLen*0.9+6 });
       const waistW = q(m.waist), tierLen = (m.height*0.5 - b.hemY)/4;
       const widths = [waistW*1.7, waistW*2.0, waistW*2.4, waistW*2.9];
       return [
-        { key:"bodiceFC", name:{en:"Bodice Front Center",ar:"مقدمة الصدرية الوسطى"}, desc:{en:"Center front panel.",ar:"لوحة المقدمة الوسطى."}, ...b.meta.frontCenter, outline:b.frontCenter, grain:[[2,8],[2,b.hemY-3]] },
+        { key:"bodiceFC", name:{en:"Bodice Front Center",ar:"مقدمة الصدرية الوسطى"}, desc:{en:"Center front panel with clean sleeveless scoop neckline.",ar:"لوحة المقدمة الوسطى بفتحة رقبة دائرية نظيفة بلا أكمام."}, ...b.meta.frontCenter, outline:b.frontCenter, grain:[[2,8],[2,b.hemY-3]] },
         { key:"bodiceFS", name:{en:"Bodice Front Side",ar:"جانب الصدرية الأمامي"}, desc:{en:"Curved side panel.",ar:"لوحة جانبية منحنية."}, ...b.meta.frontSide, outline:b.frontSide, grain:[[3,8],[3,b.hemY-3]] },
         { key:"bodiceBC", name:{en:"Bodice Back Center",ar:"خلفية الصدرية الوسطى"}, desc:{en:"Center back panel.",ar:"لوحة الخلفية الوسطى."}, ...b.meta.backCenter, outline:b.backCenter, grain:[[2,8],[2,b.hemY-3]] },
         { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel.",ar:"لوحة جانبية خلفية منحنية."}, ...b.meta.backSide, outline:b.backSide, grain:[[3,8],[3,b.hemY-3]] },
-        { key:"tier1", name:{en:"Skirt Tier 1",ar:"طبقة التنورة الأولى"}, desc:{en:"Top tier.",ar:"الطبقة العلوية."}, role:"tier", outline:tierPc(widths[0], widths[1], tierLen), grain:[[4,3],[4,tierLen-4]] },
-        { key:"tier2", name:{en:"Skirt Tier 2",ar:"طبقة التنورة الثانية"}, desc:{en:"Second tier.",ar:"الطبقة الثانية."}, role:"tier", outline:tierPc(widths[1], widths[2], tierLen), grain:[[4,3],[4,tierLen-4]] },
-        { key:"tier3", name:{en:"Skirt Tier 3",ar:"طبقة التنورة الثالثة"}, desc:{en:"Third tier.",ar:"الطبقة الثالثة."}, role:"tier", outline:tierPc(widths[2], widths[3], tierLen), grain:[[4,3],[4,tierLen-4]] },
-        { key:"tier4", name:{en:"Skirt Tier 4",ar:"طبقة التنورة الرابعة"}, desc:{en:"Hem tier.",ar:"طبقة الحاشية."}, role:"tier", outline:tierPc(widths[3], widths[3]*1.2, tierLen), grain:[[4,3],[4,tierLen-4]] },
-        { key:"sleeve", name:{en:"Puff Sleeve",ar:"كم منتفخ"}, desc:{en:"Short puffed sleeve.",ar:"كم قصير منتفخ."}, role:"puff-sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.28, 1.15), grain:[[q(m.bicep)*0.5,3],[q(m.bicep)*0.5,m.sleeve*0.22]] },
-        { key:"sash", name:{en:"Waist Sash",ar:"حزام الخصر"}, desc:{en:"Bow sash at the waist seam.",ar:"حزام بفيونكة عند خط الخصر."}, role:"sash", outline:sashPc(waistW*0.4, 36), grain:[[6,1.5],[22,1.5]] },
+        { key:"tier1", name:{en:"Skirt Tier 1 (Top Ruffle)",ar:"طبقة التنورة الأولى (الكشكش العلوي)"}, desc:{en:"Upper cascading ruffle gathered at the waist.",ar:"كشكش علوي متدرج مجمّع عند الخصر."}, role:"tier", outline:tierPc(widths[0], widths[1], tierLen), grain:[[4,3],[4,tierLen-4]] },
+        { key:"tier2", name:{en:"Skirt Tier 2",ar:"طبقة التنورة الثانية"}, desc:{en:"Second cascading ruffle tier.",ar:"طبقة كشكش متدرجة ثانية."}, role:"tier", outline:tierPc(widths[1], widths[2], tierLen), grain:[[4,3],[4,tierLen-4]] },
+        { key:"tier3", name:{en:"Skirt Tier 3",ar:"طبقة التنورة الثالثة"}, desc:{en:"Third cascading ruffle tier.",ar:"طبقة كشكش متدرجة ثالثة."}, role:"tier", outline:tierPc(widths[2], widths[3], tierLen), grain:[[4,3],[4,tierLen-4]] },
+        { key:"tier4", name:{en:"Skirt Tier 4 (Hem Flounce)",ar:"طبقة التنورة الرابعة (كشكش الحاشية)"}, desc:{en:"Wide hem flounce completing the 4-tier silhouette.",ar:"كشكش حاشية واسع يكمل قوام الطبقات الأربع."}, role:"tier", outline:tierPc(widths[3], widths[3]*1.2, tierLen), grain:[[4,3],[4,tierLen-4]] },
+        { key:"sleeve", name:{en:"Armhole Finish / Cap Sleeve",ar:"تشطيب الإبط / كم كاب"}, desc:{en:"Clean armhole facing or optional flutter cap sleeve.",ar:"بطانة فتحة إبط نظيفة أو كم كاب متموج اختياري."}, role:"cap-sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.28, 1.15), grain:[[q(m.bicep)*0.5,3],[q(m.bicep)*0.5,m.sleeve*0.22]] },
+        { key:"sash", name:{en:"Waist Bow Sash",ar:"حزام خصر بفيونكة"}, desc:{en:"Satin waist sash tying at the front center with a structured bow.",ar:"حزام خصر ستان يُربط في منتصف الأمام بفيونكة مهيكلة."}, role:"sash", outline:sashPc(waistW*0.4, 36), grain:[[6,1.5],[22,1.5]] },
       ];
     });
 
   def("gf05", "girls", "Velvet-Collar Structured Coat Dress", "فستان معطف بياقة مخملية",
     "Coat", "فستان معطف", "coat",
-    "A structured coat-dress with a velvet collar and a flared peplum hem.",
-    "فستان معطف مهيكل بياقة مخملية وحاشية بيبلوم متسعة.",
+    "A classic navy tailored wool coat dress featuring a contrast black velvet Peter Pan collar, double-breasted button front, structured long sleeves with velvet cuffs, and a flared peplum skirt.",
+    "فستان معطف كلاسيكي مفصّل من الصوف الكحلي بياقة بيتر بان مخملية سوداء متباينة وصفين من الأزرار وأكمام مهيكلة بأساور مخملية وتنورة بيبلوم واسعة.",
     (m) => {
       const len = m.backLen*1.4;
       const qc = q(m.chest), qw = q(m.waist);
       return [
-        { key:"frontL", name:{en:"Front Left",ar:"المقدمة اليسرى"}, desc:{en:"Left front closure panel.",ar:"لوحة إغلاق يسرى."}, role:"front-panel", outline:wrapPanel(qc, qw, len, "L"), grain:[[3,8],[3,len*0.6]] },
-        { key:"frontR", name:{en:"Front Right",ar:"المقدمة اليمنى"}, desc:{en:"Right front underlapping panel.",ar:"لوحة يمنى تحت الإغلاق."}, role:"front-panel", outline:wrapPanel(qc, qw, len, "R"), grain:[[-3,8],[-3,len*0.6]] },
+        { key:"frontL", name:{en:"Front Left Panel",ar:"لوحة المقدمة اليسرى"}, desc:{en:"Double-breasted left front with button placement.",ar:"مقدمة يسرى بصفين من الأزرار ومواضع تثبيتها."}, role:"front-panel", outline:wrapPanel(qc, qw, len, "L"), grain:[[3,8],[3,len*0.6]] },
+        { key:"frontR", name:{en:"Front Right Panel",ar:"لوحة المقدمة اليمنى"}, desc:{en:"Underlapping right front closure panel.",ar:"لوحة مقدمة يمنى تحت إغلاق الأزرار."}, role:"front-panel", outline:wrapPanel(qc, qw, len, "R"), grain:[[-3,8],[-3,len*0.6]] },
         { key:"back", name:{en:"Back Panel",ar:"لوحة الظهر"}, desc:{en:"Curved back panel.",ar:"لوحة ظهر منحنية."}, role:"back-panel", cutOnFold:true, outline:wrapCoatBack(qc, qw, len, qc*1.0), grain:[[3,8],[3,len*0.6]] },
-        { key:"sleeve", name:{en:"Sleeve",ar:"الكم"}, desc:{en:"Curved-cap sleeve.",ar:"كم برأس منحنٍ."}, role:"sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.85), grain:[[q(m.bicep)*0.5,4],[q(m.bicep)*0.5,m.sleeve*0.7]] },
-        { key:"collar", name:{en:"Velvet Collar",ar:"ياقة مخملية"}, desc:{en:"Contrast velvet collar piece.",ar:"قطعة ياقة مخملية متباينة."}, role:"collar", outline:shawlCollar(m.neck, 12), grain:[[3,3],[3,9]] },
-        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum at the front waist.",ar:"بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", cutOnFold:true, outline:peplumPc(qw*0.5, 16), grain:[[5,3],[5,11]] },
-        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum at the back waist.",ar:"بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", cutOnFold:true, outline:peplumPc(qw*0.5, 16), grain:[[5,3],[5,10]] },
+        { key:"sleeve", name:{en:"Tailored Sleeve",ar:"كم مفصّل"}, desc:{en:"Structured long sleeve with slight puff shoulder.",ar:"كم طويل مهيكل بكسرة خفيفة عند رأس الكتف."}, role:"sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.85), grain:[[q(m.bicep)*0.5,4],[q(m.bicep)*0.5,m.sleeve*0.7]] },
+        { key:"collar", name:{en:"Contrast Velvet Collar",ar:"ياقة مخملية متباينة"}, desc:{en:"Rounded Peter Pan collar cut in contrast plush velvet.",ar:"ياقة بيتر بان مستديرة مقصوصة من مخمل وثير متباين."}, role:"collar", outline:shawlCollar(m.neck, 12), grain:[[3,3],[3,9]] },
+        { key:"peplumF", name:{en:"Flared Skirt Front",ar:"مقدمة التنورة المتسعة"}, desc:{en:"Flared coat-dress skirt panel with graceful swing.",ar:"لوحة تنورة فستان المعطف المتسعة مع انسيابية أنيقة."}, role:"peplum-front", cutOnFold:true, outline:peplumPc(qw*0.5, 16), grain:[[5,3],[5,11]] },
+        { key:"peplumB", name:{en:"Flared Skirt Back",ar:"خلفية التنورة المتسعة"}, desc:{en:"Structured flared back skirt panel.",ar:"لوحة تنورة خلفية متسعة ومهيكلة."}, role:"peplum-back", cutOnFold:true, outline:peplumPc(qw*0.5, 16), grain:[[5,3],[5,10]] },
         { key:"pocket", name:{en:"Patch Pocket",ar:"جيب ملصق"}, desc:{en:"Curved patch pocket.",ar:"جيب ملصق منحني."}, role:"pocket", outline:pocketPc(9,3.5), grain:[[4,1],[4,2.5]] },
       ];
     });
 
   def("gf06", "girls", "Godet-Flare Gala Dress", "فستان سهرة بمروحات متسعة",
     "Gown", "فستان سهرة", "gown",
-    "A gala dress with a princess-seam bodice and flare godets inserted at the hem.",
-    "فستان سهرة بصدرية بقصات أميرة ومروحات اتساع عند الحاشية.",
+    "A royal blue and gold embroidered gala gown featuring a scoop-neck embroidered bodice, decorative waist sash, and a wide-sweeping flared skirt with dramatic godet inserts.",
+    "فستان سهرة فاخر باللون الأزرق الملكي والتطريز الذهبي بصدرية مطرزة بفتحة رقبة دائرية وحزام خصر زخرفي وتنورة واسعة منسدلة بمروحات اتساع درامية.",
     (m) => {
       const b = princessBodice(m, { neckline:"offshoulder", hipY:m.backLen*0.9+4, hemY:m.backLen*0.9+6 });
       const waistW = q(m.waist), hemLen = m.height*0.58 - b.hemY;
       return [
-        { key:"bodiceFC", name:{en:"Bodice Front Center",ar:"مقدمة الصدرية الوسطى"}, desc:{en:"Center front panel.",ar:"لوحة المقدمة الوسطى."}, ...b.meta.frontCenter, outline:b.frontCenter, grain:[[2,8],[2,b.hemY-3]] },
+        { key:"bodiceFC", name:{en:"Embroidered Bodice Center",ar:"وسط الصدرية المطرز"}, desc:{en:"Center front bodice panel featuring gold metallic embroidery.",ar:"لوحة الصدرية الأمامية الوسطى بتطريز ذهبي معدني فاخر."}, ...b.meta.frontCenter, outline:b.frontCenter, grain:[[2,8],[2,b.hemY-3]] },
         { key:"bodiceFS", name:{en:"Bodice Front Side",ar:"جانب الصدرية الأمامي"}, desc:{en:"Curved side panel.",ar:"لوحة جانبية منحنية."}, ...b.meta.frontSide, outline:b.frontSide, grain:[[3,8],[3,b.hemY-3]] },
         { key:"bodiceBC", name:{en:"Bodice Back Center",ar:"خلفية الصدرية الوسطى"}, desc:{en:"Center back panel.",ar:"لوحة الخلفية الوسطى."}, ...b.meta.backCenter, outline:b.backCenter, grain:[[2,8],[2,b.hemY-3]] },
         { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel.",ar:"لوحة جانبية خلفية منحنية."}, ...b.meta.backSide, outline:b.backSide, grain:[[3,8],[3,b.hemY-3]] },
         { key:"skirtF", name:{en:"Skirt Front",ar:"مقدمة التنورة"}, desc:{en:"Front skirt panel.",ar:"لوحة التنورة الأمامية."}, role:"skirt-front-gore", outline:gorePanel(waistW*0.55, waistW*0.65, hemLen, 2), grain:[[3,8],[3,hemLen-8]] },
         { key:"skirtB", name:{en:"Skirt Back",ar:"خلفية التنورة"}, desc:{en:"Back skirt panel.",ar:"لوحة التنورة الخلفية."}, role:"skirt-back-gore", outline:gorePanel(waistW*0.55, waistW*0.65, hemLen, 2), grain:[[3,8],[3,hemLen-8]] },
-        { key:"godetL", name:{en:"Flare Godet Left",ar:"مروحة اتساع يسرى"}, desc:{en:"Triangular flare insert at the side hem.",ar:"إدراج مروحي مثلث عند الحاشية الجانبية."}, role:"godet", outline:godetPc(q(m.hips)*0.25, hemLen*0.55), grain:[[3,5],[3,hemLen*0.35]] },
-        { key:"godetR", name:{en:"Flare Godet Right",ar:"مروحة اتساع يمنى"}, desc:{en:"Triangular flare insert at the side hem.",ar:"إدراج مروحي مثلث عند الحاشية الجانبية."}, role:"godet", outline:godetPc(q(m.hips)*0.25, hemLen*0.55), grain:[[3,5],[3,hemLen*0.35]] },
-        { key:"sash", name:{en:"Waist Sash",ar:"حزام الخصر"}, desc:{en:"Tie sash at the waist.",ar:"حزام يُربط عند الخصر."}, role:"sash", outline:sashPc(waistW*0.4, 36), grain:[[6,1.5],[22,1.5]] },
+        { key:"godetL", name:{en:"Embroidered Godet Left",ar:"مروحة اتساع يسرى مطرزة"}, desc:{en:"Dramatic flare insert with embroidered border creating 360-degree sweep.",ar:"إدراج مروحي درامي بحافة مطرزة يمنح اتساع دوران 360 درجة."}, role:"godet", outline:godetPc(q(m.hips)*0.25, hemLen*0.55), grain:[[3,5],[3,hemLen*0.35]] },
+        { key:"godetR", name:{en:"Embroidered Godet Right",ar:"مروحة اتساع يمنى مطرزة"}, desc:{en:"Dramatic flare insert with embroidered border creating 360-degree sweep.",ar:"إدراج مروحي درامي بحافة مطرزة يمنح اتساع دوران 360 درجة."}, role:"godet", outline:godetPc(q(m.hips)*0.25, hemLen*0.55), grain:[[3,5],[3,hemLen*0.35]] },
+        { key:"sash", name:{en:"Embroidered Waist Band",ar:"شريط خصر مطرز"}, desc:{en:"Gold-trimmed fitted waistband panel accentuating the waistline.",ar:"لوحة حزام خصر مهيكلة ومطرزة بالذهب تبرز خط الخصر."}, role:"sash", outline:sashPc(waistW*0.4, 36), grain:[[6,1.5],[22,1.5]] },
       ];
     });
 
@@ -1654,30 +1654,30 @@ export let FancyGen;
 
   def("bf01", "boys", "Kids Tuxedo Blazer", "بليزر سموكينغ للأطفال",
     "Jacket", "جاكيت", "jacket",
-    "A miniature tuxedo blazer with a curved shawl collar and a lined back.",
-    "بليزر سموكينغ مصغّر بياقة شال منحنية وظهر مبطّن.",
+    "A classic boys' formal black tuxedo jacket featuring a satin shawl lapel, single-button closure, satin jetted pockets, decorative sleeve cuff trims, and full interior lining.",
+    "جاكيت سموكينغ رسمي كلاسيكي للأطفال باللون الأسود بياقة شال ستان وزر إغلاق واحد وجيوب مطوية من الستان وأشرطة أساور زخرفية وبطانة داخلية كاملة.",
     (m) => {
       const len = m.backLen*1.4;
       const jb = jacketFrontBack(m, len, { hemFlareF:1.0 });
       const neckArc = jb.frontNeckLen + jb.backNeckLen;
       const sl = sleeve2pc(m.bicep, m.sleeve);
       return [
-        { key:"front", name:{en:"Jacket Front",ar:"مقدمة الجاكيت"}, desc:{en:"Tailored blazer front.",ar:"مقدمة بليزر مفصّلة."}, role:"front-panel", outline:jb.front, grain:[[3,8],[3,len*0.6]] },
+        { key:"front", name:{en:"Jacket Front",ar:"مقدمة الجاكيت"}, desc:{en:"Tailored tuxedo blazer front with single-button closure.",ar:"مقدمة بليزر سموكينغ مفصّلة بزر إغلاق واحد."}, role:"front-panel", outline:jb.front, grain:[[3,8],[3,len*0.6]] },
         { key:"back", name:{en:"Jacket Back",ar:"خلفية الجاكيت"}, desc:{en:"Tailored blazer back.",ar:"خلفية بليزر مفصّلة."}, role:"back-panel", cutOnFold:true, outline:jb.back, grain:[[3,8],[3,len*0.6]] },
         { key:"sleeveU", name:{en:"Sleeve Upper",ar:"الكم العلوي"}, desc:{en:"Outer sleeve panel.",ar:"اللوحة الخارجية للكم."}, role:"sleeve-upper", bilateral:true, outline:sl.upper, grain:[[q(m.bicep)*0.5,3],[q(m.bicep)*0.5,m.sleeve*0.5]] },
         { key:"sleeveD", name:{en:"Sleeve Under",ar:"الكم السفلي"}, desc:{en:"Inner sleeve panel.",ar:"اللوحة الداخلية للكم."}, role:"sleeve-under", bilateral:true, outline:sl.under, grain:[[q(m.bicep)*0.3,3],[q(m.bicep)*0.3,m.sleeve*0.5]] },
-        { key:"collar", name:{en:"Shawl Collar",ar:"ياقة شال"}, desc:{en:"Curved shawl collar.",ar:"ياقة شال منحنية."}, role:"collar", outline:shawlCollar(neckArc, 15), grain:[[3,3],[3,11]] },
-        { key:"facing", name:{en:"Front Facing",ar:"بطانة المقدمة"}, desc:{en:"Curved lapel facing.",ar:"بطانة صدر منحنية."}, role:"lapel-facing", outline:lapelFacing(neckArc, len*0.5), grain:[[3,3],[3,len*0.3]] },
-        { key:"pocket", name:{en:"Welt Pocket",ar:"جيب مطوي"}, desc:{en:"Curved welt pocket.",ar:"جيب مطوي منحنٍ."}, role:"pocket", outline:pocketPc(8,3), grain:[[4,1],[4,2]] },
-        { key:"cuff", name:{en:"Sleeve Cuff Detail",ar:"تفصيلة أسورة الكم"}, desc:{en:"Decorative cuff band at the sleeve hem.",ar:"شريط أسورة زخرفي عند نهاية الكم."}, role:"cuff", outline:cuffPc(q(m.bicep)*0.7), grain:[[3,1],[3,4]] },
+        { key:"collar", name:{en:"Satin Shawl Collar",ar:"ياقة شال ستان"}, desc:{en:"Gracefully curved satin shawl collar.",ar:"ياقة شال من الستان بانحناءة أنيقة."}, role:"collar", outline:shawlCollar(neckArc, 15), grain:[[3,3],[3,11]] },
+        { key:"facing", name:{en:"Shawl Lapel Facing",ar:"بطانة صدر ياقة الشال"}, desc:{en:"Satin lapel facing for the rolled collar line.",ar:"بطانة صدر ستان لخط الالتفاف الخاص بالياقة."}, role:"lapel-facing", outline:lapelFacing(neckArc, len*0.5), grain:[[3,3],[3,len*0.3]] },
+        { key:"pocket", name:{en:"Satin Jetted Pocket",ar:"جيب ستان مطوي"}, desc:{en:"Formal satin welt jetted pocket at the hip.",ar:"جيب سموكينغ مطوي بحافة ستان عند الورك."}, role:"pocket", outline:pocketPc(8,3), grain:[[4,1],[4,2]] },
+        { key:"cuff", name:{en:"Satin Cuff Trim",ar:"شريط أسورة ستان"}, desc:{en:"Decorative satin trim band for the sleeve cuff.",ar:"شريط ستان زخرفي لأساور الأكمام."}, role:"cuff", outline:cuffPc(q(m.bicep)*0.7), grain:[[3,1],[3,4]] },
         { key:"backLining", name:{en:"Back Lining",ar:"بطانة الظهر"}, desc:{en:"Full back body lining.",ar:"بطانة كاملة للظهر."}, role:"lining", outline:jb.back, grain:[[3,8],[3,len*0.6]] },
       ];
     });
 
   def("bf02", "boys", "Structured Bomber Jacket (Kids)", "جاكيت بومبر مهيكل للأطفال",
     "Jacket", "جاكيت", "jacket",
-    "A kids' bomber jacket with ribbed collar, cuffs and waistband.",
-    "جاكيت بومبر للأطفال بياقة وأساور وحزام خصر من الريب.",
+    "A classic boys' varsity bomber jacket in navy wool with contrast cream sleeves, striped ribbed baseball collar, snap-button placket, contrast welt pockets, and striped rib trim.",
+    "جاكيت بومبر كلاسيكي للأولاد من الصوف الكحلي بأكمام بيضاء متباينة وياقة بيسبول ريب مخططة وفتحة أزرار كبس وجيوب مطوية متباينة وأساور وحاشية من الريب المخطط.",
     (m) => {
       const len = m.backLen*1.05;
       const jb = jacketFrontBack(m, len, { hemFlareF:0.95, closureX:q(m.chest)*0.08 });
@@ -1685,15 +1685,15 @@ export let FancyGen;
       const sl = sleeve2pc(m.bicep, m.sleeve-3);
       const cs = collarStand(neckArc);
       return [
-        { key:"front", name:{en:"Jacket Front",ar:"مقدمة الجاكيت"}, desc:{en:"Front panel with a zip closure edge.",ar:"مقدمة بحافة إغلاق سحاب."}, role:"front-panel", outline:jb.front, grain:[[3,7],[3,len*0.6]] },
+        { key:"front", name:{en:"Jacket Front",ar:"مقدمة الجاكيت"}, desc:{en:"Wool bomber body front with snap placket edge.",ar:"مقدمة جسم البومبر الصوفية مع حافة فتحة أزرار الكبس."}, role:"front-panel", outline:jb.front, grain:[[3,7],[3,len*0.6]] },
         { key:"back", name:{en:"Jacket Back",ar:"خلفية الجاكيت"}, desc:{en:"Back panel gathered to the waistband.",ar:"لوحة خلفية مجمّعة عند حزام الخصر."}, role:"back-panel", cutOnFold:true, outline:jb.back, grain:[[3,7],[3,len*0.6]] },
         { key:"sleeveU", name:{en:"Sleeve Upper",ar:"الكم العلوي"}, desc:{en:"Outer sleeve panel.",ar:"اللوحة الخارجية للكم."}, role:"sleeve-upper", bilateral:true, outline:sl.upper, grain:[[q(m.bicep)*0.5,3],[q(m.bicep)*0.5,m.sleeve*0.4]] },
         { key:"sleeveD", name:{en:"Sleeve Under",ar:"الكم السفلي"}, desc:{en:"Inner sleeve panel.",ar:"اللوحة الداخلية للكم."}, role:"sleeve-under", bilateral:true, outline:sl.under, grain:[[q(m.bicep)*0.3,3],[q(m.bicep)*0.3,m.sleeve*0.4]] },
-        { key:"collarBand", name:{en:"Rib Collar Band",ar:"شريط ياقة ريب"}, desc:{en:"Stretch ribbed collar band.",ar:"شريط ياقة مطاطي من الريب."}, role:"collar-band", outline:cs.stand, grain:[[3,1],[m.neck/2,1]] },
-        { key:"cuff", name:{en:"Rib Cuff",ar:"أسورة ريب"}, desc:{en:"Ribbed cuff at the sleeve hem.",ar:"أسورة ريب عند نهاية الكم."}, role:"rib-cuff", outline:cuffPc(q(m.bicep)*0.8), grain:[[3,1],[3,4]] },
-        { key:"waistband", name:{en:"Rib Waistband",ar:"حزام خصر ريب"}, desc:{en:"Ribbed waistband cinching the hem.",ar:"حزام خصر من الريب يجمع الحاشية."}, role:"waistband", outline:waistbandPc(q(m.waist)*0.9, 7), grain:[[6,2],[6,5]] },
-        { key:"placket", name:{en:"Zip Placket Facing",ar:"بطانة فتحة السحاب"}, desc:{en:"Facing strip behind the zip.",ar:"شريط بطانة خلف السحاب."}, role:"placket-facing", outline:lapelFacing(neckArc*0.5, len*0.4), grain:[[2,3],[2,len*0.25]] },
-        { key:"pocket", name:{en:"Chest Pocket",ar:"جيب الصدر"}, desc:{en:"Zippered chest pocket panel.",ar:"لوحة جيب صدر بسحاب."}, role:"pocket", outline:pocketPc(9,3.5), grain:[[4,1],[4,2.5]] },
+        { key:"collarBand", name:{en:"Striped Rib Baseball Collar",ar:"ياقة بيسبول ريب مخططة"}, desc:{en:"Stretch striped ribbed knit baseball collar band.",ar:"شريط ياقة بيسبول منسوج من الريب المخطط والمطاطي."}, role:"collar-band", outline:cs.stand, grain:[[3,1],[m.neck/2,1]] },
+        { key:"cuff", name:{en:"Striped Rib Cuff",ar:"أسورة ريب مخططة"}, desc:{en:"Striped rib-knit cuff gathering the sleeve hem.",ar:"أسورة من الريب المحبوك المخطط تجمع نهاية الكم."}, role:"rib-cuff", outline:cuffPc(q(m.bicep)*0.8), grain:[[3,1],[3,4]] },
+        { key:"waistband", name:{en:"Striped Rib Waistband",ar:"حزام خصر ريب مخطط"}, desc:{en:"Striped rib-knit waistband cinching the lower hem.",ar:"حزام خصر من الريب المحبوك المخطط يجمع الحاشية السفلية."}, role:"waistband", outline:waistbandPc(q(m.waist)*0.9, 7), grain:[[6,2],[6,5]] },
+        { key:"placket", name:{en:"Snap Placket Facing",ar:"بطانة فتحة أزرار الكبس"}, desc:{en:"Reinforced facing behind the snap-button closure.",ar:"بطانة مقواة خلف أزرار الكبس."}, role:"placket-facing", outline:lapelFacing(neckArc*0.5, len*0.4), grain:[[2,3],[2,len*0.25]] },
+        { key:"pocket", name:{en:"Contrast Welt Pocket",ar:"جيب مطوي متباين"}, desc:{en:"Angled slash welt pocket in contrast sleeve fabric.",ar:"جيب مائل مطوي بقماش الأكمام المتباين."}, role:"pocket", outline:pocketPc(9,3.5), grain:[[4,1],[4,2.5]] },
       ];
     });
 
