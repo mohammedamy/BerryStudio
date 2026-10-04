@@ -33,7 +33,7 @@ async function dismissOnboarding(page) {
 
 async function waitFor3D(page) {
   try {
-    await expect.poll(() => page.evaluate(() => window.View3D.isReady()), { timeout: 15000 }).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.View3D?.isReady?.() ?? false), { timeout: 15000 }).toBe(true);
   } catch(error) {
     throw new Error(`${error.message}\n3D startup diagnostics: ${(startupErrors.get(page) || []).join('\n') || '(none)'}`);
   }
