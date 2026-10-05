@@ -231,28 +231,28 @@ import { q, PATTERNS, LIBRARY } from './data.js';
       // not 0°" symptom WP-57 already fixed on the bra Center Bridge
       // piece, same fix: proportional to the piece's own length instead
       // of a fixed cm margin.
-      { key: "front", name: { en: "Front Panel", ar: "القطعة الأمامية" },
-        desc: { en: "Front panel with a curved waist edge and a curved leg opening.", ar: "قطعة أمامية بحافة خصر منحنية وفتحة ساق منحنية." },
+      { key: "front", name: opts.frontName || { en: "Front Panel", ar: "القطعة الأمامية" },
+        desc: opts.frontDesc || { en: "Front panel with a curved waist edge and a curved leg opening.", ar: "قطعة أمامية بحافة خصر منحنية وفتحة ساق منحنية." },
         outline: front, role: "brief-front", cutOnFold: true, edges: front.edges, sideEndIdx: front.sideEndIdx, notches: front.notches,
         grain: [[qw * 0.15, frontLen * 0.2], [qw * 0.15, frontLen * 0.85]] },
-      { key: "back", name: { en: "Back Panel", ar: "القطعة الخلفية" },
-        desc: { en: "Back panel, cut higher at the waist and deeper at the crotch than the front for real seat coverage.", ar: "قطعة خلفية أعلى عند الخصر وأعمق عند خط الجسم من الأمامية لتغطية حقيقية للمقعد." },
+      { key: "back", name: opts.backName || { en: "Back Panel", ar: "القطعة الخلفية" },
+        desc: opts.backDesc || { en: "Back panel, cut higher at the waist and deeper at the crotch than the front for real seat coverage.", ar: "قطعة خلفية أعلى عند الخصر وأعمق عند خط الجسم من الأمامية لتغطية حقيقية للمقعد." },
         outline: back, role: "brief-back", cutOnFold: true, edges: back.edges, sideEndIdx: back.sideEndIdx, notches: back.notches,
         grain: [[qw * 0.15, backLen * 0.2], [qw * 0.15, backLen * 0.85]] },
-      { key: "gusset", name: { en: "Crotch Gusset", ar: "دكة الجسم" },
-        desc: { en: "Curved cotton-lining gusset seamed into the crotch, cut on the fold.", ar: "دكة قطنية منحنية تُخاط عند خط الجسم، تُقص على الطية." },
+      { key: "gusset", name: opts.gussetName || { en: "Crotch Gusset", ar: "دكة الجسم" },
+        desc: opts.gussetDesc || { en: "Curved cotton-lining gusset seamed into the crotch, cut on the fold.", ar: "دكة قطنية منحنية تُخاط عند خط الجسم، تُقص على الطية." },
         outline: gussetOval(gW, gH), role: "gusset", cutOnFold: true,
         grain: [[gW / 4, 2], [gW / 4, gH - 2]] },
-      { key: "gussetLining", name: { en: "Gusset Lining", ar: "بطانة الدكة" },
-        desc: { en: "Second gusset layer for opacity and comfort, cut on the fold.", ar: "طبقة ثانية للدكة لمزيد من التغطية والراحة، تُقص على الطية." },
+      { key: "gussetLining", name: opts.gussetLiningName || { en: "Gusset Lining", ar: "بطانة الدكة" },
+        desc: opts.gussetLiningDesc || { en: "Second gusset layer for opacity and comfort, cut on the fold.", ar: "طبقة ثانية للدكة لمزيد من التغطية والراحة، تُقص على الطية." },
         outline: gussetOval(gW, gH), role: "lining", cutOnFold: true,
         grain: [[gW / 4, 2], [gW / 4, gH - 2]] },
-      { key: "waistElastic", name: { en: "Waist Elastic", ar: "أستك الخصر" },
-        desc: { en: "Soft knit elastic stitched to the waist edge.", ar: "أستك ناعم يُخاط على حافة الخصر." },
+      { key: "waistElastic", name: opts.waistElasticName || { en: "Waist Elastic", ar: "أستك الخصر" },
+        desc: opts.waistElasticDesc || { en: "Soft knit elastic stitched to the waist edge.", ar: "أستك ناعم يُخاط على حافة الخصر." },
         outline: elasticStrip(waistCirc), role: "elastic-band",
         grain: [[waistCirc / 2, 0.6], [waistCirc / 2, 1.6]] },
-      { key: "legElastic", name: { en: "Leg Elastic", ar: "أستك فتحة الساق" },
-        desc: { en: "Soft knit elastic stitched to each leg opening.", ar: "أستك ناعم يُخاط على كل فتحة ساق." },
+      { key: "legElastic", name: opts.legElasticName || { en: "Leg Elastic", ar: "أستك فتحة الساق" },
+        desc: opts.legElasticDesc || { en: "Soft knit elastic stitched to each leg opening.", ar: "أستك ناعم يُخاط على كل فتحة ساق." },
         outline: elasticStrip(legCirc, 1.6), role: "elastic-band", bilateral: true,
         grain: [[legCirc / 2, 0.4], [legCirc / 2, 1.2]] },
     ];
@@ -410,24 +410,77 @@ import { q, PATTERNS, LIBRARY } from './data.js';
   const BRA_TAG = { en: "Bra", ar: "حمالة صدر" };
 
   // ================= WOMEN'S BRIEFS (6) =================
-  def("wu01", "women", "Classic Brief", "سروال داخلي كلاسيكي", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Mid-rise brief with full coverage and a curved leg opening.", "سروال داخلي متوسط الارتفاع بتغطية كاملة وفتحة ساق منحنية.",
-    (m) => briefPieces(m, { rise: "mid", legCut: "full", coverage: 1.0 }));
-  def("wu02", "women", "High-Waist Brief", "سروال داخلي عالي الخصر", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "High-rise brief that sits above the natural waist, full coverage.", "سروال داخلي عالي يجلس فوق الخصر الطبيعي بتغطية كاملة.",
-    (m) => briefPieces(m, { rise: "high", legCut: "full", coverage: 1.0 }));
-  def("wu03", "women", "Bikini-Cut Brief", "سروال داخلي قصة بيكيني", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Low-rise brief with a bikini-cut leg opening, curved in at the hip.", "سروال داخلي منخفض بفتحة ساق بقصة بيكيني منحنية عند الورك.",
-    (m) => briefPieces(m, { rise: "low", legCut: "bikini", coverage: 0.95 }));
-  def("wu04", "women", "Hipster Brief", "سروال داخلي هيبستر", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Low-rise brief that sits on the hips with a moderate leg cut.", "سروال داخلي منخفض يجلس على الورك بفتحة ساق معتدلة.",
-    (m) => briefPieces(m, { rise: "low", legCut: "hipster", coverage: 1.0 }));
-  def("wu05", "women", "Boyshort Brief", "سروال داخلي بويشورت", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Mid-rise brief with a squared, longer leg line for extra coverage.", "سروال داخلي متوسط الارتفاع بخط ساق مربّع وأطول لتغطية إضافية.",
-    (m) => briefPieces(m, { rise: "mid", legCut: "boyshort", coverage: 1.1 }));
-  def("wu06", "women", "Full-Coverage Brief", "سروال داخلي بتغطية كاملة", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "High-rise brief with maximum hip and seat coverage.", "سروال داخلي عالي الخصر بأقصى تغطية للورك والمقعد.",
-    (m) => briefPieces(m, { rise: "high", legCut: "full", coverage: 1.15 }));
+  def("wu01", "women", "Classic Black Picot-Trim Cotton Brief", "سروال داخلي كلاسيكي أسود بكنار دانتيل بيكو", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Everyday mid-rise women's brief in breathable black cotton jersey, featuring a flat plush waistband, delicate scalloped picot lace trim along the leg openings, and full seat coverage.",
+    "سروال داخلي نسائي متوسط الارتفاع من قطن الجيرسيه الأسود عالي التهوية، بحزام خصر مسطح ناعم، وكنار دانتيل بيكو مقوس على فتحات الساق، وتغطية كاملة للمقعد.",
+    (m) => briefPieces(m, {
+      rise: "mid", legCut: "full", coverage: 1.0,
+      frontDesc: { en: "Black cotton jersey front panel with gentle curved waist and picot lace leg opening.", ar: "لوحة أمامية من قطن الجيرسيه الأسود بخصر مقوس ناعم وفتحة ساق مزينة بالبيكو." },
+      backDesc: { en: "Full-coverage black jersey back panel offering complete seat comfort.", ar: "لوحة خلفية من الجيرسيه الأسود بتغطية كاملة للمقعد لأقصى درجات الراحة." },
+      gussetDesc: { en: "Soft 100% cotton double-layer crotch gusset for all-day breathability.", ar: "دكة قطنية نقية 100% مزدوجة الطبقة لراحة وتهوية طوال اليوم." },
+      waistElasticDesc: { en: "Flat plush-back elastic waistband providing non-chafing hold.", ar: "حزام خصر مطاطي مسطح مبطن بالنعومة يمنع الاحتكاك ويثبت براحة." },
+      legElasticDesc: { en: "Delicate scalloped picot elastic trim edging each leg opening.", ar: "كنار مطاطي من دانتيل البيكو المقوس يشطب حواف كل فتحة ساق بأناقة." },
+    }));
+
+  def("wu02", "women", "Seamless Nude High-Waist Smoothing Brief", "سروال داخلي عالي الخصر ناعم بلون نيود وبدون خياطة ظاهرة", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "High-rise women's brief in ultra-soft blush nude microfiber offering light tummy smoothing, a bonded comfort waistband, laser-cut leg openings, and full seat coverage.",
+    "سروال داخلي نسائي عالي الخصر من المايكروفايبر بلون نيود وردي ناعم، يمنح تجسيماً خفيفاً للبطن مع حزام خصر مدمج مريح، وحواف ساق مقصوصة بالليزر بدون درزات وتغطية كاملة.",
+    (m) => briefPieces(m, {
+      rise: "high", legCut: "full", coverage: 1.0,
+      frontDesc: { en: "Blush nude microfiber high-rise front panel designed for gentle abdominal smoothing.", ar: "لوحة أمامية عالية الخصر من المايكروفايبر النيود مصممة لدعم ونعومة البطن." },
+      backDesc: { en: "Seamless-effect high back panel extending above the natural waist for smooth contours.", ar: "لوحة خلفية عالية تمتد فوق الخصر الطبيعي لتحديد انسيابي للمقعد دون بروز." },
+      gussetDesc: { en: "Bonded breathable cotton gusset seamlessly fused for maximum comfort.", ar: "دكة قطنية مسامية مدمجة حرارياً دون درزات بارزة لراحة قصوى." },
+      waistElasticDesc: { en: "Bonded flat comfort waist band sitting smoothly against the skin without rolling.", ar: "شريط خصر مدمج مسطح يستقر بنعومة على الجلد دون التواء." },
+      legElasticDesc: { en: "Laser-cut clean finish leg edge with invisible interior grip.", ar: "حافة ساق مقصوصة بالليزر بنهاية نظيفة تثبت بنعومة دون درزات." },
+    }));
+
+  def("wu03", "women", "Powder Pink Cotton Bikini Brief", "سروال داخلي بيكيني وردي ناعم من القطن", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Low-rise women's bikini brief in delicate powder pink stretch cotton jersey, featuring slim self-fabric bound elastic waist and leg trims, narrow side hips, and a flattering contoured fit.",
+    "سروال داخلي بيكيني نسائي منخفض الخصر من قطن الجيرسيه الوردي الناعم المرن، بشريط مطاطي مغلف على الخصر وفتحات الساق، وجوانب ورك رفيعة وقصة أنثوية رشيقة.",
+    (m) => briefPieces(m, {
+      rise: "low", legCut: "bikini", coverage: 0.95,
+      frontDesc: { en: "Low-rise powder pink cotton front panel cut with slender hip bridges.", ar: "لوحة أمامية منخفضة من القطن الوردي بقصة بيكيني وجوانب ورك رفيعة." },
+      backDesc: { en: "Flattering bikini back panel with moderate cheeky contour and high-cut leg curve.", ar: "لوحة خلفية بيكيني بقصة رشيقة ومنحنى ساق عالٍ يبرز القوام." },
+      gussetDesc: { en: "Narrow breathable cotton crotch gusset tailored for bikini proportions.", ar: "دكة قطنية مسامية رفيعة ومفصلة بقياسات البيكيني الرشيقة." },
+      waistElasticDesc: { en: "Ultra-slim encased elastic waistband lying flat on the lower hips.", ar: "شريط خصر مطاطي رفيع مغلف بالقماش يستقر مسطحاً على الورك المنخفض." },
+      legElasticDesc: { en: "Narrow bound elastic edging following the curved bikini leg line.", ar: "شريط مطاطي رفيع مغلف يتبع انحناءات فتحة ساق البيكيني بدقة." },
+    }));
+
+  def("wu04", "women", "Sage Green Ribbed Cotton Hipster Brief", "سروال داخلي هيبستر أخضر مريمي من التريكو المضلع", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Low-rise hipster brief tailored from stretchy sage green ribbed cotton, featuring a wide supportive waistband, moderate hip bands, and clean coverstitched leg openings with full rear coverage.",
+    "سروال داخلي هيبستر منخفض الخصر من قطن الريب الأخضر المريمي المطاطي، بحزام خصر عريض وداعم، وجوانب ورك متوسطة وفتحات ساق بدرزات تغطية مزدوجة متينة.",
+    (m) => briefPieces(m, {
+      rise: "low", legCut: "hipster", coverage: 1.0,
+      frontDesc: { en: "Sage green textured ribbed cotton front panel sitting low on the hip bones.", ar: "لوحة أمامية من قطن الريب المضلع الأخضر تستقر على عظام الورك." },
+      backDesc: { en: "Stretchy ribbed back panel offering flexible everyday hip and seat coverage.", ar: "لوحة خلفية مضلعة مرنة توفر تغطية مريحة وعملية للمقعد." },
+      gussetDesc: { en: "Breathable smooth knit cotton gusset preventing ribbed texture contact.", ar: "دكة قطنية ناعمة ومسامية تمنع ملامسة الملمس المضلع للمناطق الحساسة." },
+      waistElasticDesc: { en: "Wide ribbed knit elastic waistband providing secure athletic hold.", ar: "حزام خصر عريض من تريكو الريب المطاطي يمنح ثباتاً محكماً ورياضياً." },
+      legElasticDesc: { en: "Twin-needle coverstitched elastic leg opening ensuring flexible retention.", ar: "فتحة ساق بدرزات تغطية مزدوجة مطاطية تضمن ثباتاً مرناً." },
+    }));
+
+  def("wu05", "women", "Navy Blue Modal Stretch Boyshort Brief", "سروال داخلي بويشورت كحلي من المودال المرن", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Mid-rise women's boyshort brief crafted from buttery-soft deep navy modal jersey, featuring a squared horizontal leg line extending down the upper thigh, flat waistband, and full anti-chafing coverage.",
+    "سروال داخلي بويشورت نسائي متوسط الارتفاع من جيرسيه المودال الكحلي فائق النعومة، بقصة ساق مربعة أفقية تمتد لأعلى الفخذ، وحزام خصر مسطح وتغطية كاملة مانعة للاحتكاك.",
+    (m) => briefPieces(m, {
+      rise: "mid", legCut: "boyshort", coverage: 1.1,
+      frontDesc: { en: "Navy modal jersey front panel with squared horizontal upper-thigh extension.", ar: "لوحة أمامية من جيرسيه المودال الكحلي بامتداد أفقي مربع لأعلى الفخذ." },
+      backDesc: { en: "Full boyshort back panel wrapping completely under the buttocks for anti-chafing comfort.", ar: "لوحة خلفية كاملة للبويشورت تلتف أسفل المقعد بالكامل لمنع الاحتكاك." },
+      gussetDesc: { en: "Extended rectangular modal-lined crotch gusset for superior thigh freedom.", ar: "دكة مبطنة بالمودال ممتدة تمنح حرية استثنائية لحركة الفخذين." },
+      waistElasticDesc: { en: "Enclosed flat modal waistband sitting snugly without digging into the waist.", ar: "حزام خصر مغلف من المودال المسطح يثبت بنعومة دون ضغط." },
+      legElasticDesc: { en: "Coverstitched hemmed leg band sealing the lower thigh opening.", ar: "حاشية ساق بدرزة تغطية مزدوجة مطوية تثبت فتحة الفخذ السفلية." },
+    }));
+
+  def("wu06", "women", "Ivory High-Rise Full-Coverage Maxi Brief", "سروال داخلي ماكسي عاجي عالي الخصر بتغطية كاملة", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Comfortable high-rise maxi brief in premium ivory combed cotton, offering maximum hip and tummy coverage, an encased non-pinch waistband, soft bound leg bands, and a breathable double-layered gusset.",
+    "سروال داخلي ماكسي عالي الخصر من القطن الممشط العاجي الفاخر، يوفر أقصى تغطية للورك والبطن، بحزام خصر مبطن مريح، وأشرطة ساق ناعمة ودكة مزدوجة مسامية.",
+    (m) => briefPieces(m, {
+      rise: "high", legCut: "full", coverage: 1.15,
+      frontDesc: { en: "High-rise ivory combed cotton front panel offering generous abdominal coverage.", ar: "لوحة أمامية عالية الخصر من القطن العاجي الممشط بتغطية سخية للبطن." },
+      backDesc: { en: "Deep maxi back panel with full seat wrap-around and ergonomic curve.", ar: "لوحة خلفية ماكسي عميقة تلتف بالكامل حول المقعد بانحناء مريح." },
+      gussetDesc: { en: "Double-layered 100% combed cotton gusset for peak softness and absorption.", ar: "دكة قطنية ممشطة مزدوجة الطبقة بنعومة فائقة وامتصاص مثالي." },
+      waistElasticDesc: { en: "Comfort encased non-pinch elastic waistband sitting at natural waist.", ar: "حزام خصر مطاطي مغلف بالقطن لا يضغط ويستقر عند الخصر الطبيعي." },
+      legElasticDesc: { en: "Soft self-bound cotton elastic leg band preventing ride-up.", ar: "شريط ساق مطاطي ناعم مغلف بالقطن يمنع الارتفاع غير المريح." },
+    }));
 
   // ================= MEN'S BRIEFS/TRUNKS (6) =================
   def("mu01", "men", "Classic Brief", "سروال داخلي كلاسيكي", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
