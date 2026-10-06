@@ -88,10 +88,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // needs some starting value; a user who touches nothing gets exactly
     // today's plain-text-prompt behaviour.
     aiGuided: { type:"dress", fit:"any", flare:"any", length:"any", neckline:"any", sleeve:"any", hem:"any", closure:"none", notes:"" },
-    // New projects begin with the rigged bundled human GLBs rather than the
-    // procedural mannequin. Existing custom URLs and an intentionally
-    // selected "None" still win through the state merge below.
-    avatarGLB: { women: "avatars/rigged/woman2.glb", men: "avatars/rigged/man.glb", girls: "avatars/rigged/girl3.glb", boys: "avatars/rigged/boy2.glb" },
+    // Default to the new high-fidelity articulated walking mannequins for all categories
+    avatarGLB: { women: null, men: null, girls: null, boys: null },
+    avatarCategory: null, avatarCategoryExplicit: false,
     // BerryStudio-Upgrade-Plan WP-5: "iframe" (cross-document, the original
     // engine) or "embedded" (cloth-lab's lib build mounted directly into
     // this page, sharing React/three.js via the import map — see
@@ -3753,6 +3752,11 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     state.loaded=id; const p=PATTERNS[id];
     // switch category to match
     if(p.category && p.category!==state.category){ state.category=p.category; syncCategoryUI(); }
+    if(!state.avatarCategoryExplicit){
+      state.avatarCategory = p.category || state.category;
+      const sel = $("#v3dModelSelect");
+      if (sel) sel.value = state.avatarCategory;
+    }
     const opts={category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom};
     Canvas.setPattern(resolveGradedPieces(p, opts, computeMeasurements, state.gradeRules[id]), PALETTE);
     afterLoad(L(p.name));
@@ -3770,11 +3774,24 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     updateGradeLbl(); updateStageChips(); renderSizePane(); renderMeasurePane(); save();
   }
 
-  // ================= 3D =================
   function colorToInt(c){
+    if(typeof c === "number") return c;
     if(!c) return cssHex("--brand");
-    if(c[0]==="#"){ const h=c.length===4 ? c.slice(1).split("").map(x=>x+x).join("") : c.slice(1); return parseInt(h,16); }
-    const m=/(\d+)\D+(\d+)\D+(\d+)/.exec(c); return m ? (+m[1]<<16)|(+m[2]<<8)|+m[3] : cssHex("--brand");
+    c = String(c).trim();
+    if(c[0]==="#"){
+      const h = c.length===4 ? c.slice(1).split("").map(x=>x+x).join("") : c.slice(1);
+      return parseInt(h, 16);
+    }
+    const m = /rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(c);
+    if(m) return (+m[1]<<16)|(+m[2]<<8)|+m[3];
+    try {
+      const t = document.createElement("canvas").getContext("2d");
+      t.fillStyle = c;
+      const hex = t.fillStyle;
+      if (hex && hex[0] === "#") return parseInt(hex.slice(1), 16);
+    } catch (_) {}
+    const m2 = /(\d+)\D+(\d+)\D+(\d+)/.exec(c);
+    return m2 ? (+m2[1]<<16)|(+m2[2]<<8)|+m2[3] : cssHex("--brand");
   }
   const fabricOpacity3D = () => Math.max(0.5, Math.min(1, 0.62 + Canvas.getOpt("fillOpacity")*0.6));
   // WP-49: the single source of truth for "which of three-view.js's 4
@@ -3810,25 +3827,42 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // skirt, else bodice).
   const SLEEVE_NAME_RE = /sleeve|كم/i;
   const SKIRT_NAME_RE = /skirt|تنور/i;
-  const TROUSERS_NAME_RE = /trouser|بنطل|pant|\bleg\b/i;
+  const TROUSERS_NAME_RE = /trouser|بنطل|pant|\bleg\b|brief|boxer|trunk|short|سروال|شورت|كيلوت/i;
   function classifyPart(p){
-    const name = (p && p.name && p.name.en) || (typeof p==="string" ? p : "");
+    const name = (p && p.name && (p.name.en || p.name.ar)) || (typeof p==="string" ? p : "");
+    const role = p && p.role;
     if (p && (p.bodyZone === "upper" || p.bodyZone === "lower")) {
-      return p.bodyZone === "lower" ? (TROUSERS_NAME_RE.test(name) ? "trousers" : "skirt") : "bodice";
+      if (p.bodyZone === "lower") {
+        if (SKIRT_NAME_RE.test(name)) return "skirt";
+        if (state.category === "men" || state.category === "boys") return "trousers";
+        return (TROUSERS_NAME_RE.test(name) || role === "brief-front" || role === "brief-back") ? "trousers" : "skirt";
+      }
+      return "bodice";
     }
-    if (p && SLEEVE_ROLES.has(p.role)) return "sleeve";
+    if (p && SLEEVE_ROLES.has(role)) return "sleeve";
     if (SLEEVE_NAME_RE.test(name)) return "sleeve";
     const zone = inferBodyZone(p); // role-derived only at this point — explicit bodyZone already handled above
-    if (zone === "lower") return TROUSERS_NAME_RE.test(name) ? "trousers" : "skirt";
+    if (zone === "lower") {
+      if (SKIRT_NAME_RE.test(name)) return "skirt";
+      if (state.category === "men" || state.category === "boys") return "trousers";
+      return (TROUSERS_NAME_RE.test(name) || role === "brief-front" || role === "brief-back") ? "trousers" : "skirt";
+    }
     if (zone === "upper") return "bodice";
-    if (TROUSERS_NAME_RE.test(name)) return "trousers";
+    if (TROUSERS_NAME_RE.test(name) || role === "brief-front" || role === "brief-back") return "trousers";
     if (SKIRT_NAME_RE.test(name)) return "skirt";
     return "bodice";
   }
   // {part, visible} per piece — three-view.js's applyPieceVisibility()
   // trusts `part` outright now (see its own updated comment); classifyPart()
   // above is the only place that ever decides it.
-  function pieceVisMap(){ return Canvas.getPieces().map(p=>({ part: classifyPart(p), visible: p.visible!==false })); }
+  function pieceVisMap(){
+    return Canvas.getPieces().map(p => ({
+      part: classifyPart(p),
+      role: p.role || null,
+      name: (p.name && (p.name.en || p.name.ar)) || (typeof p.name === "string" ? p.name : (p.key || "")),
+      visible: p.visible !== false
+    }));
+  }
   function isBackPiece(name){ return /\bback\b|خلفي|خلفية/.test((name||"").toLowerCase()); }
   // A part's mesh used to just take the FIRST matching piece's color/material and
   // silently drop every other one — a front+back bodice/skirt with a different
@@ -3867,32 +3901,106 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     });
     return parts;
   }
-  function build3D(colorInt){
-    const m=currentMeas(); const pieces=Canvas.getPieces();
-    const fv=pieces.find(p=>p.visible!==false);
-    View3D.build(state.category, m, {
-      color: colorInt!=null ? colorInt : (fv ? colorToInt(fv.color) : cssHex("--brand")),
-      material: state.fabric3d || "cotton", opacity: fabricOpacity3D(), pieces: pieceVisMap(),
-      parts: partsFabric(),
+  function avatarMeas(cat) {
+    const isKids = cat === "girls" || cat === "boys";
+    const kidsAge = isKids ? (state.kids || "8-9") : undefined;
+    return computeMeasurements({
+      category: cat,
+      size: state.size,
+      standard: state.standard,
+      kids: kidsAge,
+      custom: (cat === state.category) ? state.custom : null
     });
   }
+
+  function sync3DColorUI(col) {
+    let hex = "#6d5efc";
+    if (typeof col === "number") {
+      hex = "#" + col.toString(16).padStart(6, "0");
+    } else if (typeof col === "string" && col.startsWith("#")) {
+      hex = col;
+    }
+    const picker = $("#v3dColorPicker");
+    const swatch = $("#v3dColorSwatch");
+    if (picker && picker.value !== hex) picker.value = hex;
+    if (swatch) swatch.style.background = hex;
+  }
+
+  function updateMismatchWarning() {
+    const warnEl = $("#v3dMismatchWarn");
+    if (!warnEl) return;
+    const patternCat = state.loaded && PATTERNS[state.loaded]?.category ? PATTERNS[state.loaded].category : (state.category || "women");
+    const avatarCat = state.avatarCategory || state.category || "women";
+    if (patternCat !== avatarCat) {
+      const patLabel = T(patternCat) || patternCat;
+      const avLabel = T(avatarCat) || avatarCat;
+      const msg = (T("patternMismatchWarn") || "Pattern is designed for {patternCategory}, but {avatarCategory} mannequin is selected.")
+        .replace("{patternCategory}", patLabel)
+        .replace("{avatarCategory}", avLabel);
+      const txt = $("#v3dMismatchText");
+      if (txt) txt.textContent = msg;
+      const fixBtn = $("#v3dMismatchFixBtn");
+      if (fixBtn) {
+        fixBtn.textContent = (T("switchMannequinTo") || "Switch to {category}").replace("{category}", patLabel);
+        fixBtn.onclick = () => {
+          state.avatarCategory = patternCat;
+          state.avatarCategoryExplicit = false;
+          const sel = $("#v3dModelSelect");
+          if (sel) sel.value = patternCat;
+          build3D();
+          updateMismatchWarning();
+          save();
+        };
+      }
+      warnEl.classList.remove("hidden");
+    } else {
+      warnEl.classList.add("hidden");
+    }
+  }
+
+  function set3DGarmentColor(hex) {
+    const cInt = colorToInt(hex);
+    sync3DColorUI(hex);
+    View3D.setFabric({ color: cInt });
+    // Update pattern pieces so switching views preserves color
+    const pieces = Canvas.getPieces();
+    if (pieces && pieces.length > 0) {
+      const sel = Canvas.getSelected();
+      const targetPieces = (sel && sel.length > 0) ? sel : pieces;
+      targetPieces.forEach(p => { p.color = hex; });
+      Canvas.render();
+      renderLayersPane();
+    }
+  }
+
+  function build3D(colorInt){
+    const avatarCat = state.avatarCategory || state.category || "women";
+    const m = avatarMeas(avatarCat);
+    const pieces = Canvas.getPieces();
+    const fv = pieces.find(p=>p.visible!==false);
+    const col = colorInt!=null ? colorInt : (fv ? colorToInt(fv.color) : cssHex("--brand"));
+    const modelSelect = $("#v3dModelSelect");
+    if (modelSelect && modelSelect.value !== avatarCat) modelSelect.value = avatarCat;
+    View3D.build(avatarCat, m, {
+      color: col,
+      material: state.fabric3d || "cotton",
+      opacity: fabricOpacity3D(),
+      pieces: pieceVisMap(),
+      parts: partsFabric(),
+      forceMannequin: true,
+    });
+    sync3DColorUI(col);
+    updateMismatchWarning();
+  }
   // live 3D updates (no full rebuild)
-  // WP-38 (Tailornova feature study): Split View — a real, always-live 3D
-  // panel beside the 2D canvas, not a third full-bleed tab you switch away
-  // from. Deliberately scoped to 2D + 3D Preview only, not Cloth Lab (a
-  // separate, heavier R3F app — running it continuously alongside 2D editing
-  // is a materially bigger performance/architecture commitment than this WP
-  // is about); Cloth Lab keeps its own full-bleed tab, unchanged. Off by
-  // default (a Settings toggle, opt-in) so nothing changes for anyone who
-  // doesn't turn it on — same convention the Cloth Lab engine picker already
-  // established. Mutually exclusive with the "3D Preview"/"Cloth Lab" tabs:
-  // switching to either turns Split View off (setView below), and turning
-  // Split View on switches back to the "2D Pattern" tab first — so `.threed`
-  // and `.split`'s own CSS layout are never both trying to own the same
-  // canvas at once.
   function is3DActive(){ return state.view==="3d" || state.splitView; }
-  function sync3DFabric(){ if(!is3DActive()) return;
-    View3D.setFabric({ parts: partsFabric(), opacity: fabricOpacity3D() }); }
+  function sync3DFabric(){
+    if(!is3DActive()) return;
+    const pieces = Canvas.getPieces();
+    const fv = pieces.find(p=>p.visible!==false);
+    if(fv && fv.color) sync3DColorUI(fv.color);
+    View3D.setFabric({ parts: partsFabric(), opacity: fabricOpacity3D() });
+  }
   function sync3DVisibility(){ if(!is3DActive()) return; View3D.setPieceVisibility(pieceVisMap()); }
   function cssHex(k){ const t=document.createElement("canvas").getContext("2d");t.fillStyle=getComputedStyle(document.body).getPropertyValue(k).trim();return parseInt(t.fillStyle.slice(1),16);}
   function applySplitViewClasses(){
@@ -4194,6 +4302,11 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   const DEFAULT_PATTERN_BY_CATEGORY = {women:"womens_dress",men:"mens_shirt",girls:"girls_dress",boys:"boys_trousers"};
   function setCategory(cat){
     state.category=cat; syncCategoryUI();
+    if(!state.avatarCategoryExplicit){
+      state.avatarCategory = cat;
+      const sel = $("#v3dModelSelect");
+      if (sel) sel.value = cat;
+    }
     // load a default pattern for that category
     const def=DEFAULT_PATTERN_BY_CATEGORY[cat];
     // Code-review fix: this unconditionally called loadPattern(def) — the
@@ -5059,8 +5172,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const meta=e.ctrlKey||e.metaKey;
     if(e.key==="Tab" && $$(".overlay.show").length){ trapModalTab(e); return; }
     if(meta&&e.key==="k"){e.preventDefault();openCmd();return;}
-    if(meta&&e.key==="z"&&!e.shiftKey){e.preventDefault();Canvas.doUndo();renderLayersPane();return;}
-    if(meta&&(e.key==="y"||(e.shiftKey&&e.key.toLowerCase()==="z"))){e.preventDefault();Canvas.doRedo();renderLayersPane();return;}
+    if(meta&&e.key==="z"&&!e.shiftKey){e.preventDefault();Canvas.doUndo();renderLayersPane();sync3DVisibility();sync3DFabric();return;}
+    if(meta&&(e.key==="y"||(e.shiftKey&&e.key.toLowerCase()==="z"))){e.preventDefault();Canvas.doRedo();renderLayersPane();sync3DVisibility();sync3DFabric();return;}
     if($("#cmdModal").classList.contains("show")){
       if(e.key==="ArrowDown"){e.preventDefault();cmdSel=Math.min(cmdItems.length-1,cmdSel+1);hiCmd();}
       if(e.key==="ArrowUp"){e.preventDefault();cmdSel=Math.max(0,cmdSel-1);hiCmd();}
@@ -5134,7 +5247,442 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       }
     }
   }
-  function hiCmd(){ $$("#cmdList .cmd-item").forEach((x,i)=>x.classList.toggle("sel",i===cmdSel)); const s=$$("#cmdList .cmd-item")[cmdSel]; if(s)s.scrollIntoView({block:"nearest"}); }
+  // ================= 3D ACCESSORIES & PRINTS (BUTTONS, ZIPPERS, ARTWORK) =================
+  function init3DAccessoriesAndPrints() {
+    const accBtn = $("#v3dAccBtn");
+    const accPanel = $("#v3dAccPanel");
+    const accClose = $("#v3dAccCloseBtn");
+    const printsBtn = $("#v3dPrintsBtn");
+    const printsPanel = $("#v3dPrintsPanel");
+    const printsClose = $("#v3dPrintsCloseBtn");
+
+    // Drawer / Panel Toggles
+    if (accBtn && accPanel) {
+      accBtn.onclick = () => {
+        const isHidden = accPanel.classList.contains("hidden");
+        accPanel.classList.toggle("hidden", !isHidden);
+        accBtn.classList.toggle("active", isHidden);
+        if (isHidden && printsPanel) {
+          printsPanel.classList.add("hidden");
+          printsBtn?.classList.remove("active");
+        }
+      };
+    }
+    if (accClose && accPanel) {
+      accClose.onclick = () => {
+        accPanel.classList.add("hidden");
+        accBtn?.classList.remove("active");
+      };
+    }
+
+    if (printsBtn && printsPanel) {
+      printsBtn.onclick = () => {
+        const isHidden = printsPanel.classList.contains("hidden");
+        printsPanel.classList.toggle("hidden", !isHidden);
+        printsBtn.classList.toggle("active", isHidden);
+        if (isHidden && accPanel) {
+          accPanel.classList.add("hidden");
+          accBtn?.classList.remove("active");
+        }
+      };
+    }
+    if (printsClose && printsPanel) {
+      printsClose.onclick = () => {
+        printsPanel.classList.add("hidden");
+        printsBtn?.classList.remove("active");
+      };
+    }
+
+    // Accessories: Buttons & Zippers
+    function update3DAccessories() {
+      const btnToggle = $("#v3dBtnToggle");
+      const btnControls = $("#v3dBtnControls");
+      const btnStyle = $("#v3dBtnStyle");
+      const btnPlacement = $("#v3dBtnPlacement");
+      const btnCount = $("#v3dBtnCount");
+
+      const zipToggle = $("#v3dZipToggle");
+      const zipControls = $("#v3dZipControls");
+      const zipStyle = $("#v3dZipStyle");
+      const zipPlacement = $("#v3dZipPlacement");
+      const zipOpen = $("#v3dZipOpen");
+
+      const beltToggle = $("#v3dBeltToggle");
+      const beltControls = $("#v3dBeltControls");
+      const beltStyle = $("#v3dBeltStyle");
+      const beltWidth = $("#v3dBeltWidth");
+
+      const buttonsOn = !!(btnToggle && btnToggle.checked);
+      if (btnControls) btnControls.classList.toggle("disabled", !buttonsOn);
+
+      const zipperOn = !!(zipToggle && zipToggle.checked);
+      if (zipControls) zipControls.classList.toggle("disabled", !zipperOn);
+
+      const beltOn = !!(beltToggle && beltToggle.checked);
+      if (beltControls) beltControls.classList.toggle("disabled", !beltOn);
+
+      View3D.setAccessories({
+        buttons: {
+          enabled: buttonsOn,
+          style: btnStyle?.value || "gold",
+          placement: btnPlacement?.value || "front_placket",
+          count: parseInt(btnCount?.value || "6", 10)
+        },
+        zipper: {
+          enabled: zipperOn,
+          style: zipStyle?.value || "silver",
+          placement: zipPlacement?.value || "center_front",
+          openPct: parseFloat(zipOpen?.value || "0")
+        },
+        belt: {
+          enabled: beltOn,
+          style: beltStyle?.value || "leather_gold",
+          width: beltWidth?.value || "medium"
+        }
+      });
+    }
+
+    const btnToggle = $("#v3dBtnToggle");
+    if (btnToggle) btnToggle.onchange = update3DAccessories;
+    const btnStyle = $("#v3dBtnStyle");
+    if (btnStyle) btnStyle.onchange = update3DAccessories;
+    const btnPlacement = $("#v3dBtnPlacement");
+    if (btnPlacement) btnPlacement.onchange = update3DAccessories;
+    const btnCount = $("#v3dBtnCount");
+    const btnCountVal = $("#v3dBtnCountVal");
+    if (btnCount) {
+      btnCount.oninput = e => {
+        if (btnCountVal) btnCountVal.textContent = e.target.value;
+        update3DAccessories();
+      };
+    }
+
+    const zipToggle = $("#v3dZipToggle");
+    if (zipToggle) zipToggle.onchange = update3DAccessories;
+    const zipStyle = $("#v3dZipStyle");
+    if (zipStyle) zipStyle.onchange = update3DAccessories;
+    const zipPlacement = $("#v3dZipPlacement");
+    if (zipPlacement) zipPlacement.onchange = update3DAccessories;
+    const zipOpen = $("#v3dZipOpen");
+    const zipOpenVal = $("#v3dZipOpenVal");
+    if (zipOpen) {
+      zipOpen.oninput = e => {
+        const pct = Math.round(parseFloat(e.target.value) * 100);
+        if (zipOpenVal) zipOpenVal.textContent = pct + "%";
+        update3DAccessories();
+      };
+    }
+
+    const beltToggle = $("#v3dBeltToggle");
+    if (beltToggle) beltToggle.onchange = update3DAccessories;
+    const beltStyle = $("#v3dBeltStyle");
+    if (beltStyle) beltStyle.onchange = update3DAccessories;
+    const beltWidth = $("#v3dBeltWidth");
+    if (beltWidth) beltWidth.onchange = update3DAccessories;
+
+    // Prints & Artwork Presets
+    const printTarget = $("#v3dPrintTarget");
+    const presetChips = $$(".v3d-preset-chip");
+    presetChips.forEach(chip => {
+      chip.onclick = () => {
+        presetChips.forEach(c => c.classList.remove("active"));
+        chip.classList.add("active");
+        const preset = chip.dataset.preset || "none";
+        const target = printTarget?.value || "all";
+        View3D.setGarmentPrint({ preset, target });
+        toast(T("printsAndArtwork") + ": " + (T("print" + preset.charAt(0).toUpperCase() + preset.slice(1)) || preset));
+      };
+    });
+
+    // Custom Print Image Upload
+    const printFileInput = $("#v3dPrintFileInput");
+    if (printFileInput) {
+      printFileInput.onchange = e => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const dataURL = ev.target.result;
+          const target = printTarget?.value || "all";
+          presetChips.forEach(c => c.classList.remove("active"));
+          View3D.setGarmentPrint({ dataURL, target, isDrawing: false });
+          toast(T("customPrintUpload") + " " + (T("applied") || "applied"));
+        };
+        reader.readAsDataURL(file);
+      };
+    }
+
+    // Direct Cloth Drawing Modal
+    const toolbarDrawBtn = $("#v3dDrawBtn");
+    const openDrawBtn = $("#v3dOpenDrawBtn");
+    const drawModal = $("#v3dDrawModal");
+    const dCanvas = $("#v3dDrawCanvas");
+    if ((toolbarDrawBtn || openDrawBtn) && drawModal && dCanvas) {
+      const ctx = dCanvas.getContext("2d");
+      let isDrawing = false;
+      let lastX = 0;
+      let lastY = 0;
+      let currentTool = "brush";
+      let currentColor = "#111111";
+      let currentSize = 8;
+
+      function getActiveGarmentColor() {
+        const picker = $("#v3dColorPicker");
+        if (picker && picker.value) return picker.value;
+        if (typeof View3D !== "undefined" && View3D.getGarmentColor) {
+          return View3D.getGarmentColor();
+        }
+        return "#6d5efc";
+      }
+
+      function openDrawBoard() {
+        drawModal.classList.add("show");
+        if (printsPanel) printsPanel.classList.add("hidden");
+        printsBtn?.classList.remove("active");
+        if (accPanel) accPanel.classList.add("hidden");
+        accBtn?.classList.remove("active");
+
+        // Sync drawing board backdrop to current garment cloth color
+        const target = $("#v3dDrawTargetSelect")?.value || "all";
+        const garmentHex = (View3D.getGarmentColor && View3D.getGarmentColor(target === "all" ? "bodice" : target)) || getActiveGarmentColor();
+        dCanvas.style.backgroundColor = garmentHex;
+
+        // Restore active drawing from garment if canvas is blank
+        if (isCanvasBlank(dCanvas) && typeof View3D !== "undefined" && View3D.getFabricState) {
+          const st = View3D.getFabricState();
+          const partKey = target === "all" ? "bodice" : target;
+          const rawUrl = st[partKey]?.front?.rawDrawingURL;
+          if (rawUrl) {
+            const img = new Image();
+            img.onload = () => {
+              ctx.drawImage(img, 0, 0);
+              undoStack.length = 0;
+            };
+            img.src = rawUrl;
+          }
+        }
+      }
+
+      if (toolbarDrawBtn) toolbarDrawBtn.onclick = openDrawBoard;
+      if (openDrawBtn) openDrawBtn.onclick = openDrawBoard;
+
+      const undoStack = [];
+      const MAX_UNDO = 24;
+
+      function pushUndo() {
+        if (undoStack.length >= MAX_UNDO) undoStack.shift();
+        undoStack.push(ctx.getImageData(0, 0, dCanvas.width, dCanvas.height));
+      }
+
+      function doUndo() {
+        if (undoStack.length > 0) {
+          const imgData = undoStack.pop();
+          ctx.putImageData(imgData, 0, 0);
+        }
+      }
+
+      const undoBtn = $("#v3dDrawUndoBtn");
+      if (undoBtn) undoBtn.onclick = doUndo;
+
+      const brushBtn = $("#v3dDrawBrushBtn");
+      const eraserBtn = $("#v3dDrawEraserBtn");
+      if (brushBtn && eraserBtn) {
+        brushBtn.onclick = () => {
+          currentTool = "brush";
+          brushBtn.classList.add("active");
+          eraserBtn.classList.remove("active");
+        };
+        eraserBtn.onclick = () => {
+          currentTool = "eraser";
+          eraserBtn.classList.add("active");
+          brushBtn.classList.remove("active");
+        };
+      }
+
+      const drawSize = $("#v3dDrawSize");
+      const drawSizeVal = $("#v3dDrawSizeVal");
+      if (drawSize) {
+        drawSize.oninput = e => {
+          currentSize = parseInt(e.target.value, 10);
+          if (drawSizeVal) drawSizeVal.textContent = currentSize + "px";
+        };
+      }
+
+      const colorPicker = $("#v3dDrawColorPicker");
+      const swatches = $$(".v3d-swatch-dot");
+      swatches.forEach(swatch => {
+        swatch.onclick = () => {
+          swatches.forEach(s => s.classList.remove("active"));
+          swatch.classList.add("active");
+          currentColor = swatch.dataset.color || "#111111";
+          if (colorPicker) colorPicker.value = currentColor;
+          if (currentTool === "eraser" && brushBtn) brushBtn.click();
+        };
+      });
+      if (colorPicker) {
+        colorPicker.oninput = e => {
+          currentColor = e.target.value;
+          swatches.forEach(s => s.classList.remove("active"));
+          if (currentTool === "eraser" && brushBtn) brushBtn.click();
+        };
+      }
+
+      const clearBtn = $("#v3dDrawClearBtn");
+      if (clearBtn) {
+        clearBtn.onclick = () => {
+          pushUndo();
+          ctx.clearRect(0, 0, dCanvas.width, dCanvas.height);
+        };
+      }
+
+      const targetSelect = $("#v3dDrawTargetSelect");
+      if (targetSelect) {
+        targetSelect.onchange = () => {
+          const target = targetSelect.value;
+          const garmentHex = (View3D.getGarmentColor && View3D.getGarmentColor(target === "all" ? "bodice" : target)) || getActiveGarmentColor();
+          dCanvas.style.backgroundColor = garmentHex;
+        };
+      }
+
+      function getCoords(e) {
+        const rect = dCanvas.getBoundingClientRect();
+        const clientX = e.clientX != null ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        const clientY = e.clientY != null ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+        const scaleX = dCanvas.width / (rect.width || 512);
+        const scaleY = dCanvas.height / (rect.height || 512);
+        return {
+          x: (clientX - rect.left) * scaleX,
+          y: (clientY - rect.top) * scaleY
+        };
+      }
+
+      function drawDot(x, y) {
+        ctx.save();
+        if (currentTool === "eraser") {
+          ctx.globalCompositeOperation = "destination-out";
+          ctx.beginPath();
+          ctx.arc(x, y, currentSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.globalCompositeOperation = "source-over";
+          ctx.fillStyle = currentColor;
+          ctx.beginPath();
+          ctx.arc(x, y, currentSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function onDrawStart(e) {
+        pushUndo();
+        isDrawing = true;
+        try { if (e.pointerId != null) dCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+        const pt = getCoords(e);
+        lastX = pt.x;
+        lastY = pt.y;
+        drawDot(pt.x, pt.y);
+        if (e.cancelable) e.preventDefault();
+      }
+
+      function onDrawMove(e) {
+        if (!isDrawing) return;
+        const pt = getCoords(e);
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(pt.x, pt.y);
+        ctx.lineWidth = currentSize;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        if (currentTool === "eraser") {
+          ctx.globalCompositeOperation = "destination-out";
+          ctx.stroke();
+        } else {
+          ctx.globalCompositeOperation = "source-over";
+          ctx.strokeStyle = currentColor;
+          ctx.stroke();
+        }
+        ctx.restore();
+        lastX = pt.x;
+        lastY = pt.y;
+        if (e.cancelable) e.preventDefault();
+      }
+
+      function onDrawEnd(e) {
+        if (isDrawing) {
+          isDrawing = false;
+          try { if (e.pointerId != null) dCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
+        }
+      }
+
+      if (window.PointerEvent) {
+        dCanvas.addEventListener("pointerdown", onDrawStart);
+        dCanvas.addEventListener("pointermove", onDrawMove);
+        window.addEventListener("pointerup", onDrawEnd);
+        window.addEventListener("pointercancel", onDrawEnd);
+      } else {
+        dCanvas.addEventListener("mousedown", onDrawStart);
+        dCanvas.addEventListener("mousemove", onDrawMove);
+        window.addEventListener("mouseup", onDrawEnd);
+        dCanvas.addEventListener("touchstart", onDrawStart, { passive: false });
+        dCanvas.addEventListener("touchmove", onDrawMove, { passive: false });
+        window.addEventListener("touchend", onDrawEnd);
+        window.addEventListener("touchcancel", onDrawEnd);
+      }
+
+      function isCanvasBlank(canvas) {
+        const c = canvas.getContext("2d");
+        const imgData = c.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+        for (let i = 3; i < data.length; i += 4) {
+          if (data[i] !== 0) return false;
+        }
+        return true;
+      }
+
+      const applyBtn = $("#v3dDrawApplyBtn");
+      if (applyBtn) {
+        applyBtn.onclick = () => {
+          const target = $("#v3dDrawTargetSelect")?.value || "all";
+          
+          if (isCanvasBlank(dCanvas)) {
+            // If canvas is blank, clear drawings on target garment parts
+            View3D.setGarmentPrint({
+              preset: "none",
+              target
+            });
+            drawModal.classList.remove("show");
+            toast(T("drawClear") || "Drawing cleared from 3D garment");
+            return;
+          }
+
+          const rawDrawingDataURL = dCanvas.toDataURL("image/png");
+          const garmentColor = (View3D.getGarmentColor && View3D.getGarmentColor(target === "all" ? "bodice" : target)) || getActiveGarmentColor();
+
+          // Composite drawing artwork over base cloth color so transparent pixels
+          // don't turn garment black or cut holes in Three.js PBR shaders!
+          const offCanvas = document.createElement("canvas");
+          offCanvas.width = dCanvas.width;
+          offCanvas.height = dCanvas.height;
+          const offCtx = offCanvas.getContext("2d");
+          offCtx.fillStyle = garmentColor;
+          offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+          offCtx.drawImage(dCanvas, 0, 0);
+          const compositedDataURL = offCanvas.toDataURL("image/png");
+
+          View3D.setGarmentPrint({
+            dataURL: compositedDataURL,
+            rawDrawingURL: rawDrawingDataURL,
+            target,
+            isDrawing: true,
+            repeat: 1
+          });
+          drawModal.classList.remove("show");
+          toast(T("drawTitle") + " " + (T("applied") || "applied"));
+        };
+      }
+    }
+  }
 
   // ================= WIRE EVENTS =================
   function wire(){
@@ -5156,8 +5704,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     $("#unitsPill").onclick=()=>{state.unitsCm=!state.unitsCm;Canvas.setOpt("unitsCm",state.unitsCm);save();updateUnitsPill();updateStageChips();};
     tip($("#unitsPill"),T("tab_measure"),T("tt_units"));
     // grid/snap in stage toolbar
-    $("#undoBtn").onclick=()=>{Canvas.doUndo();renderLayersPane();sync3DVisibility();}; tip($("#undoBtn"),T("undoLbl"),T("tt_undo"));
-    $("#redoBtn").onclick=()=>{Canvas.doRedo();renderLayersPane();sync3DVisibility();}; tip($("#redoBtn"),T("redoLbl"),T("tt_redo"));
+    $("#undoBtn").onclick=()=>{Canvas.doUndo();renderLayersPane();sync3DVisibility();sync3DFabric();}; tip($("#undoBtn"),T("undoLbl"),T("tt_undo"));
+    $("#redoBtn").onclick=()=>{Canvas.doRedo();renderLayersPane();sync3DVisibility();sync3DFabric();}; tip($("#redoBtn"),T("redoLbl"),T("tt_redo"));
     $("#gridBtn").onclick=()=>{const v=!Canvas.getOpt("grid");Canvas.setOpt("grid",v);$("#gridBtn").classList.toggle("active",v);}; tip($("#gridBtn"),T("t_line"),T("tt_grid"));
     $("#snapBtn").onclick=()=>{const v=!Canvas.getOpt("snap");Canvas.setOpt("snap",v);$("#snapBtn").classList.toggle("active",v);}; tip($("#snapBtn"),"Snap",T("tt_snap"));
     $("#bgBtn").onclick=()=>openBgPanel(); tip($("#bgBtn"),T("bgImage"),T("tt_bgImage"));
@@ -5195,6 +5743,29 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // 3d controls
     $("#spinToggle").onchange=e=>View3D.setSpin(e.target.checked);
     $("#walkToggle").onchange=e=>View3D.setWalk(e.target.checked);
+    const modelSelect = $("#v3dModelSelect");
+    if (modelSelect) {
+      modelSelect.onchange = e => {
+        state.avatarCategory = e.target.value;
+        state.avatarCategoryExplicit = true;
+        build3D();
+        updateMismatchWarning();
+        save();
+      };
+    }
+    const colorPicker = $("#v3dColorPicker");
+    if (colorPicker) {
+      const onCol = e => set3DGarmentColor(e.target.value);
+      colorPicker.oninput = onCol;
+      colorPicker.onchange = e => { onCol(e); save(); };
+    }
+    const mismatchDismiss = $("#v3dMismatchDismissBtn");
+    if (mismatchDismiss) {
+      mismatchDismiss.onclick = () => {
+        const warn = $("#v3dMismatchWarn");
+        if (warn) warn.classList.add("hidden");
+      };
+    }
     const tensionToggle = $("#tensionToggle");
     const tensionHud = $("#v3dTensionHud");
     if (tensionToggle) {
@@ -5217,7 +5788,14 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         View3D.exportOBJ(`${cat}_3d_model.obj`);
         toast(T("objExported"));
       };
+      tip(exportObjBtn, T("export3D"), "Export 3D garment model as Wavefront OBJ");
     }
+    const drawBtn = $("#v3dDrawBtn");
+    if (drawBtn) tip(drawBtn, T("drawOnCloth"), "Draw directly onto cloth garments in 3D");
+    const printsBtn = $("#v3dPrintsBtn");
+    if (printsBtn) tip(printsBtn, T("printsAndArtwork"), "Prints, graphics, and preset fabric textures");
+    const accBtn = $("#v3dAccBtn");
+    if (accBtn) tip(accBtn, T("trimsAndAccessories"), "Buttons, zippers, belts, and trims");
     View3D.setTensionMetricsCallback(m => {
       const peak = $("#v3dPeakStrain");
       const ease = $("#v3dAvgEase");
@@ -5229,6 +5807,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         badge.textContent = T(m.status) || m.status;
       }
     });
+
+    init3DAccessoriesAndPrints();
     document.addEventListener("keydown",keys);
     window.addEventListener("resize",()=>{if(is3DActive())View3D.resize();});
     // 3D Cloth Lab bridge: cloth-lab posts {type:"clothlab:ready"} once its
@@ -5276,8 +5856,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     $("#v3dContinue2DBtn").onclick=()=>{ $("#v3dError").classList.remove("show"); setView("2d"); };
     applyReduceMotion(state.reduceMotion);
     initModalA11y();
-    // photoreal GLB avatars saved in Settings (per category)
-    Object.entries(state.avatarGLB || {}).forEach(([cat,url]) => { if(url) View3D.setAvatarURL(cat, url); });
+    // Custom uploaded 3D avatars saved in Settings (per category)
+    Object.entries(state.avatarGLB || {}).forEach(([cat,url]) => { if(url && !url.startsWith("avatars/")) View3D.setAvatarURL(cat, url); });
     Canvas.onTextRequest(openTextEditor);
     Canvas.setMeasureProvider(()=>currentMeas());
     Canvas.onPointRequest(openPointEditor);

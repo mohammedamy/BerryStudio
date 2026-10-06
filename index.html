@@ -176,34 +176,247 @@
             </div>
           </div>
           <p data-i18n="v3dIndicative" style="position:absolute;inset-inline:16px;bottom:14px;z-index:2;margin:0;max-width:560px;padding:8px 10px;border-radius:9px;background:color-mix(in srgb,var(--panel) 88%,transparent);border:1px solid var(--line);font-size:12px;line-height:1.4;color:var(--ink-2);pointer-events:none">3D preview is indicative. Confirm material behaviour, construction and fit with a maker and sewn sample.</p>
+          <div id="v3dMismatchWarn" class="v3d-mismatch-warn hidden" role="alert">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span id="v3dMismatchText"></span>
+            <button id="v3dMismatchFixBtn" class="v3d-mismatch-btn"></button>
+            <button id="v3dMismatchDismissBtn" class="v3d-mismatch-close" title="Dismiss" aria-label="Dismiss">&times;</button>
+          </div>
           <div class="v3d-toolbar" role="toolbar" aria-label="3D Preview Controls">
-            <label class="v3d-btn-label"><input type="checkbox" id="spinToggle" checked> <span data-i18n="v3dSpin">360°</span></label>
-            <label class="v3d-btn-label"><input type="checkbox" id="walkToggle" checked> <span data-i18n="v3dWalk">Walk</span></label>
-            <span class="v3d-sep"></span>
-            <label class="v3d-btn-label v3d-tension-label" title="Visualize fit strain and ease distribution">
-              <input type="checkbox" id="tensionToggle">
-              <span data-i18n="tensionMap">Tension Heatmap</span>
-            </label>
-            <div class="v3d-select-wrap">
-              <label for="v3dFabricSelect" class="sr-only" data-i18n="fabricPreset">Fabric</label>
-              <select id="v3dFabricSelect" class="v3d-select" title="Fabric Physics & Material Preset">
-                <option value="cotton">Cotton Poplin</option>
-                <option value="silk">Silk Charmeuse</option>
-                <option value="satin">Satin</option>
-                <option value="denim">Denim</option>
-                <option value="jersey">Cotton Jersey</option>
-                <option value="wool">Wool Crepe</option>
-                <option value="linen">Linen</option>
-                <option value="scuba">Scuba Knit</option>
-                <option value="chiffon">Chiffon</option>
-                <option value="leather">Leather</option>
-                <option value="tulle">Tulle</option>
-              </select>
+            <!-- Group 1: Avatar Model & Motion -->
+            <div class="v3d-tool-group">
+              <div class="v3d-select-wrap">
+                <label for="v3dModelSelect" class="sr-only" data-i18n="mannequinModel">Mannequin</label>
+                <select id="v3dModelSelect" class="v3d-select" title="Mannequin Model & Body Type">
+                  <option value="women" data-i18n="mannequinWomen">👩 Woman (168 cm)</option>
+                  <option value="men" data-i18n="mannequinMen">👨 Man (178 cm)</option>
+                  <option value="girls" data-i18n="mannequinGirls">👧 Girl (130 cm)</option>
+                  <option value="boys" data-i18n="mannequinBoys">👦 Boy (132 cm)</option>
+                </select>
+              </div>
+              <label class="v3d-btn-label" title="Rotate 360°"><input type="checkbox" id="spinToggle" checked> <span data-i18n="v3dSpin">360°</span></label>
+              <label class="v3d-btn-label" title="Walk Animation"><input type="checkbox" id="walkToggle" checked> <span data-i18n="v3dWalk">Walk</span></label>
             </div>
-            <button id="v3dExportObjBtn" class="v3d-btn" title="Export 3D Garment as Wavefront OBJ" aria-label="Export 3D Model">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              <span data-i18n="export3D">3D OBJ</span>
-            </button>
+
+            <span class="v3d-sep"></span>
+
+            <!-- Group 2: Fabric Material & Color -->
+            <div class="v3d-tool-group">
+              <label class="v3d-color-wrap" title="Garment Color">
+                <input type="color" id="v3dColorPicker" value="#6d5efc" class="v3d-color-input" aria-label="Garment Color">
+                <span class="v3d-color-swatch" id="v3dColorSwatch" style="background:#6d5efc"></span>
+              </label>
+              <div class="v3d-select-wrap">
+                <label for="v3dFabricSelect" class="sr-only" data-i18n="fabricPreset">Fabric</label>
+                <select id="v3dFabricSelect" class="v3d-select" title="Fabric Physics & Material Preset">
+                  <option value="cotton">Cotton Poplin</option>
+                  <option value="silk">Silk Charmeuse</option>
+                  <option value="satin">Satin</option>
+                  <option value="denim">Denim</option>
+                  <option value="jersey">Cotton Jersey</option>
+                  <option value="wool">Wool Crepe</option>
+                  <option value="linen">Linen</option>
+                  <option value="scuba">Scuba Knit</option>
+                  <option value="chiffon">Chiffon</option>
+                  <option value="leather">Leather</option>
+                  <option value="tulle">Tulle</option>
+                </select>
+              </div>
+            </div>
+
+            <span class="v3d-sep"></span>
+
+            <!-- Group 3: Design, Cloth Drawing & Trims -->
+            <div class="v3d-tool-group">
+              <button id="v3dDrawBtn" class="v3d-btn v3d-btn-highlight" title="Draw Directly on Cloth" aria-label="Draw on Cloth">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                <span data-i18n="drawOnCloth">Draw on Cloth</span>
+              </button>
+              <button id="v3dPrintsBtn" class="v3d-btn" title="Prints, Graphics & Artwork" aria-label="Prints & Artwork">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                <span data-i18n="printsAndArtwork">Prints & Art</span>
+              </button>
+              <button id="v3dAccBtn" class="v3d-btn" title="Accessories: Buttons, Zippers & Trims" aria-label="Accessories & Trims">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="9.5" cy="9.5" r="1.5" fill="currentColor"/><circle cx="14.5" cy="9.5" r="1.5" fill="currentColor"/><circle cx="9.5" cy="14.5" r="1.5" fill="currentColor"/><circle cx="14.5" cy="14.5" r="1.5" fill="currentColor"/></svg>
+                <span data-i18n="trimsAndAccessories">Accessories</span>
+              </button>
+            </div>
+
+            <span class="v3d-sep"></span>
+
+            <!-- Group 4: Inspection & 3D Export -->
+            <div class="v3d-tool-group">
+              <label class="v3d-btn-label v3d-tension-label" title="Visualize fit strain and ease distribution">
+                <input type="checkbox" id="tensionToggle">
+                <span data-i18n="tensionMap">Tension</span>
+              </label>
+              <button id="v3dExportObjBtn" class="v3d-btn" title="Export 3D Garment as Wavefront OBJ" aria-label="Export 3D Model">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span data-i18n="export3D">OBJ</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Floating Accessories Drawer / Panel -->
+          <div id="v3dAccPanel" class="v3d-floating-panel hidden" aria-labelledby="v3dAccPanelTitle">
+            <div class="v3d-panel-head">
+              <h3 id="v3dAccPanelTitle" data-i18n="trimsAndAccessories">Accessories & Trims</h3>
+              <button id="v3dAccCloseBtn" class="v3d-panel-close" title="Close" aria-label="Close">&times;</button>
+            </div>
+            <div class="v3d-panel-body">
+              <!-- Buttons Sub-Section -->
+              <div class="v3d-panel-section">
+                <div class="v3d-section-title">
+                  <label class="v3d-checkbox-label">
+                    <input type="checkbox" id="v3dBtnToggle">
+                    <strong data-i18n="enableButtons">Add Buttons</strong>
+                  </label>
+                </div>
+                <div id="v3dBtnControls" class="v3d-sub-controls disabled">
+                  <div class="v3d-control-row">
+                    <label for="v3dBtnStyle" data-i18n="buttonStyle">Finish</label>
+                    <select id="v3dBtnStyle" class="v3d-select sm">
+                      <option value="gold" data-i18n="buttonGold">Polished Gold</option>
+                      <option value="silver" data-i18n="buttonSilver">Polished Silver</option>
+                      <option value="horn" data-i18n="buttonHorn">Classic Horn</option>
+                      <option value="pearl" data-i18n="buttonPearl">Mother of Pearl</option>
+                      <option value="matte_black" data-i18n="buttonMatteBlack">Matte Black</option>
+                      <option value="matching" data-i18n="buttonMatching">Fabric Match</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBtnPlacement" data-i18n="buttonPlacement">Placement</label>
+                    <select id="v3dBtnPlacement" class="v3d-select sm">
+                      <option value="front_placket" data-i18n="placementPlacket">Front Placket</option>
+                      <option value="double_breasted" data-i18n="placementDoubleBreasted">Double-Breasted</option>
+                      <option value="waistband" data-i18n="placementWaistband">Waistband</option>
+                      <option value="cuffs" data-i18n="placementCuffs">Sleeve Cuffs</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBtnCount" data-i18n="buttonCount">Count</label>
+                    <div class="v3d-slider-wrap">
+                      <input type="range" id="v3dBtnCount" min="1" max="10" value="6" step="1" class="v3d-slider">
+                      <span id="v3dBtnCountVal" class="v3d-slider-val">6</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Zipper Sub-Section -->
+              <div class="v3d-panel-section">
+                <div class="v3d-section-title">
+                  <label class="v3d-checkbox-label">
+                    <input type="checkbox" id="v3dZipToggle">
+                    <strong data-i18n="enableZipper">Add Zipper</strong>
+                  </label>
+                </div>
+                <div id="v3dZipControls" class="v3d-sub-controls disabled">
+                  <div class="v3d-control-row">
+                    <label for="v3dZipStyle" data-i18n="zipperStyle">Finish</label>
+                    <select id="v3dZipStyle" class="v3d-select sm">
+                      <option value="silver" data-i18n="zipperSilver">Polished Silver</option>
+                      <option value="brass" data-i18n="zipperBrass">Antique Brass</option>
+                      <option value="gunmetal" data-i18n="zipperGunmetal">Gunmetal Black</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dZipPlacement" data-i18n="zipperPlacement">Placement</label>
+                    <select id="v3dZipPlacement" class="v3d-select sm">
+                      <option value="center_front" data-i18n="zipperCenterFront">Center Front</option>
+                      <option value="center_back" data-i18n="zipperCenterBack">Center Back</option>
+                      <option value="biker_asymmetric" data-i18n="zipperBiker">Asymmetric Biker</option>
+                      <option value="trouser_fly" data-i18n="zipperTrouserFly">Trouser Fly</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dZipOpen" data-i18n="zipperOpen">Open</label>
+                    <div class="v3d-slider-wrap">
+                      <input type="range" id="v3dZipOpen" min="0" max="0.5" value="0" step="0.05" class="v3d-slider">
+                      <span id="v3dZipOpenVal" class="v3d-slider-val">0%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Belt & Buckle Sub-Section -->
+              <div class="v3d-panel-section">
+                <div class="v3d-section-title">
+                  <label class="v3d-checkbox-label">
+                    <input type="checkbox" id="v3dBeltToggle">
+                    <strong data-i18n="enableBelt">Add Belt & Buckle</strong>
+                  </label>
+                </div>
+                <div id="v3dBeltControls" class="v3d-sub-controls disabled">
+                  <div class="v3d-control-row">
+                    <label for="v3dBeltStyle" data-i18n="beltStyle">Style</label>
+                    <select id="v3dBeltStyle" class="v3d-select sm">
+                      <option value="leather_gold" data-i18n="beltLeatherGold">Black Leather & Gold</option>
+                      <option value="leather_silver" data-i18n="beltLeatherSilver">Tan Leather & Silver</option>
+                      <option value="matte_black" data-i18n="beltMatteBlack">Stealth Matte Black</option>
+                      <option value="matching" data-i18n="beltMatching">Fabric Match</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBeltWidth" data-i18n="beltWidth">Width</label>
+                    <select id="v3dBeltWidth" class="v3d-select sm">
+                      <option value="slim" data-i18n="beltWidthSlim">Slim (2.5 cm)</option>
+                      <option value="medium" selected data-i18n="beltWidthMedium">Classic (4.0 cm)</option>
+                      <option value="wide" data-i18n="beltWidthWide">Statement (6.5 cm)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Floating Prints & Artwork Panel -->
+          <div id="v3dPrintsPanel" class="v3d-floating-panel hidden" aria-labelledby="v3dPrintsPanelTitle">
+            <div class="v3d-panel-head">
+              <h3 id="v3dPrintsPanelTitle" data-i18n="printsAndArtwork">Prints & Artwork</h3>
+              <button id="v3dPrintsCloseBtn" class="v3d-panel-close" title="Close" aria-label="Close">&times;</button>
+            </div>
+            <div class="v3d-panel-body">
+              <div class="v3d-control-row">
+                <label for="v3dPrintTarget" data-i18n="printTarget">Target</label>
+                <select id="v3dPrintTarget" class="v3d-select sm">
+                  <option value="all" data-i18n="targetAll">All Pieces (Full Garment)</option>
+                  <option value="bodice" data-i18n="targetBodice">Bodice / Top</option>
+                  <option value="skirt" data-i18n="targetSkirt">Skirt</option>
+                  <option value="trousers" data-i18n="targetTrousers">Trousers</option>
+                  <option value="sleeve" data-i18n="targetSleeve">Sleeves</option>
+                </select>
+              </div>
+
+              <!-- Presets Grid -->
+              <div class="v3d-panel-section">
+                <div class="v3d-section-title" data-i18n="printPresets">Print Presets</div>
+                <div class="v3d-presets-grid">
+                  <button type="button" class="v3d-preset-chip active" data-preset="none" data-i18n="printNone">Solid</button>
+                  <button type="button" class="v3d-preset-chip" data-preset="floral" data-i18n="printFloral">🌸 Floral</button>
+                  <button type="button" class="v3d-preset-chip" data-preset="monogram" data-i18n="printMonogram">💎 Monogram</button>
+                  <button type="button" class="v3d-preset-chip" data-preset="houndstooth" data-i18n="printHoundstooth">🏁 Houndstooth</button>
+                  <button type="button" class="v3d-preset-chip" data-preset="stripes" data-i18n="printStripes">📏 Stripes</button>
+                  <button type="button" class="v3d-preset-chip" data-preset="polka" data-i18n="printPolka">⚪ Polka Dot</button>
+                  <button type="button" class="v3d-preset-chip" data-preset="atelier" data-i18n="printAtelier">✨ Atelier</button>
+                </div>
+              </div>
+
+              <!-- Upload & Direct Drawing Actions -->
+              <div class="v3d-panel-section">
+                <div class="v3d-actions-stack">
+                  <label class="v3d-upload-btn" title="Upload an image or logo">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <span data-i18n="customPrintUpload">Upload Print Image</span>
+                    <input type="file" id="v3dPrintFileInput" accept="image/*" class="sr-only">
+                  </label>
+                  <button type="button" id="v3dOpenDrawBtn" class="v3d-draw-btn">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    <span data-i18n="drawOnCloth">Draw Directly on Cloth</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div id="v3dTensionHud" class="v3d-tension-hud hidden" aria-live="polite">
@@ -318,6 +531,73 @@
     <div class="modal-head"><div><h2 id="genericModalTitle">—</h2></div></div>
     <div class="modal-body"></div>
     <div class="modal-foot"><button class="big-btn" data-close="#genericModal" data-i18n="close" style="width:auto;padding:10px 22px">Close</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="v3dDrawModal">
+  <div class="modal wide v3d-draw-modal" role="dialog" aria-modal="true" aria-labelledby="v3dDrawModalTitle" tabindex="-1">
+    <div class="modal-head">
+      <div>
+        <h2 id="v3dDrawModalTitle" data-i18n="drawTitle">Interactive Cloth Drawing Board</h2>
+        <p data-i18n="drawOnCloth">Draw directly on cloth with custom colors, lines, and artwork.</p>
+      </div>
+      <button class="modal-close" data-close="#v3dDrawModal" title="Close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body v3d-draw-body">
+      <div class="v3d-draw-toolbar">
+        <div class="v3d-draw-tool-group">
+          <button type="button" id="v3dDrawBrushBtn" class="v3d-tool-btn active" title="Brush">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <span data-i18n="drawBrush">Brush</span>
+          </button>
+          <button type="button" id="v3dDrawEraserBtn" class="v3d-tool-btn" title="Eraser">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7L3 16C2 15 2 13 3 12L13 2L22 11L14 19"/></svg>
+            <span data-i18n="drawEraser">Eraser</span>
+          </button>
+        </div>
+        <div class="v3d-draw-tool-group">
+          <label class="v3d-draw-label" data-i18n="drawBrushSize">Size</label>
+          <input type="range" id="v3dDrawSize" min="2" max="36" value="8" class="v3d-slider">
+          <span id="v3dDrawSizeVal" class="v3d-slider-val">8px</span>
+        </div>
+        <div class="v3d-draw-tool-group v3d-palette">
+          <input type="color" id="v3dDrawColorPicker" value="#111111" class="v3d-color-input" title="Custom Color">
+          <button type="button" class="v3d-swatch-dot active" data-color="#111111" style="background:#111111" title="Jet Black"></button>
+          <button type="button" class="v3d-swatch-dot" data-color="#ffffff" style="background:#ffffff;border:1px solid #ccc" title="Pure White"></button>
+          <button type="button" class="v3d-swatch-dot" data-color="#d4af37" style="background:#d4af37" title="Gold"></button>
+          <button type="button" class="v3d-swatch-dot" data-color="#e63946" style="background:#e63946" title="Crimson"></button>
+          <button type="button" class="v3d-swatch-dot" data-color="#2a9d8f" style="background:#2a9d8f" title="Emerald"></button>
+          <button type="button" class="v3d-swatch-dot" data-color="#6d5efc" style="background:#6d5efc" title="Berry Brand"></button>
+          <button type="button" class="v3d-swatch-dot" data-color="#457b9d" style="background:#457b9d" title="Steel Navy"></button>
+        </div>
+        <div class="v3d-draw-tool-group">
+          <button type="button" id="v3dDrawUndoBtn" class="v3d-btn-sm ghost" title="Undo Stroke" aria-label="Undo">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>
+            <span data-i18n="undoLbl">Undo</span>
+          </button>
+          <button type="button" id="v3dDrawClearBtn" class="v3d-btn-sm ghost" data-i18n="drawClear">Clear</button>
+        </div>
+      </div>
+      <div class="v3d-canvas-board-wrap">
+        <canvas id="v3dDrawCanvas" width="512" height="512"></canvas>
+      </div>
+      <div class="v3d-draw-footer-row">
+        <div class="v3d-target-select-wrap">
+          <label for="v3dDrawTargetSelect" data-i18n="printTarget">Target:</label>
+          <select id="v3dDrawTargetSelect" class="v3d-select sm">
+            <option value="all" data-i18n="targetAll">All Pieces (Full Garment)</option>
+            <option value="bodice" data-i18n="targetBodice">Bodice / Top</option>
+            <option value="skirt" data-i18n="targetSkirt">Skirt</option>
+            <option value="trousers" data-i18n="targetTrousers">Trousers</option>
+            <option value="sleeve" data-i18n="targetSleeve">Sleeves</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot" style="justify-content:flex-end;gap:10px">
+      <button class="big-btn ghost" data-close="#v3dDrawModal" data-i18n="cancel" style="width:auto;padding:10px 20px">Cancel</button>
+      <button class="big-btn" id="v3dDrawApplyBtn" data-i18n="drawApply" style="width:auto;padding:10px 24px">Apply Drawing to 3D</button>
+    </div>
   </div>
 </div>
 

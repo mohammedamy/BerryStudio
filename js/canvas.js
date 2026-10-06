@@ -186,7 +186,7 @@ export const Canvas = (() => {
         darts: (p.darts || []).map(d => d.map(place)),
         notches: (p.notches || []).map(place),
         grain: (p.grain || []).map(place),
-        visible: true, color: null,
+        visible: p.visible !== false, color: p.color || null,
       };
       ox += w + 12; rowH = Math.max(rowH, h);
       return piece;
@@ -201,7 +201,7 @@ export const Canvas = (() => {
     if(context?.multimodalProposal) projectData.multimodalProposal=JSON.parse(JSON.stringify(context.multimodalProposal));
     projectMeta = { ...projectMeta, revision: projectMeta.revision + 1, status: 'draft', approval: null };
     pieces = layoutPieces(rawPieces);
-    pieces.forEach((p, i) => p.color = colors[i % colors.length]);
+    pieces.forEach((p, i) => p.color = p.color || colors[i % colors.length]);
     selected = -1; multiSelected=[]; sketch = []; texts = []; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null;
     fit();
   }
