@@ -52,54 +52,201 @@
   cursor: pointer;
 }
 
-/* Guided workflow: all selectors stay inside the embedded application. */
-.cloth-lab-root { min-width: 0; min-height: 0; }
-.cloth-lab-root button, .cloth-lab-root select { min-height: 38px; border: 1px solid var(--border); background: var(--panel-2); border-radius: 8px; padding: 7px 12px; }
+/* ============================================================
+   Guided workflow UI v2 (novice-first): Pieces → Sew → Try on.
+   All selectors stay inside the embedded application.
+   ============================================================ */
+.cloth-lab-root { min-width: 0; min-height: 0; --amber: #ffc34a; --ok: #37d2b4; --guess: #f0b75a; --surface: #191b22; }
+.cloth-lab-root button, .cloth-lab-root select { min-height: 36px; border: 1px solid var(--border); background: var(--panel-2); border-radius: 8px; padding: 6px 12px; }
+.cloth-lab-root button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
 .cloth-lab-root button:disabled { opacity: .45; cursor: not-allowed; }
-.cloth-lab-root :focus-visible { outline: 3px solid #f6bc59; outline-offset: 3px; }
-.cloth-lab-root .cl-header { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--panel); }
-.cloth-lab-root .cl-header nav, .cloth-lab-root .cl-categories { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
-.cloth-lab-root [aria-current=step] { background:var(--accent); color:white; }
-.cloth-lab-root .cl-inspect { position:relative; }
-.cloth-lab-root summary { cursor:pointer; padding:12px; font-weight:600; }
-.cloth-lab-root .cl-inspect > div { position:absolute; top:100%; inset-inline-end:0; z-index:20; display:grid; gap:5px; background:var(--panel); border:1px solid var(--border); padding:8px; width:190px; }
-.cloth-lab-root .cl-review, .cloth-lab-root .cl-sewing { padding:24px; overflow:auto; min-height:0; }
-.cloth-lab-root .cl-heading { max-width:760px; margin-bottom:20px; }
-.cloth-lab-root h2 { font-size:24px; line-height:1.2; margin:8px 0; }
-.cloth-lab-root .cl-heading p, .cloth-lab-root .cl-piece-card p { color:var(--text-2); margin:8px 0 14px; }
-.cloth-lab-root .cl-eyebrow { color:var(--accent-2); font-size:12px; font-weight:700; letter-spacing:.04em; }
-.cloth-lab-root .cl-summary { padding:12px 16px; background:var(--panel); border-radius:10px; margin-bottom:16px; }
-.cloth-lab-root .cl-inventory, .cloth-lab-root .cl-piece-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:16px; align-items:start; }
-.cloth-lab-root .cl-piece-card { border:1px solid var(--border); border-radius:12px; padding:16px; background:var(--panel); min-width:0; }
-.cloth-lab-root .cl-piece-card header { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; }
-.cloth-lab-root .cl-piece-card header span { font-size:12px; color:var(--accent-2); }
-.cloth-lab-root fieldset { min-width:0; border:1px solid var(--border); border-radius:10px; margin:12px 0; padding:12px; }
-.cloth-lab-root legend { padding:0 5px; font-weight:600; }
-.cloth-lab-root .cl-choice { display:flex; gap:10px; align-items:flex-start; padding:10px; cursor:pointer; border-radius:8px; line-height:1.4; }
-.cloth-lab-root .cl-choice:hover { background:var(--panel-2); }
-.cloth-lab-root .cl-choice input { margin-top:3px; accent-color:var(--accent-2); flex:none; }
-.cloth-lab-root .cl-primary { background:var(--accent); color:white; font-weight:700; margin-top:20px; padding:12px 24px; }
-.cloth-lab-root .cl-link { background:transparent; color:var(--accent-2); margin:8px 0; }
-.cloth-lab-root .cl-error { margin:16px; padding:16px; border:1px solid var(--danger); border-radius:10px; overflow-wrap:anywhere; }
-.cloth-lab-root .cl-empty { padding:40px; max-width:660px; margin:auto; }
-.cloth-lab-root .cl-workspace { flex:1 1 auto; min-height:0; display:grid; grid-template-columns:300px minmax(0,1fr); }
-.cloth-lab-root .cl-sidebar { background:var(--panel); border-inline-end:1px solid var(--border); overflow:auto; min-height:0; }
-.cloth-lab-root .cl-sidebar > details { border-top:1px solid var(--border); }
-.cloth-lab-root .cl-preview { min-width:0; min-height:0; position:relative; overflow:auto; }
-.cloth-lab-root .cl-preview:has(canvas) { overflow:hidden; }
-.cloth-lab-root .cl-simulation-note { position:absolute; z-index:4; inset-inline:12px; bottom:10px; margin:0; max-width:620px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:color-mix(in srgb, var(--panel) 90%, transparent); color:var(--text-2); font-size:12px; line-height:1.4; pointer-events:none; }
-.cloth-lab-root .cl-preview-tools { position:absolute; top:12px; inset-inline-start:12px; z-index:4; display:flex; flex-wrap:wrap; gap:6px; max-width:calc(100% - 24px); }
-.cloth-lab-root .cl-pattern-svg { width:100%; height:250px; background:var(--bg); margin:12px 0; border-radius:8px; touch-action:manipulation; }
-.cloth-lab-root .cl-pattern-svg [role=button] { cursor:pointer; }
-.cloth-lab-root .cl-point-selects { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
-.cloth-lab-root .cl-point-selects label, .cloth-lab-root .cl-field { display:grid; gap:4px; font-size:12px; }
-@media (max-width:760px) {
- .cloth-lab-root .cl-workspace { display:flex; flex-direction:column; overflow:auto; }
- .cloth-lab-root .cl-sidebar { flex:none; overflow:visible; border-inline-end:0; }
- .cloth-lab-root .cl-preview { flex:none; overflow:visible; min-height:420px; }
- .cloth-lab-root .cl-preview:has(canvas) { height:60vh; }
- .cloth-lab-root .cl-review, .cloth-lab-root .cl-sewing { padding:14px; }
- .cloth-lab-root .cl-inventory, .cloth-lab-root .cl-piece-grid { grid-template-columns:minmax(0,1fr); }
- .cloth-lab-root .cl-header { padding:8px; }
- .cloth-lab-root .cl-header button { font-size:12px; padding:7px 9px; }
+.cloth-lab-root :focus-visible { outline: 3px solid #f6bc59; outline-offset: 2px; }
+.cloth-lab-root h2 { font-size: 22px; line-height: 1.2; margin: 4px 0 6px; }
+.cloth-lab-root h3 { font-size: 13px; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; color: var(--text); }
+.cloth-lab-root summary { cursor: pointer; font-weight: 600; }
+.cloth-lab-root .cl-eyebrow { color: var(--accent-2); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.cloth-lab-root .cl-muted { color: var(--text-2); font-size: 12.5px; margin: 0 0 8px; }
+
+/* buttons */
+.cloth-lab-root .cl-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+.cloth-lab-root .cl-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cloth-lab-root .cl-btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 85%, white); }
+.cloth-lab-root .cl-btn-lg { min-height: 44px; padding: 10px 22px; font-size: 15px; border-radius: 10px; box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 35%, transparent); }
+.cloth-lab-root .cl-btn-ghost { background: transparent; }
+.cloth-lab-root .cl-btn-link { background: transparent; border-color: transparent; color: var(--text-2); text-decoration: underline; padding-inline: 0; }
+.cloth-lab-root .cl-btn-sm { min-height: 30px; padding: 4px 10px; font-size: 12.5px; }
+.cloth-lab-root .cl-icon-btn { min-height: 28px; min-width: 28px; padding: 0 6px; background: transparent; border-color: transparent; color: var(--text-2); font-size: 15px; line-height: 1; }
+.cloth-lab-root .cl-icon-btn[aria-pressed=true] { color: var(--amber); }
+.cloth-lab-root .cl-icon-btn.tone-danger:hover { color: var(--danger); }
+.cloth-lab-root .cl-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; user-select: none; }
+.cloth-lab-root .cl-toggle input { accent-color: var(--amber); width: 16px; height: 16px; }
+
+/* header + stepper */
+.cloth-lab-root .cl-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); flex: none; }
+.cloth-lab-root .cl-brand { font-size: 14px; }
+.cloth-lab-root .cl-stepper ol { display: flex; align-items: center; gap: 0; list-style: none; margin: 0; padding: 0; }
+.cloth-lab-root .cl-stepper li { display: flex; align-items: center; }
+.cloth-lab-root .cl-stepper li + li::before { content: ''; width: 28px; height: 2px; background: var(--border); margin: 0 4px; }
+.cloth-lab-root .cl-stepper li.is-done + li::before, .cloth-lab-root .cl-stepper li.is-current::before { background: var(--accent-2); }
+.cloth-lab-root .cl-stepper button { display: flex; align-items: center; gap: 8px; background: transparent; border-color: transparent; padding: 4px 10px 4px 4px; border-radius: 999px; color: var(--text-2); font-weight: 600; }
+.cloth-lab-root .cl-stepper .cl-step-num { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; border: 2px solid var(--border); background: var(--bg); }
+.cloth-lab-root .cl-stepper .is-done .cl-step-num { border-color: var(--accent-2); color: var(--accent-2); }
+.cloth-lab-root .cl-stepper .is-current button { color: var(--text); background: var(--panel-2); }
+.cloth-lab-root .cl-stepper .is-current .cl-step-num { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cloth-lab-root .cl-categories { display: flex; flex-wrap: wrap; gap: 6px; margin-inline-start: auto; }
+.cloth-lab-root .cl-categories [aria-pressed=true] { background: var(--accent); color: #fff; }
+
+/* sticky action bar */
+.cloth-lab-root .cl-actionbar { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--border); background: var(--panel); }
+.cloth-lab-root .cl-actionbar-status { flex: 1 1 auto; margin: 0; color: var(--text-2); font-size: 13px; min-width: 0; }
+.cloth-lab-root .cl-actionbar-status.is-notice { color: var(--amber); font-weight: 600; }
+
+/* callouts, badges, chips */
+.cloth-lab-root .cl-callout { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--panel); overflow-wrap: anywhere; font-size: 13px; }
+.cloth-lab-root .cl-callout ul { margin: 6px 0; padding-inline-start: 18px; color: var(--text-2); }
+.cloth-lab-root .cl-callout p { margin: 6px 0 0; }
+.cloth-lab-root .cl-callout.tone-warn { border-color: color-mix(in srgb, var(--guess) 55%, var(--border)); background: color-mix(in srgb, var(--guess) 10%, var(--panel)); }
+.cloth-lab-root .cl-inline { margin: 10px 16px 0; flex: none; }
+.cloth-lab-root .cl-floating { position: absolute; inset-inline: 12px; top: 60px; z-index: 6; display: flex; gap: 8px; align-items: flex-start; }
+.cloth-lab-root .cl-error { margin: 16px; padding: 16px; border: 1px solid var(--danger); border-radius: 10px; overflow-wrap: anywhere; }
+.cloth-lab-root .cl-badge { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); color: var(--text-2); white-space: nowrap; }
+.cloth-lab-root .cl-badge.tone-ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.cloth-lab-root .cl-badge.tone-guess { color: var(--guess); background: color-mix(in srgb, var(--guess) 14%, transparent); }
+.cloth-lab-root .cl-badge.tone-edited { color: #b9b0ff; background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.cloth-lab-root .cl-badge.tone-attention, .cloth-lab-root .cl-badge.tone-blocked { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.cloth-lab-root .cl-chips { display: flex; flex-wrap: wrap; gap: 5px; list-style: none; margin: 8px 0 0; padding: 0; }
+.cloth-lab-root .cl-chips li { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--bg); border: 1px solid var(--border); color: var(--text-2); }
+.cloth-lab-root .cl-count { font-size: 11.5px; font-weight: 700; color: var(--text-2); background: var(--bg); border-radius: 999px; padding: 1px 8px; }
+.cloth-lab-root .cl-field { display: grid; gap: 4px; font-size: 12.5px; color: var(--text-2); }
+.cloth-lab-root .cl-field select { color: var(--text); width: 100%; }
+
+/* step containers */
+.cloth-lab-root .cl-step { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.cloth-lab-root .cl-pieces { padding: 20px 24px 28px; }
+
+/* Step 1: pieces */
+.cloth-lab-root .cl-hero { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
+.cloth-lab-root .cl-hero-text { max-width: 680px; }
+.cloth-lab-root .cl-hero-text p { color: var(--text-2); margin: 0; }
+.cloth-lab-root .cl-stats { display: flex; gap: 8px; margin: 0; }
+.cloth-lab-root .cl-stats div { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; min-width: 96px; }
+.cloth-lab-root .cl-stats dt { font-size: 11.5px; color: var(--text-2); }
+.cloth-lab-root .cl-stats dd { margin: 0; font-size: 22px; font-weight: 700; }
+.cloth-lab-root .cl-stats .is-guess dd { color: var(--guess); }
+.cloth-lab-root .cl-pieces > .cl-callout { margin-bottom: 16px; }
+.cloth-lab-root .cl-piece-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; align-items: start; }
+.cloth-lab-root .cl-piece-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: var(--panel); min-width: 0; display: grid; gap: 10px; }
+.cloth-lab-root .cl-piece-card.tone-guess { border-color: color-mix(in srgb, var(--guess) 40%, var(--border)); }
+.cloth-lab-root .cl-piece-card.tone-attention { border-color: var(--danger); }
+.cloth-lab-root .cl-piece-card.tone-off, .cloth-lab-root .cl-piece-card.tone-blocked { opacity: .7; }
+.cloth-lab-root .cl-piece-card > .cl-btn { justify-self: start; }
+.cloth-lab-root .cl-card-top { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; }
+.cloth-lab-root .cl-card-info { display: grid; gap: 4px; justify-items: start; min-width: 0; }
+.cloth-lab-root .cl-card-title { font-size: 14px; overflow-wrap: anywhere; }
+.cloth-lab-root .cl-card-note { margin: 4px 0 0; font-size: 12.5px; color: var(--text-2); }
+.cloth-lab-root .cl-card-edit { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.cloth-lab-root .cl-card-edit .cl-btn-link { justify-self: start; }
+.cloth-lab-root .cl-thumb { width: 100%; display: block; background: var(--bg); border-radius: 8px; color: #cfd3dc; }
+.cloth-lab-root .cl-thumb-empty { display: grid; place-items: center; color: var(--text-2); font-size: 24px; }
+
+/* Step 2: sew */
+.cloth-lab-root .cl-workspace-sew { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.cloth-lab-root .cl-sew { display: grid; grid-template-columns: minmax(0, 1fr) 330px; overflow: hidden; }
+.cloth-lab-root .cl-sew-main { overflow: auto; padding: 16px 20px 24px; min-height: 0; }
+.cloth-lab-root .cl-sew-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.cloth-lab-root .cl-banner-wrap { position: sticky; top: -16px; z-index: 3; display: grid; gap: 8px; padding: 8px 0; background: var(--bg); }
+.cloth-lab-root .cl-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); }
+.cloth-lab-root .cl-banner.tone-active { border-color: color-mix(in srgb, var(--amber) 60%, var(--border)); }
+.cloth-lab-root .cl-banner.tone-ready { border-color: var(--amber); background: color-mix(in srgb, var(--amber) 9%, var(--panel)); }
+.cloth-lab-root .cl-banner-text { flex: 1 1 260px; display: grid; gap: 2px; min-width: 0; }
+.cloth-lab-root .cl-banner-text span { color: var(--text); overflow-wrap: anywhere; }
+.cloth-lab-root .cl-banner-text small, .cloth-lab-root .cl-banner-hint { color: var(--text-2); font-size: 12px; }
+.cloth-lab-root .cl-banner-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cloth-lab-root .cl-howto { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; counter-reset: howto; font-weight: 600; }
+.cloth-lab-root .cl-howto li { counter-increment: howto; display: flex; align-items: center; gap: 8px; }
+.cloth-lab-root .cl-howto li::before { content: counter(howto); width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; font-size: 12px; }
+.cloth-lab-root .cl-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--text-2); margin: 4px 0 12px; }
+.cloth-lab-root .cl-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.cloth-lab-root .cl-legend .sw { width: 22px; height: 4px; border-radius: 2px; display: inline-block; }
+.cloth-lab-root .sw-free { background: repeating-linear-gradient(90deg, #8a90a3 0 5px, transparent 5px 8px); }
+.cloth-lab-root .sw-pending { background: var(--amber); height: 6px !important; }
+.cloth-lab-root .sw-sewn { background: linear-gradient(90deg, #ff8a5b, #5bc0ff, #c38bff); }
+.cloth-lab-root .cl-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; align-items: start; }
+.cloth-lab-root .cl-board-card { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); padding: 10px; transition: box-shadow .2s, border-color .2s; min-width: 0; }
+.cloth-lab-root .cl-board-card.is-highlight { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 35%, transparent); }
+.cloth-lab-root .cl-board-card header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+.cloth-lab-root .cl-board-card header strong { font-size: 13.5px; }
+.cloth-lab-root .cl-board-card header .cl-badge { margin-inline-start: auto; }
+.cloth-lab-root .cl-side { font-size: 11.5px; color: var(--accent-2); font-weight: 700; }
+.cloth-lab-root .cl-board-svg { width: 100%; height: 260px; display: block; background: var(--bg); border-radius: 8px; touch-action: manipulation; }
+.cloth-lab-root .cl-edge { cursor: pointer; outline: none; }
+.cloth-lab-root .cl-edge-hit { stroke: transparent; pointer-events: stroke; }
+.cloth-lab-root .cl-edge-line { pointer-events: none; transition: stroke .12s; }
+.cloth-lab-root .cl-edge.is-free .cl-edge-line, .cloth-lab-root .cl-edge.is-named .cl-edge-line { stroke: #8a90a3; stroke-dasharray: 3 2.2; vector-effect: non-scaling-stroke; stroke-width: 2.5px; }
+.cloth-lab-root .cl-edge.is-named .cl-edge-line { stroke: #b4bacb; }
+.cloth-lab-root .cl-edge.is-sewn .cl-edge-line { vector-effect: non-scaling-stroke; stroke-width: 4px; }
+.cloth-lab-root .cl-edge.is-pending .cl-edge-line { vector-effect: non-scaling-stroke; stroke-width: 6px; filter: drop-shadow(0 0 3px rgba(255, 195, 74, .8)); }
+.cloth-lab-root .cl-edge:hover .cl-edge-line, .cloth-lab-root .cl-edge:focus-visible .cl-edge-line { stroke: #fff; stroke-dasharray: none; stroke-width: 5px; }
+.cloth-lab-root .cl-seam-badge { pointer-events: none; }
+.cloth-lab-root .cl-seam-badge text { fill: #14151a; font-weight: 800; }
+.cloth-lab-root .cl-point { cursor: pointer; stroke: #14151a; vector-effect: non-scaling-stroke; stroke-width: 1px; }
+.cloth-lab-root .cl-sew-panel { border-inline-start: 1px solid var(--border); background: var(--panel); overflow: auto; min-height: 0; padding: 14px; display: grid; gap: 14px; align-content: start; }
+.cloth-lab-root .cl-panel-block { display: grid; gap: 6px; }
+.cloth-lab-root .cl-panel-block + .cl-panel-block { border-top: 1px solid var(--border); padding-top: 14px; }
+.cloth-lab-root .cl-seam-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.cloth-lab-root .cl-seam-list li { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 8px; font-size: 12.5px; }
+.cloth-lab-root .cl-seam-list li:hover { background: var(--panel-2); }
+.cloth-lab-root .cl-seam-dot { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #14151a; font-weight: 800; font-size: 11.5px; }
+.cloth-lab-root .cl-seam-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.cloth-lab-root .cl-seam-text small { color: var(--text-2); }
+.cloth-lab-root .cl-loose-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 4px 0; }
+.cloth-lab-root .cl-row-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* Step 3: try on */
+.cloth-lab-root .cl-workspace { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr); }
+.cloth-lab-root .cl-sidebar { background: var(--panel); border-inline-end: 1px solid var(--border); overflow: auto; min-height: 0; display: flex; flex-direction: column; }
+.cloth-lab-root .cl-tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 4px; padding: 10px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.cloth-lab-root .cl-tabs button { padding: 6px 4px; font-size: 12.5px; background: transparent; border-color: transparent; color: var(--text-2); font-weight: 600; }
+.cloth-lab-root .cl-tabs button[aria-selected=true] { background: var(--panel-2); border-color: var(--border); color: var(--text); }
+.cloth-lab-root .cl-tabpanel > div { border-top: 0 !important; }
+.cloth-lab-root .cl-tip { margin: auto 12px 12px; padding: 10px 12px; border-radius: 10px; background: var(--bg); font-size: 12px; color: var(--text-2); }
+.cloth-lab-root .cl-tip ul { margin: 4px 0 0; padding-inline-start: 16px; }
+.cloth-lab-root .cl-preview { min-width: 0; min-height: 0; position: relative; overflow: hidden; }
+.cloth-lab-root .cl-preview-tools { position: absolute; top: 12px; inset-inline: 12px; z-index: 4; display: flex; flex-wrap: wrap; gap: 8px; pointer-events: none; }
+.cloth-lab-root .cl-tool-group { display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 10px; background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--border); pointer-events: auto; backdrop-filter: blur(6px); }
+.cloth-lab-root .cl-tool-group button, .cloth-lab-root .cl-tool-group select { min-height: 32px; padding: 4px 10px; font-size: 12.5px; }
+.cloth-lab-root .cl-view-select { margin-inline-start: auto; font-size: 12px; color: var(--text-2); padding-inline-start: 10px; }
+.cloth-lab-root .cl-simulation-note { position: absolute; z-index: 4; inset-inline: 12px; bottom: 10px; margin: 0; max-width: 620px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--panel) 90%, transparent); color: var(--text-2); font-size: 12px; line-height: 1.4; pointer-events: none; }
+.cloth-lab-root .cl-loading { height: 100%; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--text-2); }
+.cloth-lab-root .cl-spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--accent); animation: cl-spin 0.8s linear infinite; }
+@keyframes cl-spin { to { transform: rotate(360deg); } }
+
+/* empty state */
+.cloth-lab-root .cl-empty { padding: 48px 24px; max-width: 640px; margin: auto; text-align: center; }
+.cloth-lab-root .cl-empty p { color: var(--text-2); }
+.cloth-lab-root .cl-empty-art { font-size: 40px; width: 80px; height: 80px; margin: 0 auto 8px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); color: var(--accent-2); }
+.cloth-lab-root .cl-howto-big { justify-content: center; margin-top: 20px; }
+
+@media (prefers-reduced-motion: reduce) { .cloth-lab-root * { transition: none !important; animation: none !important; } }
+@media (max-width: 900px) {
+  .cloth-lab-root .cl-sew { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .cloth-lab-root .cl-sew-panel { border-inline-start: 0; border-top: 1px solid var(--border); max-height: 38vh; }
+}
+@media (max-width: 760px) {
+  .cloth-lab-root .cl-workspace { display: flex; flex-direction: column; overflow: auto; }
+  .cloth-lab-root .cl-sidebar { flex: none; overflow: visible; border-inline-end: 0; order: 2; }
+  .cloth-lab-root .cl-preview { flex: none; height: 62vh; min-height: 360px; order: 1; }
+  .cloth-lab-root .cl-pieces, .cloth-lab-root .cl-sew-main { padding: 12px; }
+  .cloth-lab-root .cl-header { padding: 8px; gap: 8px; }
+  .cloth-lab-root .cl-stepper li + li::before { width: 10px; }
+  .cloth-lab-root .cl-stepper .cl-step-label { font-size: 12px; }
+  .cloth-lab-root .cl-actionbar { flex-wrap: wrap; padding: 8px 10px; }
+  .cloth-lab-root .cl-actionbar-status { flex-basis: 100%; order: -1; font-size: 12px; }
+  .cloth-lab-root .cl-actionbar .cl-btn-primary { flex: 1 1 auto; }
+  .cloth-lab-root .cl-stats div { min-width: 0; padding: 6px 10px; }
+  .cloth-lab-root .cl-board-svg { height: 220px; }
+}
+@media (max-width: 420px) {
+  .cloth-lab-root .cl-stepper .cl-step-label { display: none; }
+  .cloth-lab-root .cl-stepper .is-current .cl-step-label { display: inline; }
 }

@@ -1,5 +1,20 @@
 # Changelog
 
+## Cloth Lab: guided, novice-friendly try-on
+
+Cloth Lab is now a 3-step flow — **Check pieces → Sew → Try on** — with one
+primary "Try it on" button available from the start. Every piece arrives
+already set up: placement, copies and dart handling are guessed from the
+piece name/role (EN/AR) and shown as editable "Auto-guessed · check" badges
+instead of blocking questions; unsewn pieces hang in place instead of
+stopping the preview. Before this change 272 of 308 library designs opened
+behind unanswered questions; now all 308 open ready to try on (covered by a
+test). Seams are made by clicking whole edges (no point-picking needed; a
+precise mode remains), with matching colours/numbers per seam, flip and
+remove controls, and plain-language errors. The try-on view groups settings
+into Fabric / Body / Look / Export tabs. The strict `planPattern` rules are
+unchanged; the auto layer sits on top of them. Bilingual EN/AR + RTL kept.
+
 ## Plan 7 P7-10: professional-pilot evidence boundary
 
 Adds a versioned, pseudonymous pilot-session record and deterministic summary
