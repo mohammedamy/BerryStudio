@@ -1,15 +1,31 @@
 import { CATEGORIES } from '../state/measurements'
 import { t } from '../i18n'
-export default function Header({ embedded = false, bodyOnly = false, linked = false, configuring = false, onConfigure, lang = 'en', category, onCategoryChange, debugView, onDebugViewChange }) {
+
+// Guided-workflow header: a numbered 3-step stepper (Pieces → Sew → Try on)
+// that is always clickable — App decides what each jump needs (e.g. "Try
+// on" builds the garment first) instead of silently bouncing the user back
+// like the old tab row did. The standalone build also shows its title and,
+// when no design is linked, the body category switcher.
+export const STEPS = [
+  ['pieces', 'Check pieces', 'مراجعة القطع'],
+  ['sew', 'Sew', 'الخياطة'],
+  ['tryon', 'Try on', 'التجربة'],
+]
+export default function Header({ embedded = false, bodyOnly = false, linked = false, lang = 'en', category, onCategoryChange, step, onStep, busy = false }) {
   const ar = lang === 'ar'
+  const index = STEPS.findIndex(s => s[0] === step)
   return <header className="cl-header">
-    {!embedded && <strong>{t(lang, 'title')}</strong>}
-    {!bodyOnly && <nav aria-label={ar ? 'خطوات العمل' : 'Garment workflow'}>
-      <button aria-current={configuring ? 'step' : undefined} onClick={onConfigure}>{ar ? '١ · القطع' : '1 · Pieces'}</button>
-      <button aria-current={!configuring && debugView === 'seams' ? 'step' : undefined} onClick={() => onDebugViewChange('seams')}>{ar ? '٢ · الوصلات' : '2 · Joins'}</button>
-      <button aria-current={!configuring && debugView === 'cloth' ? 'step' : undefined} onClick={() => onDebugViewChange('cloth')}>{ar ? '٣ · المحاكاة' : '3 · Simulate'}</button>
-      <details className="cl-inspect"><summary>{ar ? 'فحص العرض' : 'Inspect'}</summary><div>{[['off', 'Body', 'الجسم'], ['pieces', 'Placed panels', 'القطع الموضوعة'], ['weld', 'Join alignment', 'محاذاة الوصلات']].map(([id, en, arabic]) => <button key={id} onClick={() => onDebugViewChange(id)}>{ar ? arabic : en}</button>)}</div></details>
+    {!embedded && <strong className="cl-brand">{t(lang, 'title')}</strong>}
+    {!bodyOnly && linked && <nav className="cl-stepper" aria-label={ar ? 'خطوات العمل' : 'Garment workflow'}>
+      <ol>
+        {STEPS.map(([id, en, arabic], i) => <li key={id} className={i < index ? 'is-done' : i === index ? 'is-current' : ''}>
+          <button aria-current={i === index ? 'step' : undefined} disabled={busy} onClick={() => onStep?.(id)}>
+            <span className="cl-step-num" aria-hidden="true">{i < index ? '✓' : (ar ? '١٢٣'[i] : i + 1)}</span>
+            <span className="cl-step-label">{ar ? arabic : en}</span>
+          </button>
+        </li>)}
+      </ol>
     </nav>}
-    {!embedded && !linked && <div className="cl-categories">{CATEGORIES.map(c => <button key={c} aria-pressed={c === category} onClick={() => onCategoryChange(c)}>{t(lang, `cat_${c}`)}</button>)}</div>}
+    {!embedded && !linked && <div className="cl-categories" role="group" aria-label={ar ? 'الفئة' : 'Category'}>{CATEGORIES.map(c => <button key={c} aria-pressed={c === category} onClick={() => onCategoryChange(c)}>{t(lang, `cat_${c}`)}</button>)}</div>}
   </header>
 }

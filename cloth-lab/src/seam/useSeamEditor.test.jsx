@@ -48,3 +48,37 @@ it('restores seam edges by source identity after piece reordering',async()=>{
   expect(editor.drafts.map(p=>p.id)).toEqual(raw.map(p=>p.id))
   expect(editor.drafts.every(p=>p.edges.saved)).toBe(true)
 })
+
+describe('novice-first editing (autoPlace)',()=>{
+  async function mountAuto(seedEdges=[],seedSeams=[]){node=document.createElement('div');root=createRoot(node);function Test(){editor=useSeamEditor(raw,roles,seedEdges,seedSeams,{},null,{autoPlace:true});return null}await act(async()=>root.render(<Test/>))}
+  it('places pieces the importer could not sew instead of blocking simulation',async()=>{
+    await mountAuto()
+    expect(editor.unjoined).toHaveLength(0);expect(editor.separate).toEqual(raw.map(p=>p.id));expect(editor.autoPlaced).toHaveLength(4)
+    let garment;await run(()=>{garment=editor.finalize()});expect(garment.pieces).toHaveLength(4)
+  })
+  it('offers each side of an un-named piece as a one-click target and sews two of them',async()=>{
+    await mountAuto()
+    expect(editor.gapsByPiece[0]).toHaveLength(4)
+    await run(()=>editor.chooseSpan(0,1,2));await run(()=>editor.chooseSpan(1,3,0))
+    expect(editor.pendingEdges).toHaveLength(2)
+    await run(()=>editor.sewSelected())
+    expect(editor.seams).toHaveLength(1);expect(editor.separate).toEqual(['p2','p3'])
+    // right side (going down) meets left side (going up): pair top with top
+    expect(editor.seams[0].reverse).toBe(true)
+    expect(editor.seamMarks[`p0:${editor.seams[0].a.edge}`].n).toBe(1)
+    expect(editor.gapsByPiece[0]).toEqual([{from:2,to:1}])
+  })
+  it('flip inverts the automatic direction',async()=>{
+    await mountAuto();await run(()=>editor.chooseSpan(0,1,2));await run(()=>editor.chooseSpan(1,1,2));await run(()=>editor.sewSelected(true))
+    expect(editor.seams[0].reverse).toBe(true)
+  })
+  it('removing a piece’s last seam returns it to placed instead of blocking',async()=>{
+    await mountAuto();await run(()=>editor.chooseSpan(0,1,2));await run(()=>editor.chooseSpan(1,3,0));await run(()=>editor.sewSelected())
+    await run(()=>editor.removeSeam(editor.seams[0].id))
+    expect(editor.unjoined).toHaveLength(0);expect(editor.separate.sort()).toEqual(['p0','p1','p2','p3'])
+  })
+  it('try-on can proceed past an unfinished selection',async()=>{
+    await mountAuto();await run(()=>editor.chooseSpan(0,1,2))
+    let garment;await run(()=>{garment=editor.finalize({ignorePending:true})});expect(garment.pieces).toHaveLength(4)
+  })
+})
