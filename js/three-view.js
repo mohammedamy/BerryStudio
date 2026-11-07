@@ -1,27 +1,38 @@
 /* ============================================================
-   3D Preview — BerryStudio premium avatar system.
+   3D Preview — BerryStudio Studio Polish & Unified Human System.
 
-   • Four procedural bodies with correct feminine / masculine / child
-     proportions, sculpted head + hair + subtle face, PBR skin.
-   • Studio lighting + soft contact shadow + gradient backdrop.
-   • Smooth OrbitControls (orbit / zoom / pan, touch friendly) + auto-spin
-     + natural limb-swing walk cycle.
-   • Live fabric material (cotton…leather), colour & transparency.
-   • Per-piece show/hide synced with the Layers panel.
-   • Optional drop-in GLB avatars: place avatars/<category>.glb in the
-     repo and they are used instead, auto-scaled to the measurements.
-   • Graceful fallback when WebGL / network is unavailable.
+   • Unified watertight 2-manifold human mannequin (`js/human-mannequin.js`)
+     with 17-bone skeleton & smooth linear-blend skinning across all 4
+     categories (`women`, `men`, `girls`, `boys`) — zero separated pieces.
+   • Pattern-responsive tailored 3D garments (`js/pattern-3d-metrics.js`):
+     sculpted bodices with real shoulder seams, armholes, necklines & collars;
+     tailored skinned sleeves (cap, puff, fitted, 3/4, full, bell, bishop);
+     draped/pleated skirts (mini, knee, midi, maxi); and single-surface
+     Y-branched tailored trousers/shorts/briefs.
+   • Studio 3-point lighting, soft floor contact shadow + atelier turntable,
+     procedural micro-weave fabric bump maps, tension heatmap, & OBJ export.
    ============================================================ */
+
+import {
+  BONE_IDX,
+  buildHumanMannequin,
+  bumpWindow,
+  computeHumanBodyDims,
+  createHumanSkinMaterial,
+  maleTorsoZBump,
+  torsoZBump,
+} from "./human-mannequin.js";
+import { computePatternMetrics3D } from "./pattern-3d-metrics.js";
+
 export const View3D = (() => {
   let THREE, OrbitControls, GLTFLoader, RGBELoader, cloneSkeleton;
   let renderer, scene, camera, controls, raf = null;
   let root, bodyGroup, garmentGroup, limbs = {};
+  let activeMannequin = null;
   let ready = false, spinning = true, walking = true, t = 0;
-  // WP-17: an OS/app-level "prefers-reduced-motion" override — always wins
-  // over the spin toggle's own saved value, never the other way around.
   let reduceMotion = false;
   let host, curCategory = "women", curH = 1.7;
-  let curMeasurements = null, lastDims = null;
+  let curMeasurements = null, lastDims = null, curPatternMetrics = null;
   let tensionMapEnabled = false;
   let lastTensionMetrics = { avgEase: 4.5, peakStrain: 0.0, status: "fitOptimal", fabric: "cotton" };
   let onTensionMetricsUpdate = () => {};
@@ -29,39 +40,51 @@ export const View3D = (() => {
   let onAvatarIssue = () => {};
   let onFatalError = () => {};
   let noiseTex = null;
+  const sharedTextures = new Set();
+  const weaveBumpCache = new Map();
   let skirtFrontMesh = null, skirtBackMesh = null;
   let accessoriesGroup = null;
   let accessoriesState = {
     buttons: { enabled: false, style: "gold", placement: "front_placket", count: 6 },
     zipper: { enabled: false, style: "silver", placement: "center_front", openPct: 0 },
-    belt: { enabled: false, style: "leather_gold", width: "medium" }
+    belt: { enabled: false, style: "leather_gold", width: "medium" },
   };
-  const avatarURLs = {};                       // category -> optional GLB url
+  const avatarURLs = {};
 
   // ---------- GLB robustness: timeout, retry, in-memory cache ----------
-  // Bundled/uploaded avatars are optional overrides on top of the always-
-  // available procedural body, but a hung fetch (flaky network, a stalled
-  // service-worker intercept, a very slow disk on first install) used to
-  // leave the loading spinner showing forever, since GLTFLoader.load() has
-  // no built-in timeout and its promise then never settles either way.
   const GLB_TIMEOUT_MS = 10000;
   const GLB_MAX_RETRIES = 2;
-  const GLB_CACHE_LIMIT = 6;                   // cap memory for many custom URLs in one session
-  const glbCache = new Map();                  // url -> raw loaded gltf (untouched, reused via .scene.clone())
+  const GLB_CACHE_LIMIT = 6;
+  const glbCache = new Map();
+
   function withTimeout(promise, ms) {
     let timer;
-    const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), ms); });
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("timeout")), ms);
+    });
     return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
   }
+
   function fetchGLTF(url, onProgress) {
     return new Promise((resolve, reject) => {
-      new GLTFLoader().load(url, resolve, (evt) => {
-        if (onProgress && evt.total) onProgress(Math.max(0, Math.min(99, Math.round(evt.loaded / evt.total * 100))));
-      }, reject);
+      new GLTFLoader().load(
+        url,
+        resolve,
+        (evt) => {
+          if (onProgress && evt.total) {
+            onProgress(Math.max(0, Math.min(99, Math.round((evt.loaded / evt.total) * 100))));
+          }
+        },
+        reject
+      );
     });
   }
+
   async function loadGLTFWithRetry(url, onProgress) {
-    if (glbCache.has(url)) { onProgress && onProgress(100); return glbCache.get(url); }
+    if (glbCache.has(url)) {
+      if (onProgress) onProgress(100);
+      return glbCache.get(url);
+    }
     let lastErr;
     for (let attempt = 0; attempt <= GLB_MAX_RETRIES; attempt++) {
       try {
@@ -71,98 +94,71 @@ export const View3D = (() => {
         return gltf;
       } catch (e) {
         lastErr = e;
-        if (attempt < GLB_MAX_RETRIES) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+        if (attempt < GLB_MAX_RETRIES) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
       }
     }
     throw lastErr;
   }
 
-  // ---------- disposal (avoid leaking geometries/materials/textures on
-  // every avatar/category swap). Geometries and materials on a GLB body
-  // may be shared-by-reference with a cached gltf (see loadGLB — clone(true)
-  // shares leaf geometry/material, it doesn't deep-copy them), but dispose()
-  // is safe to call repeatedly in three.js: it just drops the GPU-side
-  // buffer/texture handles, which the renderer transparently re-creates the
-  // next time that same geometry/material is used, so re-visiting a cached
-  // category after leaving it still renders correctly. `noiseTex` is a
-  // single texture shared by every procedural skin material for the whole
-  // app lifetime and must never be disposed here.
   function disposeMaterial(mat) {
     if (!mat) return;
-    ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap",
-     "alphaMap", "bumpMap", "sheenColorMap", "clearcoatMap", "transmissionMap", "thicknessMap"]
-      .forEach(key => { const tex = mat[key]; if (tex && tex.isTexture && tex !== noiseTex) tex.dispose(); });
+    [
+      "map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap",
+      "alphaMap", "bumpMap", "sheenColorMap", "clearcoatMap", "transmissionMap", "thicknessMap",
+    ].forEach((key) => {
+      const tex = mat[key];
+      if (tex && tex.isTexture && tex !== noiseTex && !sharedTextures.has(tex)) {
+        tex.dispose();
+      }
+    });
     mat.dispose();
   }
+
   function disposeObject3D(obj) {
     if (!obj) return;
-    obj.traverse(o => {
+    obj.traverse((o) => {
       if (!o.isMesh) return;
       if (o.geometry) o.geometry.dispose();
-      if (Array.isArray(o.material)) o.material.forEach(disposeMaterial); else disposeMaterial(o.material);
+      if (Array.isArray(o.material)) o.material.forEach(disposeMaterial);
+      else disposeMaterial(o.material);
     });
   }
 
-  // ---------- dependency loading (uses the page import map) ----------
-  // A bare specifier ("three") only resolves via the <script type="importmap">
-  // in index.html — some browser engines have been observed to throw
-  // "Failed to resolve module specifier" for a bare specifier passed to a
-  // *dynamic* import() even though the identical map correctly resolves
-  // static imports (confirmed directly: import("three") throws in that
-  // engine while import("https://unpkg.com/.../three.module.js") succeeds
-  // immediately after, same page, same load).
-  //
-  // Real-world follow-up: even with the CDN fallback below, one user's 3D
-  // Preview still failed to load while Cloth Lab (a separately Vite-bundled
-  // app with no runtime CDN dependency) and /3d-test.html (a raw WebGL2
-  // probe that never imports three.js at all) both worked fine on the same
-  // device — pointing at something blocking unpkg.com specifically (an
-  // ad-blocker/privacy extension/network filter), not a bare-specifier
-  // resolution quirk or a WebGL capability gap. A second CDN on a genuinely
-  // different domain — esm.sh, already in this page's own CSP script-src
-  // for other features — is a real, meaningfully independent fallback for
-  // exactly that failure mode; a same-domain retry wouldn't be.
-  //
-  // Each tier is tried as a whole (main three.js + all addons from the SAME
-  // source) rather than mixed per-file, since three.js addon modules import
-  // "three" internally and mixing sources risks two different module
-  // instances of the library coexisting.
+  // ---------- dependency loading ----------
   const THREE_VERSION = "0.185.1";
   const DEP_TIERS = [
     { label: "importmap", base: null, addons: null },
     { label: "unpkg", base: `https://unpkg.com/three@${THREE_VERSION}/build/three.module.js`, addons: `https://unpkg.com/three@${THREE_VERSION}/examples/jsm` },
     { label: "esm.sh", base: `https://esm.sh/three@${THREE_VERSION}`, addons: `https://esm.sh/three@${THREE_VERSION}/examples/jsm` },
   ];
+
   async function loadDepsFromTier(tier) {
     const THREE_ = tier.base ? await import(/* @vite-ignore */ tier.base) : await import(/* @vite-ignore */ "three");
-    const addonUrl = (path) => tier.addons ? `${tier.addons}/${path}` : `three/addons/${path}`;
+    const addonUrl = (path) => (tier.addons ? `${tier.addons}/${path}` : `three/addons/${path}`);
     const { OrbitControls: OC } = await import(/* @vite-ignore */ addonUrl("controls/OrbitControls.js"));
     const { clone: cloneSkeleton_ } = await import(/* @vite-ignore */ addonUrl("utils/SkeletonUtils.js"));
     let GL = null, RGBE = null;
-    try { ({ GLTFLoader: GL } = await import(/* @vite-ignore */ addonUrl("loaders/GLTFLoader.js"))); } catch (e) { /* optional */ }
-    try { ({ RGBELoader: RGBE } = await import(/* @vite-ignore */ addonUrl("loaders/RGBELoader.js"))); } catch (e) { /* optional */ }
+    try { ({ GLTFLoader: GL } = await import(/* @vite-ignore */ addonUrl("loaders/GLTFLoader.js"))); } catch (_) { /* optional */ }
+    try { ({ RGBELoader: RGBE } = await import(/* @vite-ignore */ addonUrl("loaders/RGBELoader.js"))); } catch (_) { /* optional */ }
     return { THREE_, OC, GL, RGBE, cloneSkeleton_ };
   }
+
   async function loadDeps() {
     if (THREE) return true;
     for (const tier of DEP_TIERS) {
       try {
         const { THREE_, OC, GL, RGBE, cloneSkeleton_ } = await loadDepsFromTier(tier);
-        THREE = THREE_; OrbitControls = OC; GLTFLoader = GL; RGBELoader = RGBE; cloneSkeleton = cloneSkeleton_;
+        THREE = THREE_;
+        OrbitControls = OC;
+        GLTFLoader = GL;
+        RGBELoader = RGBE;
+        cloneSkeleton = cloneSkeleton_;
         return true;
-      } catch (e) { /* try the next tier */ }
+      } catch (_) { /* try next tier */ }
     }
     return false;
   }
 
-  // WP-9.3: same CC0 studio-softbox HDRI cloth-lab already uses (see
-  // env/README.md for provenance) — set as `scene.environment` ONLY, for
-  // ambient reflection/sheen quality on fabric and skin. `scene.background`
-  // stays the existing gradient (setupLights/gradientBackdrop below) for
-  // brand consistency — this is lighting data, not a visible backdrop
-  // swap. Loaded once and cached; a load failure just leaves ambient
-  // lighting exactly as it already was (no environment map), never blocks
-  // init or breaks the fallback path.
   let envMapPromise = null;
   function loadEnvironmentMap() {
     if (envMapPromise) return envMapPromise;
@@ -179,13 +175,13 @@ export const View3D = (() => {
           resolve(envMap);
         },
         undefined,
-        () => { pmrem.dispose(); resolve(null); },
+        () => { pmrem.dispose(); resolve(null); }
       );
     });
-    return envMapPromise
+    return envMapPromise;
   }
 
-  const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const nextFrame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
   // ---------- init ----------
   async function init(canvas) {
@@ -198,28 +194,38 @@ export const View3D = (() => {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    renderer.toneMappingExposure = 0.98;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     scene = new THREE.Scene();
     scene.background = gradientBackdrop();
-    loadEnvironmentMap().then((envMap) => { if (envMap && scene) scene.environment = envMap; });
+    loadEnvironmentMap().then((envMap) => {
+      if (envMap && scene) {
+        scene.environment = envMap;
+        scene.environmentIntensity = 0.45;
+      }
+    });
 
-    camera = new THREE.PerspectiveCamera(32, 1, 0.05, 100);
-    camera.position.set(0.15, 1.0, 3.6);
+    camera = new THREE.PerspectiveCamera(31, 1, 0.05, 100);
+    camera.position.set(0.36, 0.98, 3.55);
 
     controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; controls.dampingFactor = 0.08;
-    controls.minDistance = 0.9; controls.maxDistance = 7;
-    controls.maxPolarAngle = Math.PI * 0.92;
-    controls.autoRotate = spinning && !reduceMotion; controls.autoRotateSpeed = 1.6;
-    controls.target.set(0, 0.92, 0);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.minDistance = 0.75;
+    controls.maxDistance = 7;
+    controls.maxPolarAngle = Math.PI * 0.93;
+    controls.autoRotate = spinning && !reduceMotion;
+    controls.autoRotateSpeed = 1.35;
+    controls.target.set(0, 0.90, 0);
 
     setupLights();
     setupGround();
 
-    root = new THREE.Group(); scene.add(root);
+    root = new THREE.Group();
+    scene.add(root);
     noiseTex = makeNoise();
+    sharedTextures.add(noiseTex);
 
     ready = true;
     resize();
@@ -228,142 +234,226 @@ export const View3D = (() => {
 
   // ---------- studio environment ----------
   function gradientBackdrop() {
-    const c = document.createElement("canvas"); c.width = 16; c.height = 256;
-    const g = c.getContext("2d").createLinearGradient(0, 0, 0, 256);
+    const c = document.createElement("canvas");
+    c.width = 32;
+    c.height = 256;
+    const ctx = c.getContext("2d");
+    const g = ctx.createLinearGradient(0, 0, 0, 256);
     const dark = document.body.getAttribute("data-mode") === "dark";
-    if (dark) { g.addColorStop(0, "#20242e"); g.addColorStop(0.55, "#171a22"); g.addColorStop(1, "#0e1015"); }
-    else { g.addColorStop(0, "#eef1f6"); g.addColorStop(0.55, "#dfe4ec"); g.addColorStop(1, "#cdd3dd"); }
-    const ctx = c.getContext("2d"); ctx.fillStyle = g; ctx.fillRect(0, 0, 16, 256);
-    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+    if (dark) {
+      g.addColorStop(0, "#212634");
+      g.addColorStop(0.56, "#161a24");
+      g.addColorStop(1, "#0d1017");
+    } else {
+      g.addColorStop(0, "#e7ecf4");
+      g.addColorStop(0.58, "#d7dee9");
+      g.addColorStop(1, "#c3ccd9");
+    }
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 32, 256);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
   }
+
   function setupLights() {
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x8d8577, 0.55));
-    const key = new THREE.DirectionalLight(0xffffff, 2.1);
-    key.position.set(2.5, 4.5, 3.2); key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
-    key.shadow.camera.near = 1; key.shadow.camera.far = 14;
-    key.shadow.camera.left = -2; key.shadow.camera.right = 2;
-    key.shadow.camera.top = 3; key.shadow.camera.bottom = -1;
-    key.shadow.bias = -0.0004; key.shadow.radius = 6;
+    scene.add(new THREE.HemisphereLight(0xfffdf9, 0x7d7770, 0.48));
+
+    const key = new THREE.DirectionalLight(0xfffaf2, 1.68);
+    key.position.set(2.4, 4.2, 3.3);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.near = 1;
+    key.shadow.camera.far = 12;
+    key.shadow.camera.left = -1.6;
+    key.shadow.camera.right = 1.6;
+    key.shadow.camera.top = 2.6;
+    key.shadow.camera.bottom = -0.5;
+    key.shadow.bias = -0.0003;
+    key.shadow.radius = 5;
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0xdfe6ff, 0.55); fill.position.set(-3, 2, 2); scene.add(fill);
-    const rim = new THREE.DirectionalLight(0xffe9c8, 0.9); rim.position.set(-1.5, 3, -4); scene.add(rim);
+
+    const fill = new THREE.DirectionalLight(0xdce6ff, 0.50);
+    fill.position.set(-2.8, 2.1, 2.2);
+    scene.add(fill);
+
+    const rim = new THREE.DirectionalLight(0xffe8c9, 0.78);
+    rim.position.set(-1.4, 3.0, -3.6);
+    scene.add(rim);
   }
+
   function setupGround() {
     const shadow = new THREE.Mesh(
       new THREE.PlaneGeometry(6, 6),
-      new THREE.ShadowMaterial({ opacity: 0.22 })
+      new THREE.ShadowMaterial({ opacity: 0.20 })
     );
-    shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.001; shadow.receiveShadow = true; scene.add(shadow);
-    // soft radial contact patch for grounding on the gradient
-    const c = document.createElement("canvas"); c.width = c.height = 128;
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.y = 0.0005;
+    shadow.receiveShadow = true;
+    scene.add(shadow);
+
+    // Dual-falloff studio contact shadow under feet
+    const c = document.createElement("canvas");
+    c.width = c.height = 256;
     const ctx = c.getContext("2d");
-    const rg = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
-    rg.addColorStop(0, "rgba(0,0,0,0.28)"); rg.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = rg; ctx.fillRect(0, 0, 128, 128);
+    const rg = ctx.createRadialGradient(128, 128, 6, 128, 128, 124);
+    rg.addColorStop(0, "rgba(18,22,32,0.30)");
+    rg.addColorStop(0.45, "rgba(18,22,32,0.11)");
+    rg.addColorStop(1, "rgba(18,22,32,0)");
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, 0, 256, 256);
+    const patchTex = new THREE.CanvasTexture(c);
+    sharedTextures.add(patchTex);
     const patch = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.6, 1.0),
-      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false })
+      new THREE.PlaneGeometry(1.45, 1.05),
+      new THREE.MeshBasicMaterial({ map: patchTex, transparent: true, depthWrite: false })
     );
-    patch.rotation.x = -Math.PI / 2; patch.position.y = 0.002; scene.add(patch);
+    patch.rotation.x = -Math.PI / 2;
+    patch.position.y = 0.0012;
+    scene.add(patch);
+
+    // Subtle atelier turntable hairline ring
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.46, 0.472, 72),
+      new THREE.MeshBasicMaterial({ color: 0x64748b, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.0015;
+    scene.add(ring);
   }
+
   function makeNoise() {
-    const c = document.createElement("canvas"); c.width = c.height = 128;
-    const ctx = c.getContext("2d"); const img = ctx.createImageData(128, 128);
+    const c = document.createElement("canvas");
+    c.width = c.height = 128;
+    const ctx = c.getContext("2d");
+    const img = ctx.createImageData(128, 128);
     for (let i = 0; i < img.data.length; i += 4) {
       const v = 150 + Math.random() * 105;
-      img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+      img.data[i + 3] = 255;
     }
     ctx.putImageData(img, 0, 0);
-    const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(3, 5);
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(3, 5);
+    return tex;
+  }
+
+  // ---------- Procedural micro-weave bump maps for realistic textiles ----------
+  function getWeaveBumpMap(materialKey) {
+    if (typeof document === "undefined" || !THREE) return null;
+    let style = "plain";
+    if (materialKey === "denim" || materialKey === "wool") style = "twill";
+    else if (materialKey === "linen") style = "linen";
+    else if (materialKey === "jersey" || materialKey === "scuba") style = "knit";
+    else if (materialKey === "leather") style = "leather";
+    else if (materialKey === "silk" || materialKey === "satin") style = "satin";
+
+    if (weaveBumpCache.has(style)) return weaveBumpCache.get(style);
+
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const ctx = c.getContext("2d");
+    const img = ctx.createImageData(64, 64);
+    const d = img.data;
+
+    for (let y = 0; y < 64; y++) {
+      for (let x = 0; x < 64; x++) {
+        let v = 128;
+        if (style === "twill") {
+          const diag = (x + y * 2) % 6;
+          v = diag < 3 ? 175 : 92;
+        } else if (style === "linen") {
+          const wx = Math.sin(x * 1.57) * 28;
+          const wy = Math.sin(y * 1.57) * 28;
+          const slub = ((x * 13 + y * 7) % 19) < 2 ? 26 : 0;
+          v = 128 + wx + wy + slub;
+        } else if (style === "knit") {
+          const col = (x % 8) - 4;
+          const row = (y + Math.abs(col)) % 6;
+          v = row < 3 ? 168 : 96;
+        } else if (style === "leather") {
+          const hash = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+          v = 110 + (hash - Math.floor(hash)) * 55;
+        } else if (style === "satin") {
+          v = 124 + ((x + y * 4) % 5 === 0 ? 18 : -4);
+        } else {
+          // Crisp cotton poplin plain cross-weave
+          v = ((x + y) % 2 === 0) ? 156 : 108;
+        }
+        const idx = (y * 64 + x) * 4;
+        d[idx] = d[idx + 1] = d[idx + 2] = Math.max(0, Math.min(255, v));
+        d[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(26, 26);
+    weaveBumpCache.set(style, tex);
+    sharedTextures.add(tex);
     return tex;
   }
 
   // ---------- materials ----------
-  const SKIN = {
-    women: 0xedd6c7, men: 0xd4a88b, girls: 0xf5ddcf, boys: 0xdec0a7,
-  };
-  const SKIN_SHEEN = {
-    women: 0xe89582, men: 0xc87a5a, girls: 0xefa08c, boys: 0xd98d72,
-  };
-  const HAIR = { women: 0x221610, men: 0x1f150e, girls: 0x362114, boys: 0x26190f };
-  function skinMat(category) {
-    return new THREE.MeshPhysicalMaterial({
-      color: SKIN[category] || 0xe5baa0,
-      roughness: 0.58,
-      metalness: 0.0,
-      clearcoat: 0.0,
-      sheen: 0.0,
-      transparent: false,
-      opacity: 1.0,
-      depthWrite: true,
-      side: THREE.DoubleSide,
-    });
-  }
-  // WP-9.2: transmission (chiffon)/anisotropy (silk/satin) — confirmed
-  // present on MeshPhysicalMaterial in this file's own pinned three@0.160.0
-  // (checked against the actual source at that version, not assumed), so
-  // no import-map bump needed. Mirrors cloth-lab's fabricPresets.js so the
-  // two separate 3D views agree on what each fabric looks like, same as
-  // every other field in this table already does.
   const FABRIC = {
-    cotton:  { label: 'Cotton Poplin', massDensity: 150, structStiff: 0.96, bendStiff: 0.35, maxStrain: 1.05, damping: 0.970, friction: 0.90, rough: 0.85, metal: 0.0,  sheen: 0.2,  clear: 0.0,  om: 1 },
-    denim:   { label: 'Denim',         massDensity: 400, structStiff: 0.98, bendStiff: 0.80, maxStrain: 1.03, damping: 0.930, friction: 0.96, rough: 0.9,  metal: 0.02, sheen: 0.1,  clear: 0.0,  om: 1 },
-    silk:    { label: 'Silk Charmeuse',massDensity: 60,  structStiff: 0.94, bendStiff: 0.15, maxStrain: 1.07, damping: 0.980, friction: 0.80, rough: 0.26, metal: 0.05, sheen: 0.9,  clear: 0.15, om: 0.98, anisotropy: 0.6, anisoRot: 0 },
-    satin:   { label: 'Satin',         massDensity: 90,  structStiff: 0.95, bendStiff: 0.20, maxStrain: 1.06, damping: 0.980, friction: 0.82, rough: 0.2,  metal: 0.12, sheen: 0.85, clear: 0.22, om: 1,    anisotropy: 0.5, anisoRot: 0 },
-    chiffon: { label: 'Chiffon',       massDensity: 30,  structStiff: 0.92, bendStiff: 0.10, maxStrain: 1.08, damping: 0.985, friction: 0.75, rough: 0.5,  metal: 0.0,  sheen: 0.45, clear: 0.0,  om: 0.55, transmission: 0.18 },
-    wool:    { label: 'Wool Crepe',    massDensity: 300, structStiff: 0.97, bendStiff: 0.58, maxStrain: 1.04, damping: 0.950, friction: 0.93, rough: 0.96, metal: 0.0,  sheen: 0.08, clear: 0.0,  om: 1 },
-    linen:   { label: 'Linen',         massDensity: 170, structStiff: 0.96, bendStiff: 0.42, maxStrain: 1.05, damping: 0.970, friction: 0.87, rough: 0.82, metal: 0.0,  sheen: 0.15, clear: 0.0,  om: 1 },
-    leather: { label: 'Leather',       massDensity: 550, structStiff: 0.98, bendStiff: 0.92, maxStrain: 1.02, damping: 0.900, friction: 0.97, rough: 0.4,  metal: 0.2,  sheen: 0.2,  clear: 0.35, om: 1 },
-    jersey:  { label: 'Cotton Jersey', massDensity: 180, structStiff: 0.90, bendStiff: 0.22, maxStrain: 1.18, damping: 0.965, friction: 0.88, rough: 0.7,  metal: 0.0,  sheen: 0.18, clear: 0.0,  om: 1 },
-    scuba:   { label: 'Scuba Knit',    massDensity: 260, structStiff: 0.91, bendStiff: 0.45, maxStrain: 1.14, damping: 0.955, friction: 0.85, rough: 0.35, metal: 0.0,  sheen: 0.35, clear: 0.05, om: 1 },
-    tulle:   { label: 'Tulle',         massDensity: 18,  structStiff: 0.80, bendStiff: 0.06, maxStrain: 1.12, damping: 0.988, friction: 0.55, rough: 0.55, metal: 0.0,  sheen: 0.3,  clear: 0.0,  om: 0.35, transmission: 0.12 },
+    cotton:  { label: 'Cotton Poplin', massDensity: 150, structStiff: 0.96, bendStiff: 0.35, maxStrain: 1.05, damping: 0.970, friction: 0.90, rough: 0.82, metal: 0.0,  sheen: 0.25, clear: 0.0,  om: 1, bump: 0.0012 },
+    denim:   { label: 'Denim',         massDensity: 400, structStiff: 0.98, bendStiff: 0.80, maxStrain: 1.03, damping: 0.930, friction: 0.96, rough: 0.88, metal: 0.02, sheen: 0.14, clear: 0.0,  om: 1, bump: 0.0024 },
+    silk:    { label: 'Silk Charmeuse',massDensity: 60,  structStiff: 0.94, bendStiff: 0.15, maxStrain: 1.07, damping: 0.980, friction: 0.80, rough: 0.26, metal: 0.05, sheen: 0.9,  clear: 0.15, om: 0.98, anisotropy: 0.6, anisoRot: 0, bump: 0.0004 },
+    satin:   { label: 'Satin',         massDensity: 90,  structStiff: 0.95, bendStiff: 0.20, maxStrain: 1.06, damping: 0.980, friction: 0.82, rough: 0.2,  metal: 0.12, sheen: 0.85, clear: 0.22, om: 1,    anisotropy: 0.5, anisoRot: 0, bump: 0.0004 },
+    chiffon: { label: 'Chiffon',       massDensity: 30,  structStiff: 0.92, bendStiff: 0.10, maxStrain: 1.08, damping: 0.985, friction: 0.75, rough: 0.5,  metal: 0.0,  sheen: 0.45, clear: 0.0,  om: 0.55, transmission: 0.18, bump: 0.0006 },
+    wool:    { label: 'Wool Crepe',    massDensity: 300, structStiff: 0.97, bendStiff: 0.58, maxStrain: 1.04, damping: 0.950, friction: 0.93, rough: 0.94, metal: 0.0,  sheen: 0.12, clear: 0.0,  om: 1, bump: 0.0022 },
+    linen:   { label: 'Linen',         massDensity: 170, structStiff: 0.96, bendStiff: 0.42, maxStrain: 1.05, damping: 0.970, friction: 0.87, rough: 0.82, metal: 0.0,  sheen: 0.16, clear: 0.0,  om: 1, bump: 0.0020 },
+    leather: { label: 'Leather',       massDensity: 550, structStiff: 0.98, bendStiff: 0.92, maxStrain: 1.02, damping: 0.900, friction: 0.97, rough: 0.38, metal: 0.18, sheen: 0.2,  clear: 0.35, om: 1, bump: 0.0018 },
+    jersey:  { label: 'Cotton Jersey', massDensity: 180, structStiff: 0.90, bendStiff: 0.22, maxStrain: 1.18, damping: 0.965, friction: 0.88, rough: 0.68, metal: 0.0,  sheen: 0.22, clear: 0.0,  om: 1, bump: 0.0014 },
+    scuba:   { label: 'Scuba Knit',    massDensity: 260, structStiff: 0.91, bendStiff: 0.45, maxStrain: 1.14, damping: 0.955, friction: 0.85, rough: 0.35, metal: 0.0,  sheen: 0.35, clear: 0.05, om: 1, bump: 0.0008 },
+    tulle:   { label: 'Tulle',         massDensity: 18,  structStiff: 0.80, bendStiff: 0.06, maxStrain: 1.12, damping: 0.988, friction: 0.55, rough: 0.55, metal: 0.0,  sheen: 0.3,  clear: 0.0,  om: 0.35, transmission: 0.12, bump: 0.0010 },
   };
-  // One fabric slot per garment part — the procedural body only has 4 named mesh
-  // groups (bodice/sleeve/skirt/trousers). Each slot now holds a real `front` and
-  // (optionally) `back` sub-material rather than one flat color+material, so a
-  // front-bodice/back-bodice pair with different fabrics doesn't collapse into
-  // "whichever piece was set last wins" (WP-28). `back` is null whenever the
-  // pattern has no distinct back piece for that part — the back sub-mesh (see
-  // latheHalves() below) then just mirrors `front`, so a single-piece part still
-  // renders as one seamless whole exactly as before this change. Each front/back
-  // sub-material also carries its own optional `textureDataURL` (WP-39, Tailornova
-  // feature study) — a real uploaded fabric-swatch photo, not just the 8 preset
-  // color/roughness recipes above; front and back can hold two different photos
-  // exactly the way they can hold two different colors.
-  const defaultFabricSlot = () => ({ front: { color: 0x6d5efc, material: "cotton", textureDataURL: null, rawDrawingURL: null }, back: null, opacity: 0.85 });
-  let fabricState = { bodice: defaultFabricSlot(), sleeve: defaultFabricSlot(), skirt: defaultFabricSlot(), trousers: defaultFabricSlot() };
-  // A fresh Texture is loaded per fabricMat() call rather than cached across
-  // calls — fabricMat() already builds a brand-new material every time it's
-  // called (never reused), and disposeMaterial() (top of this file) disposes
-  // whatever texture sits on the OLD material's `.map` on every swap; a shared
-  // cache keyed by dataURL would get disposed out from under any other material
-  // still referencing it. A data-URL decode has no network round trip, so
-  // reloading per call is cheap — this mirrors the "always own what you
-  // dispose" contract disposeMaterial() already enforces everywhere else.
-  // `THREE` isn't assigned until ensureDeps()'s dynamic import resolves (see
-  // `let THREE` up top) — a module-level `new THREE.TextureLoader()` here
-  // would run at parse time, before that assignment, and throw. Lazy getter,
-  // same reason every other THREE.* construction in this file happens inside
-  // a function, never at module scope.
+
+  const defaultFabricSlot = () => ({
+    front: { color: 0x4f46e5, material: "cotton", textureDataURL: null, rawDrawingURL: null },
+    back: null,
+    opacity: 1.0,
+  });
+  let fabricState = {
+    bodice: defaultFabricSlot(),
+    sleeve: defaultFabricSlot(),
+    skirt: defaultFabricSlot(),
+    trousers: defaultFabricSlot(),
+  };
+
   let fabricTexLoader = null;
-  function getFabricTexLoader(){ return fabricTexLoader ||= new THREE.TextureLoader(); }
-  const FABRIC_TEXTURE_REPEAT = 6; // tile count so an uploaded swatch photo reads as a fabric print, not one giant smear across the whole part
+  function getFabricTexLoader() {
+    return (fabricTexLoader ||= new THREE.TextureLoader());
+  }
+  const FABRIC_TEXTURE_REPEAT = 6;
+
   function fabricMat(part, side) {
     const st = fabricState[part] || fabricState.bodice;
-    const slot = (side === "back" && st.back) ? st.back : st.front;
+    const slot = side === "back" && st.back ? st.back : st.front;
     const f = FABRIC[slot.material] || FABRIC.cotton;
     const op = Math.max(0.25, Math.min(1, st.opacity * f.om));
+    const weaveBump = getWeaveBumpMap(slot.material || "cotton");
+
     const mat = new THREE.MeshPhysicalMaterial({
-      // When a texture map (print, swatch photo, or cloth drawing) is applied,
-      // setting color to white preserves both the fabric background and drawing
-      // artwork faithfully without multiplicative color distortion or blackouts!
-      color: slot.textureDataURL ? 0xffffff : slot.color, roughness: f.rough, metalness: f.metal,
-      sheen: f.sheen, sheenRoughness: 0.5, clearcoat: f.clear, clearcoatRoughness: 0.4,
-      transparent: op < 0.99, opacity: op, side: THREE.DoubleSide,
+      color: slot.textureDataURL ? 0xffffff : slot.color,
+      roughness: f.rough,
+      metalness: f.metal,
+      sheen: f.sheen,
+      sheenRoughness: 0.48,
+      sheenColor: new THREE.Color(slot.textureDataURL ? 0xf8fafc : slot.color).lerp(new THREE.Color(0xffffff), 0.55),
+      clearcoat: f.clear,
+      clearcoatRoughness: 0.4,
+      bumpMap: weaveBump || null,
+      bumpScale: f.bump || 0.001,
+      transparent: op < 0.99,
+      opacity: op,
+      depthWrite: op >= 0.55,
+      side: THREE.DoubleSide,
       ...(f.transmission != null && { transmission: f.transmission, thickness: 0.001 }),
       ...(f.anisotropy != null && { anisotropy: f.anisotropy, anisotropyRotation: f.anisoRot ?? 0 }),
     });
+
     if (slot.textureDataURL) {
       const tex = getFabricTexLoader().load(slot.textureDataURL, () => {
         tex.needsUpdate = true;
@@ -378,857 +468,939 @@ export const View3D = (() => {
     return mat;
   }
 
-  // ---------- geometry helpers ----------
-  const cm = v => v * 0.01;
-  const R = circ => cm(circ) / (2 * Math.PI);
-  function capsule(radius, len, mat) {
-    const m = new THREE.Mesh(new THREE.CapsuleGeometry(radius, len, 6, 16), mat);
-    m.castShadow = true; return m;
-  }
-  function lathe(profile, mat, seg = 28) {
-    const isDecreasing = profile.length > 1 && profile[0][1] > profile[profile.length - 1][1];
-    const ptsList = isDecreasing ? [...profile].reverse() : profile;
-    const pts = ptsList.map(p => new THREE.Vector2(Math.max(0.001, p[0]), p[1]));
-    const m = new THREE.Mesh(new THREE.LatheGeometry(pts, seg), mat);
-    m.castShadow = true; return m;
-  }
-  // Garment panels (bodice/skirt/trousers) as two independent sub-meshes split
-  // at the body's side seams, instead of one full-revolution shell — so a
-  // front piece and a back piece with different fabrics/colors (WP-28) each
-  // get their own real material, not a shared one. three.js's own
-  // LatheGeometry source (geometries/LatheGeometry.js) builds each vertex as
-  // x = radius*sin(phi), z = radius*cos(phi); cos(phi) >= 0 exactly for
-  // phi in [-PI/2, PI/2], so a phiStart=-PI/2/phiLength=PI half is exactly
-  // the Z>=0 ("front", matching frameCamera's camera.position.z>0 convention
-  // above) half of a full revolution, and phiStart=PI/2/phiLength=PI is
-  // exactly the back. Both halves are built from the same profile at the
-  // same angles as a full-revolution lathe would use, so they share vertex
-  // positions along the phi=+-PI/2 side seams with no gap — front and back
-  // meet seamlessly when their materials match, and show a real (correct)
-  // seam line only where the fabrics actually differ.
-  function latheHalves(profile, matFront, matBack, part, seg = 32) {
-    const isDecreasing = profile.length > 1 && profile[0][1] > profile[profile.length - 1][1];
-    const ptsList = isDecreasing ? [...profile].reverse() : profile;
-    const pts = ptsList.map(p => new THREE.Vector2(Math.max(0.001, p[0]), p[1]));
-    const half = Math.max(2, Math.round(seg / 2));
-    const front = new THREE.Mesh(new THREE.LatheGeometry(pts, half, -Math.PI / 2, Math.PI), matFront);
-    const back = new THREE.Mesh(new THREE.LatheGeometry(pts, half, Math.PI / 2, Math.PI), matBack);
-    front.castShadow = back.castShadow = true;
-    front.name = back.name = part;
-    front.userData.side = "front"; back.userData.side = "back";
-    return [front, back];
-  }
-  function sphere(r, mat) { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), mat); m.castShadow = true; return m; }
+  // ---------- geometry & skinning helpers ----------
+  const cm = (v) => v * 0.01;
+  const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+  const smoothstep = (e0, e1, x) => {
+    if (e1 === e0) return x < e0 ? 0 : 1;
+    const u = clamp((x - e0) / (e1 - e0), 0, 1);
+    return u * u * (3 - 2 * u);
+  };
 
-  // Front/back torso sculpting for the female body — user-requested: "it
-  // should have a breast and a lower back so its front body differ
-  // significantly from back body." A lathe (surface of revolution) is
-  // radially symmetric by construction, so the plain torso() lathe below
-  // reads identically from front and back apart from the two bust spheres
-  // that used to be glued onto the front only. This displaces the torso
-  // lathe's own vertices instead: a breast bulge (front, two separate
-  // lobes with a flat "valley" between them, not one central mound) and a
-  // lower-back curve (a concave lumbar dip above a convex glute swell,
-  // back only). Direct port of cloth-lab/src/body/torsoSculpt.js's own
-  // bumpWindow()/femaleTorsoSculpt()/torsoZBump() — same numbers, same
-  // math, expressed as plain functions the way every other helper in this
-  // file already is (this file isn't an ES module cloth-lab can import
-  // from). No collision-margin counterpart is needed here the way
-  // collisionRig.js needed one for cloth-lab's real cloth sim — this
-  // file's own garments (buildGarment() below) are a fixed static shell,
-  // not physics, and were sized with generous fixed ease specifically
-  // checked against these same bump amplitudes before picking them.
-  function bumpWindow(x, center, halfWidth) {
-    const d = Math.abs(x - center);
-    return d >= halfWidth ? 0 : 0.5 * (1 + Math.cos((Math.PI * d) / halfWidth));
-  }
-  function femaleTorsoSculpt(d) {
-    const { hipY, span, chestR, waistR, hipR } = d;
-    return {
-      breast: { centerY: hipY + span * 0.73, halfWidth: span * 0.15, amplitude: chestR * 0.15, phi0: 0.50, phiHalfWidth: 0.46 },
-      lumbar: { centerY: hipY + span * 0.38, halfWidth: span * 0.14, amplitude: waistR * 0.12 },
-      glute: { centerY: hipY - span * 0.02, halfWidth: span * 0.12, amplitude: hipR * 0.17 },
-    };
-  }
-  function torsoZBump(y, phi, d) {
-    const { breast, lumbar, glute } = femaleTorsoSculpt(d);
-    let dz = 0;
-    const lobe = bumpWindow(phi, breast.phi0, breast.phiHalfWidth) + bumpWindow(phi, -breast.phi0, breast.phiHalfWidth);
-    dz += breast.amplitude * bumpWindow(y, breast.centerY, breast.halfWidth) * lobe;
-    const backWeight = Math.max(0, -Math.cos(phi)); // 1 at phi=PI (straight back), 0 at the side seams
-    dz += lumbar.amplitude * bumpWindow(y, lumbar.centerY, lumbar.halfWidth) * backWeight;
-    dz -= glute.amplitude * bumpWindow(y, glute.centerY, glute.halfWidth) * backWeight;
-    return dz;
-  }
-  function maleTorsoSculpt(d) {
-    const { hipY, span, chestR, waistR, hipR } = d;
-    return {
-      chest: { centerY: hipY + span * 0.74, halfWidth: span * 0.15, amplitude: chestR * 0.09, phiHalfWidth: 0.84 },
-      lumbar: { centerY: hipY + span * 0.38, halfWidth: span * 0.13, amplitude: waistR * 0.07 },
-      glute: { centerY: hipY - span * 0.02, halfWidth: span * 0.11, amplitude: hipR * 0.11 },
-    };
-  }
-  function maleTorsoZBump(y, phi, d) {
-    const { chest, lumbar, glute } = maleTorsoSculpt(d);
-    let dz = 0;
-    // Pectoral twin plates with central sternal notch
-    const pecLobe = bumpWindow(phi, 0.44, 0.40) + bumpWindow(phi, -0.44, 0.40);
-    dz += chest.amplitude * bumpWindow(y, chest.centerY, chest.halfWidth) * (pecLobe * 0.82 + bumpWindow(phi, 0, chest.phiHalfWidth) * 0.35);
-    const backWeight = Math.max(0, -Math.cos(phi));
-    dz += lumbar.amplitude * bumpWindow(y, lumbar.centerY, lumbar.halfWidth) * backWeight;
-    dz -= glute.amplitude * bumpWindow(y, glute.centerY, glute.halfWidth) * backWeight;
-    return dz;
-  }
-  // Builds the torso the same way lathe() does, then bakes in the Z
-  // flatten (instead of leaving it as a mesh-level scale.z) and, for adult
-  // female bodies, displaces each vertex by torsoZBump() — see that
-  // function's own header. Recomputes normals afterward since the flatten
-  // is now baked into the geometry's own vertex positions rather than left
-  // for three.js's automatic scale-to-normal-matrix handling to fix up.
-  function sculptedTorso(profile, mat, zScale, female, kid, dims, seg = 32) {
-    const pts = profile.map(p => new THREE.Vector2(Math.max(0.001, p[0]), p[1]));
-    const geo = new THREE.LatheGeometry(pts, seg);
-    const pos = geo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), y = pos.getY(i), zRaw = pos.getZ(i);
-      let z = zRaw * zScale;
-      const phi = Math.atan2(x, zRaw);
-      if (female && !kid) z += torsoZBump(y, phi, dims);
-      else if (!female && !kid) z += maleTorsoZBump(y, phi, dims);
-      pos.setZ(i, z);
+  function packSkinWeights(entries) {
+    const valid = entries.filter((e) => e[1] > 1e-5).sort((a, b) => b[1] - a[1]).slice(0, 4);
+    if (!valid.length) return [[0, 0, 0, 0], [1, 0, 0, 0]];
+    let sum = 0;
+    for (const e of valid) sum += e[1];
+    const idx = [0, 0, 0, 0];
+    const w = [0, 0, 0, 0];
+    for (let i = 0; i < valid.length; i++) {
+      idx[i] = valid[i][0];
+      w[i] = valid[i][1] / (sum || 1);
     }
-    pos.needsUpdate = true;
-    geo.computeVertexNormals();
-    const m = new THREE.Mesh(geo, mat);
-    m.castShadow = true;
-    return m;
+    return [idx, w];
   }
 
-  // Continuous anatomical head sculpture: cranium, supraorbital arches, recessed orbital
-  // eye sockets, nasal dorsum/bridge/tip, Cupid's bow, lips, and chin seamlessly displaced into one mesh.
-  function sculptedHead(headH, skin, female, kid, category, seg = 32) {
-    const profile = [
-      [headH * 0.06, -headH * 0.48],  // submental junction
-      [headH * 0.13, -headH * 0.45],  // chin (mentum)
-      [headH * 0.22, -headH * 0.34],  // mandibular angle / lower jaw
-      [headH * 0.30, -headH * 0.20],  // mid cheek / maxilla
-      [headH * 0.37, -headH * 0.06],  // zygomatic cheekbone level
-      [headH * 0.40, headH * 0.08],   // supraorbital brow line
-      [headH * 0.41, headH * 0.22],   // temporal plane
-      [headH * 0.35, headH * 0.38],   // parietal vault
-      [headH * 0.22, headH * 0.47],   // upper parietal arch
-      [headH * 0.02, headH * 0.50],   // apex of cranium
-    ];
-    const pts = profile.map(p => new THREE.Vector2(Math.max(0.001, p[0]), p[1]));
-    const geo = new THREE.LatheGeometry(pts, seg);
-    const pos = geo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), y = pos.getY(i), zRaw = pos.getZ(i);
-      const phi = Math.atan2(x, zRaw);
-      let dz = 0;
-
-      // 1. Supraorbital Brow Ridge
-      const browAmp = headH * (category === "men" ? 0.026 : (kid ? 0.014 : 0.018));
-      dz += browAmp * bumpWindow(y, headH * 0.08, headH * 0.06) * bumpWindow(phi, 0, 0.65);
-
-      // 2. Recessed Orbital Cavities (eye sockets indented backward)
-      const orbitAmp = -headH * 0.038;
-      const orbitLobe = bumpWindow(phi, 0.38, 0.24) + bumpWindow(phi, -0.38, 0.24);
-      dz += orbitAmp * bumpWindow(y, headH * 0.03, headH * 0.07) * orbitLobe;
-
-      // 3. Nasal Dorsum and Bridge
-      const noseAmp = headH * (category === "men" ? 0.066 : (kid ? 0.045 : 0.056));
-      dz += noseAmp * bumpWindow(y, -headH * 0.04, headH * 0.10) * bumpWindow(phi, 0, 0.18);
-
-      // 4. Refined Nasal Tip
-      const tipAmp = headH * (category === "men" ? 0.034 : (kid ? 0.024 : 0.030));
-      dz += tipAmp * bumpWindow(y, -headH * 0.12, headH * 0.05) * bumpWindow(phi, 0, 0.14);
-
-      // 5. Upper Lip & Cupid's bow
-      const uLipAmp = headH * 0.024;
-      dz += uLipAmp * bumpWindow(y, -headH * 0.21, headH * 0.04) * bumpWindow(phi, 0, 0.28);
-
-      // 6. Lower Lip
-      const lLipAmp = headH * 0.028;
-      dz += lLipAmp * bumpWindow(y, -headH * 0.26, headH * 0.04) * bumpWindow(phi, 0, 0.25);
-
-      // 7. Mentolabial Sulcus (groove under lower lip)
-      const sulcusAmp = -headH * 0.015;
-      dz += sulcusAmp * bumpWindow(y, -headH * 0.31, headH * 0.035) * bumpWindow(phi, 0, 0.25);
-
-      // 8. Chin (Mental Protuberance)
-      const chinAmp = headH * (category === "men" ? 0.045 : (kid ? 0.028 : 0.036));
-      dz += chinAmp * bumpWindow(y, -headH * 0.38, headH * 0.08) * bumpWindow(phi, 0, 0.32);
-
-      // 9. Cheekbones (Zygomatic Prominence)
-      const cheekAmp = headH * (female ? 0.022 : 0.018);
-      const cheekLobe = bumpWindow(phi, 0.62, 0.32) + bumpWindow(phi, -0.62, 0.32);
-      dz += cheekAmp * bumpWindow(y, -headH * 0.04, headH * 0.08) * cheekLobe;
-
-      // 10. Occipital Vault (back of skull)
-      const backWeight = Math.max(0, -Math.cos(phi));
-      dz -= headH * 0.042 * bumpWindow(y, headH * 0.12, headH * 0.26) * backWeight;
-
-      pos.setXYZ(i, x * 0.82, y, zRaw * 0.92 + dz);
+  function createGarmentMesh(geo, mat, partName, sideName, skeleton) {
+    let mesh;
+    if (skeleton && geo.attributes.skinIndex && geo.attributes.skinWeight) {
+      mesh = new THREE.SkinnedMesh(geo, mat);
+      mesh.frustumCulled = false;
+      mesh.bind(skeleton, new THREE.Matrix4());
+    } else {
+      mesh = new THREE.Mesh(geo, mat);
     }
-    pos.needsUpdate = true;
-    geo.computeVertexNormals();
-    const m = new THREE.Mesh(geo, skin);
-    m.castShadow = true;
-    return m;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.name = partName;
+    mesh.userData.side = sideName;
+    mesh.userData.origMat = mat;
+    return mesh;
   }
 
-  // One hand — a flattened palm capsule + 4 fingers + angled thumb,
-  // posed gracefully in a relaxed runway fashion posture.
-  function addHand(parentGroup, r, armLen, mat, side = 1) {
-    const handG = new THREE.Group();
-    handG.position.set(0, -armLen, 0);
-    const fingerR = r * 0.32, fingerLen = r * 3.2, palmLen = r * 1.6;
-    const palm = capsule(r * 0.88, palmLen * 0.35, mat);
-    palm.scale.set(1.25, 1, 0.58);
-    palm.position.set(0, -palmLen * 0.5, 0);
-    handG.add(palm);
-    [-1.6, -0.55, 0.55, 1.6].forEach((fx, i) => {
-      const long = i === 1 || i === 2;
-      const finger = capsule(fingerR, fingerLen * (long ? 0.60 : 0.48), mat);
-      finger.position.set(fx * fingerR * 1.80, -palmLen * 0.95 - fingerLen * (long ? 0.32 : 0.26), 0.005);
-      finger.rotation.z = fx * 0.045;
-      finger.rotation.x = -0.06;
-      handG.add(finger);
-    });
-    const thumb = capsule(fingerR * 1.25, fingerLen * 0.38, mat);
-    thumb.position.set(side * r * 1.40, -palmLen * 0.35, r * 0.45);
-    thumb.rotation.set(0.22, 0, -side * 0.80);
-    handG.add(thumb);
-    parentGroup.add(handG);
-    return handG;
-  }
-
-  // One foot — anatomical heel, arch, ball, and tapered toe cap.
-  function addFoot(parentGroup, r, footLen, ankleY = 0, mat) {
-    // If ankleY is passed as a material, reorder gracefully for backward compat
-    if (ankleY && typeof ankleY === 'object' && ankleY.isMaterial) {
-      mat = ankleY; ankleY = 0;
-    }
-    const footG = new THREE.Group();
-    const baseY = -ankleY - footLen * 0.11;
-
-    // Tarsus and metatarsus bridge (instep, contoured with smooth top and flat bottom)
-    const bridge = capsule(r * 0.95, footLen * 0.44, mat);
-    bridge.rotation.x = Math.PI * 0.46;
-    bridge.scale.set(0.85, 0.46, 1.15);
-    bridge.position.set(0, baseY + footLen * 0.04, footLen * 0.18);
-    footG.add(bridge);
-
-    // Calcaneus (heel counter)
-    const heel = capsule(r * 0.88, footLen * 0.22, mat);
-    heel.rotation.x = Math.PI * 0.42;
-    heel.scale.set(0.80, 0.52, 0.85);
-    heel.position.set(0, baseY + footLen * 0.04, -footLen * 0.14);
-    footG.add(heel);
-
-    // Forefoot & toe sweep (tapered)
-    const toes = capsule(r * 0.72, footLen * 0.28, mat);
-    toes.rotation.z = Math.PI * 0.5;
-    toes.scale.set(0.68, 0.30, 0.65);
-    toes.position.set(0, baseY - footLen * 0.02, footLen * 0.45);
-    footG.add(toes);
-
-    parentGroup.add(footG);
-    return footG;
-  }
-
-  // Per-bundled-avatar landmark overrides — keyed by the GLB's filename
-  // stem (see BUNDLED_AVATARS in js/app.js), not by category, since these
-  // correct one specific mesh's own proportions, not every avatar sharing
-  // its category. computeBodyDims()'s generic shoulderY/hipY fractions
-  // assume ordinary human proportions; some single-image AI-reconstructed
-  // avatars don't match them closely enough for the garment shell to land
-  // outside the skin surface (BerryStudio-Upgrade-Plan-v3 WP-31).
-  //
-  // boy2.glb specifically: direct glTF POSITION-accessor measurement (a
-  // per-Y-band XZ-cluster scan on the cleaned mesh — see the "direct
-  // measurement, not guesswork" methodology already used for
-  // stripPedestal()/keepLargestComponent() above) found its actual
-  // crotch/leg-split at ~0.33 of total mesh height and its actual
-  // underarm/shoulder line at ~0.65 — both ~14-15 points below the
-  // generic kid assumption of 0.47/0.80. The consistent, near-uniform
-  // offset points to one root cause: this mesh's head is proportionally
-  // larger than the generic kid headH (0.16H) assumes, which compresses
-  // every landmark below it as a fraction of total height.
-  //
-  // Y-position alone (shoulderYFrac/hipYFrac) was NOT sufficient on its
-  // own, contrary to the initial hypothesis — verified directly in-browser
-  // (garmentGroup temporarily forced visible/hidden to isolate it from the
-  // body mesh) by holding radiusScale at 1 with the corrected fractions:
-  // the shell still rendered fully inside the skin. boy2's chest/waist/hip
-  // radii, derived the same way as every other avatar from the entered
-  // body measurements, are simply too small for this specific mesh's own
-  // scale. The earlier radius-only attempt (v2/v3 WP-31 §3 Attempt 2) had
-  // tried 1.32x-3.0x and found "no stable middle ground" — but that search
-  // was done against the WRONG (default) Y position, so it was scaling a
-  // shell that was sitting mostly up around the neck, not the torso, and
-  // could never have looked right at any radius. With the Y position fixed
-  // first, radiusScale 2.3 (re-testing the same range the old attempt
-  // already flagged as promising) lands a correctly-shaped, outside-the-
-  // skin shell — verified by screenshot, back view, WP-31 acceptance met.
   const AVATAR_LANDMARK_OVERRIDES = {
     boy2: { shoulderYFrac: 0.65, hipYFrac: 0.33, radiusScale: 2.3 },
   };
 
-  // Measurement-only body proportions — independent of which mesh (procedural
-  // or a loaded GLB) they get applied to, so loadGLB() can reuse it to size
-  // and place a garment on a custom avatar the same way buildProcedural() does.
-  // `landmarks` is an optional { shoulderYFrac, hipYFrac, radiusScale? }
-  // override (see AVATAR_LANDMARK_OVERRIDES above) — omitted for
-  // buildProcedural() and every GLB avatar that doesn't need one, so their
-  // behavior is unchanged.
   function computeBodyDims(category, m, landmarks) {
-    const female = category === "women" || category === "girls";
-    const kid = category === "girls" || category === "boys";
-    const H = cm(m.height);
-    const headH = H * (kid ? 0.16 : 0.128);
-    const neckTopY = H - headH;
-    const shoulderY = H * (landmarks ? landmarks.shoulderYFrac : (kid ? 0.80 : 0.82));
-    const hipY = H * (landmarks ? landmarks.hipYFrac : (kid ? 0.47 : 0.52));
-
-    let chestR = R(m.chest), waistR = R(m.waist), hipR = R(m.hips);
-    let shoulderHalf = cm(m.shoulder) / 2;
-    const neckR = R(m.neck) * 0.85;
-    if (female) { waistR *= 0.86; hipR *= 1.03; }
-    else { waistR *= 0.97; shoulderHalf *= 1.07; chestR *= 1.03; }
-    if (kid) { waistR = (waistR + chestR) / 2 * 0.96; hipR *= 0.97; shoulderHalf *= 0.98; }
-    if (landmarks && landmarks.radiusScale) { chestR *= landmarks.radiusScale; waistR *= landmarks.radiusScale; hipR *= landmarks.radiusScale; shoulderHalf *= landmarks.radiusScale; }
-
-    const span = shoulderY - hipY;
-    const armLen = H * (kid ? 0.40 : 0.44);
-    const upperR = R(m.bicep) * (female ? 0.9 : 1.0);
-    const legLen = hipY;
-    const thighR = R(m.thigh) * (female ? 1.0 : 0.98);
-    return { female, kid, H, headH, neckTopY, shoulderY, hipY, chestR, waistR, hipR, shoulderHalf, neckR, span, armLen, upperR, legLen, thighR };
+    return computeHumanBodyDims(category, m, landmarks);
   }
 
-  // ---------- procedural body ----------
-  function buildProcedural(category, m) {
+  // ---------- Unified Lifelike Human Mannequin ----------
+  function buildProcedural(category, m, patternMetrics = null, preserveCamera = false) {
     curCategory = category;
     curMeasurements = m;
-    disposeObject3D(bodyGroup); disposeObject3D(garmentGroup);
-    root.clear(); limbs = {};
-    bodyGroup = new THREE.Group(); root.add(bodyGroup);
+    const prevH = curH;
+    disposeObject3D(bodyGroup);
+    disposeObject3D(garmentGroup);
+    root.clear();
+    limbs = {};
+    activeMannequin = null;
 
-    const d0 = computeBodyDims(category, m);
-    lastDims = d0;
-    const { female, kid, H, headH, neckTopY, shoulderY, hipY, chestR, waistR, hipR, shoulderHalf, neckR, span } = d0;
-    curH = H;
-    const skin = skinMat(category);
-    // torso lathe (round) then flattened front-to-back. A real waist->
-    // ribcage->bust S-curve, not three straight lerped segments — same
-    // pass cloth-lab/src/body/computeBodyDims.js's own torsoProfile() got
-    // (that file's the fuller writeup of why: 2 extra smoothing points,
-    // capped there by a hard collision-capsule budget this file has no
-    // equivalent of, but kept to the same count here for one shared
-    // silhouette language between the two apps). Every anchor Y this
-    // file's OWN buildGarment() below also hardcodes (waist at
-    // hipY+span*0.44, chest at hipY+span*0.76) is unchanged — only the
-    // curve BETWEEN them picked up the 2 new points.
-    //
-    // Built via sculptedTorso(), not the plain lathe() helper — a second
-    // pass, still user-requested: the female torso now has a real breast
-    // and lower-back curve displaced into its own mesh (see that
-    // function's own header), not just two spheres glued onto an
-    // otherwise front/back-symmetric shell. The old glued-on bust spheres
-    // below are gone; the torso surface itself now carries that volume.
-    const torso = sculptedTorso([
-      [hipR * 0.52, hipY - span * 0.16],
-      [hipR * 0.94, hipY - span * 0.06], // glute / pelvic base
-      [hipR * 1.02, hipY],               // widest hip / greater trochanter
-      [hipR * 0.98, hipY + span * 0.08], // iliac crest
-      [hipR * 0.90, hipY + span * 0.22], // hip->waist taper
-      [waistR, hipY + span * 0.44],      // natural waist
-      [waistR * 1.08, hipY + span * 0.58], // ribcage flare
-      [chestR * (female ? 1.02 : 1.04), hipY + span * 0.74], // chest / bust line
-      [chestR * (female ? 0.92 : 1.06), shoulderY - span * 0.03], // upper chest / deltoid line
-      [neckR * 1.22, shoulderY + span * 0.02], // trapezius neck base
-    ], skin, female ? 0.72 : 0.78, female, kid, d0, 32);
-    bodyGroup.add(torso);
+    bodyGroup = new THREE.Group();
+    root.add(bodyGroup);
 
-    // sculpted anatomical neck
-    const neck = lathe([
-      [neckR * 1.30, shoulderY - span * 0.02],
-      [neckR * 1.10, shoulderY + (neckTopY - shoulderY) * 0.25],
-      [neckR * 0.96, shoulderY + (neckTopY - shoulderY) * 0.60],
-      [neckR * 0.92, neckTopY],
-    ], skin, 32);
-    bodyGroup.add(neck);
-
-    const headG = new THREE.Group();
-    headG.position.y = neckTopY + headH * 0.5;
-    const headMesh = sculptedHead(headH, skin, female, kid, category, 36);
-    headG.add(headMesh);
-
-    addFace(headG, headH, category, skin);
-    addHair(headG, headH, category);
-    bodyGroup.add(headG);
-    limbs.head = headG;
-
-    // arms — multi-joint articulated skeleton (shoulder -> elbow -> wrist & hand)
-    const { armLen, upperR } = d0;
-    const upperArmLen = armLen * 0.48;
-    const forearmLen = armLen * 0.46;
-
-    [-1, 1].forEach(s => {
-      // Shoulder pivot group
-      const shoulderG = new THREE.Group();
-      shoulderG.position.set(s * shoulderHalf * 0.94, shoulderY - span * 0.03, 0);
-
-      // Upper arm mesh with anatomical deltoid shoulder cap covering the pivot
-      const upperArm = lathe([
-        [upperR * 1.35, upperArmLen * 0.08], // deltoid upper cap seamlessly capping the shoulder pivot
-        [upperR * 1.28, 0],                  // deltoid lateral contour
-        [upperR * 1.12, -upperArmLen * 0.24],// deltoid insertion / bicep fullness
-        [upperR * 0.98, -upperArmLen * 0.52],// mid brachium
-        [upperR * 0.82, -upperArmLen * 0.80],// distal taper
-        [upperR * 0.72, -upperArmLen],       // elbow joint
-      ], skin, 24);
-      shoulderG.add(upperArm);
-
-      // Elbow pivot group (child of shoulder group!)
-      const elbowG = new THREE.Group();
-      elbowG.position.set(0, -upperArmLen, 0);
-
-      // Forearm mesh — begins seamlessly at upper arm termination
-      const forearm = lathe([
-        [upperR * 0.72, 0],                  // elbow joint
-        [upperR * 0.76, -forearmLen * 0.18], // brachioradialis muscular fullness
-        [upperR * 0.64, -forearmLen * 0.44], // forearm muscular taper
-        [upperR * 0.48, -forearmLen * 0.76], // distal forearm
-        [upperR * 0.35, -forearmLen],        // carpal wrist
-      ], skin, 24);
-      elbowG.add(forearm);
-
-      // Hand added at the end of the forearm with articulated wrist group
-      const handG = addHand(elbowG, upperR * 0.32, forearmLen, skin, s);
-
-      shoulderG.add(elbowG);
-      shoulderG.rotation.z = s * 0.09;
-      bodyGroup.add(shoulderG);
-
-      limbs["arm" + s] = shoulderG;
-      limbs["elbow" + s] = elbowG;
-      limbs["hand" + s] = handG;
+    const skin = createHumanSkinMaterial(THREE, category);
+    activeMannequin = buildHumanMannequin(THREE, category, m, {
+      skinMaterial: skin,
+      pose: "standing",
     });
 
-    // legs — multi-joint articulated skeleton (hip -> knee -> ankle & foot)
-    const { legLen, thighR } = d0;
-    const thighLen = legLen * 0.50;
-    const calfLen = legLen * 0.44;
-    const footLen = thighR * 2.8;
+    bodyGroup.add(activeMannequin.group);
+    limbs = activeMannequin.limbs;
+    lastDims = activeMannequin.dims;
+    curH = lastDims.H;
 
-    [-1, 1].forEach(s => {
-      // Hip / Thigh pivot group
-      const thighG = new THREE.Group();
-      thighG.position.set(s * hipR * 0.50, hipY - span * 0.04, 0);
-
-      // Upper leg mesh (thigh / quadriceps / hamstrings)
-      const thigh = lathe([
-        [thighR * 1.24, 0],                  // trochanter / upper thigh
-        [thighR * 1.14, -thighLen * 0.20],   // quadriceps fullness
-        [thighR * 0.98, -thighLen * 0.48],   // mid thigh
-        [thighR * 0.82, -thighLen * 0.76],   // vastus medialis / lateralis
-        [thighR * 0.68, -thighLen * 0.94],   // suprapatellar
-        [thighR * 0.62, -thighLen],          // knee line
-      ], skin, 28);
-      thighG.add(thigh);
-
-      // Knee pivot group (child of thigh group!)
-      const kneeG = new THREE.Group();
-      kneeG.position.set(0, -thighLen, 0);
-
-      // Lower leg mesh (shin, gastrocnemius calf, Achilles tendon)
-      const calf = lathe([
-        [thighR * 0.62, 0],                  // knee joint
-        [thighR * 0.65, -calfLen * 0.08],    // patellar tendon transition
-        [thighR * 0.76, -calfLen * 0.24],    // gastrocnemius calf muscle apex
-        [thighR * 0.66, -calfLen * 0.44],    // soleus taper
-        [thighR * 0.48, -calfLen * 0.72],    // Achilles tendon
-        [thighR * 0.38, -calfLen * 0.90],    // supramalleolar
-        [thighR * 0.36, -calfLen],           // medial/lateral malleoli (ankle)
-      ], skin, 28);
-      kneeG.add(calf);
-
-      // Foot pivot group (child of knee group!)
-      const footG = new THREE.Group();
-      footG.position.set(0, -calfLen, 0);
-      addFoot(footG, thighR * 0.36, footLen, 0, skin);
-      kneeG.add(footG);
-
-      thighG.add(kneeG);
-      bodyGroup.add(thighG);
-
-      limbs["leg" + s] = thighG;
-      limbs["knee" + s] = kneeG;
-      limbs["foot" + s] = footG;
-    });
-
-    buildGarment(category, m, d0);
-    controls.target.set(0, H * 0.5, 0);
-    frameCamera(H);
-  }
-
-  // ---------- face ----------
-  function addFace(headG, headH, category, skin) {
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xfbf9f6, roughness: 0.15 });
-    const irisColor = category === "women" ? 0x3d271d : (category === "girls" ? 0x4a2e1f : 0x221812);
-    const irisMat = new THREE.MeshStandardMaterial({ color: irisColor, roughness: 0.12 });
-    const pupilMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
-    const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const lipColor = category === "women" ? 0xb55358 : (category === "girls" ? 0xce6c72 : (category === "boys" ? 0xa8675a : 0x9e5b50));
-    const lipMat = new THREE.MeshStandardMaterial({
-      color: lipColor,
-      roughness: 0.42,
-      side: THREE.DoubleSide,
-    });
-    const browMat = new THREE.MeshStandardMaterial({ color: HAIR[category] || 0x241913, roughness: 0.65 });
-    const ey = headH * 0.03, ex = headH * 0.15;
-    const eyeZ = headH * 0.285; // recessed flush inside the orbital sockets!
-
-    [-1, 1].forEach(s => {
-      // Sclera (eyeball) set deep inside the recessed orbital socket
-      const white = sphere(headH * 0.060, eyeMat);
-      white.scale.set(0.88, 0.50, 0.44);
-      white.position.set(s * ex, ey, eyeZ);
-      headG.add(white);
-
-      // Iris sitting flush on the sclera
-      const iris = sphere(headH * 0.032, irisMat);
-      iris.scale.set(1, 1, 0.3);
-      iris.position.set(s * ex, ey, eyeZ + headH * 0.015);
-      headG.add(iris);
-
-      // Pupil flush on iris
-      const pupil = sphere(headH * 0.015, pupilMat);
-      pupil.scale.set(1, 1, 0.2);
-      pupil.position.set(s * ex, ey, eyeZ + headH * 0.022);
-      headG.add(pupil);
-
-      // Corneal specular catchlight
-      const glint = sphere(headH * 0.006, glintMat);
-      glint.position.set(s * ex + headH * 0.009, ey + headH * 0.009, eyeZ + headH * 0.026);
-      headG.add(glint);
-
-      // Delicate upper eyelid crease / lash line framing the orbit
-      const upperLash = capsule(headH * 0.008, headH * 0.12, browMat);
-      upperLash.rotation.z = Math.PI * 0.5 + s * 0.12;
-      upperLash.position.set(s * ex, ey + headH * 0.025, eyeZ + headH * 0.012);
-      headG.add(upperLash);
-
-      // Delicate lower eyelid contour
-      const lowerLash = capsule(headH * 0.006, headH * 0.10, skin);
-      lowerLash.rotation.z = Math.PI * 0.5 - s * 0.08;
-      lowerLash.position.set(s * ex, ey - headH * 0.024, eyeZ + headH * 0.010);
-      headG.add(lowerLash);
-
-      // Natural arched editorial eyebrow following the supraorbital rim
-      const brow = capsule(headH * (category === "men" ? 0.016 : 0.011), headH * 0.17, browMat);
-      brow.rotation.z = Math.PI * 0.5 - s * 0.14;
-      brow.rotation.y = s * 0.15;
-      brow.position.set(s * ex, ey + headH * 0.075, headH * 0.355);
-      headG.add(brow);
-
-      // Elegant ear hugging the temporal contour
-      const earG = new THREE.Group();
-      earG.position.set(s * headH * 0.37, ey - headH * 0.04, -headH * 0.04);
-      earG.rotation.y = -s * 0.15;
-      const helix = capsule(headH * 0.020, headH * 0.12, skin);
-      helix.scale.set(0.65, 1.1, 0.85);
-      earG.add(helix);
-      headG.add(earG);
-    });
-
-    // Subtle vermilion lip tint accentuating the sculpted Cupid's bow and lower fullness
-    const upperVermilion = capsule(headH * 0.011, headH * 0.11, lipMat);
-    upperVermilion.rotation.z = Math.PI * 0.5;
-    upperVermilion.position.set(0, -headH * 0.215, headH * 0.302);
-    upperVermilion.scale.set(1.0, 0.65, 0.45);
-    headG.add(upperVermilion);
-
-    const lowerVermilion = capsule(headH * 0.014, headH * 0.09, lipMat);
-    lowerVermilion.rotation.z = Math.PI * 0.5;
-    lowerVermilion.position.set(0, -headH * 0.260, headH * 0.298);
-    lowerVermilion.scale.set(1.0, 0.70, 0.45);
-    headG.add(lowerVermilion);
-  }
-
-  // ---------- hair ----------
-  function addHair(headG, headH, category) {
-    const hairColor = HAIR[category] || 0x241913;
-    const mat = new THREE.MeshPhysicalMaterial({
-      color: hairColor,
-      roughness: 0.40,
-      metalness: 0.08,
-      sheen: 0.70,
-      sheenColor: new THREE.Color(0x8a624a),
-      side: THREE.DoubleSide
-    });
-
-    // Crown scalp cap
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(headH * 0.54, 24, 18, 0, Math.PI * 2, 0, Math.PI * 0.46), mat);
-    cap.position.y = headH * 0.08; cap.castShadow = true; headG.add(cap);
-
-    const backCap = new THREE.Mesh(new THREE.SphereGeometry(headH * 0.53, 24, 18, -Math.PI * 0.35, Math.PI * 0.7, Math.PI * 0.32, Math.PI * 0.55), mat);
-    backCap.rotation.y = -Math.PI / 2; backCap.position.z = -headH * 0.02; backCap.castShadow = true; headG.add(backCap);
-
-    if (category === "women") {
-      // Elegant fashion chignon updo bun at occipital nape
-      const bun = sphere(headH * 0.25, mat);
-      bun.scale.set(1.15, 0.95, 0.88);
-      bun.position.set(0, headH * 0.12, -headH * 0.46);
-      headG.add(bun);
-
-      // Chignon braid / twist wrap around bun base
-      const wrap = new THREE.Mesh(new THREE.TorusGeometry(headH * 0.19, headH * 0.045, 8, 16), mat);
-      wrap.position.set(0, headH * 0.12, -headH * 0.42);
-      headG.add(wrap);
-
-      // Swept front volume / bangs
-      const fringe = new THREE.Mesh(new THREE.SphereGeometry(headH * 0.22, 16, 12, 0, Math.PI * 0.9, 0, Math.PI * 0.6), mat);
-      fringe.position.set(-headH * 0.08, headH * 0.28, headH * 0.28);
-      fringe.rotation.set(0.3, 0.4, -0.2);
-      headG.add(fringe);
-
-      // Face-framing side tendrils
-      [-1, 1].forEach(s => {
-        const sideLock = capsule(headH * 0.042, headH * 0.68, mat);
-        sideLock.position.set(s * headH * 0.42, -headH * 0.16, -headH * 0.02);
-        sideLock.rotation.z = s * 0.08;
-        sideLock.rotation.x = 0.05;
-        headG.add(sideLock);
-      });
-    } else if (category === "men") {
-      // Modern textured taper crop with volume
-      const topVolume = sphere(headH * 0.38, mat);
-      topVolume.scale.set(0.92, 0.42, 1.08);
-      topVolume.position.set(0, headH * 0.30, headH * 0.02);
-      headG.add(topVolume);
-
-      // Front quiff / pompadour lift
-      const quiff = capsule(headH * 0.08, headH * 0.32, mat);
-      quiff.rotation.z = Math.PI * 0.5;
-      quiff.position.set(0, headH * 0.36, headH * 0.24);
-      headG.add(quiff);
-
-      // Clean sideburns alongside ears
-      [-1, 1].forEach(s => {
-        const burn = capsule(headH * 0.038, headH * 0.22, mat);
-        burn.position.set(s * headH * 0.41, headH * 0.02, headH * 0.06);
-        headG.add(burn);
-      });
-    } else if (category === "girls") {
-      // Sweet twin high pigtails with vibrant hair ties
-      const tieMat = new THREE.MeshStandardMaterial({ color: 0xff4d88, roughness: 0.3 });
-      [-1, 1].forEach(s => {
-        // Hair tie
-        const tie = new THREE.Mesh(new THREE.TorusGeometry(headH * 0.07, headH * 0.024, 6, 12), tieMat);
-        tie.position.set(s * headH * 0.44, headH * 0.18, -headH * 0.12);
-        tie.rotation.y = s * 0.4;
-        headG.add(tie);
-
-        // Pigtail bunch
-        const p = capsule(headH * 0.09, headH * 0.70, mat);
-        p.position.set(s * headH * 0.52, headH * 0.02, -headH * 0.15);
-        p.rotation.z = s * 0.48;
-        p.rotation.x = -0.18;
-        p.castShadow = true;
-        headG.add(p);
-      });
-
-      // Front wispy bangs
-      const bangs = capsule(headH * 0.045, headH * 0.36, mat);
-      bangs.rotation.z = Math.PI * 0.5;
-      bangs.position.set(0, headH * 0.25, headH * 0.36);
-      headG.add(bangs);
-    } else if (category === "boys") {
-      // Neat youthful side crop
-      const topCrop = sphere(headH * 0.36, mat);
-      topCrop.scale.set(0.90, 0.36, 1.02);
-      topCrop.position.set(headH * 0.04, headH * 0.28, 0);
-      headG.add(topCrop);
-
-      // Layered boyish fringe
-      const fringe = capsule(headH * 0.05, headH * 0.30, mat);
-      fringe.rotation.z = Math.PI * 0.46;
-      fringe.position.set(headH * 0.02, headH * 0.26, headH * 0.33);
-      headG.add(fringe);
+    buildGarment(category, m, lastDims, patternMetrics);
+    if (preserveCamera && controls && camera) {
+      const oldTarget = controls.target.clone();
+      const offset = camera.position.clone().sub(oldTarget);
+      if (prevH > 0.1 && Math.abs(curH - prevH) > 0.005) {
+        offset.multiplyScalar(curH / prevH);
+      }
+      controls.target.set(0, curH * 0.525, 0);
+      camera.position.copy(controls.target).add(offset);
+      controls.update();
+    } else {
+      controls.target.set(0, curH * 0.525, 0);
+      frameCamera(curH);
     }
   }
 
-  // ---------- garment (representative, per category) ----------
-  function buildGarment(category, m, d) {
-    garmentGroup = new THREE.Group(); root.add(garmentGroup);
-    const female = category === "women" || category === "girls";
+  // =========================================================================
+  // TAILORED, PATTERN-RESPONSIVE SKINNED GARMENT ENGINE
+  // =========================================================================
+  function getBodySurfacePoint(y, phi, d, extraEase = 0.014, waistRelax = 0) {
+    const { female, kid, hipY, shoulderY, span, chestR, waistR, hipR, shoulderHalf } = d;
+    const zScale = female ? 0.72 : 0.78;
+    const effWaistR = waistR * (1 - waistRelax) + Math.max(waistR, hipR * 0.93, chestR * 0.95) * waistRelax;
 
-    // bodice — a slightly larger torso shell from waist to shoulders
-    const t = 0.014; // ease / thickness
-    const topY = d.shoulderY - d.span * 0.06;
-    const waistYY = d.hipY + d.span * 0.44;
-    const bodiceProfile = [
-      [d.hipR + t, d.hipY + d.span * 0.02],
-      [d.waistR + t, waistYY],
-      [d.chestR * (female ? 1.08 : 1.05) + t, d.hipY + d.span * 0.76],
-      [d.chestR * (female ? 0.98 : 1.08) + t, topY],
+    // Match the exact anatomical torso profile of human-mannequin.js so garments never pinch inside iliac crest or chest
+    const stops = [
+      [hipY - span * 0.08, hipR * 1.02, hipR * 1.00],
+      [hipY - span * 0.02, hipR * 1.03, hipR * 1.01],
+      [hipY + span * 0.06, hipR * 1.01, hipR * 0.99],
+      [hipY + span * 0.19, hipR * 0.93 + effWaistR * 0.09, hipR * 0.92 + effWaistR * 0.10],
+      [hipY + span * 0.32, hipR * 0.44 + effWaistR * 0.58, hipR * 0.46 + effWaistR * 0.56],
+      [hipY + span * 0.44, effWaistR * 1.02, effWaistR * 1.00],
+      [hipY + span * 0.56, effWaistR * 0.62 + chestR * 0.40, effWaistR * 0.65 + chestR * 0.37],
+      [hipY + span * 0.65, chestR * (female ? 0.99 : 1.03), chestR * 0.98],
+      [hipY + span * 0.74, chestR * (female ? 1.03 : 1.07), chestR * (female ? 1.02 : 1.04)],
+      [hipY + span * 0.84, shoulderHalf * (female ? 0.88 : 0.92), chestR * 0.95],
+      [shoulderY,          shoulderHalf * 0.95, chestR * 0.88],
     ];
-    const [bodiceFront, bodiceBack] = latheHalves(bodiceProfile, fabricMat("bodice", "front"), fabricMat("bodice", "back"), "bodice", 32);
-    bodiceFront.scale.z = bodiceBack.scale.z = female ? 0.82 : 0.82;
-    bodiceFront.userData.garmentType = bodiceBack.userData.garmentType = "full";
-    garmentGroup.add(bodiceFront, bodiceBack);
 
-    // bra / cropped bustier shell — dedicated wireless soft-cup & underband silhouette
-    const braUnderbandY = waistYY + d.span * 0.08;
-    const braTopY = d.shoulderY - d.span * 0.12;
-    const braProfile = [
-      [d.waistR * 1.04 + t, braUnderbandY],
-      [d.chestR * (female ? 1.08 : 1.04) + t, d.hipY + d.span * 0.74],
-      [d.chestR * (female ? 0.96 : 1.02) + t, braTopY],
-    ];
-    const [braFront, braBack] = latheHalves(braProfile, fabricMat("bodice", "front"), fabricMat("bodice", "back"), "bodice", 32);
-    braFront.scale.z = braBack.scale.z = female ? 0.84 : 0.82;
-    braFront.userData.garmentType = braBack.userData.garmentType = "bra";
-    garmentGroup.add(braFront, braBack);
-
-    // skirt — dress/skirt shell for all categories (visibility decides if shown)
-    const skirtHemY = (category === "girls" || category === "boys") ? d.H * 0.30 : d.H * 0.14;
-    const flare = (category === "girls" || category === "boys") ? 2.1 : 1.95;
-    const skirtProfile = [
-      [d.waistR + t, waistYY + 0.005],
-      [d.hipR * 1.08 + t, d.hipY],
-      [d.hipR * 1.38, (d.hipY + skirtHemY) * 0.55],
-      [d.hipR * flare, skirtHemY],
-    ];
-    const [skirtFront, skirtBack] = latheHalves(skirtProfile, fabricMat("skirt", "front"), fabricMat("skirt", "back"), "skirt", 40);
-    skirtFrontMesh = skirtFront;
-    skirtBackMesh = skirtBack;
-    garmentGroup.add(skirtFront, skirtBack);
-
-    // trousers — seat bridge + leg panels
-    const pantHemY = (category === "boys" || category === "girls") ? d.H * 0.28 : d.H * 0.03;
-    const seatProfile = [
-      [d.waistR * 1.02 + t, waistYY],
-      [d.hipR * 1.15 + t, d.hipY],
-      [d.hipR * 1.16 + t, d.hipY - d.span * 0.14],
-      [d.hipR * 1.12 + t, d.hipY - d.span * 0.24],
-    ];
-    const [seatFront, seatBack] = latheHalves(seatProfile, fabricMat("trousers", "front"), fabricMat("trousers", "back"), "trousers", 28);
-    seatFront.scale.z = seatBack.scale.z = 0.88;
-    seatFront.userData.subPart = seatBack.userData.subPart = "seat";
-    garmentGroup.add(seatFront, seatBack);
-
-    const pivotY = d.hipY - d.span * 0.05;
-    const thighLen = d.legLen * 0.50;
-    const calfLen = d.legLen * 0.44;
-
-    [-1, 1].forEach(s => {
-      const legPivot = limbs["leg" + s];
-      const kneePivot = limbs["knee" + s];
-
-      if (legPivot && kneePivot) {
-        // Multi-joint articulated trousers: thigh panel follows femur, calf panel follows tibia.
-        // Deeply overlapping cuffs across knee joint guarantee 100% enclosed limbs throughout stride!
-        const thighProfile = [
-          [d.thighR * 1.48, d.span * 0.08],
-          [d.thighR * 1.42, 0],
-          [d.thighR * 1.32, -thighLen * 0.35],
-          [d.thighR * 1.28, -thighLen * 0.70],
-          [d.thighR * 1.25, -thighLen * 0.95],
-          [d.thighR * 1.22, -thighLen * 1.15], // deep overlapping knee cuff down past knee
-        ];
-        const [thighFront, thighBack] = latheHalves(thighProfile, fabricMat("trousers", "front"), fabricMat("trousers", "back"), "trousers", 24);
-        thighFront.position.set(0, 0, 0);
-        thighBack.position.set(0, 0, 0);
-        thighFront.userData.subPart = thighBack.userData.subPart = "thigh";
-        legPivot.add(thighFront, thighBack);
-
-        const hemLocalY = Math.max(-calfLen * 0.96, pantHemY - (pivotY - thighLen));
-        if (hemLocalY < -calfLen * 0.08) {
-          const calfProfile = [
-            [d.thighR * 1.20, thighLen * 0.12],  // upward telescoping cuff inside thigh cuff
-            [d.thighR * 1.22, 0],               // knee joint
-            [d.thighR * 1.18, -calfLen * 0.28], // calf muscle clearance
-            [d.thighR * 1.10, -calfLen * 0.65], // lower shin clearance
-            [d.thighR * 1.04, hemLocalY],       // trouser cuff
-          ];
-          const [calfFront, calfBack] = latheHalves(calfProfile, fabricMat("trousers", "front"), fabricMat("trousers", "back"), "trousers", 24);
-          calfFront.position.set(0, 0, 0);
-          calfBack.position.set(0, 0, 0);
-          calfFront.userData.subPart = calfBack.userData.subPart = "calf";
-          kneePivot.add(calfFront, calfBack);
+    let rx, rzBase;
+    if (y <= stops[0][0]) {
+      const f = clamp((stops[0][0] - y) / Math.max(0.15, hipY), 0, 1);
+      rx = hipR * (1.02 - 0.12 * f);
+      rzBase = hipR * (1.00 - 0.08 * f);
+    } else if (y >= stops[stops.length - 1][0]) {
+      rx = stops[stops.length - 1][1];
+      rzBase = stops[stops.length - 1][2];
+    } else {
+      rx = stops[0][1];
+      rzBase = stops[0][2];
+      for (let i = 0; i < stops.length - 1; i++) {
+        const y0 = stops[i][0], y1 = stops[i + 1][0];
+        if (y >= y0 && y <= y1) {
+          const u = (y - y0) / Math.max(1e-5, y1 - y0);
+          rx = stops[i][1] * (1 - u) + stops[i + 1][1] * u;
+          rzBase = stops[i][2] * (1 - u) + stops[i + 1][2] * u;
+          break;
         }
-      } else if (legPivot) {
-        // Fallback for single-joint avatars
-        const legProfileLocal = [
-          [d.thighR * 1.45, d.span * 0.07],
-          [d.thighR * 1.40, 0],
-          [d.thighR * 1.28, -d.legLen * 0.28],
-          [d.thighR * 1.22, -d.legLen * 0.52],
-          [d.thighR * 1.20, -d.legLen * 0.70],
-          [d.thighR * 1.18, -(pivotY - pantHemY)],
+      }
+    }
+
+    const sinP = Math.sin(phi);
+    const cosP = Math.cos(phi);
+    const x = (rx + extraEase) * sinP;
+    let z = (rzBase * zScale + extraEase) * cosP;
+    if (!kid && y >= hipY - span * 0.15 && y <= shoulderY + span * 0.06) {
+      z += female ? torsoZBump(y, phi, d) : maleTorsoZBump(y, phi, d);
+    }
+    if (cosP > 0.35 && y > hipY + span * 0.78) {
+      const clavLobe = bumpWindow(phi, 0.45, 0.36) + bumpWindow(phi, -0.45, 0.36);
+      z += 0.005 * clavLobe * smoothstep(hipY + span * 0.78, shoulderY, y);
+    }
+    return [x, z];
+  }
+
+  function torsoGarmentWeights(y, x, d) {
+    const { hipY, shoulderY, span } = d;
+    const waistY = hipY + span * 0.44;
+    const chestY = hipY + span * 0.68;
+
+    if (y < hipY - 0.02) {
+      const legBlend = smoothstep(hipY - 0.02, hipY - 0.34, y) * 0.85;
+      const bLeg = x >= 0 ? BONE_IDX.legL : BONE_IDX.legR;
+      const kneeY = hipY * 0.50;
+      const kneeBlend = y < kneeY ? smoothstep(kneeY + 0.04, kneeY - 0.14, y) * 0.70 : 0;
+      const bKnee = x >= 0 ? BONE_IDX.kneeL : BONE_IDX.kneeR;
+      return [
+        [BONE_IDX.pelvis, 1 - legBlend],
+        [bLeg, legBlend * (1 - kneeBlend)],
+        [bKnee, legBlend * kneeBlend],
+      ];
+    }
+    if (y < chestY) {
+      const fSpine = smoothstep(hipY + span * 0.04, waistY + span * 0.04, y);
+      const fChest = smoothstep(waistY - span * 0.04, chestY + span * 0.04, y);
+      const wPelvis = Math.max(0, 1 - fSpine);
+      const wChest = fChest;
+      const wSpine = Math.max(0, 1 - wPelvis - wChest);
+      return [[BONE_IDX.pelvis, wPelvis], [BONE_IDX.spine, wSpine], [BONE_IDX.chest, wChest]];
+    }
+    const lat = clamp((Math.abs(x) - d.neckR * 1.4) / Math.max(0.06, d.shoulderHalf), 0, 1);
+    const armW = smoothstep(shoulderY - span * 0.08, shoulderY + span * 0.04, y) * lat * 0.22;
+    const bArm = x >= 0 ? BONE_IDX.armL : BONE_IDX.armR;
+    return [[BONE_IDX.chest, 1 - armW], [bArm, armW]];
+  }
+
+  /**
+   * Builds a tailored bodice / blouse / shirt / jacket / robe with real
+   * shoulder straps, contoured armholes, sculpted neckline, and optional collar.
+   */
+  function buildTailoredBodice(d, pm, skeleton) {
+    const bSpec = pm.bodice;
+    const { hipY, shoulderY, span, neckR, shoulderHalf, chestR } = d;
+    const waistY = hipY + span * 0.44;
+    const underarmY = shoulderY - span * 0.09;
+    const shoulderTopY = shoulderY + span * 0.052;
+
+    const easeBase = 0.015 + Math.max(-0.002, (bSpec.easeRatio - 1.0) * 0.042);
+    const waistRelax = bSpec.style === "robe" ? 0.88 : (bSpec.style === "tunic" ? 0.52 : 0);
+
+    // Determine bottom hem Y based on actual 2D bodice style & lengthCm
+    let hemY = hipY + span * 0.06;
+    if (bSpec.style === "bra") {
+      hemY = waistY + span * 0.14;
+    } else if (bSpec.style === "crop") {
+      hemY = waistY + span * 0.07;
+    } else if (bSpec.style === "waist") {
+      hemY = waistY - 0.012;
+    } else if (bSpec.style === "hip" || bSpec.style === "leotard") {
+      hemY = clamp(shoulderTopY - cm(bSpec.lengthCm), hipY - span * 0.08, waistY - 0.03);
+    } else if (bSpec.style === "tunic") {
+      hemY = clamp(shoulderTopY - cm(bSpec.lengthCm), hipY - 0.22, hipY - 0.04);
+    } else if (bSpec.style === "robe") {
+      hemY = clamp(shoulderTopY - cm(bSpec.lengthCm), 0.05, hipY - 0.12);
+    }
+
+    const isStrapless = bSpec.neckline === "strapless";
+    const isBra = bSpec.style === "bra";
+
+    // Neckline opening width & depth on Front vs Back
+    const neckHalfW = neckR * (bSpec.neckline === "boat" ? 1.62 : (bSpec.neckline === "high" || bSpec.neckline === "collar" ? 1.15 : 1.30));
+    let frontNeckBottomY = shoulderY - span * 0.12;
+    if (bSpec.neckline === "v-neck") frontNeckBottomY = hipY + span * 0.66;
+    else if (bSpec.neckline === "scoop" || isBra) frontNeckBottomY = hipY + span * 0.72;
+    else if (bSpec.neckline === "square") frontNeckBottomY = hipY + span * 0.75;
+    else if (bSpec.neckline === "boat") frontNeckBottomY = shoulderY - span * 0.04;
+    else if (bSpec.neckline === "high" || bSpec.neckline === "collar") frontNeckBottomY = shoulderY - span * 0.015;
+
+    const backNeckBottomY = isBra
+      ? hipY + span * 0.74
+      : (bSpec.neckline === "scoop" ? shoulderY - span * 0.10 : shoulderY - span * 0.02);
+
+    const shoulderTipX = isBra
+      ? neckHalfW + (shoulderHalf * 0.86 - neckHalfW) * 0.52
+      : shoulderHalf * 0.90;
+
+    function buildBodiceSide(isFront) {
+      const positions = [];
+      const uvs = [];
+      const skinIdx = [];
+      const skinWgt = [];
+      const indices = [];
+
+      const ROWS_LOWER = bSpec.style === "robe" ? 16 : 9;
+      const ROWS_UPPER = isStrapless ? 2 : 8;
+      const totalRows = ROWS_LOWER + ROWS_UPPER;
+      const HALF_COLS = 9; // 0..8 on right (-X), 9..17 on left (+X) -> 18 columns per row
+      const rowVerts = [];
+
+      const neckBottomY = isFront ? frontNeckBottomY : backNeckBottomY;
+
+      for (let r = 0; r <= totalRows; r++) {
+        let y;
+        if (r <= ROWS_LOWER) {
+          const u = r / ROWS_LOWER;
+          y = hemY * (1 - u) + underarmY * u;
+        } else {
+          const u = (r - ROWS_LOWER) / ROWS_UPPER;
+          y = underarmY * (1 - u) + (isStrapless ? (underarmY + span * 0.02) : shoulderTopY) * u;
+        }
+
+        const upperFrac = r <= ROWS_LOWER ? 0 : (r - ROWS_LOWER) / ROWS_UPPER;
+
+        // Flare multiplier below waist for tunics / robes / abayas / peplums
+        let lowerFlare = 1.0;
+        let pleatAmp = 0;
+        if (y < waistY && bSpec.hemFlare > 1.04) {
+          const drop = clamp((waistY - y) / Math.max(0.15, waistY - hemY), 0, 1);
+          lowerFlare = 1 + (bSpec.hemFlare - 1) * Math.pow(drop, 1.12);
+          if (pm.skirt.pleats > 0 && bSpec.style === "robe") {
+            pleatAmp = 0.007 * Math.pow(drop, 1.3);
+          }
+        }
+
+        // Inner neckline X cutoff (0 below neckline, opening to neckHalfW at shoulder seam)
+        let innerX = 0;
+        if (bSpec.isOpenFront && isFront && !isBra) {
+          innerX = 0.008; // clean open-front jacket/cardigan/abaya slit
+        }
+        if (!isStrapless && y > neckBottomY) {
+          const nu = clamp((y - neckBottomY) / Math.max(0.02, shoulderTopY - neckBottomY), 0, 1);
+          let curve;
+          if (isFront && bSpec.neckline === "v-neck") curve = Math.pow(nu, 0.88);
+          else if (isFront && bSpec.neckline === "square") curve = nu < 0.16 ? nu * 5.2 : 0.84 + (nu - 0.16) * 0.19;
+          else curve = Math.sqrt(nu);
+          innerX = Math.max(innerX, neckHalfW * clamp(curve, 0, 1));
+        }
+
+        // Outer armscye X cutoff above underarmY (curves smoothly into shoulder strap!)
+        const bodyHalfWAtUnderarm = Math.abs(getBodySurfacePoint(underarmY, Math.PI / 2, d, easeBase, waistRelax)[0]);
+        let outerMaxX = Math.abs(getBodySurfacePoint(Math.min(y, underarmY), Math.PI / 2, d, easeBase, waistRelax)[0]) * lowerFlare;
+        if (r > ROWS_LOWER && !isStrapless) {
+          const armscyeIndent = Math.sin(Math.PI * Math.min(1, upperFrac * 0.85)) * (isBra ? chestR * 0.20 : chestR * 0.045);
+          outerMaxX = bodyHalfWAtUnderarm * (1 - upperFrac) + shoulderTipX * upperFrac - armscyeIndent;
+          outerMaxX = Math.max(innerX + (isBra ? 0.016 : 0.032), outerMaxX);
+        }
+
+        const row = [];
+        for (const sideSign of [-1, 1]) {
+          for (let c = 0; c < HALF_COLS; c++) {
+            const tCol = sideSign < 0 ? (1 - c / (HALF_COLS - 1)) : (c / (HALF_COLS - 1));
+            const xMag = innerX + (outerMaxX - innerX) * tCol;
+            const x = sideSign * xMag;
+
+            // Map x onto surface angle phi on front [-PI/2..+PI/2] or back [PI/2..3PI/2]
+            const refOuterW = Math.max(outerMaxX, shoulderHalf * 0.92);
+            const sinPhi = clamp(x / Math.max(0.04, (r > ROWS_LOWER ? refOuterW : outerMaxX)), -0.985, 0.985);
+            const phi = isFront ? Math.asin(sinPhi) : (Math.PI - Math.asin(sinPhi));
+
+            let [, zSurf] = getBodySurfacePoint(Math.min(y, shoulderY), phi, d, easeBase, waistRelax);
+            zSurf *= lowerFlare;
+            if (pleatAmp > 0) {
+              zSurf += (isFront ? 1 : -1) * pleatAmp * Math.cos(phi * pm.skirt.pleats);
+            }
+
+            // Over the top of the shoulder strap (upperFrac in [0.76, 1.0]), arch smoothly over the
+            // trapezius/acromion crown before welding to z=0 right at the top shoulder seam (r === totalRows)
+            let yFinal = y;
+            if (!isStrapless && upperFrac > 0) {
+              const ridgeCrownY = shoulderY + span * 0.062 - Math.abs(tCol) * span * 0.022;
+              const archLift = smoothstep(0.45, 1.0, upperFrac);
+              yFinal = y * (1 - archLift * 0.75) + ridgeCrownY * (archLift * 0.75);
+              if (upperFrac > 0.76) {
+                const capAngle = (Math.PI * 0.5) * smoothstep(0.76, 1.0, upperFrac);
+                zSurf *= Math.cos(capAngle);
+              }
+            }
+
+            const id = positions.length / 3;
+            positions.push(x, yFinal, zSurf);
+            uvs.push((x / (shoulderHalf * 2.2)) + 0.5, clamp((yFinal - hemY) / Math.max(0.2, shoulderTopY - hemY), 0, 1));
+            const [bi, bw] = packSkinWeights(torsoGarmentWeights(yFinal, x, d));
+            skinIdx.push(bi[0], bi[1], bi[2], bi[3]);
+            skinWgt.push(bw[0], bw[1], bw[2], bw[3]);
+            row.push({ id, innerX });
+          }
+        }
+        rowVerts.push(row);
+      }
+
+      // Triangulate grid: connect right half (0..HALF_COLS-1), left half (HALF_COLS..2*HALF_COLS-1),
+      // and center bridge (HALF_COLS-1 <-> HALF_COLS) where neckline/slit is closed (innerX < 0.002)
+      for (let r = 0; r < totalRows; r++) {
+        const r0 = rowVerts[r];
+        const r1 = rowVerts[r + 1];
+        for (let c = 0; c < HALF_COLS * 2 - 1; c++) {
+          const isCenterBridge = c === HALF_COLS - 1;
+          if (isCenterBridge && (r0[c].innerX > 0.002 || r1[c].innerX > 0.002)) continue;
+
+          const a0 = r0[c].id, a1 = r0[c + 1].id;
+          const b0 = r1[c].id, b1 = r1[c + 1].id;
+          if (isFront) {
+            indices.push(a0, a1, b1, a0, b1, b0);
+          } else {
+            indices.push(a0, b1, a1, a0, b0, b1);
+          }
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+      geo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(skinIdx, 4));
+      geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(skinWgt, 4));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+
+      const sideName = isFront ? "front" : "back";
+      const mesh = createGarmentMesh(geo, fabricMat("bodice", sideName), "bodice", sideName, skeleton);
+      mesh.userData.garmentType = isBra ? "bra" : "full";
+      return mesh;
+    }
+
+    const frontMesh = buildBodiceSide(true);
+    const backMesh = buildBodiceSide(false);
+    garmentGroup.add(frontMesh, backMesh);
+
+    // Optional sculpted 3D collar stitched directly into the bodice neckline (zero floating-ring skin gap!)
+    if (bSpec.hasCollar && !isBra && !isStrapless) {
+      const collarCols = 32;
+      const cPos = [], cUvs = [], cSi = [], cSw = [], cIdx = [];
+      const collarH = 0.038;
+      const rCol = neckHalfW * 1.02;
+      const isStandOnly = bSpec.neckline === "high";
+      const sideNeckY = shoulderY + span * 0.042;
+
+      for (let row = 0; row <= 2; row++) {
+        for (let k = 0; k <= collarCols; k++) {
+          const u = k / collarCols;
+          // Span phi from +0.08 to 2*PI - 0.08 (neat front placket kiss)
+          const phi = 0.08 + u * (2 * Math.PI - 0.16);
+          const cosP = Math.cos(phi);
+          const sinP = Math.sin(phi);
+
+          // Contour collar base Y along the actual front/side/back bodice neckline seam!
+          const frontW = Math.max(0, cosP);
+          const backW = Math.max(0, -cosP);
+          const sideW = Math.abs(sinP);
+          const seamY = (frontNeckBottomY - 0.004) * frontW * frontW
+            + (backNeckBottomY - 0.002) * backW * backW
+            + sideNeckY * sideW * sideW;
+
+          const [, bodyNeckZ] = getBodySurfacePoint(Math.min(seamY, shoulderY), phi, d, easeBase, waistRelax);
+          const baseZ = Math.abs(cosP) > 0.15 ? bodyNeckZ * 0.92 : rCol * cosP;
+
+          let radX = rCol;
+          let z = baseZ;
+          let y = seamY;
+          if (row === 1) {
+            radX = rCol * 0.96;
+            z = baseZ * 0.90 + 0.004 * cosP;
+            y = seamY + collarH * 0.78;
+          } else if (row === 2) {
+            radX = isStandOnly ? rCol * 0.94 : rCol * (1.16 + 0.08 * Math.max(0, cosP));
+            z = isStandOnly ? (baseZ * 0.88 + 0.004 * cosP) : (baseZ * 1.06 + 0.012 * cosP);
+            y = isStandOnly ? (seamY + collarH) : (seamY + collarH * 0.22);
+          }
+          const x = radX * sinP;
+          cPos.push(x, y, z);
+          cUvs.push(u, row * 0.5);
+          const [bi, bw] = packSkinWeights([[BONE_IDX.neck, 0.55], [BONE_IDX.chest, 0.45]]);
+          cSi.push(bi[0], bi[1], bi[2], bi[3]);
+          cSw.push(bw[0], bw[1], bw[2], bw[3]);
+        }
+        if (row > 0) {
+          const prevOffset = (row - 1) * (collarCols + 1);
+          const curOffset = row * (collarCols + 1);
+          for (let k = 0; k < collarCols; k++) {
+            const a0 = prevOffset + k, a1 = prevOffset + k + 1;
+            const b0 = curOffset + k, b1 = curOffset + k + 1;
+            cIdx.push(a0, a1, b1, a0, b1, b0);
+          }
+        }
+      }
+
+      const colGeo = new THREE.BufferGeometry();
+      colGeo.setAttribute("position", new THREE.Float32BufferAttribute(cPos, 3));
+      colGeo.setAttribute("uv", new THREE.Float32BufferAttribute(cUvs, 2));
+      colGeo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(cSi, 4));
+      colGeo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(cSw, 4));
+      colGeo.setIndex(cIdx);
+      colGeo.computeVertexNormals();
+      const collarMesh = createGarmentMesh(colGeo, fabricMat("bodice", "front"), "bodice", "front", skeleton);
+      collarMesh.userData.garmentType = "full";
+      garmentGroup.add(collarMesh);
+    }
+  }
+
+  /**
+   * Builds tailored, armscye-fitted skinned sleeves (cap, puff, fitted, 3/4,
+   * full, bell, bishop) using a vertical-oval-to-horizontal-tube deltoid sweep
+   * so the sleeve head welds directly into the bodice armhole with zero skin gap
+   * and zero pagoda/capsule protrusion.
+   */
+  function buildTailoredSleeves(d, pm, skeleton) {
+    const sSpec = pm.sleeve;
+    const { shoulderHalf, shoulderY, span, armLen, upperR, chestR } = d;
+    const pivotX = shoulderHalf * 0.80;
+    const pivotY = shoulderY - span * 0.04;
+    const upperArmLen = armLen * 0.48;
+    const totalSlLen = armLen * clamp(sSpec.lengthFrac, 0.16, 1.02);
+
+    // Armscye vertical oval anchor coordinates on the bodice shoulder/underarm seam
+    const armscyeX = shoulderHalf * 0.80;
+    const armscyeTopY = shoulderY + span * 0.050;
+    const armscyeBotY = shoulderY - span * 0.095;
+    const armscyeMidY = 0.5 * (armscyeTopY + armscyeBotY);
+    const armscyeHalfH = 0.5 * (armscyeTopY - armscyeBotY);
+    const armscyeDepthZ = Math.max(upperR * 1.25, chestR * 0.56);
+
+    const N_SEG = 24;
+    const N_RINGS = 16;
+
+    [-1, 1].forEach((side) => {
+      const positions = [];
+      const uvs = [];
+      const skinIdx = [];
+      const skinWgt = [];
+      const indices = [];
+
+      const sx = side * pivotX;
+
+      for (let r = 0; r <= N_RINGS; r++) {
+        const f = r / N_RINGS; // 0 = armscye seam, 1 = cuff/hem
+        const dyBase = f * totalSlLen;
+
+        // Body arm radius at this distance down the arm
+        let bodyArmR;
+        if (dyBase <= upperArmLen) {
+          const u = dyBase / Math.max(0.1, upperArmLen);
+          bodyArmR = upperR * (1.06 * (1 - u) + 0.75 * u);
+        } else {
+          const u = clamp((dyBase - upperArmLen) / Math.max(0.1, armLen * 0.48), 0, 1);
+          bodyArmR = upperR * (0.76 * (1 - u) + 0.39 * u);
+        }
+
+        // Tailored silhouette radius envelope
+        let sleeveR = bodyArmR + 0.013;
+        if (sSpec.style === "puff") {
+          const puffBell = Math.sin(Math.PI * Math.pow(f, 0.75));
+          sleeveR = bodyArmR + 0.012 + upperR * 0.46 * puffBell;
+          if (f > 0.88) sleeveR = bodyArmR + 0.008;
+        } else if (sSpec.style === "bishop") {
+          const billow = Math.sin(Math.PI * Math.pow(f, 0.65));
+          sleeveR = bodyArmR + 0.013 + upperR * 0.55 * billow;
+          if (f > 0.90) sleeveR = bodyArmR + 0.009;
+        } else if (sSpec.style === "bell") {
+          sleeveR = bodyArmR + 0.013 + upperR * 0.58 * Math.pow(f, 1.35);
+        } else if (sSpec.style === "cap") {
+          sleeveR = bodyArmR + 0.012 + upperR * 0.08 * (1 - f);
+        } else {
+          const easeExtra = Math.max(0, (sSpec.hemRatio - 0.68) * upperR * 0.35 * f);
+          sleeveR = bodyArmR + 0.013 + easeExtra;
+        }
+
+        // Skin weights: match armWeightsAtOffset so sleeve deforms in lockstep with the arm and shoulder saddle
+        const bArm = side > 0 ? BONE_IDX.armL : BONE_IDX.armR;
+        const bElbow = side > 0 ? BONE_IDX.elbowL : BONE_IDX.elbowR;
+        const chestAnchor = (1 - smoothstep(0.0, 0.16, f)) * 0.65;
+        const elbowBlend = smoothstep(upperArmLen - 0.035, upperArmLen + 0.035, dyBase);
+        const weights = [
+          [BONE_IDX.chest, chestAnchor],
+          [bArm, (1 - chestAnchor) * (1 - elbowBlend)],
+          [bElbow, (1 - chestAnchor) * elbowBlend],
         ];
-        const [legFront, legBack] = latheHalves(legProfileLocal, fabricMat("trousers", "front"), fabricMat("trousers", "back"), "trousers", 24);
-        legFront.position.set(0, 0, 0);
-        legBack.position.set(0, 0, 0);
-        legPivot.add(legFront, legBack);
+        const [bi, bw] = packSkinWeights(weights);
+
+        const capBlend = 1 - smoothstep(0.0, 0.22, f);
+        const deltoidArc = Math.sin(Math.PI * clamp(f / 0.22, 0, 1));
+
+        for (let k = 0; k <= N_SEG; k++) {
+          const u = k / N_SEG;
+          const theta = u * 2 * Math.PI;
+          const sCrown = Math.sin(theta); // +1 = top shoulder crown / lateral outer arm, -1 = bottom underarm / medial inner arm
+          const cFront = Math.cos(theta); // +1 = front (+Z), -1 = back (-Z)
+
+          const gatherFlute = sSpec.style === "puff" ? 0.003 * Math.sin(theta * 10) * Math.sin(Math.PI * f) : 0;
+          const rEff = sleeveR + gatherFlute;
+
+          // 1. Vertical armscye oval on the bodice at f = 0
+          const xArmscye = side * (armscyeX + 0.012 * Math.max(0, sCrown));
+          const yArmscye = armscyeMidY + armscyeHalfH * sCrown;
+          const zArmscye = (armscyeDepthZ + gatherFlute) * cFront;
+
+          // 2. Horizontal hanging sleeve tube along the arm
+          const xTube = sx + side * rEff * sCrown;
+          const yTube = pivotY - dyBase;
+          const zTube = rEff * 0.96 * cFront;
+
+          // 3. Smoothly sweep from the vertical bodice armhole over the rounded deltoid cap into the vertical arm tube
+          const overDeltoidOut = side * upperR * 0.24 * deltoidArc * Math.max(0, sCrown);
+          const overDeltoidUp = span * 0.024 * deltoidArc * Math.max(0, sCrown);
+
+          const x = xArmscye * capBlend + xTube * (1 - capBlend) + overDeltoidOut;
+          const y = yArmscye * capBlend + yTube * (1 - capBlend) + overDeltoidUp;
+          const z = zArmscye * capBlend + zTube * (1 - capBlend);
+
+          positions.push(x, y, z);
+          uvs.push(u, 1 - f);
+          skinIdx.push(bi[0], bi[1], bi[2], bi[3]);
+          skinWgt.push(bw[0], bw[1], bw[2], bw[3]);
+        }
+      }
+
+      const stride = N_SEG + 1;
+      for (let r = 0; r < N_RINGS; r++) {
+        for (let k = 0; k < N_SEG; k++) {
+          const a0 = r * stride + k;
+          const a1 = a0 + 1;
+          const b0 = (r + 1) * stride + k;
+          const b1 = b0 + 1;
+          if (side > 0) {
+            indices.push(a0, b1, a1, a0, b0, b1);
+          } else {
+            indices.push(a0, a1, b1, a0, b1, b0);
+          }
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+      geo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(skinIdx, 4));
+      geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(skinWgt, 4));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+
+      const slMesh = createGarmentMesh(geo, fabricMat("sleeve", "front"), "sleeve", "front", skeleton);
+      if (skeleton) {
+        garmentGroup.add(slMesh);
+      } else if (limbs["arm" + side]) {
+        limbs["arm" + side].add(slMesh);
       } else {
-        const legProfileWorld = [
-          [d.thighR * 1.45, d.hipY + d.span * 0.02],
-          [d.thighR * 1.40, pivotY],
-          [d.thighR * 1.28, pivotY - d.legLen * 0.28],
-          [d.thighR * 1.22, pivotY - d.legLen * 0.52],
-          [d.thighR * 1.20, pivotY - d.legLen * 0.70],
-          [d.thighR * 1.18, pantHemY],
-        ];
-        const [legFront, legBack] = latheHalves(legProfileWorld, fabricMat("trousers", "front"), fabricMat("trousers", "back"), "trousers", 24);
-        legFront.position.x = legBack.position.x = s * d.hipR * 0.5;
-        garmentGroup.add(legFront, legBack);
+        garmentGroup.add(slMesh);
       }
     });
+  }
 
-    // sleeves — parented to arm & elbow pivots for natural articulated flexing
-    const longSleeve = category === "men" || category === "women";
-    const upperArmLen = d.armLen * 0.48;
-    const forearmLen = d.armLen * 0.46;
-    const slR = category === "girls" ? 1.35 : category === "boys" ? 1.18 : 1.10;
-    const upperSlLen = category === "girls" ? d.armLen * 0.34 : (category === "boys" ? d.armLen * 0.42 : upperArmLen * 1.04);
+  /**
+   * Builds a sculpted, draped/pleated skirt (mini, knee, midi, maxi; pencil,
+   * straight, A-line, flared, pleated) split cleanly into front & back halves.
+   */
+  function buildTailoredSkirt(d, pm, skeleton) {
+    const skSpec = pm.skirt;
+    const { hipY, span, waistR, hipR, female, kid } = d;
+    const zScale = female ? 0.72 : 0.78;
+    const waistY = hipY + span * 0.44;
+    const topY = waistY + 0.004;
+    const hemY = clamp(waistY - cm(skSpec.lengthCm), 0.045, hipY - 0.08);
+    const totalDrop = Math.max(0.16, topY - hemY);
 
-    [-1, 1].forEach(s => {
-      const armPivot = limbs["arm" + s];
-      const elbowPivot = limbs["elbow" + s];
+    const N_RINGS = 16;
+    const HALF_SEG = 24;
 
-      if (armPivot) {
-        const upperSl = capsule(d.upperR * slR + t, upperSlLen, fabricMat("sleeve"));
-        upperSl.name = "sleeve";
-        upperSl.position.y = -upperSlLen * 0.5 - d.armLen * 0.02;
-        armPivot.add(upperSl);
+    function buildSkirtHalf(isFront) {
+      const positions = [];
+      const uvs = [];
+      const skinIdx = [];
+      const skinWgt = [];
+      const indices = [];
 
-        if (longSleeve && elbowPivot) {
-          const lowerSlLen = forearmLen * 0.92;
-          const lowerSl = capsule(d.upperR * slR * 0.88 + t, lowerSlLen, fabricMat("sleeve"));
-          lowerSl.name = "sleeve";
-          lowerSl.position.y = -lowerSlLen * 0.48;
-          elbowPivot.add(lowerSl);
+      const phiStart = isFront ? -Math.PI / 2 : Math.PI / 2;
+
+      for (let r = 0; r <= N_RINGS; r++) {
+        const f = r / N_RINGS; // 0 = waist, 1 = hem
+        const y = topY - f * totalDrop;
+
+        // Smooth waist -> hip -> flared hem curve
+        let baseRx, baseRz;
+        if (y >= hipY) {
+          const u = clamp((topY - y) / Math.max(0.05, topY - hipY), 0, 1);
+          baseRx = (waistR + 0.012) * (1 - u) + (hipR * 1.05 + 0.016) * u;
+          baseRz = (waistR * zScale + 0.012) * (1 - u) + (hipR * zScale * 1.06 + 0.018) * u;
+        } else {
+          const hipDrop = clamp((hipY - y) / Math.max(0.10, hipY - hemY), 0, 1);
+          const flareEase = skSpec.flare <= 1.08
+            ? (1.0 - 0.04 * hipDrop) // sleek pencil taper
+            : (1.0 + (skSpec.flare - 1.05) * Math.pow(hipDrop, 1.12));
+          baseRx = (hipR * 1.05 + 0.016) * flareEase;
+          // Gradually relax elliptical squash into graceful round drape toward hem
+          const roundBlend = smoothstep(0.0, 0.85, hipDrop) * clamp((skSpec.flare - 1.0) * 0.8, 0.15, 0.75);
+          const effZScale = zScale * (1 - roundBlend) + 0.94 * roundBlend;
+          baseRz = (hipR * 1.05 + 0.018) * effZScale * flareEase;
         }
-      } else {
-        const fullSlLen = d.armLen * (longSleeve ? 0.9 : (category === "girls" ? 0.34 : 0.45));
-        const sl = capsule(d.upperR * slR + t, fullSlLen, fabricMat("sleeve"));
-        sl.name = "sleeve";
-        sl.position.set(s * d.shoulderHalf * 0.95, d.shoulderY - d.span * 0.04 - fullSlLen * 0.5 - d.armLen * 0.02, 0);
-        garmentGroup.add(sl);
+
+        const pleatDepth = skSpec.pleats > 0 ? 0.0085 * Math.pow(f, 1.35) : 0;
+
+        for (let k = 0; k <= HALF_SEG; k++) {
+          const u = k / HALF_SEG;
+          const phi = phiStart + u * Math.PI;
+          const sinP = Math.sin(phi);
+          const cosP = Math.cos(phi);
+
+          const flute = pleatDepth > 0 ? pleatDepth * Math.cos(phi * skSpec.pleats * 2) : 0;
+          const x = (baseRx + flute) * sinP;
+          let z = (baseRz + flute) * cosP;
+
+          if (!kid && y > hipY - span * 0.14) {
+            const bumpFade = smoothstep(hipY - span * 0.14, hipY + span * 0.04, y);
+            z += (female ? torsoZBump(y, phi, d) : maleTorsoZBump(y, phi, d)) * bumpFade;
+          }
+
+          positions.push(x, y, z);
+          uvs.push(u, 1 - f);
+
+          // Waist stays 100% locked to pelvis; lower skirt subtly follows left/right leg swing
+          const legFollow = smoothstep(hipY + 0.02, hipY - 0.30, y) * (skSpec.flare < 1.25 ? 0.72 : 0.42);
+          const bLeg = x >= 0 ? BONE_IDX.legL : BONE_IDX.legR;
+          const [bi, bw] = packSkinWeights([
+            [BONE_IDX.pelvis, 1 - legFollow],
+            [bLeg, legFollow],
+          ]);
+          skinIdx.push(bi[0], bi[1], bi[2], bi[3]);
+          skinWgt.push(bw[0], bw[1], bw[2], bw[3]);
+        }
       }
-    });
+
+      const stride = HALF_SEG + 1;
+      for (let r = 0; r < N_RINGS; r++) {
+        for (let k = 0; k < HALF_SEG; k++) {
+          const a0 = r * stride + k;
+          const a1 = a0 + 1;
+          const b0 = (r + 1) * stride + k;
+          const b1 = b0 + 1;
+          indices.push(a0, b1, a1, a0, b0, b1);
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+      geo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(skinIdx, 4));
+      geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(skinWgt, 4));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+
+      const sideName = isFront ? "front" : "back";
+      return createGarmentMesh(geo, fabricMat("skirt", sideName), "skirt", sideName, skeleton);
+    }
+
+    skirtFrontMesh = buildSkirtHalf(true);
+    skirtBackMesh = buildSkirtHalf(false);
+    garmentGroup.add(skirtFrontMesh, skirtBackMesh);
+  }
+
+  /**
+   * Builds a SINGLE continuous, Y-branched tailored trouser / shorts / brief
+   * surface (using our 2-manifold pants-cobordism across waist -> seat ->
+   * crotch rise -> left & right legs), partitioned cleanly into front & back
+   * halves with ZERO overlapping seat cones or knee buckets!
+   */
+  function buildTailoredTrousers(d, pm, skeleton) {
+    const tSpec = pm.trousers;
+    const { hipY, span, waistR, hipR, thighR, female, kid, H } = d;
+    const zScale = female ? 0.72 : 0.78;
+    const waistY = hipY + span * 0.44;
+    const hipPivotX = hipR * (female ? 0.47 : 0.49);
+    const ankleY = Math.max(0.055, H * 0.048);
+    const kneeY = ankleY + (hipY - span * 0.04 - ankleY) * 0.47;
+
+    const crotchSplitY = hipY - span * (tSpec.isBrief ? 0.13 : 0.165);
+    const legStartY = crotchSplitY - 0.014;
+    const fullInseamSpan = Math.max(0.20, legStartY - (ankleY + 0.012));
+    const legDrop = tSpec.isBrief
+      ? 0.018
+      : fullInseamSpan * clamp(tSpec.inseamFrac, 0.14, 1.0);
+    const pantHemY = Math.max(ankleY + 0.010, legStartY - legDrop);
+
+    const N = 32;
+    const positions = [];
+    const uvs = [];
+    const skinIdx = [];
+    const skinWgt = [];
+    const allTris = [];
+
+    function addV(x, y, z, u, v, weights) {
+      const id = positions.length / 3;
+      positions.push(x, y, z);
+      uvs.push(u, v);
+      const [bi, bw] = packSkinWeights(weights);
+      skinIdx.push(bi[0], bi[1], bi[2], bi[3]);
+      skinWgt.push(bw[0], bw[1], bw[2], bw[3]);
+      return id;
+    }
+
+    function connect(lower, upper) {
+      for (let k = 0; k < N; k++) {
+        const k1 = (k + 1) % N;
+        const a0 = lower[k], a1 = lower[k1];
+        const b0 = upper[k], b1 = upper[k1];
+        allTris.push([a0, a1, b1], [a0, b1, b0]);
+      }
+    }
+
+    function pantLegWeights(y, side) {
+      const bHip = side > 0 ? BONE_IDX.legL : BONE_IDX.legR;
+      const bKnee = side > 0 ? BONE_IDX.kneeL : BONE_IDX.kneeR;
+      if (y <= kneeY + 0.05) {
+        const f = smoothstep(kneeY - 0.05, kneeY + 0.05, y);
+        return [[bKnee, 1 - f], [bHip, f]];
+      }
+      const pelvBlend = smoothstep(legStartY - 0.04, hipY + 0.03, y) * 0.45;
+      return [[bHip, 1 - pelvBlend], [BONE_IDX.pelvis, pelvBlend]];
+    }
+
+    function buildPantLeg(side) {
+      const legX = side * hipPivotX;
+      const legSteps = tSpec.isBrief ? 2 : 9;
+      const outerPelvicReach = Math.max(thighR * 0.96, hipR * 1.04 + 0.015 - Math.abs(legX));
+      const innerPelvicReach = Math.max(thighR * 0.68, Math.abs(legX) - 0.006);
+
+      let prev = null;
+      for (let i = 0; i <= legSteps; i++) {
+        const f = i / legSteps; // 0 = hem, 1 = crotch merge
+        const y = pantHemY * (1 - f) + legStartY * f;
+        const legFracUp = clamp((y - ankleY) / Math.max(0.2, legStartY - ankleY), 0, 1);
+
+        // Body leg clearance + tailored cut (slim / straight chino / wide palazzo)
+        const bodyLegR = thighR * (0.42 + 0.58 * Math.pow(legFracUp, 0.85)) + 0.013;
+        const cutR = thighR * (0.64 * tSpec.hemMult * (1 - legFracUp) + 1.06 * legFracUp) + 0.012;
+        const baseR = Math.max(bodyLegR, cutR);
+
+        const topBlend = smoothstep(0.72, 1.0, legFracUp);
+        const stanceX = legX + side * (1 - legFracUp) * (-hipR * 0.025);
+        const ring = [];
+
+        for (let k = 0; k < N; k++) {
+          const phi = (2 * Math.PI * k) / N;
+          const sinP = Math.sin(phi);
+          const cosP = Math.cos(phi);
+          const isMedial = sinP * side < 0;
+
+          const targetRx = isMedial ? innerPelvicReach : outerPelvicReach;
+          const targetRz = (hipR * zScale + 0.016) * (cosP >= 0 ? 0.94 : 1.04);
+
+          const rx = baseR * 0.96 * (1 - topBlend) + targetRx * topBlend;
+          let rz = baseR * 1.02 * (1 - topBlend) + targetRz * topBlend;
+
+          // Subtle tailored center-front & center-back trouser press crease on woven trousers
+          if (!tSpec.isBrief && tSpec.hemMult >= 0.88) {
+            const crease = bumpWindow(phi, 0, 0.16) + bumpWindow(phi - Math.PI, 0, 0.16) + bumpWindow(phi + Math.PI, 0, 0.16);
+            rz += 0.0035 * crease * (1 - topBlend * 0.7);
+          }
+
+          const x = stanceX + rx * sinP;
+          const z = rz * cosP + (i === legSteps && !kid
+            ? (female ? torsoZBump(y, phi, d) * 0.45 : maleTorsoZBump(y, phi, d) * 0.45)
+            : 0);
+
+          ring.push(addV(x, y, z, k / N, clamp((y - pantHemY) / Math.max(0.2, waistY - pantHemY), 0, 1), pantLegWeights(y, side)));
+        }
+
+        if (prev) connect(prev, ring);
+        prev = ring;
+      }
+      return prev;
+    }
+
+    const topLegL = buildPantLeg(1);
+    const topLegR = buildPantLeg(-1);
+
+    // Pelvis & Waistband slices from crotch rise up to waistY
+    const waistTopY = tSpec.isBrief ? (hipY + span * 0.18) : waistY;
+    const pelvisSlices = [
+      [hipY - span * 0.075, hipR * 1.04 + 0.015, hipR * 1.02 + 0.016],
+      [hipY,                hipR * 1.05 + 0.016, hipR * 1.04 + 0.017],
+      [hipY + span * 0.18,  (hipR * 0.72 + waistR * 0.30) + 0.015, (hipR * 0.72 + waistR * 0.30) + 0.015],
+    ];
+    if (!tSpec.isBrief) {
+      pelvisSlices.push(
+        [waistY - 0.032, (hipR * 0.18 + waistR * 0.84) + 0.014, (hipR * 0.18 + waistR * 0.84) + 0.014],
+        [waistTopY,      waistR * 1.02 + 0.015, waistR * 1.02 + 0.015]
+      );
+    }
+
+    function buildPelvisRing(y, rx, rzBase, isWaistbandRim = false) {
+      const ring = [];
+      for (let k = 0; k < N; k++) {
+        const phi = (2 * Math.PI * k) / N;
+        const sinP = Math.sin(phi);
+        const cosP = Math.cos(phi);
+        const wbBump = isWaistbandRim && tSpec.hasWaistband ? 0.0025 : 0;
+        const x = (rx + wbBump) * sinP;
+        let z = ((rzBase + wbBump) * zScale) * cosP;
+        if (!kid) {
+          z += female ? torsoZBump(y, phi, d) : maleTorsoZBump(y, phi, d);
+        }
+        const fSpine = smoothstep(hipY + span * 0.05, waistY, y) * 0.45;
+        const lat = clamp(Math.abs(x) / Math.max(0.1, hipR), 0, 1) * (1 - smoothstep(hipY - span * 0.10, hipY + span * 0.08, y)) * 0.30;
+        const bLeg = x >= 0 ? BONE_IDX.legL : BONE_IDX.legR;
+        ring.push(addV(
+          x,
+          y,
+          z,
+          k / N,
+          clamp((y - pantHemY) / Math.max(0.2, waistTopY - pantHemY), 0, 1),
+          [[BONE_IDX.pelvis, (1 - fSpine) * (1 - lat)], [BONE_IDX.spine, fSpine * (1 - lat)], [bLeg, lat]]
+        ));
+      }
+      return ring;
+    }
+
+    const pelv0 = buildPelvisRing(pelvisSlices[0][0], pelvisSlices[0][1], pelvisSlices[0][2], false);
+
+    // 15-vertex Crotch Rise Saddle M_1..M_15 (connecting front rise pelv0[0] under crotch to back rise pelv0[16])
+    const p0Y = positions[pelv0[0] * 3 + 1], p0Z = positions[pelv0[0] * 3 + 2];
+    const p16Y = positions[pelv0[16] * 3 + 1], p16Z = positions[pelv0[16] * 3 + 2];
+    const saddleMid = [];
+    for (let j = 1; j <= 15; j++) {
+      const u = j / 16;
+      const z = p0Z * (1 - u) + p16Z * u;
+      const endY = p0Y * (1 - u) + p16Y * u;
+      const arch = Math.sin(Math.PI * u);
+      const y = endY * (1 - arch) + crotchSplitY * arch;
+      saddleMid.push(addV(0, y, z, 0.5, 0.5, [[BONE_IDX.pelvis, 1]]));
+    }
+
+    const upperL = [pelv0[0], ...pelv0.slice(1, 16), pelv0[16], ...[...saddleMid].reverse()];
+    const upperR = [pelv0[0], ...saddleMid, pelv0[16], ...pelvisSlices && pelv0.slice(17, 32)];
+    connect(topLegL, upperL);
+    connect(topLegR, upperR);
+
+    let prevP = pelv0;
+    for (let i = 1; i < pelvisSlices.length; i++) {
+      const [y, rx, rzB] = pelvisSlices[i];
+      const nextP = buildPelvisRing(y, rx, rzB, i === pelvisSlices.length - 1);
+      connect(prevP, nextP);
+      prevP = nextP;
+    }
+
+    // Partition into seamless Front (z >= 0) and Back (z < 0) sub-meshes
+    const frontIdx = [];
+    const backIdx = [];
+    for (const [a, b, c] of allTris) {
+      const cz = (positions[a * 3 + 2] + positions[b * 3 + 2] + positions[c * 3 + 2]) / 3;
+      if (cz >= 0) frontIdx.push(a, b, c);
+      else backIdx.push(a, b, c);
+    }
+
+    const mkSubMesh = (triList, sideName) => {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+      geo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(skinIdx, 4));
+      geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(skinWgt, 4));
+      geo.setIndex(triList);
+      geo.computeVertexNormals();
+      const mesh = createGarmentMesh(geo, fabricMat("trousers", sideName), "trousers", sideName, skeleton);
+      mesh.userData.subPart = "unified";
+      return mesh;
+    };
+
+    garmentGroup.add(mkSubMesh(frontIdx, "front"), mkSubMesh(backIdx, "back"));
+  }
+
+  function buildGarment(category, m, d, explicitMetrics = null) {
+    if (garmentGroup) {
+      root.remove(garmentGroup);
+      disposeObject3D(garmentGroup);
+    }
+    garmentGroup = new THREE.Group();
+    garmentGroup.name = "garmentGroup";
+    root.add(garmentGroup);
+    skirtFrontMesh = null;
+    skirtBackMesh = null;
+
+    const pm = explicitMetrics || curPatternMetrics || computePatternMetrics3D(lastPieceVis || [], m, category);
+    curPatternMetrics = pm;
+    const skeleton = activeMannequin ? activeMannequin.skeleton : null;
+
+    buildTailoredBodice(d, pm, skeleton);
+    buildTailoredSkirt(d, pm, skeleton);
+    buildTailoredTrousers(d, pm, skeleton);
+    buildTailoredSleeves(d, pm, skeleton);
 
     buildAccessories(d);
     applyPieceVisibility();
   }
 
-  // ---------- Accessories & Trims: Buttons & Zippers ----------
+  // ---------- Accessories & Trims: Buttons, Zippers & Belts ----------
   function createButtonMesh(size, style, baseColor) {
     const btnG = new THREE.Group();
     let mat;
@@ -1245,18 +1417,16 @@ export const View3D = (() => {
     } else if (style === "wood") {
       mat = new THREE.MeshPhysicalMaterial({ color: 0x7c4f27, roughness: 0.68, metalness: 0.02 });
     } else {
-      mat = new THREE.MeshPhysicalMaterial({ color: baseColor || 0x6d5efc, roughness: 0.5 });
+      mat = new THREE.MeshPhysicalMaterial({ color: baseColor || 0x4f46e5, roughness: 0.5 });
     }
 
-    const r = (size || 1.0) * 0.007; // approx 7mm radius
+    const r = (size || 1.0) * 0.007;
     const thick = r * 0.25;
 
-    // Outer rim: Torus
     const rim = new THREE.Mesh(new THREE.TorusGeometry(r * 0.88, r * 0.16, 12, 24), mat);
     rim.castShadow = true;
     btnG.add(rim);
 
-    // Concave face disc
     const faceGeom = new THREE.CylinderGeometry(r * 0.85, r * 0.85, thick, 24);
     faceGeom.rotateX(Math.PI / 2);
     const face = new THREE.Mesh(faceGeom, mat);
@@ -1264,7 +1434,6 @@ export const View3D = (() => {
     face.castShadow = true;
     btnG.add(face);
 
-    // 4 Stitch Holes
     const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
     const holeR = r * 0.12;
     const holeOffset = r * 0.32;
@@ -1274,7 +1443,6 @@ export const View3D = (() => {
       btnG.add(hole);
     });
 
-    // Cross thread stitches
     const threadMat = new THREE.MeshBasicMaterial({ color: style === "matte_black" ? 0x666666 : 0xdddddd });
     const thread1 = new THREE.Mesh(new THREE.BoxGeometry(holeOffset * 2.1, r * 0.08, r * 0.06), threadMat);
     thread1.position.z = thick * 0.40;
@@ -1303,12 +1471,10 @@ export const View3D = (() => {
     const len = Math.abs(startY - endY);
     const midY = (startY + endY) / 2;
 
-    // Fabric tape backing
     const tape = new THREE.Mesh(new THREE.PlaneGeometry(0.024, len), tapeMat);
     tape.position.set(0, midY, radius + 0.002);
     zipG.add(tape);
 
-    // Interlocking metallic teeth
     const teethCount = Math.max(12, Math.round(len / 0.008));
     const closedLimitY = startY - (startY - endY) * Math.min(0.5, openPct);
 
@@ -1333,7 +1499,6 @@ export const View3D = (() => {
       }
     }
 
-    // Slider box & pull tab
     const sliderG = new THREE.Group();
     const sliderBody = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.016, 0.008), teethMat);
     sliderG.add(sliderBody);
@@ -1349,13 +1514,12 @@ export const View3D = (() => {
     return zipG;
   }
 
-  function createBeltMesh(waistY, waistR, style, width = "medium", baseCol = 0x6d5efc) {
+  function createBeltMesh(waistY, waistR, zScale, style, width = "medium", baseCol = 0x4f46e5) {
     const beltG = new THREE.Group();
-    const h = width === "slim" ? 0.024 : (width === "wide" ? 0.062 : 0.038);
+    const h = width === "slim" ? 0.024 : (width === "wide" ? 0.058 : 0.036);
     const r = waistR * 1.035 + 0.016;
 
-    let strapMat;
-    let buckleMat;
+    let strapMat, buckleMat;
     if (style === "leather_gold") {
       strapMat = new THREE.MeshStandardMaterial({ color: 0x1a1918, roughness: 0.38, metalness: 0.05 });
       buckleMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.22, metalness: 0.92 });
@@ -1370,19 +1534,17 @@ export const View3D = (() => {
       buckleMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.22, metalness: 0.92 });
     }
 
-    // Cylindrical curved strap around waist
-    const strapGeo = new THREE.CylinderGeometry(r, r, h, 36, 1, true);
+    const strapGeo = new THREE.CylinderGeometry(r, r, h, 40, 1, true);
     const strapMesh = new THREE.Mesh(strapGeo, strapMat);
     strapMesh.position.y = waistY;
-    strapMesh.scale.z = 0.85;
+    strapMesh.scale.z = zScale;
     beltG.add(strapMesh);
 
-    // Sculpted Metallic Buckle at center front
     const bW = h * 1.45;
     const bH = h * 1.25;
     const bThick = 0.006;
     const buckleG = new THREE.Group();
-    buckleG.position.set(0, waistY, r * 0.85 + 0.006);
+    buckleG.position.set(0, waistY, r * zScale + 0.005);
 
     const shape = new THREE.Shape();
     shape.moveTo(-bW / 2, -bH / 2);
@@ -1428,110 +1590,94 @@ export const View3D = (() => {
     const zCfg = accessoriesState.zipper;
     const beltCfg = accessoriesState.belt;
     const waistYY = d.hipY + d.span * 0.44;
+    const zScale = d.female ? 0.72 : 0.78;
 
-    // --- Buttons ---
     if (bCfg && bCfg.enabled) {
       const count = Math.max(1, Math.min(12, bCfg.count || 6));
       const style = bCfg.style || "gold";
-      const baseCol = fabricState.bodice?.front?.color || 0x6d5efc;
+      const baseCol = fabricState.bodice?.front?.color || 0x4f46e5;
 
       if (bCfg.placement === "front_placket") {
-        const startY = d.hipY + d.span * 0.74;
+        const startY = d.hipY + d.span * 0.72;
         const endY = waistYY;
         const step = (startY - endY) / (count + 1);
         for (let i = 1; i <= count; i++) {
           const y = startY - step * i;
-          const frac = (y - waistYY) / (startY - waistYY);
-          const r = (d.waistR * (1 - frac) + d.chestR * 1.05 * frac) + 0.018;
+          const [, zFront] = getBodySurfacePoint(y, 0, d, 0.015);
           const btn = createButtonMesh(1.0, style, baseCol);
-          btn.position.set(0, y, r);
+          btn.position.set(0, y, zFront);
           btn.userData.parentPart = "bodice";
           accessoriesGroup.add(btn);
         }
       } else if (bCfg.placement === "double_breasted") {
-        const startY = d.hipY + d.span * 0.74;
+        const startY = d.hipY + d.span * 0.72;
         const endY = waistYY;
         const rows = Math.max(1, Math.round(count / 2));
         const step = (startY - endY) / (rows + 1);
-        const colOffset = 0.045; // 4.5 cm
+        const colOffset = 0.042;
         for (let i = 1; i <= rows; i++) {
           const y = startY - step * i;
-          const frac = (y - waistYY) / (startY - waistYY);
-          const r = (d.waistR * (1 - frac) + d.chestR * 1.05 * frac) + 0.016;
-          [-1, 1].forEach(col => {
+          const [, zFront] = getBodySurfacePoint(y, 0.28, d, 0.015);
+          [-1, 1].forEach((col) => {
             const btn = createButtonMesh(1.0, style, baseCol);
-            btn.position.set(col * colOffset, y, r * 0.96);
+            btn.position.set(col * colOffset, y, zFront);
             btn.userData.parentPart = "bodice";
             accessoriesGroup.add(btn);
           });
         }
       } else if (bCfg.placement === "waistband") {
-        const r = d.waistR * 1.04 + 0.018;
+        const [, zFront] = getBodySurfacePoint(waistYY, 0, d, 0.017);
         const btn = createButtonMesh(1.15, style, baseCol);
-        btn.position.set(0, waistYY, r);
+        btn.position.set(0, waistYY, zFront);
         btn.userData.parentPart = "trousers";
         accessoriesGroup.add(btn);
       } else if (bCfg.placement === "cuffs") {
-        [-1, 1].forEach(s => {
-          const armG = limbs["elbow" + s] || limbs["arm" + s];
-          if (armG) {
-            for (let i = 0; i < Math.min(3, count); i++) {
-              const btn = createButtonMesh(0.75, style, baseCol);
-              btn.position.set(s * (d.upperR * 1.15), -d.armLen * (0.35 + i * 0.04), 0);
-              btn.rotation.y = s * Math.PI / 2;
-              btn.userData.parentPart = "sleeve";
-              accessoriesGroup.add(btn);
-            }
+        [-1, 1].forEach((s) => {
+          for (let i = 0; i < Math.min(3, count); i++) {
+            const btn = createButtonMesh(0.75, style, baseCol);
+            btn.position.set(s * (d.shoulderHalf * 0.92 + d.upperR * 0.65), d.shoulderY - d.armLen * (0.82 + i * 0.04), 0);
+            btn.rotation.y = (s * Math.PI) / 2;
+            btn.userData.parentPart = "sleeve";
+            accessoriesGroup.add(btn);
           }
         });
       }
     }
 
-    // --- Zipper ---
     if (zCfg && zCfg.enabled) {
       const style = zCfg.style || "silver";
       const openPct = zCfg.openPct || 0;
+      const [, waistFrontZ] = getBodySurfacePoint(waistYY, 0, d, 0.015);
+      const [, waistBackZ] = getBodySurfacePoint(waistYY, Math.PI, d, 0.015);
 
       if (zCfg.placement === "center_front") {
-        const startY = d.hipY + d.span * 0.74;
-        const endY = waistYY;
-        const r = d.waistR * 1.04 + 0.015;
-        const zip = createZipperMesh(startY, endY, r, style, openPct);
+        const zip = createZipperMesh(d.hipY + d.span * 0.72, waistYY, waistFrontZ, style, openPct);
         zip.userData.parentPart = "bodice";
         accessoriesGroup.add(zip);
       } else if (zCfg.placement === "center_back") {
-        const startY = d.hipY + d.span * 0.74;
-        const endY = d.hipY;
-        const r = d.waistR * 1.04 + 0.015;
-        const zip = createZipperMesh(startY, endY, -r, style, openPct);
+        const zip = createZipperMesh(d.hipY + d.span * 0.74, d.hipY, Math.abs(waistBackZ), style, openPct);
         zip.rotation.y = Math.PI;
         zip.userData.parentPart = "bodice";
         accessoriesGroup.add(zip);
       } else if (zCfg.placement === "biker_asymmetric") {
-        const startY = d.shoulderY - d.span * 0.08;
-        const endY = waistYY;
-        const r = d.waistR * 1.04 + 0.016;
-        const zip = createZipperMesh(startY, endY, r, style, openPct);
+        const zip = createZipperMesh(d.shoulderY - d.span * 0.10, waistYY, waistFrontZ + 0.002, style, openPct);
         zip.position.x = 0.035;
-        zip.rotation.z = -0.15; // diagonal biker angle
+        zip.rotation.z = -0.15;
         zip.userData.parentPart = "bodice";
         accessoriesGroup.add(zip);
       } else if (zCfg.placement === "trouser_fly") {
-        const startY = waistYY;
-        const endY = d.hipY - d.span * 0.12;
-        const r = d.hipR * 1.14 + 0.016;
-        const zip = createZipperMesh(startY, endY, r, style, openPct);
+        const [, hipFrontZ] = getBodySurfacePoint(d.hipY, 0, d, 0.018);
+        const zip = createZipperMesh(waistYY, d.hipY - d.span * 0.11, hipFrontZ, style, openPct);
         zip.userData.parentPart = "trousers";
         accessoriesGroup.add(zip);
       }
     }
 
-    // --- Belt & Buckle ---
     if (beltCfg && beltCfg.enabled) {
       const bStyle = beltCfg.style || "leather_gold";
       const bWidth = beltCfg.width || "medium";
-      const baseCol = fabricState.bodice?.front?.color || fabricState.skirt?.front?.color || fabricState.trousers?.front?.color || 0x6d5efc;
-      const belt = createBeltMesh(waistYY, d.waistR, bStyle, bWidth, baseCol);
+      const baseCol = fabricState.bodice?.front?.color || fabricState.skirt?.front?.color || fabricState.trousers?.front?.color || 0x4f46e5;
+      const belt = createBeltMesh(waistYY, d.waistR, zScale, bStyle, bWidth, baseCol);
       belt.userData.parentPart = "waist";
       accessoriesGroup.add(belt);
     }
@@ -1556,7 +1702,6 @@ export const View3D = (() => {
     ctx.fillStyle = "#faf7f2";
     ctx.fillRect(0, 0, 512, 512);
 
-    // Stems & vines
     ctx.strokeStyle = "#4a6b57";
     ctx.lineWidth = 3;
     ctx.lineCap = "round";
@@ -1567,7 +1712,6 @@ export const View3D = (() => {
     ctx.bezierCurveTo(340, 300, 420, 460, 512, 384);
     ctx.stroke();
 
-    // Leaves
     function drawLeaf(x, y, angle) {
       ctx.save();
       ctx.translate(x, y);
@@ -1578,35 +1722,36 @@ export const View3D = (() => {
       ctx.fill();
       ctx.restore();
     }
-    [[100, 110, 0.4], [200, 170, -0.5], [300, 90, 0.6], [410, 160, -0.4],
-     [100, 360, 0.4], [200, 430, -0.5], [300, 350, 0.6], [410, 420, -0.4]].forEach(([x, y, a]) => drawLeaf(x, y, a));
+    [[90, 110, -0.4], [210, 150, 0.5], [340, 100, -0.3], [140, 360, 0.4], [310, 410, -0.5], [440, 370, 0.3]]
+      .forEach(([x, y, a]) => drawLeaf(x, y, a));
 
-    // Blooming Flowers
-    function drawFlower(cx, cy, color, petalColor, scale = 1) {
+    function drawFlower(x, y, centerCol, petalCol, scale = 1) {
       ctx.save();
-      ctx.translate(cx, cy);
+      ctx.translate(x, y);
       ctx.scale(scale, scale);
-      ctx.fillStyle = petalColor;
-      for (let i = 0; i < 5; i++) {
-        const a = (i * Math.PI * 2) / 5;
-        const px = Math.cos(a) * 16;
-        const py = Math.sin(a) * 16;
+      for (let i = 0; i < 6; i++) {
+        ctx.save();
+        ctx.rotate((i * Math.PI) / 3);
+        ctx.fillStyle = petalCol;
         ctx.beginPath();
-        ctx.arc(px, py, 13, 0, Math.PI * 2);
+        ctx.ellipse(0, -18, 11, 18, 0, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
       }
-      ctx.fillStyle = color;
+      ctx.fillStyle = centerCol;
       ctx.beginPath();
       ctx.arc(0, 0, 9, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
 
-    [[128, 128, "#fcd34d", "#f472b6", 1.2],
-     [384, 128, "#fbbf24", "#fb7185", 1.1],
-     [256, 256, "#fcd34d", "#c084fc", 1.3],
-     [128, 384, "#fbbf24", "#fb7185", 1.1],
-     [384, 384, "#fcd34d", "#f472b6", 1.2]].forEach(([x, y, c1, c2, s]) => drawFlower(x, y, c1, c2, s));
+    [
+      [128, 128, "#fcd34d", "#f472b6", 1.2],
+      [384, 128, "#fbbf24", "#fb7185", 1.1],
+      [256, 256, "#fcd34d", "#c084fc", 1.3],
+      [128, 384, "#fbbf24", "#fb7185", 1.1],
+      [384, 384, "#fcd34d", "#f472b6", 1.2],
+    ].forEach(([x, y, c1, c2, s]) => drawFlower(x, y, c1, c2, s));
 
     return c.toDataURL("image/png");
   }
@@ -1618,7 +1763,6 @@ export const View3D = (() => {
     ctx.fillStyle = "#1e1b18";
     ctx.fillRect(0, 0, 512, 512);
 
-    // Diagonal gold geometric grid
     ctx.strokeStyle = "rgba(212, 175, 55, 0.28)";
     ctx.lineWidth = 1.5;
     const step = 64;
@@ -1627,7 +1771,6 @@ export const View3D = (() => {
       ctx.beginPath(); ctx.moveTo(x, 512); ctx.lineTo(x + 512, 0); ctx.stroke();
     }
 
-    // Monogram 'B' emblems at diamond intersections
     ctx.fillStyle = "#d4af37";
     ctx.font = "bold 26px 'Playfair Display', serif, Georgia";
     ctx.textAlign = "center";
@@ -1643,7 +1786,6 @@ export const View3D = (() => {
           ctx.stroke();
           ctx.fillText("B", x, y + 1);
         } else {
-          // Diamond star ornament
           ctx.beginPath();
           ctx.moveTo(x, y - 6); ctx.lineTo(x + 5, y); ctx.lineTo(x, y + 6); ctx.lineTo(x - 5, y); ctx.closePath();
           ctx.fill();
@@ -1675,14 +1817,14 @@ export const View3D = (() => {
         ctx.beginPath();
         ctx.moveTo(ox, oy + s / 2);
         ctx.lineTo(ox + s / 4, oy + s / 2);
-        ctx.lineTo(ox, oy + 3 * s / 4);
+        ctx.lineTo(ox, oy + (3 * s) / 4);
         ctx.closePath();
         ctx.fill();
 
         ctx.beginPath();
         ctx.moveTo(ox + s / 2, oy);
         ctx.lineTo(ox + s / 2, oy + s / 4);
-        ctx.lineTo(ox + 3 * s / 4, oy);
+        ctx.lineTo(ox + (3 * s) / 4, oy);
         ctx.closePath();
         ctx.fill();
       }
@@ -1697,10 +1839,10 @@ export const View3D = (() => {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, 64, 64);
 
-    ctx.fillStyle = "#1e3a8a"; // navy stripe
+    ctx.fillStyle = "#1e3a8a";
     ctx.fillRect(0, 0, 24, 64);
 
-    ctx.fillStyle = "#dc2626"; // thin red accent pinstripe
+    ctx.fillStyle = "#dc2626";
     ctx.fillRect(38, 0, 4, 64);
 
     return c.toDataURL("image/png");
@@ -1714,8 +1856,7 @@ export const View3D = (() => {
     ctx.fillRect(0, 0, 128, 128);
 
     ctx.fillStyle = "#18181b";
-    const dots = [[32, 32], [96, 32], [64, 64], [32, 96], [96, 96]];
-    dots.forEach(([x, y]) => {
+    [[32, 32], [96, 32], [64, 64], [32, 96], [96, 96]].forEach(([x, y]) => {
       ctx.beginPath();
       ctx.arc(x, y, 14, 0, Math.PI * 2);
       ctx.fill();
@@ -1774,11 +1915,11 @@ export const View3D = (() => {
       url = preset === "none" ? null : generatePatternPreset(preset);
     }
 
-    const partsToUpdate = (target === "all" || !target)
+    const partsToUpdate = target === "all" || !target
       ? ["bodice", "skirt", "trousers", "sleeve"]
       : [target];
 
-    partsToUpdate.forEach(part => {
+    partsToUpdate.forEach((part) => {
       if (!fabricState[part]) return;
       fabricState[part].front.textureDataURL = url;
       fabricState[part].front.rawDrawingURL = url ? (rawDrawingURL || (isDrawing ? url : null)) : null;
@@ -1800,20 +1941,9 @@ export const View3D = (() => {
     return url;
   }
 
-  // Some single-mesh AI-generated avatars (image-to-3D pipelines like the
-  // ComfyUI exports bundled in avatars/) bake in a flat circular turntable
-  // base under the feet, in the same mesh as the body (confirmed by direct
-  // glTF POSITION-accessor inspection: girl.glb, girl3.glb, boy2.glb each
-  // have a bottom Y-band with several times the vertex density and radius
-  // of the leg cross-section directly above it; man/fatman/boy/girl2/woman2
-  // don't). Left in place, the whole bounding box — including the disc —
-  // gets grounded, which pushes the disc up through the ankles and reads as
-  // the avatar being "sunk into the ground". This scans the mesh's local Y
-  // histogram for that signature and drops the offending triangles before
-  // grounding. Heuristic, not a general mesh-cleanup tool — tuned against
-  // the 8 bundled models (see the "50%-under-the-ground" fix in CHANGELOG).
+  // ---------- Optional custom GLB upload cleanup helpers ----------
   function stripPedestal(group) {
-    group.traverse(o => {
+    group.traverse((o) => {
       if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
       const geo = o.geometry;
       const pos = geo.attributes.position;
@@ -1826,46 +1956,37 @@ export const View3D = (() => {
       const maxR = new Array(nBins).fill(0);
       for (let i = 0; i < pos.count; i++) {
         const y = pos.getY(i);
-        let bin = Math.floor((y - bb.min.y) / height * nBins);
-        if (bin >= nBins) bin = nBins - 1; if (bin < 0) bin = 0;
+        let bin = Math.floor(((y - bb.min.y) / height) * nBins);
+        if (bin >= nBins) bin = nBins - 1;
+        if (bin < 0) bin = 0;
         counts[bin]++;
         const r = Math.hypot(pos.getX(i), pos.getZ(i));
         if (r > maxR[bin]) maxR[bin] = r;
       }
-      // reference radius/density: a band clearly on the leg (above any
-      // pedestal, below the hips) — 15%-30% of the mesh's own height.
       let refN = 0, refR = 0, n = 0;
-      for (let b = 3; b < 6; b++) { if (counts[b] > 0) { refN += counts[b]; refR += maxR[b]; n++; } }
+      for (let b = 3; b < 6; b++) {
+        if (counts[b] > 0) { refN += counts[b]; refR += maxR[b]; n++; }
+      }
       if (!n) return;
       refN /= n; refR /= n;
       if (!refR || !refN) return;
-      // contiguous wide/dense bins from the very bottom = the pedestal.
       const pedestalBins = [];
       for (let b = 0; b < 3; b++) {
         if (counts[b] / refN > 3.5 || maxR[b] / refR > 1.8) pedestalBins.push(b);
         else break;
       }
       if (!pedestalBins.length) return;
-      const cutoffY = bb.min.y + height * (pedestalBins[pedestalBins.length - 1] + 1) / nBins;
-      // The radius test above is only used to DETECT that a pedestal band
-      // exists — a solid disc is a smooth, continuous surface welded right
-      // into the body mesh (confirmed: single connected component, not a
-      // separate object), so its interior spans every radius from the rim
-      // down to ~0 at the center, same as a real ankle's cross-section. A
-      // radius test at removal time can only ever catch the wide rim,
-      // leaving the disc's narrower center intact as a stray stub/spike.
-      // Once a pedestal band is flagged, clip it by Y alone — drop the
-      // whole triangle if any vertex falls below cutoffY, full stop.
+      const cutoffY = bb.min.y + (height * (pedestalBins[pedestalBins.length - 1] + 1)) / nBins;
       const idx = geo.getIndex();
       const triCount = idx ? idx.count / 3 : pos.count / 3;
-      const vIdx = (k) => idx ? idx.getX(k) : k;
+      const vIdx = (k) => (idx ? idx.getX(k) : k);
       const keep = [];
-      for (let t = 0; t < triCount; t++) {
-        const i0 = vIdx(t * 3), i1 = vIdx(t * 3 + 1), i2 = vIdx(t * 3 + 2);
-        if (pos.getY(i0) < cutoffY || pos.getY(i1) < cutoffY || pos.getY(i2) < cutoffY) continue; // pedestal band — drop
+      for (let tIdx = 0; tIdx < triCount; tIdx++) {
+        const i0 = vIdx(tIdx * 3), i1 = vIdx(tIdx * 3 + 1), i2 = vIdx(tIdx * 3 + 2);
+        if (pos.getY(i0) < cutoffY || pos.getY(i1) < cutoffY || pos.getY(i2) < cutoffY) continue;
         keep.push(i0, i1, i2);
       }
-      if (keep.length === triCount * 3) return; // nothing matched — leave geometry untouched
+      if (keep.length === triCount * 3) return;
       const Arr = pos.count > 65535 ? Uint32Array : Uint16Array;
       geo.setIndex(new THREE.BufferAttribute(new Arr(keep), 1));
       geo.computeBoundingBox();
@@ -1873,46 +1994,35 @@ export const View3D = (() => {
     });
   }
 
-  // Separate, pre-existing defect confirmed on top of the pedestal: girl3.glb
-  // has a ~3200-vertex island (plus a couple of smaller ones) with over 2x
-  // the body's own radius, floating near the shoulder/head — a disconnected
-  // reconstruction artifact from the source pipeline, rendering as a long
-  // diagonal spike. The disc handled by stripPedestal() is welded into the
-  // body's own connected component (confirmed above) so this needs a
-  // different test: any island that is NOT the body itself. Real character
-  // geometry is one connected surface in every bundled model; small genuine
-  // extra bits (an unwelded eyelash/accessory island, seen as 60-190
-  // vertices in a couple of the clean models) are kept via a size-relative
-  // threshold so this doesn't quietly delete legitimate detail.
   function keepLargestComponent(group) {
-    group.traverse(o => {
+    group.traverse((o) => {
       if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
       const geo = o.geometry;
       const pos = geo.attributes.position;
       const idx = geo.getIndex();
       const triCount = idx ? idx.count / 3 : pos.count / 3;
-      const vIdx = (k) => idx ? idx.getX(k) : k;
+      const vIdx = (k) => (idx ? idx.getX(k) : k);
       const parent = new Int32Array(pos.count);
       for (let i = 0; i < parent.length; i++) parent[i] = i;
       const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
       const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
       const tris = new Array(triCount);
-      for (let t = 0; t < triCount; t++) {
-        const i0 = vIdx(t * 3), i1 = vIdx(t * 3 + 1), i2 = vIdx(t * 3 + 2);
-        tris[t] = [i0, i1, i2];
+      for (let tIdx = 0; tIdx < triCount; tIdx++) {
+        const i0 = vIdx(tIdx * 3), i1 = vIdx(tIdx * 3 + 1), i2 = vIdx(tIdx * 3 + 2);
+        tris[tIdx] = [i0, i1, i2];
         union(i0, i1); union(i1, i2);
       }
       const sizes = new Map();
       for (let i = 0; i < parent.length; i++) { const r = find(i); sizes.set(r, (sizes.get(r) || 0) + 1); }
       let largestRoot = -1, largestSize = -1;
-      sizes.forEach((size, root) => { if (size > largestSize) { largestSize = size; largestRoot = root; } });
+      sizes.forEach((size, r) => { if (size > largestSize) { largestSize = size; largestRoot = r; } });
       if (largestRoot < 0) return;
-      const dropThreshold = pos.count * 0.005; // >0.5% of the mesh's own vertices
+      const dropThreshold = pos.count * 0.005;
       const keep = [];
       let dropped = false;
       for (const [i0, i1, i2] of tris) {
-        const root = find(i0);
-        if (root !== largestRoot && sizes.get(root) > dropThreshold) { dropped = true; continue; }
+        const r = find(i0);
+        if (r !== largestRoot && sizes.get(r) > dropThreshold) { dropped = true; continue; }
         keep.push(i0, i1, i2);
       }
       if (!dropped) return;
@@ -1923,118 +2033,125 @@ export const View3D = (() => {
     });
   }
 
-  // ---------- optional GLB avatar ----------
-  async function loadGLB(category, m, onProgress) {
+  async function loadGLB(category, m, onProgress, patternMetrics = null) {
     if (!GLTFLoader) throw new Error("no loader");
     const url = avatarURLs[category];
-    // Bundled avatars follow the "avatars/<id>.glb" convention (see
-    // BUNDLED_AVATARS in js/app.js) — the filename stem doubles as the id
-    // AVATAR_LANDMARK_OVERRIDES is keyed by. Custom/uploaded URLs (a
-    // user's own file, or a blob: URL) simply won't match any override,
-    // same as every other bundled avatar that doesn't need one.
     const avatarId = (url.match(/([^/]+)\.glb(?:[?#].*)?$/i) || [])[1];
     const gltf = await loadGLTFWithRetry(url, onProgress);
-    disposeObject3D(bodyGroup); disposeObject3D(garmentGroup);
-    // A plain Object3D.clone(true) leaves a SkinnedMesh's Skeleton pointing
-    // at the cached source bones. Scaling and grounding that clone can then
-    // evaluate the mesh against a different hierarchy, making the model look
-    // partly buried. SkeletonUtils rebinds each copied SkinnedMesh to its
-    // copied bones while still sharing immutable geometry/material buffers.
-    root.clear(); limbs = {}; bodyGroup = cloneSkeleton(gltf.scene); root.add(bodyGroup);
-    bodyGroup.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    disposeObject3D(bodyGroup);
+    disposeObject3D(garmentGroup);
+    root.clear();
+    limbs = {};
+    activeMannequin = null;
+    bodyGroup = cloneSkeleton(gltf.scene);
+    root.add(bodyGroup);
+    bodyGroup.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     stripPedestal(bodyGroup);
     keepLargestComponent(bodyGroup);
-    // normalise to the requested height
     const box = new THREE.Box3().setFromObject(bodyGroup);
-    const size = new THREE.Vector3(); box.getSize(size);
-    const H = cm(m.height); curH = H;
-    const sc = H / (size.y || 1); bodyGroup.scale.setScalar(sc);
-    const box2 = new THREE.Box3().setFromObject(bodyGroup); bodyGroup.position.y -= box2.min.y;
-    // Wear the currently loaded pattern: the same measurement-derived garment
-    // shapes buildProcedural() uses, placed in the same absolute-Y frame
-    // (feet ~0, head ~H) that grounding just put this GLB body into. Visible
-    // parts/fabric are decided by the existing pieceVisMap()/applyFabric()
-    // plumbing, unchanged — this just gives it a garmentGroup to act on.
-    // The garment shell is sized from generic measurements, not this specific
-    // mesh, so its fit is approximate — on a build stockier than that generic
-    // assumption the shell can sit partly inside the skin surface rather than
-    // hugging it exactly (see the Honest note in README/CHANGELOG). A
-    // general, automated per-mesh auto-fit was tried and reverted: these
-    // AI-generated avatars don't share one rest pose (some hold arms out
-    // near shoulder height, others lower, closer to the waist — confirmed
-    // by direct vertex inspection), so any fixed "safe" Y-band for
-    // measuring torso-only girth ends up sampling outstretched-arm geometry
-    // on at least one bundled model, which blew the garment size up several
-    // times over. Approximate but stable beats precise but occasionally
-    // wildly wrong — that's still true for the 7 avatars with no entry in
-    // AVATAR_LANDMARK_OVERRIDES above; boy2 got a one-off measured
-    // correction instead because its default fit wasn't "approximate", it
-    // was fully swallowed (see that table's own comment).
-    curCategory = category; curMeasurements = m;
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const H = cm(m.height);
+    curH = H;
+    const sc = H / (size.y || 1);
+    bodyGroup.scale.setScalar(sc);
+    const box2 = new THREE.Box3().setFromObject(bodyGroup);
+    bodyGroup.position.y -= box2.min.y;
+    curCategory = category;
+    curMeasurements = m;
     lastDims = computeBodyDims(category, m, AVATAR_LANDMARK_OVERRIDES[avatarId]);
-    buildGarment(category, m, lastDims);
-    controls.target.set(0, H * 0.5, 0); frameCamera(H);
+    buildGarment(category, m, lastDims, patternMetrics);
+    controls.target.set(0, H * 0.51, 0);
+    frameCamera(H);
   }
 
   // ---------- public build ----------
   let buildToken = 0;
+  let hasFramedOnce = false;
+  let lastFramedCategory = null;
   async function build(category, m, opts) {
     if (!ready) return;
     curCategory = category;
     curMeasurements = m;
     opts = opts || {};
-    if (typeof opts === "number") opts = { color: opts };   // back-compat
+    if (typeof opts === "number") opts = { color: opts };
+
+    if (opts.resetPrints) {
+      Object.values(fabricState).forEach((st) => {
+        st.front.textureDataURL = null;
+        st.front.rawDrawingURL = null;
+        st.front.isDrawing = false;
+        if (st.back) {
+          st.back.textureDataURL = null;
+          st.back.rawDrawingURL = null;
+          st.back.isDrawing = false;
+        }
+      });
+    }
+
     if (opts.parts) {
       Object.entries(opts.parts).forEach(([part, v]) => {
         if (!fabricState[part] || !v) return;
         if (v.front) {
-          if (v.front.color != null) fabricState[part].front.color = v.front.color;
+          if (v.front.color != null) {
+            fabricState[part].front.color = v.front.color;
+            if (fabricState[part].front.isDrawing && fabricState[part].front.rawDrawingURL) {
+              retextureDrawingSlot(fabricState[part].front, v.front.color);
+            }
+          }
           if (v.front.material) fabricState[part].front.material = v.front.material;
-          if (v.front.textureDataURL !== undefined) fabricState[part].front.textureDataURL = v.front.textureDataURL || null;
+          if (v.front.textureDataURL) {
+            fabricState[part].front.textureDataURL = v.front.textureDataURL;
+            fabricState[part].front.isDrawing = false;
+            fabricState[part].front.rawDrawingURL = null;
+          } else if (v.front.textureDataURL === null && !fabricState[part].front.isDrawing && !fabricState[part].front.textureDataURL) {
+            fabricState[part].front.textureDataURL = null;
+          }
         }
         fabricState[part].back = v.back ? { ...fabricState[part].back, ...v.back } : null;
       });
     } else {
-      Object.values(fabricState).forEach(st => {
+      Object.values(fabricState).forEach((st) => {
         if (opts.color != null) st.front.color = opts.color;
         if (opts.material) st.front.material = opts.material;
         st.back = null;
       });
     }
-    if (opts.opacity != null) Object.values(fabricState).forEach(st => st.opacity = opts.opacity);
-    lastPieceVis = opts.pieces || lastPieceVis;
+    if (opts.opacity != null) Object.values(fabricState).forEach((st) => { st.opacity = opts.opacity; });
+    if (opts.pieces !== undefined) lastPieceVis = opts.pieces;
+    const incomingMetrics = opts.patternMetrics || null;
+    const preserveCamera = hasFramedOnce && lastFramedCategory === category && !opts.resetCamera;
 
     const token = ++buildToken;
     onLoading(true, { progress: 0 });
-    await nextFrame();                       // let the spinner paint
+    await nextFrame();
     if (token !== buildToken) return;
-    scene.background = gradientBackdrop();    // follow light/dark theme
-    // The spinner must NEVER stay stuck: onLoading(false) always fires in
-    // `finally`, whether the GLB loads, times out, errors, or even if the
-    // procedural fallback itself throws (a real render bug, not a network
-    // one — surfaced via onAvatarIssue instead of leaving a dead screen).
+    scene.background = gradientBackdrop();
+
     try {
       const url = avatarURLs[category];
       const isCustomUserUpload = url && !url.startsWith("avatars/") && !opts.forceMannequin;
       if (isCustomUserUpload) {
         try {
-          await loadGLB(category, m, pct => { if (token === buildToken) onLoading(true, { progress: pct }); });
+          await loadGLB(category, m, (pct) => { if (token === buildToken) onLoading(true, { progress: pct }); }, incomingMetrics);
           if (tensionMapEnabled) applyTensionHeatmap();
           else applyFabric();
           applyPieceVisibility();
         } catch (e) {
           if (token === buildToken) onAvatarIssue(category, e);
-          buildProcedural(category, m);
+          buildProcedural(category, m, incomingMetrics, preserveCamera);
           if (tensionMapEnabled) applyTensionHeatmap();
           else applyFabric();
           applyPieceVisibility();
         }
       } else {
-        buildProcedural(category, m);
+        buildProcedural(category, m, incomingMetrics, preserveCamera);
         if (tensionMapEnabled) applyTensionHeatmap();
         else applyFabric();
         applyPieceVisibility();
       }
+      hasFramedOnce = true;
+      lastFramedCategory = category;
     } catch (e) {
       console.error("[View3D] avatar build failed:", e);
       if (token === buildToken) onAvatarIssue(category, e);
@@ -2044,37 +2161,68 @@ export const View3D = (() => {
   }
 
   function frameCamera(H) {
-    camera.near = 0.05; camera.far = 100;
-    camera.position.set(0, H * 0.55, H * 2.15);   // full body head-to-toe with margin
-    if (controls) { controls.target.set(0, H * 0.52, 0); controls.update(); }
+    camera.near = 0.05;
+    camera.far = 100;
+    const narrow = host && host.clientWidth > 0 && host.clientWidth < 560;
+    const dMul = narrow ? 1.12 : 1.0;
+    const tY = H * (narrow ? 0.555 : 0.52);
+    camera.position.set(H * 0.24 * dMul, H * 0.56, H * 2.12 * dMul);
+    if (controls) {
+      controls.target.set(0, tY, 0);
+      controls.update();
+    }
     camera.updateProjectionMatrix();
   }
 
-  // Re-composite drawings dynamically when the base garment color changes
+  function setCameraPreset(preset = "front") {
+    if (!ready || !camera || !controls) return;
+    const H = curH || 1.7;
+    const narrow = host && host.clientWidth > 0 && host.clientWidth < 560;
+    const dMul = narrow ? 1.12 : 1.0;
+    const tY = H * (narrow ? 0.555 : 0.52);
+    if (preset === "front") {
+      camera.position.set(0, H * 0.55, H * 2.12 * dMul);
+      controls.target.set(0, tY, 0);
+    } else if (preset === "threeQuarter") {
+      camera.position.set(H * 0.72 * dMul, H * 0.57, H * 1.98 * dMul);
+      controls.target.set(0, tY, 0);
+    } else if (preset === "side") {
+      camera.position.set(H * 2.08 * dMul, H * 0.55, 0.04);
+      controls.target.set(0, tY, 0);
+    } else if (preset === "back") {
+      camera.position.set(0, H * 0.56, -H * 2.12 * dMul);
+      controls.target.set(0, tY, 0);
+    } else if (preset === "face") {
+      camera.position.set(H * 0.12, H * 0.89, H * 0.72);
+      controls.target.set(0, H * 0.86, 0);
+    }
+    controls.update();
+    camera.updateProjectionMatrix();
+  }
+
   function retextureDrawingSlot(slot, colorVal) {
-    if (!slot || !slot.rawDrawingURL || typeof document === 'undefined') return;
-    const hex = typeof colorVal === 'number' ? '#' + colorVal.toString(16).padStart(6, '0') : colorVal;
+    if (!slot || !slot.rawDrawingURL || typeof document === "undefined") return;
+    const hex = typeof colorVal === "number" ? "#" + colorVal.toString(16).padStart(6, "0") : colorVal;
     try {
       const img = new Image();
       img.onload = () => {
-        const c = document.createElement('canvas');
+        const c = document.createElement("canvas");
         c.width = img.naturalWidth || 512;
         c.height = img.naturalHeight || 512;
-        const ctx = c.getContext('2d');
+        const ctx = c.getContext("2d");
         ctx.fillStyle = hex;
         ctx.fillRect(0, 0, c.width, c.height);
         ctx.drawImage(img, 0, 0);
-        slot.textureDataURL = c.toDataURL('image/png');
+        slot.textureDataURL = c.toDataURL("image/png");
         applyFabric();
       };
       img.src = slot.rawDrawingURL;
-    } catch (_) {}
+    } catch (_) { /* ignore */ }
   }
 
   // ---------- live fabric / visibility ----------
   function setFabric({ parts, color, material, opacity } = {}) {
-    if (opacity != null) Object.values(fabricState).forEach(st => st.opacity = opacity);
-    // back-compat: a flat {color,material} with no `parts` applies to every part
+    if (opacity != null) Object.values(fabricState).forEach((st) => { st.opacity = opacity; });
     if (parts) {
       Object.entries(parts).forEach(([part, v]) => {
         if (!fabricState[part] || !v) return;
@@ -2094,10 +2242,12 @@ export const View3D = (() => {
           if (fabricState[part].back && fabricState[part].back.color != null && fabricState[part].back.rawDrawingURL) {
             retextureDrawingSlot(fabricState[part].back, fabricState[part].back.color);
           }
+        } else {
+          fabricState[part].back = null;
         }
       });
     } else if (color != null || material) {
-      Object.values(fabricState).forEach(st => {
+      Object.values(fabricState).forEach((st) => {
         if (color != null) {
           st.front.color = color;
           if (st.front.rawDrawingURL) retextureDrawingSlot(st.front, color);
@@ -2108,6 +2258,7 @@ export const View3D = (() => {
     }
     applyFabric();
   }
+
   function applyFabric() {
     if (!garmentGroup) return;
     if (tensionMapEnabled) {
@@ -2115,16 +2266,18 @@ export const View3D = (() => {
       return;
     }
     const visited = new Set();
-    const applyToMesh = o => {
+    const applyToMesh = (o) => {
       if (!o.isMesh || visited.has(o)) return;
       visited.add(o);
       if (fabricState[o.name]) {
+        const oldMat = o.userData.origMat;
         o.material = fabricMat(o.name, o.userData.side || "front");
         o.userData.origMat = o.material;
+        if (oldMat && oldMat !== o.material) disposeMaterial(oldMat);
       }
     };
     garmentGroup.traverse(applyToMesh);
-    Object.values(limbs).forEach(g => g.traverse(applyToMesh));
+    Object.values(limbs).forEach((g) => g && g.traverse && g.traverse(applyToMesh));
   }
 
   // ---------- Tension Simulation, Heatmap & 3D OBJ Export ----------
@@ -2133,29 +2286,25 @@ export const View3D = (() => {
     const stiffRatio = (fPreset.structStiff || 0.95) / (fPreset.maxStrain || 1.05);
 
     if (easeCm >= 8.0) {
-      // Loose ease: Cool Blue (0.15, 0.40, 0.95) to Soft Cyan
-      const t = Math.min(1, (easeCm - 8.0) / 8.0);
-      r = 0.15 * (1 - t) + 0.10 * t;
-      g = 0.45 * (1 - t) + 0.70 * t;
+      const u = Math.min(1, (easeCm - 8.0) / 8.0);
+      r = 0.15 * (1 - u) + 0.10 * u;
+      g = 0.45 * (1 - u) + 0.70 * u;
       b = 0.95;
     } else if (easeCm >= 3.0) {
-      // Optimal ease: Emerald / Vibrant Green (0.10, 0.82, 0.35)
-      const t = (easeCm - 3.0) / 5.0;
-      r = 0.10 * (1 - t) + 0.15 * t;
-      g = 0.82 * (1 - t) + 0.65 * t;
-      b = 0.35 * (1 - t) + 0.95 * t;
+      const u = (easeCm - 3.0) / 5.0;
+      r = 0.10 * (1 - u) + 0.15 * u;
+      g = 0.82 * (1 - u) + 0.65 * u;
+      b = 0.35 * (1 - u) + 0.95 * u;
     } else if (easeCm >= 0.8) {
-      // Snug fit: Emerald Green to Golden Amber (0.96, 0.75, 0.10)
-      const t = (3.0 - easeCm) / 2.2;
-      r = 0.10 * (1 - t) + 0.96 * t;
-      g = 0.82 * (1 - t) + 0.75 * t;
-      b = 0.35 * (1 - t) + 0.10 * t;
+      const u = (3.0 - easeCm) / 2.2;
+      r = 0.10 * (1 - u) + 0.96 * u;
+      g = 0.82 * (1 - u) + 0.75 * u;
+      b = 0.35 * (1 - u) + 0.10 * u;
     } else {
-      // High Strain / Compression: Golden Amber to Crimson Red (0.95, 0.18, 0.15)
-      const t = Math.min(1, Math.max(0, (0.8 - easeCm) / 1.8 * stiffRatio));
-      r = 0.96 * (1 - t) + 0.95 * t;
-      g = 0.75 * (1 - t) + 0.18 * t;
-      b = 0.10 * (1 - t) + 0.15 * t;
+      const u = Math.min(1, Math.max(0, ((0.8 - easeCm) / 1.8) * stiffRatio));
+      r = 0.96 * (1 - u) + 0.95 * u;
+      g = 0.75 * (1 - u) + 0.18 * u;
+      b = 0.10 * (1 - u) + 0.15 * u;
     }
     return [r, g, b];
   }
@@ -2183,7 +2332,7 @@ export const View3D = (() => {
     let minEase = 999;
 
     const processMesh = (mesh) => {
-      if (!mesh || !mesh.isMesh || !mesh.geometry) return;
+      if (!mesh || !mesh.isMesh || !mesh.geometry || !mesh.visible) return;
       const geo = mesh.geometry;
       const pos = geo.attributes.position;
       if (!pos) return;
@@ -2202,35 +2351,34 @@ export const View3D = (() => {
 
       const v = new THREE.Vector3();
       for (let i = 0; i < count; i++) {
-        v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+        // Sample bind-pose coordinates for stable anatomical ease comparison
+        v.fromBufferAttribute(pos, i);
         const y = v.y;
-        let bodyR = d.waistR;
-        let garmentR = Math.hypot(v.x, v.z);
+        let easeCm = 3.6;
 
         if (isSleeve) {
-          bodyR = d.upperR;
-          garmentR = Math.hypot(pos.getX(i), pos.getZ(i));
-        } else if (isTrousers) {
-          if (y < d.hipY) {
-            const legCenterSign = v.x >= 0 ? 1 : -1;
-            const legCenterX = legCenterSign * d.hipR * 0.5;
-            garmentR = Math.hypot(v.x - legCenterX, v.z);
-            const legFrac = Math.max(0, Math.min(1, (d.hipY - y) / (d.hipY || 1)));
-            bodyR = d.thighR * (1.3 - legFrac * 0.4);
-          } else {
-            bodyR = d.hipR;
-          }
+          const sideSign = v.x >= 0 ? 1 : -1;
+          const armLocalX = v.x - sideSign * d.shoulderHalf * 0.90;
+          const garmentR = Math.hypot(armLocalX, v.z);
+          const dy = Math.max(0, d.shoulderY - d.span * 0.04 - y);
+          const armFrac = clamp(dy / Math.max(0.2, d.armLen), 0, 1);
+          const bodyArmR = d.upperR * (1.02 * (1 - armFrac) + 0.44 * armFrac);
+          easeCm = (garmentR - bodyArmR) * 100 * 2 * Math.PI * 0.25;
+        } else if (isTrousers && y < d.hipY - d.span * 0.14) {
+          const legSign = v.x >= 0 ? 1 : -1;
+          const legCx = legSign * d.hipR * (d.female ? 0.47 : 0.49);
+          const garmentR = Math.hypot(v.x - legCx, v.z);
+          const legFrac = clamp((y - d.H * 0.05) / Math.max(0.2, d.hipY - d.H * 0.05), 0, 1);
+          const bodyLegR = d.thighR * (0.42 + 0.56 * legFrac);
+          easeCm = (garmentR - bodyLegR) * 100 * 2.2;
         } else {
-          if (y > d.waistR && y <= d.shoulderY) {
-            const frac = Math.max(0, Math.min(1, (y - d.hipY - d.span * 0.44) / (d.span * 0.32 || 1)));
-            bodyR = d.waistR + (d.chestR - d.waistR) * frac;
-          } else if (y <= d.waistR) {
-            const frac = Math.max(0, Math.min(1, (d.hipY + d.span * 0.44 - y) / (d.span * 0.44 || 1)));
-            bodyR = d.waistR + (d.hipR - d.waistR) * frac;
-          }
+          const phi = Math.atan2(v.x, v.z);
+          const [bx, bz] = getBodySurfacePoint(y, phi, d, 0);
+          const garmentR = Math.hypot(v.x, v.z);
+          const bodyR = Math.hypot(bx, bz);
+          easeCm = (garmentR - bodyR) * 100 * 2.5;
         }
 
-        const easeCm = (garmentR - bodyR) * 100;
         totalEase += easeCm;
         vertexCount++;
         if (easeCm < minEase) minEase = easeCm;
@@ -2252,24 +2400,24 @@ export const View3D = (() => {
       if (!mesh.userData.tensionMat) {
         mesh.userData.tensionMat = new THREE.MeshStandardMaterial({
           vertexColors: true,
-          roughness: 0.6,
-          metalness: 0.05,
-          side: THREE.DoubleSide
+          roughness: 0.58,
+          metalness: 0.04,
+          side: THREE.DoubleSide,
         });
       }
       mesh.material = mesh.userData.tensionMat;
     };
 
     const visitedTension = new Set();
-    const processMeshSafe = o => {
+    const processMeshSafe = (o) => {
       if (!o.isMesh || visitedTension.has(o)) return;
       visitedTension.add(o);
       if (fabricState[o.name]) processMesh(o);
     };
     garmentGroup.traverse(processMeshSafe);
-    Object.values(limbs).forEach(g => g.traverse(processMeshSafe));
+    Object.values(limbs).forEach((g) => g && g.traverse && g.traverse(processMeshSafe));
 
-    const avgEase = vertexCount > 0 ? (totalEase / vertexCount) : 4.5;
+    const avgEase = vertexCount > 0 ? totalEase / vertexCount : 4.5;
     let status = "fitOptimal";
     if (maxStrainPct > 5 || minEase < 0) status = "fitTight";
     else if (minEase < 2.0) status = "fitSnug";
@@ -2279,7 +2427,7 @@ export const View3D = (() => {
       avgEase: parseFloat(avgEase.toFixed(1)),
       peakStrain: parseFloat(maxStrainPct.toFixed(1)),
       status,
-      fabric: currentFabricKey
+      fabric: currentFabricKey,
     };
 
     onTensionMetricsUpdate(lastTensionMetrics);
@@ -2288,36 +2436,30 @@ export const View3D = (() => {
   function restoreOriginalMaterials() {
     if (!garmentGroup) return;
     const visitedRestore = new Set();
-    const restoreMesh = o => {
+    const restoreMesh = (o) => {
       if (!o.isMesh || visitedRestore.has(o)) return;
       visitedRestore.add(o);
       if (o.userData.origMat) o.material = o.userData.origMat;
       else if (fabricState[o.name]) o.material = fabricMat(o.name, o.userData.side || "front");
     };
     garmentGroup.traverse(restoreMesh);
-    Object.values(limbs).forEach(g => g.traverse(restoreMesh));
+    Object.values(limbs).forEach((g) => g && g.traverse && g.traverse(restoreMesh));
   }
 
   function setTensionMap(v) {
     tensionMapEnabled = !!v;
-    if (tensionMapEnabled) {
-      applyTensionHeatmap();
-    } else {
-      restoreOriginalMaterials();
-    }
+    if (tensionMapEnabled) applyTensionHeatmap();
+    else restoreOriginalMaterials();
   }
 
   function setFabricPreset(key) {
     if (!FABRIC[key]) return;
-    Object.values(fabricState).forEach(st => {
+    Object.values(fabricState).forEach((st) => {
       if (st.front) st.front.material = key;
       if (st.back) st.back.material = key;
     });
-    if (tensionMapEnabled) {
-      applyTensionHeatmap();
-    } else {
-      applyFabric();
-    }
+    if (tensionMapEnabled) applyTensionHeatmap();
+    else applyFabric();
   }
 
   function exportOBJ(filename = "garment_3d.obj") {
@@ -2329,6 +2471,11 @@ export const View3D = (() => {
     let vOffset = 1;
     let vnOffset = 1;
     let vtOffset = 1;
+
+    if (activeMannequin && activeMannequin.skeleton) {
+      bodyGroup.updateMatrixWorld(true);
+      activeMannequin.skeleton.update();
+    }
 
     const exportMesh = (mesh, name) => {
       if (!mesh || !mesh.isMesh || !mesh.geometry) return;
@@ -2348,7 +2495,11 @@ export const View3D = (() => {
 
       const v = new THREE.Vector3();
       for (let i = 0; i < pos.count; i++) {
-        v.fromBufferAttribute(pos, i).applyMatrix4(matrixWorld);
+        if (mesh.isSkinnedMesh && typeof mesh.getVertexPosition === "function") {
+          mesh.getVertexPosition(i, v).applyMatrix4(matrixWorld);
+        } else {
+          v.fromBufferAttribute(pos, i).applyMatrix4(matrixWorld);
+        }
         obj += `v ${v.x.toFixed(5)} ${v.y.toFixed(5)} ${v.z.toFixed(5)}\n`;
       }
 
@@ -2370,23 +2521,23 @@ export const View3D = (() => {
       const hasUv = !!uv;
       const triCount = idx ? idx.count / 3 : pos.count / 3;
 
-      for (let t = 0; t < triCount; t++) {
-        const i0 = (idx ? idx.getX(t * 3) : t * 3) + vOffset;
-        const i1 = (idx ? idx.getX(t * 3 + 1) : t * 3 + 1) + vOffset;
-        const i2 = (idx ? idx.getX(t * 3 + 2) : t * 3 + 2) + vOffset;
+      for (let tIdx = 0; tIdx < triCount; tIdx++) {
+        const i0 = (idx ? idx.getX(tIdx * 3) : tIdx * 3) + vOffset;
+        const i1 = (idx ? idx.getX(tIdx * 3 + 1) : tIdx * 3 + 1) + vOffset;
+        const i2 = (idx ? idx.getX(tIdx * 3 + 2) : tIdx * 3 + 2) + vOffset;
 
         if (hasUv && hasNorm) {
-          const u0 = (idx ? idx.getX(t * 3) : t * 3) + vtOffset;
-          const u1 = (idx ? idx.getX(t * 3 + 1) : t * 3 + 1) + vtOffset;
-          const u2 = (idx ? idx.getX(t * 3 + 2) : t * 3 + 2) + vtOffset;
-          const n0 = (idx ? idx.getX(t * 3) : t * 3) + vnOffset;
-          const n1 = (idx ? idx.getX(t * 3 + 1) : t * 3 + 1) + vnOffset;
-          const n2 = (idx ? idx.getX(t * 3 + 2) : t * 3 + 2) + vnOffset;
+          const u0 = (idx ? idx.getX(tIdx * 3) : tIdx * 3) + vtOffset;
+          const u1 = (idx ? idx.getX(tIdx * 3 + 1) : tIdx * 3 + 1) + vtOffset;
+          const u2 = (idx ? idx.getX(tIdx * 3 + 2) : tIdx * 3 + 2) + vtOffset;
+          const n0 = (idx ? idx.getX(tIdx * 3) : tIdx * 3) + vnOffset;
+          const n1 = (idx ? idx.getX(tIdx * 3 + 1) : tIdx * 3 + 1) + vnOffset;
+          const n2 = (idx ? idx.getX(tIdx * 3 + 2) : tIdx * 3 + 2) + vnOffset;
           obj += `f ${i0}/${u0}/${n0} ${i1}/${u1}/${n1} ${i2}/${u2}/${n2}\n`;
         } else if (hasNorm) {
-          const n0 = (idx ? idx.getX(t * 3) : t * 3) + vnOffset;
-          const n1 = (idx ? idx.getX(t * 3 + 1) : t * 3 + 1) + vnOffset;
-          const n2 = (idx ? idx.getX(t * 3 + 2) : t * 3 + 2) + vnOffset;
+          const n0 = (idx ? idx.getX(tIdx * 3) : tIdx * 3) + vnOffset;
+          const n1 = (idx ? idx.getX(tIdx * 3 + 1) : tIdx * 3 + 1) + vnOffset;
+          const n2 = (idx ? idx.getX(tIdx * 3 + 2) : tIdx * 3 + 2) + vnOffset;
           obj += `f ${i0}//${n0} ${i1}//${n1} ${i2}//${n2}\n`;
         } else {
           obj += `f ${i0} ${i1} ${i2}\n`;
@@ -2406,12 +2557,13 @@ export const View3D = (() => {
       exportMesh(o, defaultName);
     };
 
-    garmentGroup.traverse(o => {
+    garmentGroup.traverse((o) => {
       exportOnce(o, `${o.name}_${o.userData.side || "mesh"}`);
     });
 
     Object.entries(limbs).forEach(([limbName, group]) => {
-      group.traverse(o => {
+      if (!group || !group.traverse) return;
+      group.traverse((o) => {
         if (o.name === "sleeve" || o.name === "trousers") {
           exportOnce(o, `${o.name}_${limbName}`);
         }
@@ -2435,81 +2587,52 @@ export const View3D = (() => {
 
     return obj;
   }
+
   let lastPieceVis = null;
-  function setPieceVisibility(pieces) { lastPieceVis = pieces; applyPieceVisibility(); }
+  function setPieceVisibility(pieces) {
+    lastPieceVis = pieces;
+    applyPieceVisibility();
+  }
+
   function applyPieceVisibility() {
     if (!garmentGroup) return;
 
-    const isBrief = (lastPieceVis || []).some(p => p.role === "brief-front" || p.role === "brief-back" || /brief|panties|كيلوت|سروال داخلي/i.test(p.name || p.key || ""));
-    const isTrunk = !isBrief && (lastPieceVis || []).some(p => /trunk|boxer|short|شورت/i.test(p.name || p.key || ""));
-    const isBra = (lastPieceVis || []).some(p => p.role === "cup" || p.role === "band" || p.role === "strap" || /bra|bralette|bandeau|حمالة/i.test(p.name || p.key || ""));
-
     const setVis = (name, v) => {
       const visited = new Set();
-      const visit = o => {
+      const visit = (o) => {
         if (visited.has(o)) return;
         visited.add(o);
         if (o.name === name) {
-          if (name === "bodice") {
-            if (o.userData && o.userData.garmentType === "bra") {
-              o.visible = v && isBra;
-            } else if (o.userData && o.userData.garmentType === "full") {
-              o.visible = v && !isBra;
-            } else {
-              o.visible = v;
-            }
-          } else if (name === "trousers") {
-            if (o.userData && o.userData.subPart === "calf") {
-              o.visible = v && !isBrief && !isTrunk;
-            } else if (o.userData && o.userData.subPart === "thigh") {
-              o.visible = v && !isBrief;
-            } else {
-              o.visible = v;
-            }
-          } else {
-            o.visible = v;
-          }
+          o.visible = v;
         }
       };
       garmentGroup.traverse(visit);
-      Object.values(limbs).forEach(g => g.traverse(visit));
+      Object.values(limbs).forEach((g) => g && g.traverse && g.traverse(visit));
     };
-    // A garment part is shown unless the pattern has piece(s) mapping to it
-    // that are ALL hidden. Parts with no matching piece stay on (full outfit).
-    //
-    // WP-49: `p.part` arrives PRE-CLASSIFIED — js/app.js's classifyPart()
-    // (pieceVisMap()'s caller) is now the one and only place that decides
-    // which of these 4 buckets a piece belongs to, consulting the piece's
-    // explicit/role-derived body zone (js/body-zone.js) before ever
-    // falling back to a name guess. This function used to re-derive the
-    // same classification from `p.key` (the piece's raw name) via its OWN
-    // separate regex — a second, independently-hand-copied copy of
-    // js/app.js's classifyPart() that could (and did — see body-zone.js's
-    // header comment) silently disagree with it. Trusting the given part
-    // outright removes that whole class of drift.
+
     const present = { bodice: false, sleeve: false, skirt: false, trousers: false };
     const vis = { bodice: false, sleeve: false, skirt: false, trousers: false };
-    (lastPieceVis || []).forEach(p => {
+    (lastPieceVis || []).forEach((p) => {
       const part = Object.prototype.hasOwnProperty.call(present, p.part) ? p.part : "bodice";
-      present[part] = true; if (p.visible) vis[part] = true;
+      present[part] = true;
+      if (p.visible !== false) vis[part] = true;
     });
-    // When an active pattern is loaded (lastPieceVis has items), ONLY show the garment
-    // When lastPieceVis is provided (even an empty array []), ONLY show the garment
-    // parts that belong to the active pattern and are set visible (e.g., if working on
-    // trousers alone, only trousers will appear on the mannequin, not a full dress).
-    // If no pattern pieces are provided (lastPieceVis === null), fallback to default outfit.
-    const defaultPartVisible = part => {
-      if (part === "trousers") return lastCategory === "men" || lastCategory === "boys";
-      if (part === "skirt") return lastCategory === "women" || lastCategory === "girls";
+
+    const defaultPartVisible = (part) => {
+      if (part === "trousers") return curCategory === "men" || curCategory === "boys";
+      if (part === "skirt") return curCategory === "women" || curCategory === "girls";
       return true;
     };
-    const show = part => lastPieceVis !== null ? !!(present[part] && vis[part]) : defaultPartVisible(part);
-    setVis("bodice", show("bodice")); setVis("sleeve", show("sleeve"));
-    setVis("skirt", show("skirt")); setVis("trousers", show("trousers"));
+    const show = (part) => (lastPieceVis !== null ? !!(present[part] && vis[part]) : defaultPartVisible(part));
+
+    setVis("bodice", show("bodice"));
+    setVis("sleeve", show("sleeve"));
+    setVis("skirt", show("skirt"));
+    setVis("trousers", show("trousers"));
 
     if (accessoriesGroup) {
       const accVisited = new Set();
-      accessoriesGroup.traverse(o => {
+      accessoriesGroup.traverse((o) => {
         if (accVisited.has(o)) return;
         accVisited.add(o);
         if (o.userData && o.userData.parentPart) {
@@ -2523,7 +2646,7 @@ export const View3D = (() => {
     }
   }
 
-  // ---------- loop ----------
+  // ---------- Natural Runway Gait & Animation Loop ----------
   function loop() {
     raf = requestAnimationFrame(loop);
     if (!ready) return;
@@ -2532,137 +2655,132 @@ export const View3D = (() => {
       const isKid = curCategory === "girls" || curCategory === "boys";
       const isWoman = curCategory === "women";
       const freq = isKid ? 3.6 : 3.1;
-      const sw = Math.sin(t * freq) * (isKid ? 0.30 : (isWoman ? 0.33 : 0.35));
+      const sw = Math.sin(t * freq) * (isKid ? 0.28 : (isWoman ? 0.31 : 0.33));
 
       // Hip / thigh swing
-      limbs["leg1"].rotation.x = sw;
+      limbs.leg1.rotation.x = sw;
       limbs["leg-1"].rotation.x = -sw;
 
-      // Knee backward flexion: trailing leg flexes backward to clear ground smoothly.
-      // In Three.js coordinates (shin along -Y), positive X rotation swings the shin backward into -Z.
+      // Knee backward flexion (trailing leg clears ground smoothly, forward leg straightens for heel strike)
       if (limbs.knee1 && limbs["knee-1"]) {
-        const k1 = Math.max(0, sw * 1.55) + (sw > 0 ? Math.abs(Math.sin(t * freq)) * 0.16 : 0);
-        const k2 = Math.max(0, -sw * 1.55) + (sw < 0 ? Math.abs(Math.sin(t * freq)) * 0.16 : 0);
-        limbs["knee1"].rotation.x = k1;
+        const k1 = Math.max(0, sw * 1.48) + (sw > 0 ? Math.abs(Math.sin(t * freq)) * 0.14 : 0);
+        const k2 = Math.max(0, -sw * 1.48) + (sw < 0 ? Math.abs(Math.sin(t * freq)) * 0.14 : 0);
+        limbs.knee1.rotation.x = k1;
         limbs["knee-1"].rotation.x = k2;
       }
 
-      // Ankle pitch / foot roll (runway toe trailing & heel strike)
+      // Ankle pitch / foot roll
       if (limbs.foot1 && limbs["foot-1"]) {
-        limbs["foot1"].rotation.x = sw * 0.28;
-        limbs["foot-1"].rotation.x = -sw * 0.28;
+        limbs.foot1.rotation.x = sw * 0.24;
+        limbs["foot-1"].rotation.x = -sw * 0.24;
       }
 
-      // Arm swing (shoulder / deltoid)
-      limbs["arm1"].rotation.x = -sw * 0.65;
-      limbs["arm-1"].rotation.x = sw * 0.65;
-      limbs["arm1"].rotation.z = -0.08 - Math.abs(sw) * 0.02;
-      limbs["arm-1"].rotation.z = 0.08 + Math.abs(sw) * 0.02;
+      // Arm swing opposing leg swing; outward abduction (+angle on +X arm1, -angle on -X arm-1)
+      limbs.arm1.rotation.x = -sw * 0.62;
+      limbs["arm-1"].rotation.x = sw * 0.62;
+      const abduct = 0.088 + Math.abs(sw) * 0.024;
+      limbs.arm1.rotation.z = abduct;
+      limbs["arm-1"].rotation.z = -abduct;
 
-      // Elbow flexion (natural forward flex during forward swing)
+      // Elbow natural forward flexion
       if (limbs.elbow1 && limbs["elbow-1"]) {
-        limbs["elbow1"].rotation.x = -0.15 - Math.max(0, -sw * 0.55) * 0.40;
-        limbs["elbow-1"].rotation.x = -0.15 - Math.max(0, sw * 0.55) * 0.40;
+        limbs.elbow1.rotation.x = -0.14 - Math.max(0, -sw * 0.55) * 0.36;
+        limbs["elbow-1"].rotation.x = -0.14 - Math.max(0, sw * 0.55) * 0.36;
       }
 
-      // Wrist / hand cadence
+      // Subtle wrist cadence
       if (limbs.hand1 && limbs["hand-1"]) {
-        limbs.hand1.rotation.x = sw * 0.14;
-        limbs["hand-1"].rotation.x = -sw * 0.14;
+        limbs.hand1.rotation.x = sw * 0.12;
+        limbs["hand-1"].rotation.x = -sw * 0.12;
       }
 
-      // Pelvic vertical bob (two peaks per stride)
-      const bob = Math.abs(Math.sin(t * freq)) * (isKid ? 0.016 : 0.013);
+      // Pelvic vertical bob & subtle organic spinal S-motion
+      const bob = Math.abs(Math.sin(t * freq)) * (isKid ? 0.013 : 0.011);
       if (bodyGroup) bodyGroup.position.y = bob;
       if (garmentGroup) garmentGroup.position.y = bob;
 
-      // Subtle pelvic roll (weight transfer across hips — catwalk sway for women)
-      const rollAmp = isWoman ? 0.024 : (isKid ? 0.016 : 0.012);
+      const rollAmp = isWoman ? 0.022 : (isKid ? 0.014 : 0.011);
       const roll = Math.sin(t * freq) * rollAmp;
-      if (bodyGroup) bodyGroup.rotation.z = roll;
-      if (garmentGroup) garmentGroup.rotation.z = roll;
-
-      // Spinal counter-twist (thorax yaws opposite to hip swing)
-      const yawAmp = isWoman ? 0.024 : (isKid ? 0.018 : 0.032);
+      const yawAmp = isWoman ? 0.022 : (isKid ? 0.016 : 0.028);
       const yaw = -Math.sin(t * freq) * yawAmp;
-      if (bodyGroup) bodyGroup.rotation.y = yaw;
-      if (garmentGroup) garmentGroup.rotation.y = yaw;
 
-      // Head stabilization: counter-yaw and roll keeps model gaze fixed down the runway
-      if (limbs.head) {
-        limbs.head.rotation.y = -yaw * 0.85;
-        limbs.head.rotation.z = -roll * 0.70;
+      if (limbs.pelvis && limbs.chest) {
+        limbs.pelvis.rotation.z = roll;
+        limbs.pelvis.rotation.y = -yaw * 0.45;
+        if (limbs.spine) limbs.spine.rotation.z = -roll * 0.55;
+        limbs.chest.rotation.y = yaw * 0.85;
+        limbs.chest.rotation.z = -roll * 0.35;
+      } else {
+        if (bodyGroup) { bodyGroup.rotation.z = roll; bodyGroup.rotation.y = yaw; }
+        if (garmentGroup) { garmentGroup.rotation.z = roll; garmentGroup.rotation.y = yaw; }
       }
 
-      // Dynamic skirt billowing & stride flare: clothes move with walking so legs stay inside
+      // Head stabilization keeps gaze steady down the runway
+      if (limbs.head) {
+        limbs.head.rotation.y = -yaw * 0.55;
+        limbs.head.rotation.z = -roll * 0.20;
+      }
+
+      // Gentle dynamic hem flare on skirts during stride
       if (skirtFrontMesh && skirtBackMesh) {
         const strideMag = Math.abs(sw);
-        // Forward swing flares and pushes the front panel forward over leading thigh/knee
-        skirtFrontMesh.position.z = strideMag * (curH * 0.08);
-        skirtFrontMesh.rotation.x = -strideMag * 0.36;
-        skirtFrontMesh.scale.z = 1.0 + strideMag * 0.85;
-        skirtFrontMesh.scale.x = 1.0 + strideMag * 0.22;
-
-        // Trailing swing sweeps the back panel backward over trailing calf/heel
-        skirtBackMesh.position.z = -strideMag * (curH * 0.07);
-        skirtBackMesh.rotation.x = strideMag * 0.30;
-        skirtBackMesh.scale.z = 1.0 + strideMag * 0.75;
-        skirtBackMesh.scale.x = 1.0 + strideMag * 0.20;
-
-        // Dynamic lateral sway matching stride
-        skirtFrontMesh.rotation.y = sw * 0.10;
-        skirtBackMesh.rotation.y = sw * 0.10;
-        skirtFrontMesh.position.x = sw * 0.015;
+        skirtFrontMesh.position.z = strideMag * (curH * 0.035);
+        skirtFrontMesh.scale.z = 1.0 + strideMag * 0.32;
+        skirtBackMesh.position.z = -strideMag * (curH * 0.030);
+        skirtBackMesh.scale.z = 1.0 + strideMag * 0.28;
       }
     } else if (limbs.leg1) {
-      // Smooth damping back to neutral runway stance
-      limbs["leg1"].rotation.x *= 0.88;
-      limbs["leg-1"].rotation.x *= 0.88;
+      // Smooth damping back to neutral fashion stance
+      limbs.leg1.rotation.x *= 0.86;
+      limbs["leg-1"].rotation.x *= 0.86;
       if (limbs.knee1 && limbs["knee-1"]) {
-        limbs["knee1"].rotation.x *= 0.88;
-        limbs["knee-1"].rotation.x *= 0.88;
+        limbs.knee1.rotation.x *= 0.86;
+        limbs["knee-1"].rotation.x *= 0.86;
       }
       if (limbs.foot1 && limbs["foot-1"]) {
-        limbs["foot1"].rotation.x *= 0.88;
-        limbs["foot-1"].rotation.x *= 0.88;
+        limbs.foot1.rotation.x *= 0.86;
+        limbs["foot-1"].rotation.x *= 0.86;
       }
-      limbs["arm1"].rotation.x *= 0.88;
-      limbs["arm-1"].rotation.x *= 0.88;
+      limbs.arm1.rotation.x *= 0.86;
+      limbs["arm-1"].rotation.x *= 0.86;
+      limbs.arm1.rotation.z = limbs.arm1.rotation.z * 0.86 + 0.085 * 0.14;
+      limbs["arm-1"].rotation.z = limbs["arm-1"].rotation.z * 0.86 + (-0.085) * 0.14;
       if (limbs.elbow1 && limbs["elbow-1"]) {
-        limbs["elbow1"].rotation.x = limbs["elbow1"].rotation.x * 0.88 + (-0.15) * 0.12;
-        limbs["elbow-1"].rotation.x = limbs["elbow-1"].rotation.x * 0.88 + (-0.15) * 0.12;
+        limbs.elbow1.rotation.x = limbs.elbow1.rotation.x * 0.86 + (-0.10) * 0.14;
+        limbs["elbow-1"].rotation.x = limbs["elbow-1"].rotation.x * 0.86 + (-0.10) * 0.14;
       }
       if (limbs.hand1 && limbs["hand-1"]) {
-        limbs.hand1.rotation.x *= 0.88;
-        limbs["hand-1"].rotation.x *= 0.88;
+        limbs.hand1.rotation.x *= 0.86;
+        limbs["hand-1"].rotation.x *= 0.86;
+      }
+      if (limbs.pelvis) {
+        limbs.pelvis.rotation.z *= 0.86;
+        limbs.pelvis.rotation.y *= 0.86;
+      }
+      if (limbs.spine) limbs.spine.rotation.z *= 0.86;
+      if (limbs.chest) {
+        limbs.chest.rotation.y *= 0.86;
+        limbs.chest.rotation.z *= 0.86;
       }
       if (limbs.head) {
-        limbs.head.rotation.y *= 0.88;
-        limbs.head.rotation.z *= 0.88;
+        limbs.head.rotation.y *= 0.86;
+        limbs.head.rotation.z *= 0.86;
       }
       if (bodyGroup) {
-        bodyGroup.position.y *= 0.88;
-        bodyGroup.rotation.z *= 0.88;
-        bodyGroup.rotation.y *= 0.88;
+        bodyGroup.position.y *= 0.86;
+        bodyGroup.rotation.z *= 0.86;
+        bodyGroup.rotation.y *= 0.86;
       }
       if (garmentGroup) {
-        garmentGroup.position.y *= 0.88;
-        garmentGroup.rotation.z *= 0.88;
-        garmentGroup.rotation.y *= 0.88;
+        garmentGroup.position.y *= 0.86;
+        garmentGroup.rotation.z *= 0.86;
+        garmentGroup.rotation.y *= 0.86;
       }
       if (skirtFrontMesh && skirtBackMesh) {
         skirtFrontMesh.position.z *= 0.85;
-        skirtFrontMesh.position.x *= 0.85;
-        skirtFrontMesh.rotation.x *= 0.85;
-        skirtFrontMesh.rotation.y *= 0.85;
-        skirtFrontMesh.scale.z = skirtFrontMesh.scale.z * 0.85 + 1.0 * 0.15;
-        skirtFrontMesh.scale.x = skirtFrontMesh.scale.x * 0.85 + 1.0 * 0.15;
-
+        skirtFrontMesh.scale.z = skirtFrontMesh.scale.z * 0.85 + 0.15;
         skirtBackMesh.position.z *= 0.85;
-        skirtBackMesh.rotation.x *= 0.85;
-        skirtBackMesh.rotation.y *= 0.85;
-        skirtBackMesh.scale.z = skirtBackMesh.scale.z * 0.85 + 1.0 * 0.15;
-        skirtBackMesh.scale.x = skirtBackMesh.scale.x * 0.85 + 1.0 * 0.15;
+        skirtBackMesh.scale.z = skirtBackMesh.scale.z * 0.85 + 0.15;
       }
     }
     controls.update();
@@ -2671,47 +2789,36 @@ export const View3D = (() => {
 
   // ---------- misc ----------
   function resize() {
-    // init() runs at app boot, before the user has ever switched to the 3D
-    // tab — if WebGL/deps genuinely aren't available, fallback() draws its
-    // message onto a canvas that's still invisible (zero-sized) at that
-    // exact moment, and nothing ever redraws it. Re-attempt with the real,
-    // now-correct size whenever a later resize (e.g. the view switch that
-    // makes the canvas visible for the first time) calls back in here.
     if (!ready) { fallback(); return; }
     const r = host.getBoundingClientRect();
     renderer.setSize(r.width, r.height, false);
-    camera.aspect = (r.width || 1) / (r.height || 1); camera.updateProjectionMatrix();
+    camera.aspect = (r.width || 1) / (r.height || 1);
+    camera.updateProjectionMatrix();
   }
+
   function fallback() {
-    // Primary UX is the DOM overlay app.js shows via onFatalError (Retry /
-    // Continue in 2D) — this canvas text is just a last-resort safety net
-    // in case that callback was never wired up.
     onFatalError();
-    const c = host.getContext && host.getContext("2d"); if (!c) return;
-    host.width = host.clientWidth; host.height = host.clientHeight;
-    c.fillStyle = "#8b93a7"; c.font = "600 14px Inter, sans-serif"; c.textAlign = "center";
+    const c = host.getContext && host.getContext("2d");
+    if (!c) return;
+    host.width = host.clientWidth;
+    host.height = host.clientHeight;
+    c.fillStyle = "#8b93a7";
+    c.font = "600 14px Inter, sans-serif";
+    c.textAlign = "center";
     c.fillText("3D preview needs WebGL and a first-load connection.", host.width / 2, host.height / 2);
   }
+
   function setAvatarURL(category, url) {
     if (url && !url.startsWith("avatars/")) avatarURLs[category] = url;
     else delete avatarURLs[category];
   }
-  // Re-attempt loading three.js/WebGL from scratch (the "Retry" action on the
-  // fatal-error overlay). loadDeps() itself already tries every CDN tier
-  // again since THREE is still null at this point.
-  async function retryInit() { if (ready) return true; await init(host); return ready; }
 
-  // Real bug fix: the page's zoombar (js/app.js's #zin/#zout/#zfit) used to
-  // be wired ONLY to Canvas.zoom()/Canvas.fit() (the 2D pattern canvas)
-  // regardless of which tab was open — so its buttons silently did nothing
-  // while viewing 3D Preview (this module) or Cloth Lab. `dolly()` mirrors
-  // Canvas.zoom(f)'s convention exactly: f>1 moves the camera closer
-  // (zoom in), f<1 moves it away, clamped to OrbitControls' own
-  // min/maxDistance so this can never punch through the model or drift
-  // past its already-tuned zoom-out limit. `fit()` reuses frameCamera()
-  // with `curH` (the last-built avatar's height, already tracked at
-  // module scope for exactly this kind of "what am I looking at right
-  // now" query) — the same framing a fresh build already lands on.
+  async function retryInit() {
+    if (ready) return true;
+    await init(host);
+    return ready;
+  }
+
   function dolly(f) {
     if (!controls || !camera || !f) return;
     const dir = camera.position.clone().sub(controls.target);
@@ -2719,17 +2826,35 @@ export const View3D = (() => {
     camera.position.copy(controls.target).add(dir.setLength(dist));
     controls.update();
   }
-  function fit() { if (ready && camera) frameCamera(curH); }
+
+  function fit() {
+    if (ready && camera) frameCamera(curH);
+  }
 
   return {
-    init, build, resize, setFabric, setPieceVisibility, zoom: dolly, fit,
-    setSpin: v => { spinning = v; if (controls) controls.autoRotate = v && !reduceMotion; },
-    setWalk: v => walking = v,
-    setReduceMotion: v => { reduceMotion = !!v; if (controls) controls.autoRotate = spinning && !reduceMotion; },
-    setLoadingCallback: cb => onLoading = cb || (() => {}),
-    setAvatarIssueCallback: cb => onAvatarIssue = cb || (() => {}),
-    setFatalErrorCallback: cb => onFatalError = cb || (() => {}),
-    setAvatarURL, isReady: () => ready, retryInit,
+    init,
+    build,
+    resize,
+    setFabric,
+    setPieceVisibility,
+    zoom: dolly,
+    fit,
+    setCameraPreset,
+    setSpin: (v) => {
+      spinning = v;
+      if (controls) controls.autoRotate = v && !reduceMotion;
+    },
+    setWalk: (v) => { walking = v; },
+    setReduceMotion: (v) => {
+      reduceMotion = !!v;
+      if (controls) controls.autoRotate = spinning && !reduceMotion;
+    },
+    setLoadingCallback: (cb) => { onLoading = cb || (() => {}); },
+    setAvatarIssueCallback: (cb) => { onAvatarIssue = cb || (() => {}); },
+    setFatalErrorCallback: (cb) => { onFatalError = cb || (() => {}); },
+    setAvatarURL,
+    isReady: () => ready,
+    retryInit,
     // 3D Tension Simulation & Wavefront OBJ Export
     setTensionMap,
     getTensionMap: () => tensionMapEnabled,
@@ -2737,9 +2862,9 @@ export const View3D = (() => {
     getFabricPreset: () => fabricState.bodice?.front?.material || "cotton",
     getFabricPresets: () => FABRIC,
     getTensionMetrics: () => lastTensionMetrics,
-    setTensionMetricsCallback: cb => onTensionMetricsUpdate = cb || (() => {}),
+    setTensionMetricsCallback: (cb) => { onTensionMetricsUpdate = cb || (() => {}); },
     exportOBJ,
-    // 3D Accessories (Buttons & Zippers)
+    // 3D Accessories
     setAccessories,
     getAccessories: () => JSON.parse(JSON.stringify(accessoriesState)),
     // 3D Prints, Graphics & Drawing
@@ -2747,10 +2872,10 @@ export const View3D = (() => {
     generatePatternPreset,
     getGarmentColor: (part = "bodice") => {
       const col = fabricState[part]?.front?.color;
-      return col != null ? (typeof col === "number" ? "#" + col.toString(16).padStart(6, "0") : col) : "#6d5efc";
+      return col != null ? (typeof col === "number" ? "#" + col.toString(16).padStart(6, "0") : col) : "#4f46e5";
     },
     getFabricState: () => JSON.parse(JSON.stringify(fabricState)),
   };
 })();
-// TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.
-if (typeof window !== 'undefined') window.View3D = View3D;
+
+if (typeof window !== "undefined") window.View3D = View3D;

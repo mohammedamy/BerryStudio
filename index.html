@@ -175,7 +175,22 @@
               <button class="big-btn ghost" id="v3dContinue2DBtn" data-i18n="v3dContinue2D">Continue in 2D</button>
             </div>
           </div>
-          <p data-i18n="v3dIndicative" style="position:absolute;inset-inline:16px;bottom:14px;z-index:2;margin:0;max-width:560px;padding:8px 10px;border-radius:9px;background:color-mix(in srgb,var(--panel) 88%,transparent);border:1px solid var(--line);font-size:12px;line-height:1.4;color:var(--ink-2);pointer-events:none">3D preview is indicative. Confirm material behaviour, construction and fit with a maker and sewn sample.</p>
+          <div id="v3dStatusPill" class="v3d-status-pill" aria-live="polite">
+            <span id="v3dStatusDot" class="v3d-status-dot" style="background:#6d5efc"></span>
+            <strong id="v3dStatusPattern">Fit &amp; Flare Midi Dress</strong>
+            <span class="v3d-status-sep">·</span>
+            <span id="v3dStatusSize">Women · M</span>
+            <span class="v3d-status-sep">·</span>
+            <span id="v3dStatusMeas" class="v3d-status-meas">88 / 70 / 96 cm</span>
+          </div>
+          <p class="v3d-indicative-note" data-i18n="v3dIndicative">3D preview is indicative. Confirm material behaviour, construction and fit with a maker and sewn sample.</p>
+          <div id="v3dCamBar" class="v3d-cam-bar" role="group" aria-label="Camera Views">
+            <button type="button" class="v3d-cam-btn" data-cam-preset="front" data-i18n="v3dCamFront">Front</button>
+            <button type="button" class="v3d-cam-btn active" data-cam-preset="threeQuarter" data-i18n="v3dCam34">3/4</button>
+            <button type="button" class="v3d-cam-btn" data-cam-preset="side" data-i18n="v3dCamSide">Side</button>
+            <button type="button" class="v3d-cam-btn" data-cam-preset="back" data-i18n="v3dCamBack">Back</button>
+            <button type="button" class="v3d-cam-btn" data-cam-preset="face" data-i18n="v3dCamFace">Close</button>
+          </div>
           <div id="v3dMismatchWarn" class="v3d-mismatch-warn hidden" role="alert">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             <span id="v3dMismatchText"></span>
@@ -230,15 +245,15 @@
             <div class="v3d-tool-group">
               <button id="v3dDrawBtn" class="v3d-btn v3d-btn-highlight" title="Draw Directly on Cloth" aria-label="Draw on Cloth">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                <span data-i18n="drawOnCloth">Draw on Cloth</span>
+                <span data-i18n="v3dDrawShort">Draw</span>
               </button>
               <button id="v3dPrintsBtn" class="v3d-btn" title="Prints, Graphics & Artwork" aria-label="Prints & Artwork">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                <span data-i18n="printsAndArtwork">Prints & Art</span>
+                <span data-i18n="v3dPrintsShort">Prints</span>
               </button>
               <button id="v3dAccBtn" class="v3d-btn" title="Accessories: Buttons, Zippers & Trims" aria-label="Accessories & Trims">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="9.5" cy="9.5" r="1.5" fill="currentColor"/><circle cx="14.5" cy="9.5" r="1.5" fill="currentColor"/><circle cx="9.5" cy="14.5" r="1.5" fill="currentColor"/><circle cx="14.5" cy="14.5" r="1.5" fill="currentColor"/></svg>
-                <span data-i18n="trimsAndAccessories">Accessories</span>
+                <span data-i18n="v3dAccShort">Trims</span>
               </button>
             </div>
 
@@ -248,11 +263,11 @@
             <div class="v3d-tool-group">
               <label class="v3d-btn-label v3d-tension-label" title="Visualize fit strain and ease distribution">
                 <input type="checkbox" id="tensionToggle">
-                <span data-i18n="tensionMap">Tension</span>
+                <span data-i18n="v3dTensionShort">Fit Map</span>
               </label>
               <button id="v3dExportObjBtn" class="v3d-btn" title="Export 3D Garment as Wavefront OBJ" aria-label="Export 3D Model">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                <span data-i18n="export3D">OBJ</span>
+                <span data-i18n="v3dExportShort">OBJ</span>
               </button>
             </div>
           </div>

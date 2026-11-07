@@ -1,9 +1,9 @@
 /* BerryStudio — service worker (offline-capable, update-friendly) */
-const CACHE = "berrystudio-v67";
+const CACHE = "berrystudio-v68";
 const ASSETS = [
   "./", "./index.html",
   "./css/styles.css",
-  "./js/i18n.js", "./js/data.js", "./js/canvas.js", "./js/three-view.js", "./js/ai.js", "./js/billboard.js", "./js/library.js", "./js/girls-leotards.js", "./js/underwear-library.js", "./js/reference-patterns.js", "./js/pattern-flat.js", "./js/fancy-patterns.js", "./js/validate.js",
+  "./js/i18n.js", "./js/data.js", "./js/canvas.js", "./js/human-mannequin.js", "./js/pattern-3d-metrics.js", "./js/three-view.js", "./js/ai.js", "./js/billboard.js", "./js/library.js", "./js/girls-leotards.js", "./js/underwear-library.js", "./js/reference-patterns.js", "./js/pattern-flat.js", "./js/fancy-patterns.js", "./js/validate.js",
   "./js/ai-keystore.js", "./js/capability-probe.js", "./js/ai-providers.js", "./js/schema-validate.js", "./js/ai-spec-pipeline.js", "./js/ai-fusion.js", "./js/image-providers.js", "./js/thumbnails.js", "./js/app.js",
   "./js/vendor/pattern-spec-validate.generated.js",
   "./js/cloth-workflow-contract.js", "./js/responsive-workspace.js",

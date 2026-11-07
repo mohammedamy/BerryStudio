@@ -1794,9 +1794,26 @@ export const Canvas = (() => {
   function getZoom(){ return Math.round(view.scale/3.2*100); }
   function toggleVisible(i){ pieces[i].visible=!pieces[i].visible; render(); }
   function toggleLock(i){ pieces[i].locked=!pieces[i].locked; if(pieces[i].locked && selected===i) selected=-1; render(); }
-  function setColor(i,color){ if(pieces[i]){ pieces[i].color=color; render(); } }
+  function setColor(i,color,isCustom=true){ if(pieces[i]){ pieces[i].color=color; pieces[i].customColor=Boolean(isCustom); render(); } }
   function setMaterial(i,matKey){ if(pieces[i]){ pieces[i].material=matKey||null; render(); } }
   function setTexture(i,dataURL){ if(pieces[i]){ pieces[i].textureDataURL=dataURL||null; render(); } }
+  function scalePieces(sx, sy){
+    if(!pieces.length || (!Number.isFinite(sx) || !Number.isFinite(sy))) return;
+    if(Math.abs(sx-1)<1e-4 && Math.abs(sy-1)<1e-4) return;
+    pushUndo();
+    pieces.forEach(p=>{
+      if(!Array.isArray(p.outline) || !p.outline.length) return;
+      const xs=p.outline.map(pt=>pt[0]), ys=p.outline.map(pt=>pt[1]);
+      const ox=Math.min(...xs), oy=Math.min(...ys);
+      const tx=([x,y])=>[ox+(x-ox)*sx, oy+(y-oy)*sy];
+      p.outline=p.outline.map(tx);
+      if(Array.isArray(p.darts)) p.darts=p.darts.map(d=>d.map(tx));
+      if(Array.isArray(p.notches)) p.notches=p.notches.map(tx);
+      if(Array.isArray(p.grain)) p.grain=p.grain.map(tx);
+      if(Array.isArray(p.curves)) p.curves=p.curves.map(c=>({...c, c1:c.c1?tx(c.c1):c.c1, c2:c.c2?tx(c.c2):c.c2}));
+    });
+    render();
+  }
   function getSelected(){ return selected; }
   // Indices of every piece currently in the group selection (Shift+click or
   // Lasso) — empty array when there's none/only a plain single selection.
@@ -2495,7 +2512,7 @@ export const Canvas = (() => {
   function screenOf(x,y){ return toScreen(x,y); }
 
   return { init, setTranslator, setPattern, getPieces, setTool, setOpt, getOpt, zoom, fit,
-           doUndo, doRedo, getZoom, toggleVisible, toggleLock, setColor, setMaterial, setTexture, getSelected,
+           doUndo, doRedo, getZoom, toggleVisible, toggleLock, setColor, setMaterial, setTexture, scalePieces, getSelected,
            getMultiSelection, selectPiece, clearSketch, render, deleteSelection,
            copySelection, cutSelection, pasteClipboard, hasClipboard,
            addText, updateText, removeText, getTexts, onTextRequest,

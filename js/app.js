@@ -50,6 +50,7 @@ import { seamPointAtFraction } from './geometry.js';
 import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
 import { inferBodyZone, SLEEVE_ROLES } from './body-zone.js';
+import { classifyPiecePart, resolvePartsFabric3D, computePatternMetrics3D } from './pattern-3d-metrics.js';
 import { Auth, isAuthConfigured } from './auth.js';
 import { computeEntitlement, isAllowed } from './entitlement.js';
 
@@ -823,8 +824,11 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   function applyFabric(color, matKey){
     const pieces=Canvas.getPieces(); if(!pieces.length){ toast(T("empty2d")); return; }
     const sel=Canvas.getSelected();
-    if(sel>=0){ Canvas.setColor(sel,color); if(matKey) Canvas.setMaterial(sel,matKey); }
-    else{ pieces.forEach((_,i)=>Canvas.setColor(i,color)); if(matKey){ state.fabric3d=matKey; save(); } }
+    if(sel>=0){ Canvas.setColor(sel,color,true); if(matKey) Canvas.setMaterial(sel,matKey); }
+    else{
+      pieces.forEach((_,i)=>{ Canvas.setColor(i,color,false); if(matKey) Canvas.setMaterial(i,null); });
+      if(matKey){ state.fabric3d=matKey; const fs=$("#v3dFabricSelect"); if(fs) fs.value=matKey; save(); }
+    }
     sync3DFabric();
     renderLayersPane();
   }
@@ -883,9 +887,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     else m.style.left = Math.max(8, Math.min(r.left, innerWidth-mr.width-8))+"px";
     requestAnimationFrame(()=>m.classList.add("show"));
     const q = s => m.querySelector(s);
-    q(".lp-en").onchange = () => { Canvas.renamePiece(i,{en:q(".lp-en").value.trim()||p.name.en}); renderLayersPane(); };
-    q(".lp-ar").onchange = () => { Canvas.renamePiece(i,{ar:q(".lp-ar").value.trim()||p.name.ar}); renderLayersPane(); };
-    q(".lp-col").oninput = () => { Canvas.setColor(i,q(".lp-col").value); sync3DFabric(); renderLayersPane(); };
+    q(".lp-en").onchange = () => { Canvas.renamePiece(i,{en:q(".lp-en").value.trim()||p.name.en}); renderLayersPane(); if(is3DActive()) build3D(); };
+    q(".lp-ar").onchange = () => { Canvas.renamePiece(i,{ar:q(".lp-ar").value.trim()||p.name.ar}); renderLayersPane(); if(is3DActive()) build3D(); };
+    q(".lp-col").oninput = () => { Canvas.setColor(i,q(".lp-col").value,true); sync3DFabric(); renderLayersPane(); };
     // WP-49: explicit upper/lower-body override — the single control that
     // makes "determine explicitly which body region this piece is" real.
     // Re-syncs BOTH 3D consumers immediately (not just re-rendering this
@@ -896,12 +900,13 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       b.onclick = () => {
         Canvas.setPieceProps(i, { bodyZone: b.dataset.zone || null });
         m.querySelectorAll(".lp-zone button").forEach(x=>x.classList.toggle("active", x===b));
-        sync3DVisibility(); syncClothLab(true);
+        if(is3DActive()) build3D(); else sync3DVisibility();
+        syncClothLab(true);
       };
     });
     q(".lp-mat").onchange = () => { Canvas.setMaterial(i,q(".lp-mat").value||null); sync3DFabric(); };
     q(".lp-op").oninput = () => { const v=+q(".lp-op").value; q(".lp-opv").textContent=v+"%"; Canvas.setPieceProps(i,{opacity:v/100}); };
-    q(".lp-del").onclick = () => { Canvas.removePiece(i); closeAnyMenu(); sync3DVisibility(); renderLayersPane(); toast("✓ "+T("removeLayer")); };
+    q(".lp-del").onclick = () => { Canvas.removePiece(i); closeAnyMenu(); if(is3DActive()) build3D(); else sync3DVisibility(); renderLayersPane(); toast("✓ "+T("removeLayer")); };
     if(q(".lp-darts")) q(".lp-darts").onclick = () => { closeAnyMenu(); openDartEditorModal(i); };
     q(".lp-outline").onclick = () => { closeAnyMenu(); openOutlineEditorModal(i); };
     setTimeout(()=>document.addEventListener("pointerdown",onDocDown),0);
@@ -942,9 +947,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         if (!Number.isFinite(x) || !Number.isFinite(y)) return;
         Canvas.setOutlinePointXY(pieceIdx, idx, x, y);
         Canvas.setOutlinePointName(pieceIdx, idx, nameInp.value);
+        if(is3DActive()) build3D();
         toast(T("outlinePointUpdated")); reopen();
       };
-      delBtn.onclick = () => { Canvas.removeOutlinePoint(pieceIdx, idx); toast(T("outlinePointDeleted")); reopen(); };
+      delBtn.onclick = () => { Canvas.removeOutlinePoint(pieceIdx, idx); if(is3DActive()) build3D(); toast(T("outlinePointDeleted")); reopen(); };
     });
 
     body.appendChild(el("div","section-title",T("outlineEdgesSection"))).style.marginTop="18px";
@@ -1087,7 +1093,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // add-layer is always available (even on an empty canvas)
     const addB = el("button","big-btn ghost",IC.layers+T("addLayer"));
     addB.style.marginBottom="10px";
-    addB.onclick=()=>{ Canvas.addPiece({ en:I18N.en.newLayer, ar:I18N.ar.newLayer }); hideEmpty(); renderLayersPane(); toast("✓ "+T("newLayer")); };
+    addB.onclick=()=>{ Canvas.addPiece({ en:I18N.en.newLayer, ar:I18N.ar.newLayer }); hideEmpty(); renderLayersPane(); if(is3DActive()) build3D(); toast("✓ "+T("newLayer")); };
     c.appendChild(addB);
     const pieces = Canvas.getPieces();
     if(!pieces.length){ c.appendChild(el("div","help-note",T("empty2d"))); return; }
@@ -1099,7 +1105,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       const sw = el("label","swatch"); sw.style.background=p.color; sw.title=T("pieceColor");
       const ci = el("input"); ci.type="color"; ci.value=rgbToHex(p.color);
       ci.style.cssText="position:absolute;width:0;height:0;opacity:0;pointer-events:none";
-      ci.oninput=()=>{ Canvas.setColor(i,ci.value); sw.style.background=ci.value; sync3DFabric(); };
+      ci.oninput=()=>{ Canvas.setColor(i,ci.value,true); sw.style.background=ci.value; sync3DFabric(); };
       sw.appendChild(ci); row.appendChild(sw);
       const nameEl = el("span","lname"); nameEl.dir=state.lang==="ar"?"rtl":"ltr"; nameEl.textContent=L(p.name);
       const otherName=el("small"); otherName.dir=state.lang==="ar"?"ltr":"rtl"; otherName.textContent=p.name[state.lang==="ar"?"en":"ar"]; nameEl.append(otherName);
@@ -2093,8 +2099,11 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if (!pieces || !pieces.length) { toast(T("importFail")); return; }
     state.loaded = null;
     Canvas.setPattern(pieces, PALETTE);
+    lastGradedMeas = { ...currentMeas() };
     hideEmpty(); renderLayersPane();
-    if (is3DActive()) build3D();
+    if (is3DActive()) build3D(null, { resetPrints: true });
+    if (state.view === "clothlab") syncClothLab();
+    update3DStatusPill();
     toast(T("generated")+" · "+T("kind_"+kind));
     save();
   }
@@ -2426,7 +2435,14 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     Canvas.restoreState(target.snapshot);
     Canvas.setHistory(target.history);
     state.loaded = target.loaded||null;
-    if(target.category && target.category!==state.category){ state.category=target.category; syncCategoryUI(); }
+    if(target.category && target.category!==state.category){
+      state.category=target.category; syncCategoryUI();
+      if(!state.avatarCategoryExplicit){
+        state.avatarCategory = target.category;
+        const sel = $("#v3dModelSelect");
+        if (sel) sel.value = target.category;
+      }
+    }
     if(target.measurementProfileSnapshot){
       try {
         target.measurementProfileSnapshot=snapshotMeasurementProfile(target.measurementProfileSnapshot,target.measurementProfileSnapshot.selectedAt);
@@ -2434,10 +2450,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         state.selectedMeasurementProfileId=state.measurementProfiles.some(profile=>profile.id===target.measurementProfileSnapshot.id)?target.measurementProfileSnapshot.id:null;
       } catch { target.measurementProfileSnapshot=workingMeasurementSnapshot(); state.selectedMeasurementProfileId=null; }
     } else { target.measurementProfileSnapshot=workingMeasurementSnapshot(); state.selectedMeasurementProfileId=null; }
+    lastGradedMeas = { ...currentMeas() };
     aiImage = target.aiImage||null;
     if(Canvas.getPieces().length) hideEmpty(); else showEmpty();
     renderLayersPane(); renderAIPane(); renderSizePane(); renderMeasurePane();
     if(is3DActive()) build3D();
+    update3DStatusPill();
     renderProjectTabs();
     save();
   }
@@ -2446,6 +2464,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     Canvas.clearAll();
     Canvas.setHistory({undo:[],redo:[]});
     state.loaded=null; aiImage=null;
+    lastGradedMeas = { ...currentMeas() };
     const p = { id: projectSeq++, title: T("untitledProject"), customTitle:false,
       snapshot: Canvas.snapshotState(), history: Canvas.getHistory(), loaded:null, category: state.category, aiImage:null,
       measurementProfileSnapshot: workingMeasurementSnapshot() };
@@ -2453,6 +2472,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     state.activeProjectId = p.id;
     showEmpty(); renderLayersPane(); renderAIPane();
     if(is3DActive()) build3D();
+    update3DStatusPill();
     renderProjectTabs(); save();
     toast(T("newTabOpened"));
   }
@@ -2471,7 +2491,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const p = state.projects.find(x=>x.id===id); if(!p) return;
     const v=(title||"").trim(); if(!v) return;
     p.title=v; p.customTitle=true;
-    renderProjectTabs(); save();
+    renderProjectTabs(); update3DStatusPill(); save();
   }
   function renderProjectTabs(){
     const bar=$("#projectTabs"); if(!bar) return;
@@ -2515,7 +2535,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       accept:proposal=>{
         if(tabId !== state.activeProjectId) throw new Error('commandStale');
         Canvas.acceptProposal(proposal);
-        state.loaded=null; renderLayersPane(); if(is3DActive()) build3D(); save();
+        state.loaded=null; renderLayersPane(); if(is3DActive()) build3D(); update3DStatusPill(); save();
       },
     });
   }
@@ -2558,9 +2578,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       if(!requireEntitlement()) return;
       accept.disabled=true;
       newProjectTab();
+      if(res.colors?.length > 1) draft.pieces.forEach(p => { p.customColor = true; });
       Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc'],{...(res.brief?{brief:res.brief}:{}),...(res.patternProgram?{patternProgram:res.patternProgram}:{}),...(res.patternConfiguration?{patternConfiguration:res.patternConfiguration}:{}),...(res.multimodalProposal?{multimodalProposal:res.multimodalProposal}:{})});
+      lastGradedMeas = { ...currentMeas() };
       hideEmpty(); renderLayersPane(); renderAIAttrs(res);
-      if(is3DActive()) build3D(res.colorInt);
+      if(is3DActive()) build3D(res.colorInt, { resetPrints: true });
+      update3DStatusPill();
       save(); closeModal("#genericModal"); toast(T(doneToastKey));
     };
     const actions=el("div","project-review-actions"); actions.append(accept,reject); body.append(actions);
@@ -2579,8 +2602,11 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const project=activeProject(); if(project) project.measurementProfileSnapshot=measurementSnapshot;
     applyMeasurementSnapshotToState(measurementSnapshot);
     state.selectedMeasurementProfileId=state.measurementProfiles.some(profile=>profile.id===measurementSnapshot.id)?measurementSnapshot.id:null;
+    lastGradedMeas = { ...currentMeas() };
     state.loaded=null; hideEmpty(); renderLayersPane();
-    if(is3DActive()) build3D(); save();
+    if(is3DActive()) build3D();
+    update3DStatusPill();
+    save();
     return true;
   }
   function importProject(){
@@ -3748,6 +3774,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
 
   // ================= PATTERNS =================
+  let lastGradedMeas = null;
   function currentMeas(){ return computeMeasurements({category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom}); }
   function loadPattern(id){
     state.loaded=id; const p=PATTERNS[id];
@@ -3760,17 +3787,68 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     }
     const opts={category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom};
     Canvas.setPattern(resolveGradedPieces(p, opts, computeMeasurements, state.gradeRules[id]), PALETTE);
-    afterLoad(L(p.name));
+    lastGradedMeas = { ...currentMeas() };
+    $$(".v3d-preset-chip").forEach(c=>c.classList.toggle("active", c.dataset.preset==="none"));
+    afterLoad(L(p.name), true);
   }
-  function afterLoad(name){ hideEmpty(); renderLayersPane(); renderSizePane(); toast(T("patternLoaded")+" · "+name); if(is3DActive()) build3D(); save(); renderProjectTabs(); }
+  function afterLoad(name, resetPrints=false){
+    hideEmpty(); renderLayersPane(); renderSizePane();
+    toast(T("patternLoaded")+" · "+name);
+    if(is3DActive()) build3D(null, { resetPrints });
+    if(state.view==="clothlab") syncClothLab();
+    update3DStatusPill();
+    save(); renderProjectTabs();
+  }
   function grade(){
+    const nextMeas = currentMeas();
     if(state.loaded){
+      const prevByKey = new Map();
+      Canvas.getPieces().forEach((oldP, idx) => {
+        prevByKey.set(oldP.key || `__idx_${idx}`, {
+          color: oldP.color,
+          customColor: Boolean(oldP.customColor),
+          material: oldP.material || null,
+          textureDataURL: oldP.textureDataURL || null,
+          bodyZone: oldP.bodyZone || null,
+          visible: oldP.visible !== false,
+          locked: Boolean(oldP.locked),
+          opacity: oldP.opacity,
+          clothLabSetup: oldP.clothLabSetup,
+        });
+      });
       const p=PATTERNS[state.loaded];
       const opts={category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom};
-      const pieces=resolveGradedPieces(p, opts, computeMeasurements, state.gradeRules[state.loaded]);
-      Canvas.setPattern(pieces, PALETTE); renderLayersPane(); if(is3DActive()) build3D();
+      const pieces=resolveGradedPieces(p, opts, computeMeasurements, state.gradeRules[state.loaded]).map((np, idx) => {
+        const saved = prevByKey.get(np.key || `__idx_${idx}`);
+        if (!saved) return np;
+        return {
+          ...np,
+          color: saved.color || np.color,
+          customColor: saved.customColor,
+          material: saved.material,
+          textureDataURL: saved.textureDataURL,
+          bodyZone: saved.bodyZone,
+          visible: saved.visible,
+          locked: saved.locked,
+          ...(saved.opacity != null ? { opacity: saved.opacity } : {}),
+          ...(saved.clothLabSetup ? { clothLabSetup: saved.clothLabSetup } : {}),
+        };
+      });
+      Canvas.setPattern(pieces, PALETTE);
+      renderLayersPane();
+    } else if (Canvas.getPieces().length > 0 && lastGradedMeas) {
+      const sx = Math.max(0.5, Math.min(2.0, nextMeas.chest / (lastGradedMeas.chest || nextMeas.chest)));
+      const sy = Math.max(0.5, Math.min(2.0, nextMeas.height / (lastGradedMeas.height || nextMeas.height)));
+      if (Math.abs(sx - 1) > 1e-3 || Math.abs(sy - 1) > 1e-3) {
+        Canvas.scalePieces(sx, sy);
+        renderLayersPane();
+      }
     }
+    lastGradedMeas = { ...nextMeas };
     Canvas.recomputeConstruction();   // re-resolve any formula-driven construction points to the new measurements
+    if(is3DActive()) build3D();
+    if(state.view==="clothlab") syncClothLab();
+    update3DStatusPill();
     refreshDesignBrief?.();
     updateGradeLbl(); updateStageChips(); renderSizePane(); renderMeasurePane(); save();
   }
@@ -3794,68 +3872,17 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const m2 = /(\d+)\D+(\d+)\D+(\d+)/.exec(c);
     return m2 ? (+m2[1]<<16)|(+m2[2]<<8)|+m2[3] : cssHex("--brand");
   }
-  const fabricOpacity3D = () => Math.max(0.5, Math.min(1, 0.62 + Canvas.getOpt("fillOpacity")*0.6));
-  // WP-49: the single source of truth for "which of three-view.js's 4
-  // generic garment-part mesh groups (bodice/sleeve/skirt/trousers) does
-  // this piece belong to" — used by BOTH partsFabric() (material, below)
-  // and pieceVisMap() (visibility), so the two can never disagree about
-  // the same piece, and computed HERE (not duplicated inside three-view.js
-  // — see that file's own applyPieceVisibility() comment) so there's
-  // exactly one place to fix if it's ever wrong again.
-  //
-  // Before this WP, both call sites independently regex-matched the
-  // piece's NAME ONLY, each defaulting an unmatched piece to "bodice" —
-  // confirmed as a real bug (see js/body-zone.js's header comment): a
-  // piece with no informative name-keyword (e.g. underwear-library.js's
-  // brief panels, generically named "Front Panel"/"Back Panel") silently
-  // rendered/toggled as part of the TORSO. Fixed by consulting an
-  // explicit/role-derived signal FIRST; the original name-only regex is
-  // now only a last resort for a piece with neither signal at all,
-  // unchanged from its pre-WP-49 behavior in that case.
-  //
-  // Code-review fix: this originally checked SLEEVE_NAME_RE (a pure name
-  // guess) BEFORE ever consulting inferBodyZone() — directly contradicting
-  // this comment's own "FIRST" claim and js/body-zone.js's "explicit
-  // always wins over role" rule. A piece with an explicit bodyZone
-  // override (or a declared non-sleeve role) whose NAME happened to
-  // contain "sleeve"/"كم" (e.g. a renamed/duplicated custom piece) had
-  // that override silently ignored. Fixed with an explicit priority
-  // ladder: (1) explicit bodyZone always wins outright — it can't even
-  // land in the sleeve bucket, since "sleeve" isn't one of its two values;
-  // (2) a declared sleeve ROLE (not just a name match) wins next; (3) only
-  // with NEITHER signal does the original name-only regex chain run,
-  // unchanged in its original priority order (sleeve, then trousers, then
-  // skirt, else bodice).
-  const SLEEVE_NAME_RE = /sleeve|كم/i;
-  const SKIRT_NAME_RE = /skirt|تنور/i;
-  const TROUSERS_NAME_RE = /trouser|بنطل|pant|\bleg\b|brief|boxer|trunk|short|سروال|شورت|كيلوت/i;
+  // Solid opaque 3D cloth by default (1.0) so Cotton, Denim, Wool, Satin, and
+  // Leather render with true Z-depth occlusion instead of inheriting 2D drafting
+  // paper translucency (sheer fabrics like Chiffon/Tulle apply physical sheer
+  // opacity & transmission inside View3D's PBR material profile).
+  const fabricOpacity3D = () => 1.0;
+
+  // Single source of truth for mapping 2D pattern pieces (including shared trims
+  // like waistbands, pockets, gussets, flies, and cuffs) to View3D's 4 garment groups.
   function classifyPart(p){
-    const name = (p && p.name && (p.name.en || p.name.ar)) || (typeof p==="string" ? p : "");
-    const role = p && p.role;
-    if (p && (p.bodyZone === "upper" || p.bodyZone === "lower")) {
-      if (p.bodyZone === "lower") {
-        if (SKIRT_NAME_RE.test(name)) return "skirt";
-        if (state.category === "men" || state.category === "boys") return "trousers";
-        return (TROUSERS_NAME_RE.test(name) || role === "brief-front" || role === "brief-back") ? "trousers" : "skirt";
-      }
-      return "bodice";
-    }
-    if (p && SLEEVE_ROLES.has(role)) return "sleeve";
-    if (SLEEVE_NAME_RE.test(name)) return "sleeve";
-    const zone = inferBodyZone(p); // role-derived only at this point — explicit bodyZone already handled above
-    if (zone === "lower") {
-      if (SKIRT_NAME_RE.test(name)) return "skirt";
-      if (state.category === "men" || state.category === "boys") return "trousers";
-      return (TROUSERS_NAME_RE.test(name) || role === "brief-front" || role === "brief-back") ? "trousers" : "skirt";
-    }
-    if (zone === "upper") return "bodice";
-    if (TROUSERS_NAME_RE.test(name) || role === "brief-front" || role === "brief-back") return "trousers";
-    if (SKIRT_NAME_RE.test(name)) return "skirt";
-    return "bodice";
+    return classifyPiecePart(p, Canvas.getPieces(), state.category);
   }
-  // {part, visible} per piece — three-view.js's applyPieceVisibility()
-  // trusts `part` outright now (see its own updated comment); classifyPart()
-  // above is the only place that ever decides it.
   function pieceVisMap(){
     return Canvas.getPieces().map(p => ({
       part: classifyPart(p),
@@ -3864,43 +3891,14 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       visible: p.visible !== false
     }));
   }
-  function isBackPiece(name){ return /\bback\b|خلفي|خلفية/.test((name||"").toLowerCase()); }
-  // A part's mesh used to just take the FIRST matching piece's color/material and
-  // silently drop every other one — a front+back bodice/skirt with a different
-  // fabric or color (common: contrast lining, color-blocked panels) lost the back
-  // piece's styling entirely, since the procedural body has one continuous
-  // front+back shell per part, not one mesh per real 2D piece. WP-28 split each
-  // part's mesh into a real front sub-mesh and a real back sub-mesh in
-  // three-view.js, so this now hands over a full {color,material} pair for
-  // `back` (not just a color) whenever a distinct back piece exists. A part with
-  // only one piece (the overwhelmingly common case) still gets exactly the same
-  // single `front` descriptor as before and `back` stays null, unchanged.
   function partsFabric(){
-    const buckets={};
-    Canvas.getPieces().filter(p=>p.visible!==false).forEach(p=>{
-      const part=classifyPart(p);
-      const back = isBackPiece(p.name&&p.name.en) || isBackPiece(p.name&&p.name.ar);
-      (buckets[part] ||= {front:[], back:[]})[back?"back":"front"].push(p);
+    return resolvePartsFabric3D(Canvas.getPieces(), {
+      category: state.category,
+      defaultColor: cssHex("--brand"),
+      defaultMaterial: state.fabric3d || "cotton",
+      defaultTexture: state.fabricTexture3d || null,
+      colorToInt,
     });
-    const parts={};
-    Object.entries(buckets).forEach(([part,{front,back}])=>{
-      const primary = front[0] || back[0];
-      const frontDesc = { color:colorToInt(primary.color), material:primary.material||state.fabric3d||"cotton",
-        textureDataURL: primary.textureDataURL || state.fabricTexture3d || null };
-      parts[part] = { front: frontDesc };
-      if (back.length){
-        const backDesc = { color:colorToInt(back[0].color), material:back[0].material||state.fabric3d||"cotton",
-          textureDataURL: back[0].textureDataURL || state.fabricTexture3d || null };
-        // Only a genuinely distinct back piece is worth a separate sub-mesh
-        // material — one matching front exactly (color AND fabric AND texture) has
-        // nothing to render differently, so leave the back mesh mirroring
-        // front instead of manufacturing a no-op override.
-        const sameAsFront = front.length && backDesc.color===frontDesc.color && backDesc.material===frontDesc.material
-          && backDesc.textureDataURL===frontDesc.textureDataURL;
-        if (!sameAsFront) parts[part].back = backDesc;
-      }
-    });
-    return parts;
   }
   function avatarMeas(cat) {
     const isKids = cat === "girls" || cat === "boys";
@@ -3923,8 +3921,48 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     }
     const picker = $("#v3dColorPicker");
     const swatch = $("#v3dColorSwatch");
+    const dot = $("#v3dStatusDot");
     if (picker && picker.value !== hex) picker.value = hex;
     if (swatch) swatch.style.background = hex;
+    if (dot) dot.style.background = hex;
+  }
+
+  function update3DStatusPill() {
+    const patEl = $("#v3dStatusPattern");
+    const sizeEl = $("#v3dStatusSize");
+    const measEl = $("#v3dStatusMeas");
+    const dotEl = $("#v3dStatusDot");
+    if (!patEl && !sizeEl && !measEl) return;
+
+    const pieces = Canvas.getPieces();
+    const activeTab = activeProject();
+    let patName = T("v3dCustomDraft");
+    if (state.loaded && PATTERNS[state.loaded]) {
+      patName = L(PATTERNS[state.loaded].name);
+    } else if (activeTab && activeTab.title) {
+      patName = activeTab.title;
+    } else if (!pieces.length) {
+      patName = T("untitledProject");
+    }
+
+    const avatarCat = state.avatarCategory || state.category || "women";
+    const isKids = avatarCat === "girls" || avatarCat === "boys";
+    const catLabel = T(avatarCat) || avatarCat;
+    const sizeLabel = isKids
+      ? L((KIDS_AGES.find(a => a.id === (state.kids || "8-9")) || KIDS_AGES[2]).label)
+      : state.size;
+    const m = avatarMeas(avatarCat);
+    const fmt = v => state.unitsCm ? Math.round(v) : (v / 2.54).toFixed(1);
+    const unit = state.unitsCm ? "cm" : "in";
+
+    if (patEl) patEl.textContent = patName;
+    if (sizeEl) sizeEl.textContent = `${catLabel} · ${sizeLabel}`;
+    if (measEl) measEl.textContent = `${fmt(m.chest)} / ${fmt(m.waist)} / ${fmt(m.hips)} ${unit}`;
+
+    const lead = pieces.find(p => p.visible !== false && p.customColor) || pieces.find(p => p.visible !== false);
+    if (dotEl && lead && lead.color) {
+      dotEl.style.background = rgbToHex(lead.color);
+    }
   }
 
   function updateMismatchWarning() {
@@ -3962,48 +4000,74 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   function set3DGarmentColor(hex) {
     const cInt = colorToInt(hex);
     sync3DColorUI(hex);
-    View3D.setFabric({ color: cInt });
-    // Update pattern pieces so switching views preserves color
     const pieces = Canvas.getPieces();
     if (pieces && pieces.length > 0) {
+      const multi = Canvas.getMultiSelection();
       const sel = Canvas.getSelected();
-      const targetPieces = (sel && sel.length > 0) ? sel : pieces;
-      targetPieces.forEach(p => { p.color = hex; });
-      Canvas.render();
+      const hasPieceSelection = state.splitView && ((multi && multi.length > 0) || sel >= 0);
+      if (hasPieceSelection) {
+        const targets = (multi && multi.length > 0) ? multi : [sel];
+        targets.forEach(idx => Canvas.setColor(idx, hex, true));
+        sync3DFabric();
+      } else {
+        pieces.forEach((_, idx) => Canvas.setColor(idx, hex, false));
+        View3D.setFabric({ color: cInt, parts: partsFabric(), opacity: fabricOpacity3D() });
+        if (state.view === "clothlab") syncClothLab();
+      }
       renderLayersPane();
+      update3DStatusPill();
+    } else {
+      View3D.setFabric({ color: cInt });
     }
   }
 
-  function build3D(colorInt){
+  function build3D(colorInt, extraOpts){
     const avatarCat = state.avatarCategory || state.category || "women";
     const m = avatarMeas(avatarCat);
     const pieces = Canvas.getPieces();
-    const fv = pieces.find(p=>p.visible!==false);
-    const col = colorInt!=null ? colorInt : (fv ? colorToInt(fv.color) : cssHex("--brand"));
+    const parts = partsFabric();
+    const leadPiece = pieces.find(p=>p.visible!==false && p.customColor) || pieces.find(p=>p.visible!==false);
+    const col = colorInt!=null ? colorInt : (leadPiece ? colorToInt(leadPiece.color) : cssHex("--brand"));
     const modelSelect = $("#v3dModelSelect");
     if (modelSelect && modelSelect.value !== avatarCat) modelSelect.value = avatarCat;
+    const fabricSelect = $("#v3dFabricSelect");
+    if (fabricSelect && fabricSelect.value !== (state.fabric3d || "cotton")) {
+      fabricSelect.value = state.fabric3d || "cotton";
+    }
+    const patternMeta = state.loaded ? PATTERNS[state.loaded] : null;
+    const patternMetrics = computePatternMetrics3D(pieces, m, avatarCat, patternMeta);
     View3D.build(avatarCat, m, {
       color: col,
       material: state.fabric3d || "cotton",
       opacity: fabricOpacity3D(),
       pieces: pieceVisMap(),
-      parts: partsFabric(),
+      parts,
+      patternMetrics,
       forceMannequin: true,
+      resetPrints: Boolean(extraOpts && extraOpts.resetPrints),
+      resetCamera: Boolean(extraOpts && extraOpts.resetCamera),
     });
     sync3DColorUI(col);
     updateMismatchWarning();
+    update3DStatusPill();
   }
   // live 3D updates (no full rebuild)
   function is3DActive(){ return state.view==="3d" || state.splitView; }
   function sync3DFabric(){
+    if(state.view==="clothlab") syncClothLab();
     if(!is3DActive()) return;
     const pieces = Canvas.getPieces();
-    const fv = pieces.find(p=>p.visible!==false);
+    const fv = pieces.find(p=>p.visible!==false && p.customColor) || pieces.find(p=>p.visible!==false);
     if(fv && fv.color) sync3DColorUI(fv.color);
     View3D.setFabric({ parts: partsFabric(), opacity: fabricOpacity3D() });
-    if(state.view==="clothlab") syncClothLab();
+    update3DStatusPill();
   }
-  function sync3DVisibility(){ if(state.view==="clothlab") syncClothLab(); if(!is3DActive()) return; View3D.setPieceVisibility(pieceVisMap()); }
+  function sync3DVisibility(){
+    if(state.view==="clothlab") syncClothLab();
+    if(!is3DActive()) return;
+    View3D.setPieceVisibility(pieceVisMap());
+    update3DStatusPill();
+  }
   function cssHex(k){ const t=document.createElement("canvas").getContext("2d");t.fillStyle=getComputedStyle(document.body).getPropertyValue(k).trim();return parseInt(t.fillStyle.slice(1),16);}
   function applySplitViewClasses(){
     document.querySelector(".canvas-wrap").classList.toggle("split", !!state.splitView);
@@ -4305,11 +4369,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   const DEFAULT_PATTERN_BY_CATEGORY = {women:"womens_dress",men:"mens_shirt",girls:"girls_dress",boys:"boys_trousers"};
   function setCategory(cat){
     state.category=cat; syncCategoryUI();
-    if(!state.avatarCategoryExplicit){
-      state.avatarCategory = cat;
-      const sel = $("#v3dModelSelect");
-      if (sel) sel.value = cat;
-    }
+    state.avatarCategoryExplicit = false;
+    state.avatarCategory = cat;
+    const sel = $("#v3dModelSelect");
+    if (sel) sel.value = cat;
     // load a default pattern for that category
     const def=DEFAULT_PATTERN_BY_CATEGORY[cat];
     // Code-review fix: this unconditionally called loadPattern(def) — the
@@ -4322,7 +4385,19 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // auto-swapping in a brand-new full catalog pattern for the new
     // category is gated the same as any other Library pick; a gated user
     // keeps whatever pattern they already had loaded.
-    if(state.loaded){ if(gateAllowed()) loadPattern(def); } else { renderMeasurePane(); grade(); }
+    if(state.loaded){
+      if(gateAllowed()) {
+        loadPattern(def);
+      } else {
+        renderSizePane(); renderMeasurePane(); updateStageChips(); updateGradeLbl();
+        if(is3DActive()) build3D();
+        if(state.view==="clothlab") syncClothLab();
+        update3DStatusPill();
+        save();
+      }
+    } else {
+      renderMeasurePane(); grade();
+    }
     renderLibraryPane();
   }
 
@@ -4362,6 +4437,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     $("#brandName").textContent=T("appName"); $("#brandSub").textContent=T("tagline");
     $$("#viewToggle button")[0].textContent=T("view2d"); $$("#viewToggle button")[1].textContent=T("view3d"); $$("#viewToggle button")[2].textContent=T("viewClothLab");
     Canvas.render();
+    update3DStatusPill();
     // Cloth Lab only re-reads `lang` from a resent payload (it has no
     // language toggle of its own — it mirrors this app's) — without this,
     // switching language while already on the Cloth Lab tab left it
@@ -5175,8 +5251,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const meta=e.ctrlKey||e.metaKey;
     if(e.key==="Tab" && $$(".overlay.show").length){ trapModalTab(e); return; }
     if(meta&&e.key==="k"){e.preventDefault();openCmd();return;}
-    if(meta&&e.key==="z"&&!e.shiftKey){e.preventDefault();Canvas.doUndo();renderLayersPane();sync3DVisibility();sync3DFabric();return;}
-    if(meta&&(e.key==="y"||(e.shiftKey&&e.key.toLowerCase()==="z"))){e.preventDefault();Canvas.doRedo();renderLayersPane();sync3DVisibility();sync3DFabric();return;}
+    if(meta&&e.key==="z"&&!e.shiftKey){e.preventDefault();Canvas.doUndo();renderLayersPane();if(is3DActive())build3D();else{sync3DVisibility();sync3DFabric();}return;}
+    if(meta&&(e.key==="y"||(e.shiftKey&&e.key.toLowerCase()==="z"))){e.preventDefault();Canvas.doRedo();renderLayersPane();if(is3DActive())build3D();else{sync3DVisibility();sync3DFabric();}return;}
     if($("#cmdModal").classList.contains("show")){
       if(e.key==="ArrowDown"){e.preventDefault();cmdSel=Math.min(cmdItems.length-1,cmdSel+1);hiCmd();}
       if(e.key==="ArrowUp"){e.preventDefault();cmdSel=Math.max(0,cmdSel-1);hiCmd();}
@@ -5222,11 +5298,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         const dy=e.key==="ArrowUp"?-step:e.key==="ArrowDown"?step:0;
         const group=Canvas.getMultiSelection();
         if(group.length) Canvas.nudgePieces(group,dx,dy); else Canvas.nudgePiece(sel,dx,dy);
-        sync3DVisibility();
+        if(is3DActive()) build3D(); else sync3DVisibility();
       } else if(e.key==="Delete"||e.key==="Backspace"){
         if (Canvas.deleteSelection()){
           e.preventDefault();
-          renderLayersPane(); sync3DVisibility();
+          renderLayersPane();
+          if(is3DActive()) build3D(); else sync3DVisibility();
           if (objBrowserOpen) renderObjectBrowser();
         }
       }
@@ -5241,11 +5318,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       if(k==="c" && Canvas.copySelection()){ e.preventDefault(); toast(T("copiedObj")); }
       else if(k==="x" && Canvas.cutSelection()){
         e.preventDefault();
-        renderLayersPane(); sync3DVisibility(); if (objBrowserOpen) renderObjectBrowser();
+        renderLayersPane();
+        if(is3DActive()) build3D(); else sync3DVisibility();
+        if (objBrowserOpen) renderObjectBrowser();
         toast(T("cutObj"));
       } else if(k==="v" && Canvas.pasteClipboard()){
         e.preventDefault();
-        renderLayersPane(); sync3DVisibility(); if (objBrowserOpen) renderObjectBrowser();
+        renderLayersPane();
+        if(is3DActive()) build3D(); else sync3DVisibility();
+        if (objBrowserOpen) renderObjectBrowser();
         toast(T("pastedObj"));
       }
     }
@@ -5704,11 +5785,11 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     tip($("#docsBtn"),T("docs"),T("tt_docs"));
     $("#helpBtn").onclick=openHelp; tip($("#helpBtn"),T("help"),T("helpTitle"));
     $("#installBtn").onclick=installApp;
-    $("#unitsPill").onclick=()=>{state.unitsCm=!state.unitsCm;Canvas.setOpt("unitsCm",state.unitsCm);save();updateUnitsPill();updateStageChips();};
+    $("#unitsPill").onclick=()=>{state.unitsCm=!state.unitsCm;Canvas.setOpt("unitsCm",state.unitsCm);save();updateUnitsPill();updateStageChips();update3DStatusPill();};
     tip($("#unitsPill"),T("tab_measure"),T("tt_units"));
     // grid/snap in stage toolbar
-    $("#undoBtn").onclick=()=>{Canvas.doUndo();renderLayersPane();sync3DVisibility();sync3DFabric();}; tip($("#undoBtn"),T("undoLbl"),T("tt_undo"));
-    $("#redoBtn").onclick=()=>{Canvas.doRedo();renderLayersPane();sync3DVisibility();sync3DFabric();}; tip($("#redoBtn"),T("redoLbl"),T("tt_redo"));
+    $("#undoBtn").onclick=()=>{Canvas.doUndo();renderLayersPane();if(is3DActive())build3D();else{sync3DVisibility();sync3DFabric();}}; tip($("#undoBtn"),T("undoLbl"),T("tt_undo"));
+    $("#redoBtn").onclick=()=>{Canvas.doRedo();renderLayersPane();if(is3DActive())build3D();else{sync3DVisibility();sync3DFabric();}}; tip($("#redoBtn"),T("redoLbl"),T("tt_redo"));
     $("#gridBtn").onclick=()=>{const v=!Canvas.getOpt("grid");Canvas.setOpt("grid",v);$("#gridBtn").classList.toggle("active",v);}; tip($("#gridBtn"),T("t_line"),T("tt_grid"));
     $("#snapBtn").onclick=()=>{const v=!Canvas.getOpt("snap");Canvas.setOpt("snap",v);$("#snapBtn").classList.toggle("active",v);}; tip($("#snapBtn"),"Snap",T("tt_snap"));
     $("#bgBtn").onclick=()=>openBgPanel(); tip($("#bgBtn"),T("bgImage"),T("tt_bgImage"));
@@ -5746,6 +5827,18 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // 3d controls
     $("#spinToggle").onchange=e=>View3D.setSpin(e.target.checked);
     $("#walkToggle").onchange=e=>View3D.setWalk(e.target.checked);
+    const camBtns = $$("#v3dCamBar [data-cam-preset]");
+    camBtns.forEach(btn => {
+      btn.onclick = () => {
+        camBtns.forEach(b => b.classList.toggle("active", b === btn));
+        const spinEl = $("#spinToggle");
+        if (spinEl && spinEl.checked) {
+          spinEl.checked = false;
+          View3D.setSpin(false);
+        }
+        View3D.setCameraPreset(btn.dataset.camPreset);
+      };
+    });
     const modelSelect = $("#v3dModelSelect");
     if (modelSelect) {
       modelSelect.onchange = e => {
@@ -5780,8 +5873,13 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     }
     const fabricSelect = $("#v3dFabricSelect");
     if (fabricSelect) {
+      fabricSelect.value = state.fabric3d || "cotton";
       fabricSelect.onchange = e => {
-        View3D.setFabricPreset(e.target.value);
+        state.fabric3d = e.target.value;
+        View3D.setFabricPreset(state.fabric3d);
+        if (state.view === "clothlab") syncClothLab();
+        update3DStatusPill();
+        save();
       };
     }
     const exportObjBtn = $("#v3dExportObjBtn");
@@ -5880,7 +5978,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     $("#snapBtn").classList.toggle("active",Canvas.getOpt("snap"));
     // Snapshot direct canvas edits too: these do not all pass through a
     // settings/action handler that calls save(). Capture again on exit.
-    $("#patternCanvas").addEventListener("pointerup", save);
+    $("#patternCanvas").addEventListener("pointerup", () => {
+      if (state.splitView) build3D();
+      save();
+    });
     document.addEventListener("keyup", e=>{
       if(!/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && !e.target.isContentEditable) save();
     });

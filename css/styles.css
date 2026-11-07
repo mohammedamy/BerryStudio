@@ -283,17 +283,17 @@ button { cursor: pointer; border: none; background: none; }
 .v3d-toolbar {
   position: absolute;
   inset-inline-start: 16px;
-  top: 16px;
+  top: 14px;
   z-index: 5;
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  gap: 4px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 6px 10px;
+  padding: 4px 7px;
   box-shadow: var(--shadow-2);
   user-select: none;
   max-width: calc(100% - 32px);
@@ -316,28 +316,32 @@ button { cursor: pointer; border: none; background: none; }
 .v3d-tool-group {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
 }
 .v3d-btn-label {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 3px;
+  font-size: 10.5px;
   font-weight: 700;
   color: var(--ink);
   cursor: pointer;
   white-space: nowrap;
 }
 .v3d-btn-label input[type="checkbox"] {
+  margin: 0;
+  width: 13px;
+  height: 13px;
   cursor: pointer;
   accent-color: var(--brand);
 }
 .v3d-sep {
   width: 1px;
-  height: 18px;
+  height: 16px;
   background: var(--line);
-  margin: 0 2px;
+  margin: 0 1px;
+  flex-shrink: 0;
 }
 .v3d-select-wrap {
   display: flex;
@@ -347,10 +351,12 @@ button { cursor: pointer; border: none; background: none; }
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 5px 8px;
-  font-size: 11px;
+  padding: 4px 5px;
+  font-size: 10.5px;
   font-weight: 700;
   color: var(--ink);
+  max-width: 112px;
+  text-overflow: ellipsis;
   outline: none;
   cursor: pointer;
   transition: border-color .15s ease, box-shadow .15s ease;
@@ -361,12 +367,12 @@ button { cursor: pointer; border: none; background: none; }
 .v3d-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 5px 10px;
-  font-size: 11px;
+  padding: 4px 6px;
+  font-size: 10.5px;
   font-weight: 700;
   color: var(--ink);
   cursor: pointer;
@@ -387,6 +393,104 @@ button { cursor: pointer; border: none; background: none; }
   background: var(--brand);
   border-color: var(--brand);
   color: #fff;
+}
+
+/* 3D Live Status Pill & Camera Preset Bar */
+.v3d-status-pill {
+  position: absolute;
+  inset-inline-start: 16px;
+  bottom: 44px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: calc(100% - 210px);
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-1);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.v3d-status-pill strong {
+  color: var(--ink);
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.v3d-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1.5px var(--panel), 0 0 0 2.5px var(--line);
+}
+.v3d-status-sep {
+  opacity: 0.45;
+}
+.v3d-status-meas {
+  font-variant-numeric: tabular-nums;
+}
+.v3d-indicative-note {
+  position: absolute;
+  inset-inline-start: 16px;
+  bottom: 14px;
+  z-index: 2;
+  margin: 0;
+  max-width: min(520px, calc(100% - 200px));
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  border: 1px solid var(--line);
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.v3d-cam-bar {
+  position: absolute;
+  inset-inline-end: 16px;
+  bottom: 62px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-2);
+}
+.v3d-cam-btn {
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+  background: transparent;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.v3d-cam-btn:hover {
+  color: var(--ink);
+  background: var(--panel-2);
+}
+.v3d-cam-btn.active {
+  color: #fff;
+  background: var(--brand);
 }
 
 .v3d-color-wrap {
@@ -420,7 +524,8 @@ button { cursor: pointer; border: none; background: none; }
 /* Category Mismatch Warning */
 .v3d-mismatch-warn {
   position: absolute;
-  top: 72px;
+  bottom: 92px;
+  top: auto;
   inset-inline-start: 50%;
   transform: translateX(-50%);
   z-index: 6;
@@ -900,20 +1005,46 @@ button { cursor: pointer; border: none; background: none; }
 
 /* Split view & responsive rules for 3D toolbar */
 .canvas-wrap.split .view3d-wrap .v3d-toolbar {
-  inset-inline-start: 10px;
-  top: 10px;
-  max-width: calc(100% - 20px);
+  inset-inline-start: 8px;
+  top: 8px;
+  max-width: calc(100% - 16px);
   padding: 4px 6px;
-  gap: 5px;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 3px;
+  overflow-x: visible;
+}
+.canvas-wrap.split .view3d-wrap .v3d-sep {
+  display: none;
 }
 .canvas-wrap.split .view3d-wrap .v3d-btn {
-  padding: 4px 6px;
-  font-size: 10.5px;
+  padding: 3px 5px;
+  font-size: 9.5px;
 }
 .canvas-wrap.split .view3d-wrap .v3d-select {
-  font-size: 10.5px;
-  padding: 3px 5px;
-  max-width: 105px;
+  font-size: 9.5px;
+  padding: 2px 4px;
+  max-width: 82px;
+}
+.canvas-wrap.split .view3d-wrap .v3d-indicative-note {
+  display: none;
+}
+.canvas-wrap.split .view3d-wrap .v3d-status-pill {
+  inset-inline-start: 10px;
+  bottom: 14px;
+  max-width: calc(100% - 190px);
+  font-size: 10px;
+  padding: 4px 9px;
+}
+.canvas-wrap.split .view3d-wrap .v3d-cam-bar {
+  inset-inline-end: 10px;
+  bottom: 58px;
+  padding: 3px;
+}
+.canvas-wrap.split .view3d-wrap .v3d-cam-btn {
+  padding: 3px 6px;
+  font-size: 10px;
 }
 
 @media (max-width: 1024px) {
@@ -952,6 +1083,19 @@ button { cursor: pointer; border: none; background: none; }
     font-size: 10px;
     padding: 3px 5px;
     max-width: 100px;
+  }
+  .v3d-indicative-note {
+    display: none;
+  }
+  .v3d-status-pill {
+    inset-inline-start: 10px;
+    bottom: 14px;
+    max-width: calc(100% - 180px);
+    font-size: 10px;
+  }
+  .v3d-cam-bar {
+    inset-inline-end: 10px;
+    bottom: 58px;
   }
   .v3d-tension-hud {
     top: 72px;
