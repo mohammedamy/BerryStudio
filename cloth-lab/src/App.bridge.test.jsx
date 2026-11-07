@@ -9,7 +9,7 @@ vi.mock('./scene/Scene', () => ({ default: ({ garment, paused }) => <div data-pr
 vi.mock('./ui/MeasurementPanel', () => ({ default: () => null }))
 vi.mock('./ui/FabricPanel', () => ({ default: () => null }))
 vi.mock('./ui/AvatarPanel', () => ({ default: () => null, DEFAULT_SKIN_TONE: 'light', DEFAULT_POSE: 'standing' }))
-vi.mock('./ui/ExportPanel', () => ({ default: () => null }))
+vi.mock('./ui/ExportPanel', () => ({ default: () => <div data-panel="export" /> }))
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 let root, container
 const payload = () => ({ designId: 'test', designName:'My design', category:'women', measurements:DEFAULT_MEASUREMENTS.women, lang:'en', pieces:[{id:'custom',label:{en:'My custom panel',ar:'قطعتي'},role:'front-panel',cutOnFold:false,bilateral:false,outline:[[0,0],[20,0],[20,30],[0,30]]}] })
@@ -82,6 +82,8 @@ describe('guided imported garment workflow',()=>{
 
 it('standalone body-only mode accepts no pattern or saved editor',async()=>{
   await render(null,{bodyOnly:true});expect(preview()).not.toBeNull()
-  const tabs=[...container.querySelectorAll('[role=tab]')].map(t=>t.textContent)
-  expect(tabs).toContain('Export');expect(tabs).not.toContain('Fabric')
+  // BodyForm keeps Export visible straight away (no tab to find) — the
+  // deploy smoke test clicks "Export GLB" right after generating the avatar.
+  expect(container.querySelector('[data-panel="export"]')).not.toBeNull()
+  expect(container.querySelector('[role=tab]')).toBeNull()
 })

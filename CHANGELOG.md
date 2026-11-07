@@ -12,8 +12,22 @@ behind unanswered questions; now all 308 open ready to try on (covered by a
 test). Seams are made by clicking whole edges (no point-picking needed; a
 precise mode remains), with matching colours/numbers per seam, flip and
 remove controls, and plain-language errors. The try-on view groups settings
-into Fabric / Body / Look / Export tabs. The strict `planPattern` rules are
-unchanged; the auto layer sits on top of them. Bilingual EN/AR + RTL kept.
+into Fabric / Body / Look / Export tabs, while standalone BodyForm (`body.html`)
+keeps Measurement, Avatar and Export stacked together with no extra tab click.
+
+Host integration and 3D garment assembly fixes:
+- Hides 2D stage overlays (`.zoombar`, `#emptyState`, `#pieceInfo`) when viewing
+  3D Cloth Lab so the primary action bar is never covered, and sizes the
+  embedded 3D `<Canvas>` to fill the full preview pane from frame zero.
+- Live-syncs Cloth Lab whenever the active pattern, category, size/grading,
+  piece visibility or fabric/colour changes while Cloth Lab is open, and
+  forwards `autoTorsoSeams` across the bridge.
+- Wraps neck, waist, hem and chest attachments (`collar`, `waistband`, `cuff`,
+  `pocket`, `peplum`, `godet`) smoothly outside the collision rig instead of
+  spawning flat inside body capsules; routes 2-panel cut-on-fold library skirts
+  to welded hip panels; and centers bilateral trouser leg panels per thigh with
+  separate outseam, inseam and crotch-rise seams.
+- Preserves strict `planPattern` rules and full EN/AR + RTL support.
 
 ## Plan 7 P7-10: professional-pilot evidence boundary
 

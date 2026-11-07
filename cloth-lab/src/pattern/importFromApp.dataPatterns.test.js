@@ -54,26 +54,10 @@ test('all 6 of js/data.js\'s own directly-registered patterns are discovered (sa
   for (const id of DATA_PATTERN_IDS) expect(PATTERNS[id], `${id} not registered`).toBeTruthy()
 })
 
-// boys_trousers predates WP-6 role metadata (no declared `role` on its
-// leg pieces), so it falls through to classifyLegacy — which explicitly,
-// deliberately ignores trouser/leg pieces ("aren't supported in 3D yet"),
-// its own documented scope limit, not a bug this sweep should paper over.
-// Declaring real roles on boys_trousers so its legs import too (the same
-// fix trouserFamily()/trouserPanel() already got elsewhere in this
-// library, WP-59/WP-64) is a genuine, separate improvement — out of
-// scope for a sweep-coverage pass, not attempted here. Pinned to this
-// EXACT known pair so a different, new skip on this pattern still fails
-// loudly instead of being silently swallowed by a loose "some skips are
-// fine" assertion.
-const KNOWN_SKIPS = {
-  boys_trousers: [
-    { label: 'Front Leg', reason: 'trousers/leg pieces aren’t supported in 3D yet' },
-    { label: 'Back Leg', reason: 'trousers/leg pieces aren’t supported in 3D yet' },
-  ],
-}
+const KNOWN_SKIPS = {}
 
 describe.each(DATA_PATTERN_IDS)('%s', (id) => {
-  test('imports with zero (or only already-known) skipped pieces, and simulates with zero exceptions', () => {
+  test('imports with zero skipped pieces and simulates with zero exceptions', () => {
     const entry = PATTERNS[id]
     const category = entry.category
     const m = SAMPLE_MEASUREMENTS[category]
@@ -98,4 +82,21 @@ describe.each(DATA_PATTERN_IDS)('%s', (id) => {
       assembleCloth(triangulated, dims, result.seamInstructions)
     }).not.toThrow()
   })
+})
+
+test('boys_trousers imports 4 leg panels with outseam, inseam, and crotch-rise joins', () => {
+  const m = SAMPLE_MEASUREMENTS.boys
+  const payload = { pieces: PATTERNS.boys_trousers.pieces(m).map(toPayloadPiece), measurements: m, category: 'boys' }
+  const result = convertAppPattern(payload)
+  const legIds = Object.entries(result.roles)
+    .filter(([, role]) => role === 'legFront' || role === 'legBack')
+    .map(([id]) => id)
+  expect(legIds).toHaveLength(4)
+  for (const id of legIds) {
+    const joins = result.seamInstructions.filter((s) => s.a.piece === id || s.b.piece === id)
+    expect(joins, `${id} should have outseam + inseam + rise`).toHaveLength(3)
+  }
+  const legSeams = result.seamInstructions.filter((s) => s.id.includes('boysTrouser'))
+  expect(legSeams).toHaveLength(4)
+  for (const s of legSeams) expect(s.reverse).toBe(false)
 })

@@ -84,3 +84,29 @@ describe('placePiece — same-slot siblings (placementHint)', () => {
     expect(withHint).toEqual(withoutHint)
   })
 })
+
+describe('attachment placements wrap outside the body surface', () => {
+  const dims = computeBodyDims(WOMEN_M, 'women')
+  const zScale = 0.72
+
+  it('wraps a full-circumference waistband around the waist ring instead of sticking out as a flat plank', () => {
+    const strip = [[0, 0], [18, 0], [36, 0], [54, 0], [72, 0], [72, 5], [0, 5]]
+    const placed = placePiece({ pieceId: 'waistband_0', role: 'attachWaist', positions2D: strip }, dims)
+    for (const [x, , z] of placed) {
+      // Elliptical waist clearance: Math.hypot(x, z / zScale) > waistR, and
+      // never a 72 cm flat plank extending to |X| = 0.36m.
+      expect(Math.hypot(x, z / zScale)).toBeGreaterThan(dims.waistR)
+      expect(Math.abs(x)).toBeLessThan(dims.waistR * 1.5)
+    }
+  })
+
+  it('places neck, hem, and body attachments outside the spine/neck collision radius', () => {
+    const patch = [[0, 0], [12, 0], [24, 0], [24, 7], [0, 7]]
+    for (const role of ['attachNeck', 'attachHem', 'attachBody', 'attachBodyBack']) {
+      const placed = placePiece({ pieceId: 'acc_0', role, positions2D: patch }, dims)
+      for (const [x, , z] of placed) {
+        expect(Math.hypot(x, z), role).toBeGreaterThan(dims.neckR * 1.2)
+      }
+    }
+  })
+})

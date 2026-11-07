@@ -333,6 +333,23 @@ export function convertAppPattern(payload) {
     }
   }
 
+  const activePieces = (payload.pieces || []).filter((p) => p.visible !== false)
+  const hasSideGores = activePieces.some((p) => {
+    const r = resolveSchemaRole(p.role)?.role
+    return r === 'skirt-side-gore-left' || r === 'skirt-side-gore-right'
+  })
+  const frontGores = activePieces.filter((p) => resolveSchemaRole(p.role)?.role === 'skirt-front-gore')
+  const backGores = activePieces.filter((p) => resolveSchemaRole(p.role)?.role === 'skirt-back-gore')
+  // Two-piece pleated/straight skirts in js/library.js declare
+  // skirt-front-gore + skirt-back-gore on the fold with no side gores and
+  // no explicit edges; placing them as hipPanelFront/hipPanelBack wraps
+  // them around the hips and welds their left/right side seams so they
+  // drape on the body instead of free-falling as two unseamed wedges.
+  const pairGoresAsHipPanels = !hasSideGores &&
+    frontGores.length === 1 && backGores.length === 1 &&
+    Boolean(frontGores[0].cutOnFold) && Boolean(backGores[0].cutOnFold) &&
+    !frontGores[0].edges?.length && !backGores[0].edges?.length
+
   for (const p of payload.pieces || []) {
     const label = (p.label && p.label.en) || p.id
     const resolved = resolveSchemaRole(p.role)
@@ -401,7 +418,12 @@ export function convertAppPattern(payload) {
     // sourced from `resolved` — a piece-level override still wins if a
     // generator ever sets one explicitly (defensive, matches how a piece
     // already CAN also declare its own cutOnFold/bilateral directly).
-    const { role: schemaRole, placement: declaredPlacement } = resolved
+    const { role: schemaRole } = resolved
+    const declaredPlacement = pairGoresAsHipPanels && schemaRole === 'skirt-front-gore'
+      ? 'hipPanelFront'
+      : pairGoresAsHipPanels && schemaRole === 'skirt-back-gore'
+        ? 'hipPanelBack'
+        : resolved.placement
     const cutOnFold = p.cutOnFold ?? resolved.cutOnFold
     const bilateral = p.bilateral ?? resolved.bilateral
     const edges = p.edges
@@ -440,7 +462,7 @@ export function convertAppPattern(payload) {
       continue
     }
 
-    if (schemaRole === 'skirt-front-gore' || schemaRole === 'skirt-back-gore' || schemaRole === 'skirt-side-gore-left' || schemaRole === 'skirt-side-gore-right') {
+    if (!pairGoresAsHipPanels && (schemaRole === 'skirt-front-gore' || schemaRole === 'skirt-back-gore' || schemaRole === 'skirt-side-gore-left' || schemaRole === 'skirt-side-gore-right')) {
       const internalRole = { 'skirt-front-gore': 'goreFront', 'skirt-back-gore': 'goreBack', 'skirt-side-gore-left': 'goreSideLeft', 'skirt-side-gore-right': 'goreSideRight' }[schemaRole]
       const outline = cutOnFold ? unfoldPiece(local) : local
       const copies = bilateral && !cutOnFold ? [

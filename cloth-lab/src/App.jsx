@@ -142,7 +142,10 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
     if (payload.fabricId) setFabricId(payload.fabricId)
     setAvatarGLBByCategory(payload.avatarGLB || {})
     const signature = patternSignature(payload)
-    if (signature === lastPatternSignatureRef.current) return
+    if (signature === lastPatternSignatureRef.current) {
+      setSource(payload)
+      return
+    }
     lastPatternSignatureRef.current = signature
     const saved = readSession(payload) || (payload.clothLabSetup?.design === signature ? payload.clothLabSetup : null)
     setSource(payload)
@@ -288,7 +291,7 @@ function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChan
   const seamEditor = useSeamEditor(rawPieces, roles, seedEdges, seedSeams, placementHints, restored, { autoPlace: true })
   const [paused, setPaused] = useState(false)
   const [restartVersion, setRestartVersion] = useState(0)
-  const [tab, setTab] = useState(bodyOnly ? 'body' : 'fabric')
+  const [tab, setTab] = useState('fabric')
   const editorChangedRef = useRef(onEditorChange)
   editorChangedRef.current = onEditorChange
   const initialEditorRef = useRef(true)
@@ -374,20 +377,29 @@ function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChan
       primary={{ label: text('Try it on', 'جرّبه على المجسم'), onClick: () => { if (seamEditor.unjoined?.length) { onNotice?.(friendlyError('unjoined', ar)); return } onStep('tryon') } }} />
   </>
 
-  const visibleTabs = TABS.filter(([id]) => !bodyOnly || id !== 'fabric')
   const showCanvas = bodyOnly || garment
   return <>
     <div className="cl-workspace">
       <aside className="cl-sidebar" aria-label={text('Try-on settings', 'إعدادات التجربة')}>
-        <div className="cl-tabs" role="tablist">
-          {visibleTabs.map(([id, en, arabic]) => <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{ar ? arabic : en}</button>)}
-        </div>
-        <div className="cl-tabpanel" role="tabpanel">
-          {tab === 'fabric' && !bodyOnly && <FabricPanel lang={lang} fabricId={fabricId} onChange={onFabricChange} qualityTier={qualityTier} onQualityTierChange={onQualityTierChange} />}
-          {tab === 'body' && <MeasurementPanel lang={lang} measurements={measurements} onChange={onMeasurementsChange} />}
-          {tab === 'look' && <AvatarPanel lang={lang} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />}
-          {tab === 'export' && <ExportPanel lang={lang} exportRef={exportRef} />}
-        </div>
+        {bodyOnly ? (
+          // BodyForm's whole job is measure → generate → export, so its
+          // three short panels stay visible together (no tabs hiding Export).
+          <div className="cl-tabpanel cl-stack">
+            <MeasurementPanel lang={lang} measurements={measurements} onChange={onMeasurementsChange} />
+            <AvatarPanel lang={lang} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />
+            <ExportPanel lang={lang} exportRef={exportRef} />
+          </div>
+        ) : <>
+          <div className="cl-tabs" role="tablist">
+            {TABS.map(([id, en, arabic]) => <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{ar ? arabic : en}</button>)}
+          </div>
+          <div className="cl-tabpanel" role="tabpanel">
+            {tab === 'fabric' && <FabricPanel lang={lang} fabricId={fabricId} onChange={onFabricChange} qualityTier={qualityTier} onQualityTierChange={onQualityTierChange} />}
+            {tab === 'body' && <MeasurementPanel lang={lang} measurements={measurements} onChange={onMeasurementsChange} />}
+            {tab === 'look' && <AvatarPanel lang={lang} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />}
+            {tab === 'export' && <ExportPanel lang={lang} exportRef={exportRef} />}
+          </div>
+        </>}
         {!bodyOnly && <div className="cl-tip">
           <strong>{text('Tips', 'نصائح')}</strong>
           <ul>
@@ -428,9 +440,11 @@ function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChan
           </div>
           {!bodyOnly && <p className="cl-simulation-note">{t(lang, 'simulationIndicative')}</p>}
           <SceneBoundary key={`${view}-${garment?.pieces?.length}`} lang={lang} onRecover={() => onStep('sew')}>
-            <Canvas key={restartVersion} shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
-              <Scene dims={dims} lang={lang} debugView={bodyOnly ? 'off' : view} fabricId={fabricId} qualityTier={qualityTier} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} controlsRef={controlsRef} paused={paused} />
-            </Canvas>
+            <div className="cl-canvas">
+              <Canvas key={restartVersion} shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
+                <Scene dims={dims} lang={lang} debugView={bodyOnly ? 'off' : view} fabricId={fabricId} qualityTier={qualityTier} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} controlsRef={controlsRef} paused={paused} />
+              </Canvas>
+            </div>
           </SceneBoundary>
         </> : <div className="cl-loading" role="status"><span className="cl-spinner" aria-hidden="true" />{text('Preparing your garment…', 'جارٍ تجهيز قطعتك…')}</div>}
         {view === 'cloth' && isSolverHUDEnabled() && <SolverHUD statsRef={statsRef} />}

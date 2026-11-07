@@ -173,6 +173,7 @@ const LEGACY_ROLE_ALIASES = {
   'bodice-back': 'back-panel',
   'skirt-front': 'hip-panel-front',
   'skirt-back': 'hip-panel-back',
+  'cape-sleeve': 'cape-overlay',
 }
 
 // Resolves any declared schema role (current or legacy-aliased) to its
