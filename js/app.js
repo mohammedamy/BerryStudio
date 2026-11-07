@@ -198,6 +198,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   const save = () => {
     if(!projectsReady) return;
     syncActiveProjectSnapshot();
+    if(state.view==="clothlab") syncClothLab();
     try { localStorage.setItem("pps", JSON.stringify(state)); storageWarningShown = false; return true; }
     catch(e) {
       if(!storageWarningShown) toast(T("projectStorageFailed"));
@@ -3761,7 +3762,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     Canvas.setPattern(resolveGradedPieces(p, opts, computeMeasurements, state.gradeRules[id]), PALETTE);
     afterLoad(L(p.name));
   }
-  function afterLoad(name){ hideEmpty(); renderLayersPane(); renderSizePane(); toast(T("patternLoaded")+" · "+name); if(is3DActive()) build3D(); save(); }
+  function afterLoad(name){ hideEmpty(); renderLayersPane(); renderSizePane(); toast(T("patternLoaded")+" · "+name); if(is3DActive()) build3D(); save(); renderProjectTabs(); }
   function grade(){
     if(state.loaded){
       const p=PATTERNS[state.loaded];
@@ -4000,8 +4001,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const fv = pieces.find(p=>p.visible!==false);
     if(fv && fv.color) sync3DColorUI(fv.color);
     View3D.setFabric({ parts: partsFabric(), opacity: fabricOpacity3D() });
+    if(state.view==="clothlab") syncClothLab();
   }
-  function sync3DVisibility(){ if(!is3DActive()) return; View3D.setPieceVisibility(pieceVisMap()); }
+  function sync3DVisibility(){ if(state.view==="clothlab") syncClothLab(); if(!is3DActive()) return; View3D.setPieceVisibility(pieceVisMap()); }
   function cssHex(k){ const t=document.createElement("canvas").getContext("2d");t.fillStyle=getComputedStyle(document.body).getPropertyValue(k).trim();return parseInt(t.fillStyle.slice(1),16);}
   function applySplitViewClasses(){
     document.querySelector(".canvas-wrap").classList.toggle("split", !!state.splitView);
@@ -4254,6 +4256,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         // full reasoning and index-math (identical convention to
         // necklineEndIdx).
         sideEndIdx: p.sideEndIdx,
+        autoTorsoSeams: p.autoTorsoSeams,
         // WP-49: explicit upper/lower-body override (js/body-zone.js) —
         // cloth-lab/src/pattern/importFromApp.js's classifyLegacy path
         // consults this to correct a wrong name-based guess for pieces
@@ -5827,7 +5830,11 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       const setup = e.data.setup;
       if(!setup || typeof setup.answers!=="object" || JSON.stringify(setup).length>2000000) return;
       const first = Canvas.getPieces()[0];
-      if(first){ first.clothLabSetup = { ...setup, design: e.data.design }; save(); }
+      if(first){
+        first.clothLabSetup = { ...setup, design: e.data.design };
+        lastClothLabPayloadJSON = JSON.stringify(buildClothLabPayload());
+        save();
+      }
     });
   }
   function updateUnitsPill(){ $("#unitsPill .u").textContent=state.unitsCm?"cm":"inch"; }

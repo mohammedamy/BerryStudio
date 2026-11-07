@@ -4,7 +4,7 @@ import '../../../js/girls-leotards.js'
 import '../../../js/library.js'
 import '../../../js/underwear-library.js'
 import { PATTERNS } from '../../../js/data.js'
-import { autoPlan, guessPlacement, asUserAnswer } from './autoSetup'
+import { autoPlan, guessPlacement, guessCopies, asUserAnswer } from './autoSetup'
 import { shapeKey } from './patternPlan'
 
 const piece = (extra = {}) => ({ id: 'panel', label: { en: 'My panel', ar: 'قطعتي' }, outline: [[0, 0], [20, 0], [20, 30], [0, 30]], ...extra })
@@ -50,12 +50,27 @@ describe('novice auto setup', () => {
     expect(plan.ready).toBe(true)
     expect(plan.inventory.filter(r => r.excluded).map(r => r.piece.id).sort()).toEqual(['bad', 'hid'])
   })
-  it('never mistakes accessories for full panels', () => {
+  it('never mistakes accessories for full panels or modified panels for accessories', () => {
     expect(guessPlacement({ label: { en: 'Neckline Binding' } })).toBe('collar')
     expect(guessPlacement({ label: { en: 'Leg Opening Binding' } })).toBe('pocket')
     expect(guessPlacement({ label: { en: 'Front Leg' } })).toBe('trouser-front')
     expect(guessPlacement({ label: { en: 'Front Panel' }, bodyZone: 'lower' })).toBe('hip-panel-front')
     expect(guessPlacement({ label: { en: 'Waistband' } })).toBe('waistband')
+    expect(guessPlacement({ label: { en: 'Shirt Back with Yoke' } })).toBe('back-panel')
+    expect(guessPlacement({ label: { en: 'V-Neck Bodice Front' } })).toBe('front-panel')
+    expect(guessPlacement({ label: { en: 'High-Waist Skirt Back' } })).toBe('hip-panel-back')
+    expect(guessPlacement({ label: { en: 'One-Shoulder Dress Front' } })).toBe('front-panel')
+  })
+  it('defaults bilateral and cut-on-fold schema roles to pair and fold copies', () => {
+    const pCenter = piece({ id: 'center', label: { en: 'Center' }, role: 'bodice-front-center' })
+    const { answers, plan } = autoPlan(
+      payload([piece({ id: 'leg', label: { en: 'Front Leg' } }), pCenter]),
+      { center: { shape: shapeKey(pCenter), review: true, role: 'bodice-front-center' } },
+    )
+    expect(plan.ready).toBe(true)
+    expect(answers.leg).toMatchObject({ role: 'trouser-front', copies: 'pair' })
+    expect(answers.center).toMatchObject({ copies: 'fold' })
+    expect(guessCopies(pCenter, 'bodice-front-center')).toBe('fold')
   })
   it('strips bookkeeping flags when an answer becomes the user’s own', () => {
     expect(asUserAnswer({ shape: 's', role: 'sleeve', auto: true, autoFields: ['role'] })).toEqual({ shape: 's', role: 'sleeve' })

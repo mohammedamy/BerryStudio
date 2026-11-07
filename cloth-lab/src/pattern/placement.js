@@ -90,12 +90,15 @@ export function placeLegPanel(positions2D, dims, { side, zSign, easeFactor = 1.1
   const waistWorldY = dims.hipY + dims.span * 0.44
   const waistWorldX = side * dims.hipR * 0.55
   const legPatternLen = dims.legLen + dims.span * 0.2 // rise (waist-to-crotch) + inseam, close enough for placement
+  let minX = Infinity, maxX = -Infinity
+  for (const [x] of positions2D) { if (x < minX) minX = x; if (x > maxX) maxX = x }
+  const centerX = Number.isFinite(minX) ? (minX + maxX) / 2 : 0
   return positions2D.map(([xCm, yCm]) => {
     const alongLeg = cm(yCm)
     const t = Math.min(1, Math.max(0, alongLeg / legPatternLen))
     const r = lerp(dims.thighR, dims.thighR * 0.4, t) * easeFactor
     const halfCirc = Math.PI * r
-    const theta = (cm(xCm) / halfCirc) * angleSpan
+    const theta = (cm(xCm - centerX) / halfCirc) * angleSpan
     const worldY = waistWorldY - alongLeg
     return [waistWorldX + r * Math.sin(theta), worldY, zSign * r * Math.cos(theta)]
   })
@@ -186,44 +189,73 @@ const bboxCenterX = (positions2D) => {
   return (minX + maxX) / 2
 }
 
-// Neckline-attached: collar/hood/cape/yoke — centered at the neck, small
-// forward offset so it doesn't z-fight the bodice, hanging down over the
-// piece's own local Y extent.
+// Neckline-attached: collar/hood/cape/yoke — wrapped cylindrically around
+// the neck/collarbone outside the neck and upper-torso collision capsules so
+// wide collars, capes, and yokes drape over the shoulders rather than
+// spawning flat at z=0.02 inside the throat.
 export function placeAttachNeck(positions2D, dims, side = 0) {
-  const worldY = dims.shoulderY + dims.span * 0.02
+  const topWorldY = dims.shoulderY + dims.span * 0.025
+  const yShoulder = dims.shoulderY - dims.span * 0.03
   const cx = bboxCenterX(positions2D)
-  const zOffset = 0.02
-  return positions2D.map(([xCm, yCm]) => [
-    cm(xCm - cx) + side * dims.shoulderHalf * 0.5,
-    worldY - cm(yCm),
-    zOffset,
-  ])
+  const thetaCenter = side * Math.PI * 0.45
+  return positions2D.map(([xCm, yCm]) => {
+    const worldY = topWorldY - cm(yCm)
+    const baseR = worldY >= yShoulder
+      ? lerp(dims.chestR * 1.16, dims.neckR * 1.35, Math.min(1, (worldY - yShoulder) / (topWorldY - yShoulder)))
+      : radiusAtHeight(dims, worldY) * 1.18
+    const r = Math.max(dims.neckR * 1.35, baseR)
+    const phi = thetaCenter + cm(xCm - cx) / r
+    const rOut = r + 0.006 * (Math.abs(phi) / Math.PI)
+    return [rOut * Math.sin(phi), worldY, rOut * Math.cos(phi)]
+  })
 }
 
-// Waist-attached: waistband/peplum/sash — centered at the waist.
+// Waist-attached: waistband/peplum/sash — wrapped around the elliptical
+// waist surface outside the collision capsule (and within the waist pin
+// ring) so full-circumference waistbands and sashes hug the waist instead of
+// spearing horizontally through the abdomen.
 export function placeAttachWaist(positions2D, dims, zSign = 1) {
-  const worldY = dims.hipY + dims.span * 0.44
+  const topWorldY = dims.hipY + dims.span * 0.44
+  const zScale = dims.female ? 0.72 : 0.78
   const cx = bboxCenterX(positions2D)
-  return positions2D.map(([xCm, yCm]) => [cm(xCm - cx), worldY - cm(yCm), zSign * 0.02])
+  return positions2D.map(([xCm, yCm]) => {
+    const worldY = topWorldY - cm(yCm)
+    const baseR = Math.max(dims.waistR * 0.95, radiusAtHeight(dims, worldY)) * 1.18
+    const rEff = baseR * (1 + zScale) * 0.5
+    const phi = cm(xCm - cx) / rEff
+    const rOut = baseR + 0.008 * (Math.abs(phi) / Math.PI)
+    return [rOut * Math.sin(phi), worldY, zSign * rOut * zScale * Math.cos(phi)]
+  })
 }
 
-// Hem-attached: godet/tier — centered at the garment hem height, hanging down.
+// Hem-attached: godet/tier/elastic-band — wrapped outside the lower-hip/thigh
+// surface rather than flat inside the leg collision capsule.
 export function placeAttachHem(positions2D, dims, side = 0) {
-  const worldY = dims.hipY - dims.legLen * 0.1
+  const topWorldY = dims.hipY - dims.legLen * 0.1
   const cx = bboxCenterX(positions2D)
-  return positions2D.map(([xCm, yCm]) => [
-    cm(xCm - cx) + side * dims.hipR * 0.6,
-    worldY - cm(yCm),
-    0.02,
-  ])
+  const thetaCenter = side * Math.PI * 0.35
+  return positions2D.map(([xCm, yCm]) => {
+    const worldY = topWorldY - cm(yCm)
+    const r = Math.max(dims.hipR * 0.9, radiusAtHeight(dims, worldY)) * 1.2
+    const phi = thetaCenter + cm(xCm - cx) / r
+    const rOut = r + 0.006 * (Math.abs(phi) / Math.PI)
+    return [rOut * Math.sin(phi), worldY, rOut * Math.cos(phi)]
+  })
 }
 
-// Generic small body accessory: pocket/facing/lining/cuff — placed near
-// chest height, slightly recessed so linings sit behind the shell.
+// Generic small body accessory: pocket/facing/lining/cuff/cup/gusset —
+// wrapped outside the chest/ribcage collision surface (above the waist pin
+// band so seamed accessories pull freely to their target edges).
 export function placeAttachBody(positions2D, dims, zSign = 1) {
-  const worldY = dims.hipY + dims.span * 0.6
+  const topWorldY = dims.hipY + dims.span * 0.62
   const cx = bboxCenterX(positions2D)
-  return positions2D.map(([xCm, yCm]) => [cm(xCm - cx), worldY - cm(yCm), zSign * 0.015])
+  return positions2D.map(([xCm, yCm]) => {
+    const worldY = topWorldY - cm(yCm)
+    const r = radiusAtHeight(dims, worldY) * 1.22
+    const phi = cm(xCm - cx) / r
+    const rOut = r + 0.006 * (Math.abs(phi) / Math.PI)
+    return [rOut * Math.sin(phi), worldY, zSign * rOut * Math.cos(phi)]
+  })
 }
 
 // Dispatch by piece role + id (sleeveL/sleeveR, and WP-6's bilateral-
@@ -234,6 +266,8 @@ export function placeAttachBody(positions2D, dims, zSign = 1) {
 export function placePiece(triangulated, dims) {
   const { pieceId, role, positions2D, placementHint } = triangulated
   const side = (pieceId.endsWith('L') || pieceId.endsWith('_l')) ? -1 : 1
+  const attachSide = (pieceId.endsWith('L') || pieceId.endsWith('_l')) ? -1
+    : (pieceId.endsWith('R') || pieceId.endsWith('_r')) ? 1 : 0
   // Same-slot siblings (importFromApp.js's placementHint: pieces the
   // importer recognized as e.g. "front" but had no way to tell apart —
   // see that file's own header on why it no longer just drops all but
@@ -255,10 +289,10 @@ export function placePiece(triangulated, dims) {
   if (role === 'goreBack') return placeGorePanel(positions2D, dims, Math.PI)
   if (role === 'goreSideLeft') return placeGorePanel(positions2D, dims, -Math.PI / 2)
   if (role === 'goreSideRight') return placeGorePanel(positions2D, dims, Math.PI / 2)
-  if (role === 'attachNeck') return placeAttachNeck(positions2D, dims, side)
+  if (role === 'attachNeck') return placeAttachNeck(positions2D, dims, attachSide)
   if (role === 'attachWaist') return placeAttachWaist(positions2D, dims, 1)
   if (role === 'attachWaistBack') return placeAttachWaist(positions2D, dims, -1)
-  if (role === 'attachHem') return placeAttachHem(positions2D, dims, side)
+  if (role === 'attachHem') return placeAttachHem(positions2D, dims, attachSide)
   if (role === 'attachBody') return placeAttachBody(positions2D, dims, 1)
   if (role === 'attachBodyBack') return placeAttachBody(positions2D, dims, -1)
   throw new Error(`placePiece: no placement heuristic for role "${role}"`)

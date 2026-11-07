@@ -128,3 +128,13 @@ describe.each(TROUSER_IDS)('%s waistband', (id) => {
     expect(involves(waistband.id).length, `${waistband.id} should have exactly 4 real seams`).toBe(4)
   })
 })
+
+describe.each(['w05', 'w07', 'g05'])('%s two-panel skirt', (id) => {
+  test('pairs front and back skirt panels with left and right side seams so the skirt stays on the hips', () => {
+    const entry = PATTERNS[id]
+    const m = SAMPLE_MEASUREMENTS[entry.category]
+    const payload = { pieces: entry.pieces(m).map(toPayloadPiece), measurements: m, category: entry.category, fabricId: null, avatarGLB: {} }
+    const result = convertAppPattern(payload)
+    expect(result.seamInstructions.filter((s) => /hipPanelFront_(right|left)Side$/.test(s.id))).toHaveLength(2)
+  })
+})

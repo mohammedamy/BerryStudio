@@ -175,11 +175,11 @@ describe.each(TROUSER_IDS)('%s trousers', (id) => {
       .map(([id]) => id)
     expect(legPieceIds.length).toBe(4) // front_r, front_l, back_r, back_l
 
-    // Count leg-to-leg joins specifically; a waistband adds a third join.
+    // Count leg-to-leg joins specifically (outseam + inseam + crotch rise); a waistband adds a fourth join.
     const involves = (pid) => result.seamInstructions.filter((s) =>
       (s.a.piece === pid || s.b.piece === pid) && legPieceIds.includes(s.a.piece) && legPieceIds.includes(s.b.piece))
     for (const pid of legPieceIds) {
-      expect(involves(pid).length, `${pid} should have exactly 1 outseam + 1 inseam seam`).toBe(2)
+      expect(involves(pid).length, `${pid} should have 1 outseam + 1 inseam + 1 crotch-rise seam`).toBe(3)
     }
   })
 })

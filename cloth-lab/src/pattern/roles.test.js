@@ -62,4 +62,9 @@ describe('resolveSchemaRole', () => {
     expect(r.placement).toBe('hipPanelFront')
     expect(r.zone).toBe('lower')
   })
+
+  it('cape-sleeve resolves through legacy alias to cape-overlay (attachNeck)', () => {
+    const r = resolveSchemaRole('cape-sleeve')
+    expect(r).toMatchObject({ role: 'cape-overlay', placement: 'attachNeck' })
+  })
 })

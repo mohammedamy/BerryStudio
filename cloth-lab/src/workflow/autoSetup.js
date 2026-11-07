@@ -19,8 +19,10 @@
 // invalid garment: darts are sewn when the geometry supports it and kept
 // as markings otherwise.
 import { planPattern, shapeKey, labelOf } from './patternPlan'
+import { resolveSchemaRole } from '../pattern/roles'
 
 const has = (re, s) => re.test(s)
+const PANEL_NOUN_RE = /\b(bodice|shirt|t-shirt|tee|blouse|dress|gown|top|jacket|coat|vest|tunic|abaya|thobe|leotard|skirt|trouser|pant|shorts|panel|body)\b|\bleg\b|صدرية|قميص|بلوزة|فستان|جاكيت|معطف|عباية|ثوب|تنور|بنطال|بنطلون|ساق|لوحة/
 
 // Placement guess from the piece's name (English and Arabic), body-zone
 // override and declared schema role. Always returns one of PLACEMENTS'
@@ -29,16 +31,26 @@ const has = (re, s) => re.test(s)
 export function guessPlacement(piece) {
   const en = String((piece?.label && typeof piece.label === 'object' ? piece.label.en : piece?.label) || '').toLowerCase()
   const ar = String((piece?.label && typeof piece.label === 'object' ? piece.label.ar : '') || '')
-  const name = `${en} ${ar}`
-  const front = has(/front|أمام/, name), back = has(/back|خلف/, name)
+  const rawName = `${en} ${ar}`
+  // Strip trailing "with ..." / "مع ..." modifiers so "Shirt Back with Yoke"
+  // or "Bodice Front with Placket" classifies by its primary garment noun.
+  const name = rawName.replace(/\bwith\b.*|مع\s+.*/g, '').trim() || rawName
+  const front = has(/front|أمام|مقدمة/, name), back = has(/back|خلف|ظهر/, name)
   const lower = piece?.bodyZone === 'lower' || has(/skirt|hip|brief|tier|godet|peplum|تنور|ورك/, name)
-  // Accessories first: a "Neckline Binding" or "Leg Opening Binding" must not
-  // be mistaken for a full panel just because it also says "front"/"leg".
-  if (has(/collar|neck|strap|yoke|shoulder|hood|cape|epaulet|ياقة|رقبة|حمالة|كتف/, name)) return 'collar'
-  if (has(/waist|belt|sash|\btie\b|خصر|حزام/, name)) return 'waistband'
-  if (has(/binding|gusset|insert|bridge|pocket|cuff|facing|placket|band|trim|جيب|كفة/, name)) return 'pocket'
+  const isPanel = has(PANEL_NOUN_RE, name)
+
+  // Explicit accessory nouns win first so "Neckline Binding" or "Leg Opening
+  // Binding" is never mistaken for a full panel just because it mentions a
+  // body region, while modifier prefixes on real panels ("V-Neck Bodice
+  // Front", "High-Waist Skirt Back", "One-Shoulder Dress Front") stay panels.
+  if (has(/binding|band|facing|trim|placket|سجاف|شريط/, name) && has(/collar|neck|ياقة|رقبة/, name)) return 'collar'
+  if (has(/\b(collar|undercollar|lapel|strap|hood|epaulet\w*|yoke)\b|ياقة|حمالة/, name)) return 'collar'
+  if (has(/\b(waistband|belt|sash|peplum)\b|wrap[-\s]?tie|حزام/, name)) return 'waistband'
+  if (has(/\b(binding|gusset|insert|bridge|pocket|cuff|facing|placket|trim|lining|cup)\b|\bband\b|جيب|كفة|أساور|بطانة|دكة/, name)) return 'pocket'
   if (has(/sleeve|كم/, name)) return 'sleeve'
-  if (has(/trouser|pant|\bleg\b|بنطال|بنطلون|ساق/, name)) return back ? 'trouser-back' : 'trouser-front'
+  if (!isPanel && has(/collar|neck|shoulder|cape|ياقة|رقبة|كتف|كاب/, name)) return 'collar'
+  if (!isPanel && has(/waist|\btie\b|خصر|رباط/, name)) return 'waistband'
+  if (has(/trouser|pant|shorts|\bleg\b|بنطال|بنطلون|شورت|ساق/, name)) return back ? 'trouser-back' : 'trouser-front'
   if (lower) return back ? 'hip-panel-back' : 'hip-panel-front'
   if (back) return 'back-panel'
   if (front) return 'front-panel'
@@ -46,10 +58,15 @@ export function guessPlacement(piece) {
   return 'pocket'
 }
 
-// Mirrors importFromApp's own no-metadata behaviour: sleeves are drawn once
-// and duplicated as a left/right pair; every other piece is a single copy.
+// Consults the resolved schema role first (so bilateral roles like
+// trouser-front/back, bodice-*-side, hood, godet default to a mirrored pair
+// and cutOnFold roles like bodice-*-center default to on-the-fold), then
+// falls back to importFromApp's sleeve-pair / single-copy convention.
 export function guessCopies(piece, role) {
-  if (role === 'sleeve' || /sleeve|كم/i.test(labelOf(piece, 'en') + labelOf(piece, 'ar'))) return 'pair'
+  const info = resolveSchemaRole(role)
+  if (info?.cutOnFold) return 'fold'
+  if (info?.bilateral || info?.placement === 'sleeve') return 'pair'
+  if (/sleeve|كم/i.test(labelOf(piece, 'en') + labelOf(piece, 'ar'))) return 'pair'
   return 'single'
 }
 

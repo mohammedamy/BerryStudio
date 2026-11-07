@@ -1115,8 +1115,9 @@ export let FancyGen;
     // panel placed as a small misplaced accessory patch, never seamed,
     // in Cloth Lab.
     outline.edges = [
-      { fromIdx: 2, toIdx: 8, seamId: 'trouserOutseam' },
-      { fromIdx: 9, toIdx: 0, mirrorSelf: true },
+      { fromIdx: 2, toIdx: 8, seamId: 'trouserOutseam', reverse: false },
+      { fromIdx: 9, toIdx: 10, seamId: 'trouserInseam', reverse: false },
+      { fromIdx: 10, toIdx: 0, mirrorSelf: true },
     ];
     return outline;
   }
