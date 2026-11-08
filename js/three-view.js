@@ -212,6 +212,18 @@ export const View3D = (() => {
     }
   }
 
+  function detectSoftwareGL(glRenderer) {
+    try {
+      const gl = glRenderer.getContext();
+      if (!gl) return false;
+      const dbg = gl.getExtension && gl.getExtension("WEBGL_debug_renderer_info");
+      const str = (dbg && gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) || gl.getParameter(gl.RENDERER) || "";
+      return /SwiftShader|llvmpipe|softpipe|Software|Basic Render Driver/i.test(String(str));
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ---------- init ----------
   async function init(canvas) {
     if (canvas) host = canvas;
@@ -229,8 +241,9 @@ export const View3D = (() => {
         }
 
         renderer = createWebGLRenderer(host);
-        renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
-        renderer.shadowMap.enabled = true;
+        const softGL = detectSoftwareGL(renderer);
+        renderer.setPixelRatio(softGL ? 1 : Math.min(2, devicePixelRatio || 1));
+        renderer.shadowMap.enabled = !softGL;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 0.98;
@@ -238,12 +251,14 @@ export const View3D = (() => {
 
         scene = new THREE.Scene();
         scene.background = gradientBackdrop();
-        loadEnvironmentMap().then((envMap) => {
-          if (envMap && scene) {
-            scene.environment = envMap;
-            scene.environmentIntensity = 0.45;
-          }
-        });
+        if (!softGL) {
+          loadEnvironmentMap().then((envMap) => {
+            if (envMap && scene) {
+              scene.environment = envMap;
+              scene.environmentIntensity = 0.45;
+            }
+          });
+        }
 
         camera = new THREE.PerspectiveCamera(31, 1, 0.05, 100);
         camera.position.set(0.36, 0.98, 3.55);
@@ -318,7 +333,7 @@ export const View3D = (() => {
     const key = new THREE.DirectionalLight(0xfffaf2, 1.68);
     key.position.set(2.4, 4.2, 3.3);
     key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.mapSize.set(1024, 1024);
     key.shadow.camera.near = 1;
     key.shadow.camera.far = 12;
     key.shadow.camera.left = -1.6;
@@ -326,7 +341,7 @@ export const View3D = (() => {
     key.shadow.camera.top = 2.6;
     key.shadow.camera.bottom = -0.5;
     key.shadow.bias = -0.0003;
-    key.shadow.radius = 5;
+    key.shadow.radius = 3;
     scene.add(key);
 
     const fill = new THREE.DirectionalLight(0xdce6ff, 0.50);
@@ -2188,15 +2203,15 @@ export const View3D = (() => {
     const preserveCamera = hasFramedOnce && lastFramedCategory === category && !opts.resetCamera;
 
     const token = ++buildToken;
-    onLoading(true, { progress: 0 });
-    await nextFrame();
-    if (token !== buildToken) return;
     scene.background = gradientBackdrop();
 
     try {
       const url = avatarURLs[category];
       const isCustomUserUpload = url && !url.startsWith("avatars/") && !opts.forceMannequin;
       if (isCustomUserUpload) {
+        onLoading(true, { progress: 0 });
+        await nextFrame();
+        if (token !== buildToken) return;
         try {
           await loadGLB(category, m, (pct) => { if (token === buildToken) onLoading(true, { progress: pct }); }, incomingMetrics);
           if (tensionMapEnabled) applyTensionHeatmap();
@@ -2217,6 +2232,7 @@ export const View3D = (() => {
       }
       hasFramedOnce = true;
       lastFramedCategory = category;
+      if (renderer && scene && camera) renderer.render(scene, camera);
     } catch (e) {
       console.error("[View3D] avatar build failed:", e);
       if (token === buildToken) onAvatarIssue(category, e);
@@ -2712,9 +2728,19 @@ export const View3D = (() => {
   }
 
   // ---------- Natural Runway Gait & Animation Loop ----------
+  function scheduleNextFrame(delayMs = 0) {
+    if (delayMs > 0) {
+      setTimeout(() => { raf = requestAnimationFrame(loop); }, delayMs);
+    } else {
+      raf = requestAnimationFrame(loop);
+    }
+  }
+
   function loop() {
-    raf = requestAnimationFrame(loop);
-    if (!ready) return;
+    if (!ready || !host || host.clientWidth === 0 || host.clientHeight === 0) {
+      scheduleNextFrame(120);
+      return;
+    }
     t += 0.016;
     if (walking && limbs.leg1) {
       const isKid = curCategory === "girls" || curCategory === "boys";
@@ -2848,8 +2874,14 @@ export const View3D = (() => {
         skirtBackMesh.scale.z = skirtBackMesh.scale.z * 0.85 + 0.15;
       }
     }
+    const t0 = typeof performance !== "undefined" ? performance.now() : 0;
     controls.update();
     renderer.render(scene, camera);
+    const renderMs = typeof performance !== "undefined" ? performance.now() - t0 : 0;
+    if (renderMs > 30 && renderer.shadowMap.enabled) {
+      renderer.shadowMap.enabled = false;
+    }
+    scheduleNextFrame(renderMs > 22 ? Math.min(60, Math.round(renderMs)) : 0);
   }
 
   // ---------- misc ----------

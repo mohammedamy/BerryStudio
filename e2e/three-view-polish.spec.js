@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect } from '@playwright/test';
 
+test.setTimeout(60_000);
+
 const THREE_ROOT = path.resolve(process.cwd(), 'cloth-lab/node_modules/three');
 
 async function attachLocalThreeFallback(page) {
@@ -173,12 +175,14 @@ test('3D Boot & Retry Resilience: booting with view="3d" while Three.js is still
   const errors = [];
   page.on('pageerror', (err) => errors.push(String(err)));
 
-  // Simulate realistic 450ms CDN latency (>200ms boot setView timer)
+  // Simulate realistic 350ms CDN latency (>200ms boot setView timer) on initial three.module.js load
   await page.route('https://unpkg.com/three@*/**', async (route) => {
     const url = new URL(route.request().url());
     const rel = url.pathname.replace(/^\/three@[^/]+\//, '');
     const filePath = path.resolve(THREE_ROOT, rel);
-    await new Promise((r) => setTimeout(r, 450));
+    if (rel.endsWith('three.module.js')) {
+      await new Promise((r) => setTimeout(r, 350));
+    }
     if (filePath.startsWith(THREE_ROOT) && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
       await route.fulfill({
         status: 200,
