@@ -83,6 +83,10 @@ jobs:
       - name: Install root dev dependencies
         run: npm ci
 
+      - name: Install cloth-lab dependencies
+        run: npm ci
+        working-directory: cloth-lab
+
       - name: Root unit tests (node --test)
         run: npm test
 
@@ -101,10 +105,6 @@ jobs:
       # addressed — not done here, and deliberately not silently assumed.
       - name: Lint (root app)
         run: npm run lint
-
-      - name: Install cloth-lab dependencies
-        run: npm ci
-        working-directory: cloth-lab
 
       - name: cloth-lab unit tests (vitest)
         run: npm test
