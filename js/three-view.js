@@ -29,7 +29,8 @@ export const View3D = (() => {
   let renderer, scene, camera, controls, raf = null;
   let root, bodyGroup, garmentGroup, limbs = {};
   let activeMannequin = null;
-  let ready = false, spinning = true, walking = true, t = 0;
+  let ready = false, initPromise = null, initFailed = false;
+  let spinning = true, walking = true, t = 0;
   let reduceMotion = false;
   let host, curCategory = "women", curH = 1.7;
   let curMeasurements = null, lastDims = null, curPatternMetrics = null;
@@ -133,18 +134,22 @@ export const View3D = (() => {
   ];
 
   async function loadDepsFromTier(tier) {
-    const THREE_ = tier.base ? await import(/* @vite-ignore */ tier.base) : await import(/* @vite-ignore */ "three");
     const addonUrl = (path) => (tier.addons ? `${tier.addons}/${path}` : `three/addons/${path}`);
-    const { OrbitControls: OC } = await import(/* @vite-ignore */ addonUrl("controls/OrbitControls.js"));
-    const { clone: cloneSkeleton_ } = await import(/* @vite-ignore */ addonUrl("utils/SkeletonUtils.js"));
-    let GL = null, RGBE = null;
-    try { ({ GLTFLoader: GL } = await import(/* @vite-ignore */ addonUrl("loaders/GLTFLoader.js"))); } catch (_) { /* optional */ }
-    try { ({ RGBELoader: RGBE } = await import(/* @vite-ignore */ addonUrl("loaders/RGBELoader.js"))); } catch (_) { /* optional */ }
+    const [THREE_, { OrbitControls: OC }] = await Promise.all([
+      tier.base ? import(/* @vite-ignore */ tier.base) : import(/* @vite-ignore */ "three"),
+      import(/* @vite-ignore */ addonUrl("controls/OrbitControls.js")),
+    ]);
+    let cloneSkeleton_ = null, GL = null, RGBE = null;
+    await Promise.allSettled([
+      import(/* @vite-ignore */ addonUrl("utils/SkeletonUtils.js")).then((m) => { cloneSkeleton_ = m.clone; }),
+      import(/* @vite-ignore */ addonUrl("loaders/GLTFLoader.js")).then((m) => { GL = m.GLTFLoader; }),
+      import(/* @vite-ignore */ addonUrl("loaders/RGBELoader.js")).then((m) => { RGBE = m.RGBELoader; }),
+    ]);
     return { THREE_, OC, GL, RGBE, cloneSkeleton_ };
   }
 
   async function loadDeps() {
-    if (THREE) return true;
+    if (THREE && OrbitControls) return true;
     for (const tier of DEP_TIERS) {
       try {
         const { THREE_, OC, GL, RGBE, cloneSkeleton_ } = await loadDepsFromTier(tier);
@@ -183,53 +188,104 @@ export const View3D = (() => {
 
   const nextFrame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
+  function createWebGLRenderer(targetCanvas) {
+    try {
+      return new THREE.WebGLRenderer({
+        canvas: targetCanvas,
+        antialias: true,
+        alpha: true,
+        powerPreference: "high-performance",
+      });
+    } catch (_) {
+      try {
+        return new THREE.WebGLRenderer({ canvas: targetCanvas, antialias: false, alpha: true });
+      } catch (err2) {
+        // If the canvas element was previously bound to a non-WebGL context, replace with a clean clone
+        if (targetCanvas && targetCanvas.parentNode) {
+          const fresh = targetCanvas.cloneNode(false);
+          targetCanvas.parentNode.replaceChild(fresh, targetCanvas);
+          host = fresh;
+          return new THREE.WebGLRenderer({ canvas: fresh, antialias: true, alpha: true });
+        }
+        throw err2;
+      }
+    }
+  }
+
   // ---------- init ----------
   async function init(canvas) {
-    host = canvas;
-    const ok = await loadDeps();
-    if (!ok || !window.WebGLRenderingContext) { fallback(); return; }
+    if (canvas) host = canvas;
+    if (ready) return true;
+    if (initPromise) return initPromise;
 
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.98;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    initFailed = false;
+    initPromise = (async () => {
+      try {
+        const ok = await loadDeps();
+        if (!ok || !window.WebGLRenderingContext || !host) {
+          initFailed = true;
+          fallback();
+          return false;
+        }
 
-    scene = new THREE.Scene();
-    scene.background = gradientBackdrop();
-    loadEnvironmentMap().then((envMap) => {
-      if (envMap && scene) {
-        scene.environment = envMap;
-        scene.environmentIntensity = 0.45;
+        renderer = createWebGLRenderer(host);
+        renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 0.98;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+        scene = new THREE.Scene();
+        scene.background = gradientBackdrop();
+        loadEnvironmentMap().then((envMap) => {
+          if (envMap && scene) {
+            scene.environment = envMap;
+            scene.environmentIntensity = 0.45;
+          }
+        });
+
+        camera = new THREE.PerspectiveCamera(31, 1, 0.05, 100);
+        camera.position.set(0.36, 0.98, 3.55);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.minDistance = 0.75;
+        controls.maxDistance = 7;
+        controls.maxPolarAngle = Math.PI * 0.93;
+        controls.autoRotate = spinning && !reduceMotion;
+        controls.autoRotateSpeed = 1.35;
+        controls.target.set(0, 0.90, 0);
+
+        setupLights();
+        setupGround();
+
+        root = new THREE.Group();
+        scene.add(root);
+        noiseTex = makeNoise();
+        sharedTextures.add(noiseTex);
+
+        ready = true;
+        initFailed = false;
+        if (typeof document !== "undefined") {
+          const errEl = document.getElementById("v3dError");
+          if (errEl) errEl.classList.remove("show");
+        }
+        resize();
+        if (!raf) loop();
+        return true;
+      } catch (err) {
+        console.error("[View3D] init failed:", err);
+        initFailed = true;
+        fallback();
+        return false;
+      } finally {
+        initPromise = null;
       }
-    });
+    })();
 
-    camera = new THREE.PerspectiveCamera(31, 1, 0.05, 100);
-    camera.position.set(0.36, 0.98, 3.55);
-
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.minDistance = 0.75;
-    controls.maxDistance = 7;
-    controls.maxPolarAngle = Math.PI * 0.93;
-    controls.autoRotate = spinning && !reduceMotion;
-    controls.autoRotateSpeed = 1.35;
-    controls.target.set(0, 0.90, 0);
-
-    setupLights();
-    setupGround();
-
-    root = new THREE.Group();
-    scene.add(root);
-    noiseTex = makeNoise();
-    sharedTextures.add(noiseTex);
-
-    ready = true;
-    resize();
-    loop();
+    return initPromise;
   }
 
   // ---------- studio environment ----------
@@ -2070,7 +2126,16 @@ export const View3D = (() => {
   let hasFramedOnce = false;
   let lastFramedCategory = null;
   async function build(category, m, opts) {
-    if (!ready) return;
+    if (!ready) {
+      onLoading(true, { progress: 0 });
+      if (initPromise) await initPromise;
+      else if (host && !initFailed) await init(host);
+      if (!ready) {
+        onLoading(false);
+        return;
+      }
+      resize();
+    }
     curCategory = category;
     curMeasurements = m;
     opts = opts || {};
@@ -2789,23 +2854,22 @@ export const View3D = (() => {
 
   // ---------- misc ----------
   function resize() {
-    if (!ready) { fallback(); return; }
+    if (!ready) {
+      if (initFailed) fallback();
+      return;
+    }
+    if (!host || !renderer || !camera) return;
     const r = host.getBoundingClientRect();
-    renderer.setSize(r.width, r.height, false);
-    camera.aspect = (r.width || 1) / (r.height || 1);
+    const w = r.width || host.clientWidth || 0;
+    const h = r.height || host.clientHeight || 0;
+    if (w <= 0 || h <= 0) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
 
   function fallback() {
     onFatalError();
-    const c = host.getContext && host.getContext("2d");
-    if (!c) return;
-    host.width = host.clientWidth;
-    host.height = host.clientHeight;
-    c.fillStyle = "#8b93a7";
-    c.font = "600 14px Inter, sans-serif";
-    c.textAlign = "center";
-    c.fillText("3D preview needs WebGL and a first-load connection.", host.width / 2, host.height / 2);
   }
 
   function setAvatarURL(category, url) {
@@ -2815,6 +2879,7 @@ export const View3D = (() => {
 
   async function retryInit() {
     if (ready) return true;
+    initFailed = false;
     await init(host);
     return ready;
   }

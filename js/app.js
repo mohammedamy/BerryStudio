@@ -5944,7 +5944,6 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     Canvas.init($("#patternCanvas"), T, (p)=>{ if(p)showPieceInfo(p); });
     Canvas.setOpt("unitsCm",state.unitsCm);
     Canvas.onZoomChange(()=>{ $("#zval").textContent=Canvas.getZoom()+"%"; });
-    View3D.init($("#canvas3d"));
     View3D.setLoadingCallback((v,detail)=>{
       const o=$("#v3dLoading"); if(!o) return;
       o.classList.toggle("show", v);
@@ -5953,6 +5952,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     });
     View3D.setAvatarIssueCallback((cat,err)=>{ console.warn("[3D avatar]",cat,err); toast(T("v3dAvatarFailed")); });
     View3D.setFatalErrorCallback(()=>{ const o=$("#v3dError"); if(o) o.classList.add("show"); });
+    View3D.init($("#canvas3d"));
     $("#v3dRetryBtn").onclick=async()=>{
       const o=$("#v3dError"); if(o) o.classList.remove("show");
       const ok=await View3D.retryInit();

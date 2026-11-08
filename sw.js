@@ -1,5 +1,5 @@
 /* BerryStudio — service worker (offline-capable, update-friendly) */
-const CACHE = "berrystudio-v68";
+const CACHE = "berrystudio-v69";
 const ASSETS = [
   "./", "./index.html",
   "./css/styles.css",
@@ -59,11 +59,11 @@ self.addEventListener("fetch", (e) => {
     // Cache-first for third-party assets (fonts, three.js) — safe to keep.
     e.respondWith(
       caches.match(req).then((cached) => cached || fetch(req).then((res) => {
-        if (res && res.ok && /unpkg|fonts\.(googleapis|gstatic)/.test(req.url)) {
+        if (res && res.ok && /unpkg|esm\.sh|fonts\.(googleapis|gstatic)/.test(req.url)) {
           const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy));
         }
         return res;
-      }).catch(() => cached))
+      }).catch(() => cached || Response.error()))
     );
   }
 });

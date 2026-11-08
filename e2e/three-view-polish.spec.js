@@ -168,3 +168,47 @@ test('3D Category & Split View Sync: header categories update mannequin and Spli
 
   expect(errors).toEqual([]);
 });
+
+test('3D Boot & Retry Resilience: booting with view="3d" while Three.js is still loading never triggers false fatal error or poisons #canvas3d', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+
+  // Simulate realistic 450ms CDN latency (>200ms boot setView timer)
+  await page.route('https://unpkg.com/three@*/**', async (route) => {
+    const url = new URL(route.request().url());
+    const rel = url.pathname.replace(/^\/three@[^/]+\//, '');
+    const filePath = path.resolve(THREE_ROOT, rel);
+    await new Promise((r) => setTimeout(r, 450));
+    if (filePath.startsWith(THREE_ROOT) && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/javascript; charset=utf-8',
+        body: fs.readFileSync(filePath),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.addInitScript(() => {
+    localStorage.setItem('pps', JSON.stringify({ onboarded: true, view: '3d' }));
+  });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/index.html');
+
+  // Wait for 3D view to become ready after the delayed CDN load
+  await expect.poll(() => page.evaluate(() => window.View3D?.isReady?.() ?? false), { timeout: 15000 }).toBe(true);
+
+  // Fatal error overlay must NOT be shown, and #canvas3d must have a valid WebGL context and non-zero raster size
+  await expect(page.locator('#v3dError')).not.toHaveClass(/show/);
+  const canvasState = await page.evaluate(() => {
+    const c = document.getElementById('canvas3d');
+    return { w: c.width, h: c.height, ready: window.View3D.isReady() };
+  });
+  expect(canvasState.ready).toBe(true);
+  expect(canvasState.w).toBeGreaterThan(0);
+  expect(canvasState.h).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
