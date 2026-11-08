@@ -135,16 +135,22 @@ export const View3D = (() => {
 
   async function loadDepsFromTier(tier) {
     const addonUrl = (path) => (tier.addons ? `${tier.addons}/${path}` : `three/addons/${path}`);
-    const [THREE_, { OrbitControls: OC }] = await Promise.all([
-      tier.base ? import(/* @vite-ignore */ tier.base) : import(/* @vite-ignore */ "three"),
-      import(/* @vite-ignore */ addonUrl("controls/OrbitControls.js")),
-    ]);
+    const [THREE_, { OrbitControls: OC }] = await withTimeout(
+      Promise.all([
+        tier.base ? import(/* @vite-ignore */ tier.base) : import(/* @vite-ignore */ "three"),
+        import(/* @vite-ignore */ addonUrl("controls/OrbitControls.js")),
+      ]),
+      8000
+    );
     let cloneSkeleton_ = null, GL = null, RGBE = null;
-    await Promise.allSettled([
-      import(/* @vite-ignore */ addonUrl("utils/SkeletonUtils.js")).then((m) => { cloneSkeleton_ = m.clone; }),
-      import(/* @vite-ignore */ addonUrl("loaders/GLTFLoader.js")).then((m) => { GL = m.GLTFLoader; }),
-      import(/* @vite-ignore */ addonUrl("loaders/RGBELoader.js")).then((m) => { RGBE = m.RGBELoader; }),
-    ]);
+    await withTimeout(
+      Promise.allSettled([
+        import(/* @vite-ignore */ addonUrl("utils/SkeletonUtils.js")).then((m) => { cloneSkeleton_ = m.clone; }),
+        import(/* @vite-ignore */ addonUrl("loaders/GLTFLoader.js")).then((m) => { GL = m.GLTFLoader; }),
+        import(/* @vite-ignore */ addonUrl("loaders/RGBELoader.js")).then((m) => { RGBE = m.RGBELoader; }),
+      ]),
+      6000
+    ).catch(() => {});
     return { THREE_, OC, GL, RGBE, cloneSkeleton_ };
   }
 

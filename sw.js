@@ -1,5 +1,5 @@
 /* BerryStudio — service worker (offline-capable, update-friendly) */
-const CACHE = "berrystudio-v69";
+const CACHE = "berrystudio-v70";
 const ASSETS = [
   "./", "./index.html",
   "./css/styles.css",
@@ -25,7 +25,17 @@ const ASSETS = [
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+  e.waitUntil(
+    caches.open(CACHE).then((c) =>
+      Promise.all(
+        ASSETS.map((url) =>
+          fetch(url, { cache: "reload" })
+            .then((res) => (res && res.ok ? c.put(url, res) : null))
+            .catch(() => null)
+        )
+      )
+    )
+  );
 });
 
 self.addEventListener("activate", (e) => {
