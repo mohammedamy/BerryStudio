@@ -394,16 +394,14 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     return id;
   }
 
-  let ringStripParity = 0;
   function connectRings(lower, upper) {
     const n = lower.length;
     const half = n >> 1;
-    const flip = (ringStripParity++ & 1) === 1;
     for (let k = 0; k < n; k++) {
       const k1 = (k + 1) % n;
       const a0 = lower[k], a1 = lower[k1];
       const b0 = upper[k], b1 = upper[k1];
-      if ((k < half) !== flip) {
+      if (k < half) {
         indices.push(a0, a1, b1);
         indices.push(a0, b1, b0);
       } else {
@@ -440,8 +438,8 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
   const footW = footLen * (female ? 0.37 : 0.39);
   const ankleY = lm.ankleY;
   const kneeY = lm.kneeY;
-  const crotchMergeY = hipY - span * 0.116;
-  const legTopY = hipY - span * 0.104;
+  const crotchMergeY = hipY - span * 0.106;
+  const legTopY = hipY - span * 0.088;
 
   function legWeightsAtY(y, side) {
     const bHip = side > 0 ? BONE_IDX.legL : BONE_IDX.legR;
@@ -478,14 +476,14 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       true
     );
 
-    // Monotonic anatomical foot-to-ankle cross-sections (zero posterior ankle pinch!)
+    // Monotonic anatomical foot-to-ankle cross-sections (seamless talocrural transition)
     const footSpecs = [
       // [yPlantar, yDorsal, zFront, zBack, rxMed, rxLat, sw, clampSole]
       [0.000, 0.023, toeTipZ * 0.92,  toeTipZ * 0.72,  footW * 0.43, footW * 0.37, 0.22, true],
       [0.000, 0.034, toeTipZ * 0.74,  toeTipZ * 0.42,  footW * 0.51, footW * 0.47, 0.25, true],
       [0.000, 0.052, toeTipZ * 0.46, -footLen * 0.14,  footW * 0.45, footW * 0.41, 0.30, true],
-      [0.002, ankleY * 0.76, toeTipZ * 0.22, heelBackZ * 0.96, footW * 0.37, footW * 0.36, 0.38, true],
-      [ankleY * 0.48, ankleY * 0.94, thighR * 0.42, heelBackZ * 0.72, thighR * 0.35, thighR * 0.34, 0.48, false],
+      [0.002, ankleY * 0.78, toeTipZ * 0.20, heelBackZ * 0.94, footW * 0.37, footW * 0.36, 0.42, true],
+      [ankleY * 0.56, ankleY * 0.96, thighR * 0.39, -thighR * 0.44, thighR * 0.36, thighR * 0.35, 0.58, false],
     ];
 
     let prevRing = null;
@@ -527,13 +525,11 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       prevRing = ring;
     }
 
-    // Vertical anatomical leg sections with 3 knee loops for smooth stride bending
+    // Vertical anatomical leg sections with 3 knee loops and diagonal inguinal hip blend
     const legSpan = legTopY - ankleY;
     const kneeFrac = clamp((kneeY - ankleY) / legSpan, 0.44, 0.56);
 
     const pelvicOuterAtMerge = hipR * (female ? 0.99 : 0.96);
-    const outerReachAtTop = Math.max(thighR * 0.88, pelvicOuterAtMerge - Math.abs(legX));
-    const innerReachAtTop = Math.max(thighR * 0.72, Math.abs(legX) - 0.0025);
 
     const legFracs = [
       0.00,             // malleoli ankle
@@ -546,8 +542,9 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       kneeFrac + 0.04,  // suprapatellar knee loop
       kneeFrac + 0.13,  // vastus medialis teardrop
       kneeFrac + 0.26,  // mid quadriceps
-      0.86,             // upper quadriceps / hamstrings
-      0.94,             // sub-gluteal fold / adductor top
+      0.80,             // upper quadriceps / hamstrings
+      0.88,             // sub-gluteal / upper adductor transition
+      0.945,            // inguinal ramp blend
       1.00,             // groin cobordism merge ring
     ];
 
@@ -559,25 +556,29 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       let baseR;
       if (f <= 0.08) {
         const u = f / 0.08;
-        baseR = thighR * (0.375 * (1 - u) + 0.352 * u);
+        baseR = thighR * (0.378 * (1 - u) + 0.354 * u);
       } else if (f <= 0.33) {
         const u = smoothstep(0.08, 0.33, f);
         const calfPeak = female ? 0.66 : (kid ? 0.63 : 0.69);
-        baseR = thighR * (0.352 * (1 - u) + calfPeak * u);
+        baseR = thighR * (0.354 * (1 - u) + calfPeak * u);
       } else if (f <= kneeFrac) {
         const u = smoothstep(0.33, kneeFrac, f);
         const calfPeak = female ? 0.66 : (kid ? 0.63 : 0.69);
         baseR = thighR * (calfPeak * (1 - u) + 0.59 * u);
       } else {
         const u = smoothstep(kneeFrac, 1.0, f);
-        baseR = thighR * (0.59 * (1 - u) + 0.96 * u);
+        baseR = thighR * (0.59 * (1 - u) + 0.95 * u);
       }
 
-      const stanceOffset = side * (1 - f) * (-hipR * 0.022);
-      const cx = legX + stanceOffset;
-      const cz = -0.005 * Math.sin(Math.PI * clamp(f / kneeFrac, 0, 1));
+      const topInward = smoothstep(0.68, 1.0, f);
+      const stanceOffset = side * smoothstep(0.0, 0.26, f) * (1 - f) * (-hipR * 0.018);
+      const cx = legX * (1 - 0.18 * topInward) + stanceOffset;
+      const cz = -thighR * 0.024 * (1 - smoothstep(0.0, 0.14, f)) - 0.005 * Math.sin(Math.PI * clamp(f / kneeFrac, 0, 1));
 
-      const topBlend = smoothstep(0.75, 1.0, f);
+      const outerReachAtTop = Math.max(thighR * 0.88, pelvicOuterAtMerge - Math.abs(cx));
+      const innerReachAtTop = Math.max(thighR * 0.56, Math.abs(cx) - 0.0028);
+
+      const topBlend = smoothstep(0.66, 1.0, f);
       const calfWindow = bumpWindow(f, 0.33, 0.16);
       const ankleWindow = bumpWindow(f, 0.01, 0.045);
       const kneeWindow = bumpWindow(f, kneeFrac, 0.065);
@@ -614,21 +615,21 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
         }
 
         const targetRx = isMedial ? innerReachAtTop : outerReachAtTop;
-        const targetRz = hipR * zScale * (cosP >= 0 ? 0.91 : 1.02);
+        const targetRz = hipR * zScale * (cosP >= 0 ? 0.92 : 1.01);
         rx = rx * (1 - topBlend) + targetRx * topBlend;
         rz = rz * (1 - topBlend) + targetRz * topBlend;
 
         const x = cx + rx * sinP;
-        const topArchBlend = smoothstep(0.84, 1.0, f);
-        const medialArchY = isMedial
-          ? (-span * 0.008 * (1 - 0.65 * Math.max(0, cosP)) + span * 0.008 * Math.max(0, cosP)) * Math.pow(Math.abs(sinP), 1.3) * topArchBlend
-          : 0;
-        const yVert = y + medialArchY + malYShift;
-        const z = cz + rz * cosP + (i >= legFracs.length - 2
-          ? (female ? torsoZBump(yVert, phi, d) : maleTorsoZBump(yVert, phi, d)) * (i === legFracs.length - 1 ? 0.55 : 0.25) * bumpScale
+        const topArchBlend = smoothstep(0.76, 1.0, f);
+        const inguinalSlopeY = isMedial
+          ? (-span * 0.011 * (1 - 0.45 * Math.max(0, cosP))) * Math.pow(Math.abs(sinP), 1.2) * topArchBlend
+          : (span * 0.014 * Math.pow(Math.abs(sinP), 1.15)) * topArchBlend;
+        const yVert = y + inguinalSlopeY + malYShift;
+        const z = cz + rz * cosP + (i >= legFracs.length - 3
+          ? (female ? torsoZBump(yVert, phi, d) : maleTorsoZBump(yVert, phi, d)) * smoothstep(0.78, 1.0, f) * 0.58 * bumpScale
           : 0);
 
-        const sw = i <= 1 ? 0.52 : (i >= legFracs.length - 3 ? 0.92 : 0.24);
+        const sw = i <= 1 ? 0.60 : (i >= legFracs.length - 4 ? 0.94 : 0.24);
         ring.push(addVertex(x, yVert, z, sw, legWeightsAtY(yVert, side), false));
       }
 
@@ -680,10 +681,10 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
   // Denser pelvic & thoracic slices eliminate gluteal side-profile spikes and origami shoulder steps
   const torsoSlices = [
     // [y, rx, rzBase, sw]
-    [hipY - span * 0.076, hipR * 0.980, hipR * 0.93, 0.94],  // T0: pelvic base (cobordism target)
-    [hipY - span * 0.046, hipR * 1.005, hipR * 0.98, 0.56],  // lower gluteal round
-    [hipY - span * 0.015, hipR * 1.015, hipR * 0.99, 0.44],  // trochanter / gluteal fullness
-    [hipY + span * 0.030, hipR * 1.005, hipR * 0.98, 0.36],  // upper glute / sacrum
+    [hipY - span * 0.068, hipR * 0.985, hipR * 0.94, 0.96],  // T0: pelvic base (diagonal inguinal merge)
+    [hipY - span * 0.042, hipR * 1.005, hipR * 0.98, 0.78],  // lower gluteal round
+    [hipY - span * 0.014, hipR * 1.015, hipR * 0.99, 0.56],  // trochanter / gluteal fullness
+    [hipY + span * 0.030, hipR * 1.005, hipR * 0.98, 0.38],  // upper glute / sacrum
     [hipY + span * 0.085, hipR * 0.985, hipR * 0.96, 0.28],  // iliac crest
     [hipY + span * 0.19,  hipR * 0.91 + waistR * 0.09, hipR * 0.90 + waistR * 0.10, 0.24],
     [hipY + span * 0.32,  hipR * 0.42 + waistR * 0.58, hipR * 0.44 + waistR * 0.56, 0.22],
@@ -691,10 +692,16 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     [hipY + span * 0.55,  waistR * 0.60 + chestR * 0.42, waistR * 0.63 + chestR * 0.39, 0.22], // lower ribcage
     [hipY + span * 0.65,  chestR * (female ? 0.97 : 1.01), chestR * 0.96, 0.24], // underbust / lower pecs
     [hipY + span * 0.73,  chestR * (female ? 1.01 : 1.06), chestR * (female ? 1.00 : 1.02), 0.28], // bust / chest apex
-    [hipY + span * 0.81,  chestR * (female ? 1.00 : 1.07), chestR * 0.95, 0.42], // upper chest / lat V-taper
-    [hipY + span * 0.88,  upperRibRx, chestR * 0.90, 0.64], // deltopectoral & teres flare
-    [shoulderY - span * 0.048, axillaRibRx, chestR * 0.84, 0.84], // coaxial axillary dome & pectoral fold
+    [hipY + span * 0.81,  chestR * (female ? 1.00 : 1.07), chestR * 0.95, 0.44], // upper chest / lat V-taper
+    [hipY + span * 0.88,  upperRibRx, chestR * 0.90, 0.68], // deltopectoral & teres flare
+    [shoulderY - span * 0.046, axillaRibRx, chestR * 0.84, 0.88], // smooth axillary & deltopectoral dome
   ];
+
+  const medAxillaIndent = Math.min(
+    upperR * 0.60,
+    Math.max(upperR * 0.26, lm.shoulderPivotX - chestR * (female ? 0.90 : 0.94))
+  ) * radCap;
+  const shoulderSeamRx = lm.shoulderPivotX * radCap - medAxillaIndent * 0.36;
 
   function buildTorsoRing(y, rx, rzBase, sw, isTopAxilla = false, isPelvisBase = false) {
     const ring = [];
@@ -721,53 +728,50 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       }
 
       if (upperVBlend > 0.001) {
-        const pecLatTargetX = (lm.shoulderPivotX - upperR * 0.16) * radCap;
-        const foldBell = 1 - Math.pow(absSin, 3.2);
-        const vRx = rx * radCap + (pecLatTargetX - rx * radCap) * 0.62 * upperVBlend * foldBell;
+        const pecLatTargetX = shoulderSeamRx;
+        const foldBell = 1 - Math.pow(absSin, 3.0);
+        const vRx = rx * radCap + (pecLatTargetX - rx * radCap) * 0.52 * upperVBlend * foldBell;
         x = vRx * sinP;
       }
 
       let yLocal = y;
-      const axillaBlend = isTopAxilla ? 1.0 : smoothstep(hipY + span * 0.83, hipY + span * 0.91, y) * 0.48;
+      const axillaBlend = isTopAxilla ? 1.0 : smoothstep(hipY + span * 0.84, hipY + span * 0.92, y) * 0.42;
       if (axillaBlend > 0.001) {
-        // Exact C1-continuous coaxial axillary & pectoral contour:
-        // kSym=0..5 curves chest sternum -> anterior deltopectoral groove (sx, +upperR*1.02);
-        // kSym=5..19 traces the exact medial half-ellipse of the arm cylinder around sx;
-        // kSym=19..24 curves posterior latissimus groove (sx, -upperR*1.02) -> upper spine!
+        // Monotonic, pinch-free deltopectoral & axillary contour:
+        // kSym=0..5 sweeps sternum -> deltopectoral seamRx without lateral overshoot;
+        // kSym=5..19 forms a gentle axillary hollow; kSym=19..24 sweeps teres -> spine.
         const kSym = k <= 24 ? k : 48 - k;
         const sideSign = (k === 0 || k === 24) ? 0 : (k < 24 ? 1 : -1);
-        const pivotRx = lm.shoulderPivotX * radCap;
-        const zArm = upperR * 1.02 * radCap;
+        const zArm = upperR * 0.98 * radCap;
         let xAx, zAx, yAx;
         if (kSym <= 5) {
           const uChest = kSym / 5;
-          xAx = sideSign * pivotRx * Math.sin((Math.PI * 0.5) * uChest);
-          const blendZ = Math.pow(uChest, 1.45);
+          xAx = sideSign * shoulderSeamRx * Math.sin((Math.PI * 0.5) * uChest);
+          const blendZ = smoothstep(0.0, 1.0, uChest);
           zAx = z * (1 - blendZ) + zArm * blendZ;
-          yAx = y + span * 0.022 * (1 - 0.55 * uChest);
+          yAx = y + span * 0.020 * (1 - 0.65 * uChest);
         } else if (kSym >= 19) {
           const uBack = (24 - kSym) / 5;
-          xAx = sideSign * pivotRx * Math.sin((Math.PI * 0.5) * uBack);
-          const blendZ = Math.pow(uBack, 1.45);
+          xAx = sideSign * shoulderSeamRx * Math.sin((Math.PI * 0.5) * uBack);
+          const blendZ = smoothstep(0.0, 1.0, uBack);
           zAx = z * (1 - blendZ) - zArm * blendZ;
-          yAx = y + span * 0.022 * (1 - 0.55 * uBack);
+          yAx = y + span * 0.020 * (1 - 0.65 * uBack);
         } else {
           const thetaArm = (Math.PI * (kSym - 5)) / 14;
           const sinArm = Math.sin(thetaArm);
           const cosArm = Math.cos(thetaArm);
-          const medIndent = Math.min(upperR * 0.78, Math.max(upperR * 0.36, lm.shoulderPivotX - chestR * (female ? 0.88 : 0.92))) * radCap;
-          xAx = sideSign * (pivotRx - medIndent * sinArm);
+          xAx = sideSign * (shoulderSeamRx - medAxillaIndent * 0.54 * sinArm);
           zAx = zArm * cosArm;
-          yAx = y + span * 0.010 * (1 - sinArm) - span * 0.008 * sinArm;
+          yAx = y + span * 0.007 * (1 - sinArm) - span * 0.006 * sinArm;
         }
         x = x * (1 - axillaBlend) + xAx * axillaBlend;
         z = z * (1 - axillaBlend) + zAx * axillaBlend;
         yLocal = y * (1 - axillaBlend) + yAx * axillaBlend;
       } else if (isPelvisBase) {
-        // Smooth pubic symphysis / inguinal curve into inner thighs (zero dark underside shelf)
-        const frontCenter = Math.max(0, cosP) * Math.pow(1 - absSin, 1.4);
-        z *= 1 - 0.14 * frontCenter;
-        yLocal = y - span * 0.006 * frontCenter;
+        // Diagonal human inguinal ramp: dips softly at pubic/perineal midline, rises over outer trochanter
+        const frontCenter = Math.max(0, cosP) * Math.pow(1 - absSin, 1.35);
+        z *= 1 - 0.11 * frontCenter;
+        yLocal = y - span * 0.011 * Math.pow(1 - absSin, 1.3) + span * 0.012 * Math.pow(absSin, 1.2);
       }
 
       ring.push(addVertex(x, yLocal, z, sw, torsoWeightsAtY(yLocal, x), false));
@@ -791,7 +795,7 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
   const p0Y = positions[p0Idx * 3 + 1];
   const pBackZ = positions[pBackIdx * 3 + 2];
   const pBackY = positions[pBackIdx * 3 + 1];
-  const crotchArchY = legTopY - span * 0.004;
+  const crotchArchY = legTopY - span * 0.006;
 
   const groinMid = [];
   for (let j = 1; j <= 23; j++) {
@@ -835,21 +839,20 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     const fy = positions[frontIdx * 3 + 1];
     const by = positions[backIdx * 3 + 1];
     const bArm = side > 0 ? BONE_IDX.armL : BONE_IDX.armR;
-    // Coaxial lateral half-ellipse around shoulderPivotX: strictly convex into lateral deltoid below!
-    const pivotRx = lm.shoulderPivotX * radCap;
-    const latRadius = upperR * 0.58 * radCap;
-    const zArm = upperR * 1.02 * radCap;
-    const acromionTargetY = shoulderY - span * 0.020;
+    // Rounded human acromion-to-deltoid cap curving seamlessly from shoulderSeamRx into lateral deltoid
+    const outerAcromionX = (lm.shoulderPivotX + upperR * 0.78) * radCap;
+    const zArm = upperR * 0.98 * radCap;
+    const acromionTargetY = shoulderY - span * 0.014;
     const saddle = [];
     for (let j = 1; j <= 13; j++) {
-      const u = j / 14; // 0 = front (sx, +zArm), 0.5 = lateral acromion (sx + latRadius, 0), 1 = back (sx, -zArm)
+      const u = j / 14; // 0 = front seam, 0.5 = lateral acromion dome, 1 = back seam
       const sinU = Math.sin(Math.PI * u);
       const cosU = Math.cos(Math.PI * u);
-      const x = side * (pivotRx + latRadius * sinU);
+      const x = side * (shoulderSeamRx + (outerAcromionX - shoulderSeamRx) * Math.pow(sinU, 0.82));
       const baseLineY = fy * (1 - u) + by * u;
       const y = baseLineY * (1 - sinU) + acromionTargetY * sinU;
       const z = zArm * cosU;
-      saddle.push(addVertex(x, y, z, 0.78, [[BONE_IDX.chest, 0.52], [bArm, 0.42], [BONE_IDX.neck, 0.06]], false));
+      saddle.push(addVertex(x, y, z, 0.86, [[BONE_IDX.chest, 0.52], [bArm, 0.42], [BONE_IDX.neck, 0.06]], false));
     }
     return saddle;
   }
@@ -912,9 +915,9 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     // Strictly convex lateral deltoid contour expanding smoothly from sloped acromion -> deltoid belly -> 3 elbow loops
     const armStops = [
       // [dyDown, rMedLat, rAntPost, xShiftOut, zShift, sw, tiltScale]
-      [0.018, upperR * 0.86, upperR * 1.02, side * upperR * 0.02, 0.002, 0.80, 0.36],          // proximal deltoid cap blend
-      [upperLen * 0.13, upperR * 0.96, upperR * 1.02, side * upperR * 0.03, 0.001, 0.56, 0.16], // lateral deltoid roundness
-      [upperLen * 0.26, upperR * 0.95, upperR * 0.99, side * upperR * 0.02, 0.001, 0.38, 0.08], // deltoid tuberosity
+      [0.016, upperR * 0.90, upperR * 1.00, side * upperR * 0.025, 0.001, 0.86, 0.30],         // proximal deltoid cap blend
+      [upperLen * 0.13, upperR * 0.96, upperR * 1.01, side * upperR * 0.03, 0.001, 0.62, 0.14], // lateral deltoid roundness
+      [upperLen * 0.26, upperR * 0.95, upperR * 0.99, side * upperR * 0.02, 0.001, 0.40, 0.07], // deltoid tuberosity
       [upperLen * 0.50, upperR * 0.90, upperR * 0.96, side * upperR * 0.015, 0.002, 0.24, 0.0], // bicep / tricep belly
       [upperLen * 0.78, upperR * 0.80, upperR * 0.82, side * upperR * 0.01, 0.001, 0.22, 0.0], // distal brachium
       [upperLen * 0.93, upperR * 0.74, upperR * 0.73, 0.0, -0.001, 0.25, 0.0],             // supracondylar elbow loop
@@ -1412,32 +1415,43 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
  * directly onto the `head` bone, sampling exact triangle coordinates from
  * `bodyGeo` so features never get buried by skin or cause Z-fighting.
  */
-function populateHeadFeatures(THREE, headBone, headH, category, customHairColor, bodyGeo = null, headCenterY = 0, lowPower = false) {
+function populateHeadFeatures(THREE, headBone, headH, category, customHairColor, bodyGeo = null, headCenterY = 0, lowPower = false, customSkinColor = null) {
   const female = category === "women" || category === "girls";
   const kid = category === "girls" || category === "boys";
   const headWidthScale = kid ? 0.82 : (female ? 0.78 : 0.81);
   const headDepthScale = 0.92;
 
-  const hairColor = customHairColor != null ? customHairColor : (HUMAN_HAIR_PALETTE[category] || 0x241913);
+  const baseSkin = new THREE.Color(customSkinColor != null ? customSkinColor : (HUMAN_SKIN_PALETTE[category] || 0xdca98e));
+  const skinLuma = 0.2126 * baseSkin.r + 0.7152 * baseSkin.g + 0.0722 * baseSkin.b;
+  const deepSkinBlend = clamp((0.42 - skinLuma) / 0.34, 0, 1);
 
+  const defaultHairHex = deepSkinBlend > 0.45 ? 0x1b120e : (HUMAN_HAIR_PALETTE[category] || 0x241913);
+  const hairColor = customHairColor != null ? customHairColor : defaultHairHex;
+
+  const scleraTint = new THREE.Color(0xf8f5f0).lerp(new THREE.Color(0xefe8e0), deepSkinBlend * 0.55);
   const eyeWhiteMat = lowPower
-    ? new THREE.MeshPhongMaterial({ color: 0xf8f5f0, shininess: 60, specular: 0x444444 })
-    : new THREE.MeshStandardMaterial({ color: 0xf8f5f0, roughness: 0.18 });
-  const irisColor = category === "women" ? 0x4e3524 : (category === "girls" ? 0x593c28 : (category === "boys" ? 0x3d2b1e : 0x312319));
+    ? new THREE.MeshPhongMaterial({ color: scleraTint, shininess: 56, specular: 0x444444 })
+    : new THREE.MeshStandardMaterial({ color: scleraTint, roughness: 0.20 });
+  const baseIrisHex = category === "women" ? 0x4e3524 : (category === "girls" ? 0x593c28 : (category === "boys" ? 0x3d2b1e : 0x312319));
+  const irisColor = new THREE.Color(baseIrisHex).lerp(new THREE.Color(0x261811), deepSkinBlend * 0.6);
   const irisMat = lowPower
     ? new THREE.MeshPhongMaterial({ color: irisColor, shininess: 70, specular: 0x555555 })
     : new THREE.MeshStandardMaterial({ color: irisColor, roughness: 0.14 });
   const pupilMat = new THREE.MeshBasicMaterial({ color: 0x08080a });
   const glintMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-  const lipColor = category === "women" ? 0xc06d6c : (category === "girls" ? 0xc87d7d : (category === "boys" ? 0xb67b6e : 0xae7266));
+  // Natural mucosal lip tone blended harmoniously with the active skin tone across Porcelain -> Ebony
+  const lightLipHex = category === "women" ? 0xbc6766 : (category === "girls" ? 0xc47777 : (category === "boys" ? 0xb3776a : 0xa86d62));
+  const deepLipHex = female ? 0x592b30 : 0x4b2728;
+  const targetLipPigment = new THREE.Color(lightLipHex).lerp(new THREE.Color(deepLipHex), deepSkinBlend);
+  const lipColor = baseSkin.clone().lerp(targetLipPigment, female ? 0.64 : 0.50);
   const lipMat = lowPower
     ? new THREE.MeshPhongMaterial({ color: lipColor, shininess: 32, specular: 0x332222, side: THREE.DoubleSide })
     : new THREE.MeshPhysicalMaterial({
         color: lipColor,
-        roughness: 0.44,
-        clearcoat: 0.12,
-        clearcoatRoughness: 0.48,
+        roughness: 0.43,
+        clearcoat: 0.14,
+        clearcoatRoughness: 0.46,
         sheen: 0.0,
         side: THREE.DoubleSide,
       });
@@ -1446,9 +1460,9 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
     ? new THREE.MeshPhongMaterial({ color: hairColor, shininess: 10 })
     : new THREE.MeshStandardMaterial({ color: hairColor, roughness: 0.78 });
   const lashMat = lowPower
-    ? new THREE.MeshPhongMaterial({ color: 0x1a1310, shininess: 16 })
-    : new THREE.MeshStandardMaterial({ color: 0x1a1310, roughness: 0.58 });
-  const lidColor = new THREE.Color(HUMAN_SKIN_PALETTE[category] || 0xdca98e).multiplyScalar(0.92);
+    ? new THREE.MeshPhongMaterial({ color: 0x16100d, shininess: 16 })
+    : new THREE.MeshStandardMaterial({ color: 0x16100d, roughness: 0.58 });
+  const lidColor = baseSkin.clone().multiplyScalar(0.86);
   const lidMat = lowPower
     ? new THREE.MeshPhongMaterial({ color: lidColor, shininess: 18 })
     : new THREE.MeshStandardMaterial({ color: lidColor, roughness: 0.54 });
@@ -1457,10 +1471,10 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
     ? new THREE.MeshPhongMaterial({ color: hairColor, shininess: 22, specular: 0x2b1e16, side: THREE.DoubleSide })
     : new THREE.MeshPhysicalMaterial({
         color: hairColor,
-        roughness: 0.68,
+        roughness: 0.66,
         metalness: 0.02,
-        sheen: 0.26,
-        sheenRoughness: 0.58,
+        sheen: 0.28,
+        sheenRoughness: 0.56,
         sheenColor: new THREE.Color(0x6b4b37),
         side: THREE.DoubleSide,
       });
@@ -1866,11 +1880,12 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
   } else {
     // Boys: neat side-parted youthful textured crop
     headBone.add(buildParametricHairShell({
-      frontYFrac: 0.242,
+      frontYFrac: 0.252,
+      templeSweep: 0.068,
       napeYFrac: -0.25,
-      crownLiftFrac: 0.046,
-      sideLoftFrac: 0.026,
-      backLoftFrac: 0.038,
+      crownLiftFrac: 0.044,
+      sideLoftFrac: 0.024,
+      backLoftFrac: 0.035,
       partPhi: -0.24,
       partDepth: 0.006,
     }));
@@ -2213,10 +2228,30 @@ export function buildHumanMannequin(THREE, category = "women", measurementsOrDim
   group.updateMatrixWorld(true);
   skinnedBody.bind(rig.skeleton);
 
-  populateHeadFeatures(THREE, rig.limbs.head, dims.headH, category, options.hairColor, bodyGeo, rig.landmarks.headCenterY, lowPower);
+  populateHeadFeatures(
+    THREE,
+    rig.limbs.head,
+    dims.headH,
+    category,
+    options.hairColor,
+    bodyGeo,
+    rig.landmarks.headCenterY,
+    lowPower,
+    options.skinColor
+  );
   applyMannequinPose(rig.limbs, options.pose || "standing", dims);
   group.updateMatrixWorld(true);
   rig.skeleton.update();
+
+  if (typeof options.onBindData === "function") {
+    options.onBindData({
+      bindGeometry: bodyGeo,
+      limbs: rig.limbs,
+      bones: rig.bones,
+      landmarks: rig.landmarks,
+      dims,
+    });
+  }
 
   if (options.bakeStatic) {
     const bakedGeo = bakeSkinnedMeshGeometry(THREE, skinnedBody, group);

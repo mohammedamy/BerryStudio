@@ -1,13 +1,91 @@
 import { describe, it, expect } from 'vitest'
+import * as THREE from 'three'
 import { computeBodyDims } from './computeBodyDims.js'
-import { deriveCollisionRig, deriveShoulderPinSegments, deriveShoulderPinMask, deriveWaistbandPinRing, deriveWaistbandPinMask, MAX_COLLISION_CAPSULES } from './collisionRig.js'
+import {
+  deriveCollisionRig,
+  deriveCollisionRigFromLimbs,
+  projectPointOutsideCapsules,
+  deriveShoulderPinSegments,
+  deriveShoulderPinMask,
+  deriveWaistbandPinRing,
+  deriveWaistbandPinMask,
+  MAX_COLLISION_CAPSULES,
+} from './collisionRig.js'
+import {
+  buildBodyEnvelopeTexture,
+  computeEnvelopeFramesFromLimbs,
+  projectPointOutsideBodyEnvelope,
+  ENV_SEGMENT_COUNT,
+} from './bodyEnvelope.js'
+import { buildHumanMannequin } from '../../../js/human-mannequin.js'
 
 const WOMEN_M = { chest: 88, waist: 70, hips: 96, shoulder: 39, backLen: 41, sleeve: 58, neck: 37, bicep: 28, inseam: 78, thigh: 56, height: 167 }
 
 describe('deriveCollisionRig', () => {
-  it('never exceeds MAX_COLLISION_CAPSULES', () => {
+  it('never exceeds MAX_COLLISION_CAPSULES across all poses', () => {
     const dims = computeBodyDims(WOMEN_M, 'women')
-    expect(deriveCollisionRig(dims).length).toBeLessThanOrEqual(MAX_COLLISION_CAPSULES)
+    for (const pose of ['standing', 'apose', 'tpose', 'contrapposto', 'seated', 'walk']) {
+      const rig = deriveCollisionRig(dims, pose)
+      expect(rig.length).toBeGreaterThanOrEqual(25)
+      expect(rig.length).toBeLessThanOrEqual(MAX_COLLISION_CAPSULES)
+    }
+  })
+
+  it('tracks posed arms and legs in apose, tpose, and seated', () => {
+    const dims = computeBodyDims(WOMEN_M, 'women')
+    const standing = deriveCollisionRig(dims, 'standing')
+    const tpose = deriveCollisionRig(dims, 'tpose')
+    const seated = deriveCollisionRig(dims, 'seated')
+    // Upper-arm capsule (#17, -X side) elbow endpoint swings high & wide in tpose
+    expect(tpose[17].b[1]).toBeGreaterThan(standing[17].b[1] + 0.15)
+    expect(Math.abs(tpose[17].b[0])).toBeGreaterThan(Math.abs(standing[17].b[0]) + 0.10)
+    // Left thigh capsule (#23) knee endpoint swings forward (+Z) and up (+Y) in seated
+    expect(seated[23].b[2]).toBeGreaterThan(standing[23].b[2] + 0.25)
+    expect(seated[23].b[1]).toBeGreaterThan(standing[23].b[1] + 0.20)
+  })
+})
+
+describe('buildBodyEnvelopeTexture & zero-penetration projection', () => {
+  it('rasterizes all 9 anatomical segments from humanBody and pushes interior points outside the mesh', () => {
+    const dims = computeBodyDims(WOMEN_M, 'women')
+    let env = null
+    let rig = null
+    let frames = null
+    const mannequin = buildHumanMannequin(THREE, 'women', dims, {
+      pose: 'standing',
+      bakeStatic: true,
+      collisionSafe: false,
+      onBindData: ({ bindGeometry, limbs, landmarks }) => {
+        env = buildBodyEnvelopeTexture(bindGeometry, dims, landmarks)
+        rig = deriveCollisionRigFromLimbs(dims, limbs)
+        frames = computeEnvelopeFramesFromLimbs(limbs, dims, landmarks)
+      },
+    })
+
+    expect(env).toBeTruthy()
+    expect(frames).toHaveLength(ENV_SEGMENT_COUNT)
+    expect(rig.length).toBeLessThanOrEqual(MAX_COLLISION_CAPSULES)
+
+    // Sample vertices across the baked humanBody mesh (chest, hip, thigh, knee, calf, upper arm)
+    // and verify that a point placed 10mm INSIDE each vertex along its inward radial vector is
+    // pushed back OUTSIDE the vertex's radial distance by projectPointOutsideCapsules + projectPointOutsideBodyEnvelope.
+    const pos = mannequin.bodyMesh.geometry.attributes.position
+    let tested = 0
+    for (let i = 0; i < pos.count; i += 13) {
+      const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i)
+      // Test torso/chest/waist/hip region (vy between hipY and shoulderY, within trunk X)
+      if (vy > dims.hipY + 0.03 && vy < dims.shoulderY - 0.03 && Math.abs(vx) < dims.shoulderHalf * 0.72) {
+        const rMesh = Math.hypot(vx, vz)
+        const scaleIn = Math.max(0.1, (rMesh - 0.012) / rMesh)
+        let p = [vx * scaleIn, vy, vz * scaleIn]
+        p = projectPointOutsideCapsules(p, rig)
+        p = projectPointOutsideBodyEnvelope(p, env, frames)
+        const rPushed = Math.hypot(p[0], p[2])
+        expect(rPushed).toBeGreaterThanOrEqual(rMesh - 1e-4)
+        tested++
+      }
+    }
+    expect(tested).toBeGreaterThan(20)
   })
 })
 

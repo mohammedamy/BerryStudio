@@ -56,7 +56,7 @@ function loadFabricTextures() {
 // about the steady-state render loop — grab-and-drag below does a ONE-TIME
 // readback per pointerdown, which is a rare, user-paced event, not a
 // per-frame cost).
-export default function ClothMesh({ paused = false, dims, fabricId = DEFAULT_FABRIC, qualityTier = QUALITY_TIER_DEFAULT, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef }) {
+export default function ClothMesh({ paused = false, dims, pose = 'standing', fabricId = DEFAULT_FABRIC, qualityTier = QUALITY_TIER_DEFAULT, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef, bodyColliderRef }) {
   const gl = useThree((s) => s.gl)
   const camera = useThree((s) => s.camera)
   // Keep the current texture bound across first compile and fabric-map recompiles.
@@ -64,11 +64,11 @@ export default function ClothMesh({ paused = false, dims, fabricId = DEFAULT_FAB
 
   const assembled = useMemo(() => {
     const triangulated = triangulateAll(pieces, seams, 2)
-    const cloth = assembleCloth(triangulated, dims, seams)
+    const cloth = assembleCloth(triangulated, dims, seams, pose)
     const neighbors = deriveNeighbors(cloth, 8)
     const normalRing = deriveNormalRing(cloth, neighbors, 4)
     return { cloth, neighbors, normalRing }
-  }, [dims, pieces, seams])
+  }, [dims, pieces, seams, pose])
 
   const geometry = useMemo(() => {
     const { cloth } = assembled
@@ -219,12 +219,15 @@ export default function ClothMesh({ paused = false, dims, fabricId = DEFAULT_FAB
     const fabric = FABRIC_PRESETS[fabricId] || FABRIC_PRESETS[DEFAULT_FABRIC]
     // WP-8.3: prefer a real, currently-loaded GLB's own mesh-fit collision
     // rig (written by BodyAvatar/GLBAvatar into meshFitRigRef — see
-    // Scene.jsx's header comment) over the formula-only one, when present.
-    const collisionRig = meshFitRigRef?.current || deriveCollisionRig(dims)
+    // Scene.jsx's header comment) over the procedural avatar's exact rig.
+    const procCollider = meshFitRigRef?.current ? null : bodyColliderRef?.current
+    const collisionRig = meshFitRigRef?.current || procCollider?.collisionRig || deriveCollisionRig(dims, pose)
+    const bodyEnvelope = procCollider?.bodyEnvelope || null
+    const envelopeFrames = procCollider?.envelopeFrames || null
     const shoulderMask = deriveShoulderPinMask(assembled.cloth.simRestPositions, assembled.cloth.simParticleCount, dims)
     const waistbandMask = deriveWaistbandPinMask(assembled.cloth.simRestPositions, assembled.cloth.simParticleCount, dims)
     const pinnedMask = shoulderMask.map((v, i) => (v || waistbandMask[i] ? 1 : 0))
-    const sim = new ClothSimulation(gl, assembled.cloth, assembled.neighbors, fabric, { collisionRig, pinnedMask, qualityTier })
+    const sim = new ClothSimulation(gl, assembled.cloth, assembled.neighbors, fabric, { collisionRig, bodyEnvelope, envelopeFrames, pinnedMask, qualityTier })
     sim.preRelax()
     simRef.current = sim
     positionUniform.current.value = sim.getPositionTexture()
@@ -237,7 +240,7 @@ export default function ClothMesh({ paused = false, dims, fabricId = DEFAULT_FAB
     // (see ClothSimulation's constructor) — unlike fabricId below, it can't
     // be live-swapped, so it's a dependency here (full sim rebuild) rather
     // than in the setFabric effect.
-  }, [gl, assembled, dims, qualityTier])
+  }, [gl, assembled, dims, pose, qualityTier, meshFitRigRef, bodyColliderRef])
 
   useEffect(() => {
     simRef.current?.setFabric(FABRIC_PRESETS[fabricId] || FABRIC_PRESETS[DEFAULT_FABRIC])
@@ -246,7 +249,13 @@ export default function ClothMesh({ paused = false, dims, fabricId = DEFAULT_FAB
   useFrame((_, delta) => {
     const sim = simRef.current
     if (!sim) return
-    if (!paused) sim.step(delta)
+    if (!paused) {
+      const liveCollider = meshFitRigRef?.current ? null : bodyColliderRef?.current
+      if (liveCollider && pose === 'walk') {
+        sim.updateBodyCollider(liveCollider.collisionRig, liveCollider.envelopeFrames, liveCollider.pinOffset)
+      }
+      sim.step(delta)
+    }
     positionUniform.current.value = sim.getPositionTexture()
     // WP-7.3: cheap plain-object write, no state/re-render — SolverHUD.jsx
     // polls this ref on its own throttled timer from outside the R3F loop.

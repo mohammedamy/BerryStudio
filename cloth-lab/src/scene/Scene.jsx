@@ -21,6 +21,7 @@ export default function Scene({ paused = false, dims, lang = 'en', debugView, fa
   // afterward — see BodyAvatar.jsx's header comment for the full flow.
   // Siblings, not parent/child, so this ref is the hand-off point.
   const meshFitRigRef = useRef(null)
+  const bodyColliderRef = useRef(null)
   // WP-9.5: the turntable exporters rotate THIS group, not the camera —
   // simpler than animating OrbitControls' azimuth and gives the same
   // visual result (subject spins in place) without fighting user-driven
@@ -29,10 +30,11 @@ export default function Scene({ paused = false, dims, lang = 'en', debugView, fa
 
   return (
     <>
-      <color attach="background" args={['#14151a']} />
-      <hemisphereLight args={['#8899bb', '#111114', 0.55]} />
-      <directionalLight position={[2, 4, 3]} intensity={1.6} castShadow shadow-mapSize={[1024, 1024]} />
-      <directionalLight position={[-3, 2, -2]} intensity={0.4} />
+      <color attach="background" args={['#1b1d24']} />
+      <hemisphereLight args={['#dce6f7', '#4a3b34', 0.68]} />
+      <directionalLight position={[2.2, 3.8, 3.2]} intensity={1.32} color="#fff8f0" castShadow shadow-mapSize={[1024, 1024]} />
+      <directionalLight position={[-2.8, 2.2, 1.8]} intensity={0.48} color="#d8e4ff" />
+      <directionalLight position={[0, 3.2, -3.0]} intensity={0.45} color="#ffeadd" />
       {/* Real CC0 studio-softbox HDRI (bundled locally, see public/env/README.md)
           for ambient reflection/sheen quality on fabric and skin — deliberately
           a local file rather than drei's preset= (which fetches from a
@@ -43,17 +45,17 @@ export default function Scene({ paused = false, dims, lang = 'en', debugView, fa
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[6, 6]} />
-        <meshStandardMaterial color="#20222b" roughness={1} />
+        <meshStandardMaterial color="#232630" roughness={0.94} />
       </mesh>
 
       <group ref={turntableGroupRef}>
         {debugView !== 'seams' && (
-          <BodyAvatar dims={dims} lang={lang} url={avatarGLBUrl} collisionRigRef={meshFitRigRef} skinColor={resolveSkinToneHex(skinToneId)} pose={poseId} onPoseWarning={onPoseWarning} />
+          <BodyAvatar dims={dims} lang={lang} url={avatarGLBUrl} collisionRigRef={meshFitRigRef} bodyColliderRef={bodyColliderRef} skinColor={resolveSkinToneHex(skinToneId)} pose={poseId} paused={paused} onPoseWarning={onPoseWarning} />
         )}
-        {debugView === 'pieces' && <StaticPiecesDebug dims={dims} pieces={garment?.pieces} seams={garment?.seams} />}
-        {debugView === 'weld' && <WeldDebugView dims={dims} pieces={garment?.pieces} seams={garment?.seams} />}
+        {debugView === 'pieces' && <StaticPiecesDebug dims={dims} pose={poseId} pieces={garment?.pieces} seams={garment?.seams} />}
+        {debugView === 'weld' && <WeldDebugView dims={dims} pose={poseId} pieces={garment?.pieces} seams={garment?.seams} />}
         {debugView === 'cloth' && (
-          <ClothMesh paused={paused} dims={dims} fabricId={fabricId} qualityTier={qualityTier} onDragStateChange={setDragging} pieces={garment?.pieces} seams={garment?.seams} statsRef={statsRef} meshFitRigRef={meshFitRigRef} />
+          <ClothMesh paused={paused} dims={dims} pose={poseId} fabricId={fabricId} qualityTier={qualityTier} onDragStateChange={setDragging} pieces={garment?.pieces} seams={garment?.seams} statsRef={statsRef} meshFitRigRef={meshFitRigRef} bodyColliderRef={bodyColliderRef} />
         )}
         {debugView === 'seams' && <SeamEditorScene editor={seamEditor} />}
       </group>

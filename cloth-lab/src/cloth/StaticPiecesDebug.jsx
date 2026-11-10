@@ -13,11 +13,11 @@ const ROLE_COLORS = { frontPanel: '#6d5efc', backPanel: '#00c2a8', sleeve: '#ff5
 // Build-order steps 3-4: render every piece in its initial placed position
 // with ZERO physics running, so placement/winding/triangulation bugs are
 // caught before motion is even involved.
-export default function StaticPiecesDebug({ dims, pieces: pieceDefs = TSHIRT_PIECES, seams = TSHIRT_SEAMS }) {
+export default function StaticPiecesDebug({ dims, pose = 'standing', pieces: pieceDefs = TSHIRT_PIECES, seams = TSHIRT_SEAMS }) {
   const pieces = useMemo(() => {
     const triangulated = triangulateAll(pieceDefs, seams, 2)
     return triangulated.map((tp) => {
-      const positions3D = placePiece(tp, dims)
+      const positions3D = placePiece(tp, dims, pose)
       const geometry = new THREE.BufferGeometry()
       const posArray = new Float32Array(positions3D.length * 3)
       positions3D.forEach(([x, y, z], i) => { posArray[i * 3] = x; posArray[i * 3 + 1] = y; posArray[i * 3 + 2] = z })
@@ -26,7 +26,7 @@ export default function StaticPiecesDebug({ dims, pieces: pieceDefs = TSHIRT_PIE
       geometry.computeVertexNormals()
       return { id: tp.pieceId, role: tp.role, color: tp.color, geometry }
     })
-  }, [dims, pieceDefs, seams])
+  }, [dims, pose, pieceDefs, seams])
 
   return (
     <group name="static-pieces-debug">

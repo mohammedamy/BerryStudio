@@ -49,7 +49,7 @@ class AvatarErrorBoundary extends Component {
 // whenever there's no url at all (plain procedural avatar, no GLB-specific
 // limitation possible) — GLBAvatar unmounting doesn't otherwise get a
 // chance to clear whatever it last reported.
-export default function BodyAvatar({ dims, lang = 'en', url, collisionRigRef, skinColor, pose, onPoseWarning }) {
+export default function BodyAvatar({ dims, lang = 'en', url, collisionRigRef, bodyColliderRef, skinColor, pose, paused = false, onPoseWarning }) {
   // A previous GLB can leave a mesh-derived collision rig in the shared Scene
   // ref. Clear it during the URL-changing render so ClothMesh never collides
   // against a body that is no longer on screen while the next GLB is loading,
@@ -58,21 +58,22 @@ export default function BodyAvatar({ dims, lang = 'en', url, collisionRigRef, sk
   if (lastUrlRef.current !== url) {
     lastUrlRef.current = url
     if (collisionRigRef) collisionRigRef.current = null
+    if (url && bodyColliderRef) bodyColliderRef.current = null
   }
   useEffect(() => {
     if (!url && onPoseWarning) onPoseWarning(null)
   }, [url, onPoseWarning])
-  if (!url) return <Avatar dims={dims} skinColor={skinColor} pose={pose} />
+  if (!url) return <Avatar dims={dims} skinColor={skinColor} pose={pose} paused={paused} bodyColliderRef={bodyColliderRef} />
   return (
     <AvatarErrorBoundary
       // Error boundaries retain their failure state for their whole mount.
       // Keying by URL makes a valid later choice retry instead of keeping the
       // procedural fallback that a previous bad custom URL selected.
       key={url}
-      fallback={<Avatar dims={dims} skinColor={skinColor} pose={pose} />}
+      fallback={<Avatar dims={dims} skinColor={skinColor} pose={pose} paused={paused} bodyColliderRef={bodyColliderRef} />}
       onLoadError={() => onPoseWarning && onPoseWarning(t(lang, 'avatarLoadError'))}
     >
-      <Suspense fallback={<Avatar dims={dims} skinColor={skinColor} pose={pose} />}>
+      <Suspense fallback={<Avatar dims={dims} skinColor={skinColor} pose={pose} paused={paused} bodyColliderRef={bodyColliderRef} />}>
         <GLBAvatar dims={dims} lang={lang} url={url} collisionRigRef={collisionRigRef} pose={pose} onPoseWarning={onPoseWarning} />
       </Suspense>
     </AvatarErrorBoundary>

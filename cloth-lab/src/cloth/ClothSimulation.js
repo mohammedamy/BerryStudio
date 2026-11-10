@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { GPUComputationRenderer } from 'three/addons/misc/GPUComputationRenderer.js'
-import { MAX_COLLISION_CAPSULES } from '../body/collisionRig.js'
+import { MAX_COLLISION_CAPSULES, projectPointOutsideCapsules } from '../body/collisionRig.js'
+import { ENV_SEGMENT_COUNT, ENV_PHI_BINS, ENV_T_BINS, projectPointOutsideBodyEnvelope } from '../body/bodyEnvelope.js'
 import { FrameBudgetController } from '../perf/frameBudget.js'
 import { buildGrid, nextPow2, minLowerBoundIters, DEFAULT_SCAN_CAP } from './spatialHash.js'
 import { GPUBitonicSort } from './bitonicSortGPU.js'
@@ -229,19 +230,95 @@ vec3 collideCapsule(vec3 p, vec3 prevP, vec3 a, vec3 b, float r0, float r1, floa
   vec3 c = a + ab * t;
   float r = mix(r0, r1, t);
   vec3 offset = p - c;
-  vec3 scaledOffset = vec3(offset.x, offset.y, offset.z / zScale);
+  float yWeight = (zScale < 0.99 && c.y <= uCapA[0].y + 1e-4 && offset.y < 0.0) ? 5.5 : 1.0;
+  vec3 scaledOffset = vec3(offset.x, offset.y * yWeight, offset.z / zScale);
   float dist = length(scaledOffset);
   if (dist < r) {
     float depth = r - dist;
-    vec3 pushed = c + offset * (r / max(dist, 1e-6));
-    vec3 n = normalize(offset);
+    vec3 pushOff = (zScale < 0.99 && c.y <= uCapA[0].y + 1e-4 && offset.y < 0.0) ? vec3(offset.x, 0.0, offset.z) : offset;
+    vec3 safeOff = dist > 1e-6 ? pushOff : vec3(0.0, 0.0, zScale);
+    float safeDist = dist > 1e-6 ? dist : 1.0;
+    vec3 pushed = c + safeOff * (r / safeDist);
+    vec3 n = normalize(safeOff);
     vec3 delta = pushed - prevP;
     vec3 tangentDelta = delta - n * dot(delta, n);
     float tangentLen = length(tangentDelta);
+    if (friction <= 0.0 || tangentLen <= 1e-7) return pushed;
     float staticBudget = friction * depth;
     if (tangentLen <= staticBudget) return pushed - tangentDelta;
     vec3 remainder = tangentDelta * (1.0 - staticBudget / tangentLen);
     return pushed - tangentDelta + remainder * friction;
+  }
+  return p;
+}
+
+vec3 collideBodyEnvelope(vec3 p, vec3 prevP, float friction) {
+  const float ENV_PHI_F = ${ENV_PHI_BINS}.0;
+  const float ENV_T_F = ${ENV_T_BINS}.0;
+  const float ENV_TEX_H = ${ENV_SEGMENT_COUNT * ENV_T_BINS}.0;
+
+  for (int s = 0; s < ${ENV_SEGMENT_COUNT}; s++) {
+    vec3 a = uEnvA[s];
+    vec3 ab = uEnvB[s] - a;
+    float len2 = max(dot(ab, ab), 1e-8);
+    float t = dot(p - a, ab) / len2;
+    if (t <= 0.015 || t >= 0.985) continue;
+
+    vec3 c = a + ab * t;
+    vec3 rel = p - c;
+    vec3 rightAxis = uEnvRight[s];
+    vec3 fwdAxis = uEnvFwd[s];
+    float lx = dot(rel, rightAxis);
+    float lz = dot(rel, fwdAxis);
+    float dist = length(vec2(lx, lz));
+
+    float phi = atan(lx, lz);
+    float uNorm = fract(phi / 6.28318530718 + 0.5);
+    float uScaled = uNorm * ENV_PHI_F;
+    float iu = min(ENV_PHI_F - 1.0, floor(uScaled));
+    float fu = uScaled - iu;
+
+    float vScaled = clamp(t, 0.0, 0.9999) * ENV_T_F;
+    float iv = min(ENV_T_F - 1.0, floor(vScaled));
+    float fv = vScaled - iv;
+
+    float texRow = float(s) * ENV_T_F + iv;
+    vec2 envUv = vec2((iu + 0.5) / ENV_PHI_F, (texRow + 0.5) / ENV_TEX_H);
+    vec4 corners = texture2D(uBodyEnvelope, envUv);
+    float rEnv = mix(mix(corners.r, corners.g, fu), mix(corners.b, corners.a, fu), fv);
+
+    if (dist < rEnv && rEnv > 0.0) {
+      float depth = rEnv - dist;
+      vec2 dir2 = dist > 1e-5 ? vec2(lx, lz) / dist : vec2(0.0, 1.0);
+      vec2 dl = dir2 * rEnv - vec2(lx, lz);
+      vec3 pushed = p + rightAxis * dl.x + fwdAxis * dl.y;
+      vec3 n = normalize(rightAxis * dir2.x + fwdAxis * dir2.y);
+      vec3 delta = pushed - prevP;
+      vec3 tangentDelta = delta - n * dot(delta, n);
+      float tangentLen = length(tangentDelta);
+      if (friction <= 0.0 || tangentLen <= 1e-7) {
+        p = pushed;
+      } else {
+        float staticBudget = friction * depth;
+        if (tangentLen <= staticBudget) {
+          p = pushed - tangentDelta;
+        } else {
+          vec3 remainder = tangentDelta * (1.0 - staticBudget / tangentLen);
+          p = pushed - tangentDelta + remainder * friction;
+        }
+      }
+    }
+  }
+  return p;
+}
+
+vec3 collideAllBody(vec3 p, vec3 prevP, float friction) {
+  for (int i = 0; i < ${MAX_COLLISION_CAPSULES}; i++) {
+    if (i >= uCapsuleCount) break;
+    p = collideCapsule(p, prevP, uCapA[i], uCapB[i], uCapR0[i], uCapR1[i], uCapZScale[i], friction);
+  }
+  if (uEnvEnabled > 0.5) {
+    p = collideBodyEnvelope(p, prevP, friction);
   }
   return p;
 }
@@ -623,8 +700,15 @@ uniform sampler2D uStructRestA;
 uniform sampler2D uStructRestB;
 uniform sampler2D uBendNbrA;
 uniform sampler2D uBendNbrB;
-uniform sampler2D uBendRestA;
-uniform sampler2D uBendRestB;
+${highQuality ? '' : `uniform sampler2D uBendRestA;\nuniform sampler2D uBendRestB;`}
+uniform sampler2D uBodyEnvelope;
+uniform float uEnvEnabled;
+uniform vec3 uEnvA[${ENV_SEGMENT_COUNT}];
+uniform vec3 uEnvB[${ENV_SEGMENT_COUNT}];
+uniform vec3 uEnvRight[${ENV_SEGMENT_COUNT}];
+uniform vec3 uEnvFwd[${ENV_SEGMENT_COUNT}];
+uniform float uPinMotionActive;
+uniform vec3 uPinOffset;
 uniform float uDt;
 uniform float uVelocityScale;
 uniform float uGravityRamp;
@@ -655,6 +739,18 @@ ${CAPSULE_COLLISION_GLSL}
 ${highQuality ? selfCollisionSpatialHashGlsl(sortDim, maxIters, DEFAULT_SCAN_CAP) : selfCollisionGlsl(texDim)}
 ${highQuality ? DIHEDRAL_BEND_GLSL : ''}
 
+vec4 edgeMidpointBodyPush(vec3 predicted, float idx) {
+  if (idx < -0.5) return vec4(0.0);
+  vec2 nuv = ( vec2( mod(idx, resolution.x), floor(idx / resolution.x) ) + 0.5 ) / resolution;
+  vec3 npos = texture2D(texturePosition, nuv).xyz;
+  vec3 mid = 0.5 * (predicted + npos);
+  vec3 pushedMid = collideAllBody(mid, mid, 0.0);
+  vec3 diff = pushedMid - mid;
+  float dLen = length(diff);
+  if (dLen > 1e-5) return vec4(diff, dLen);
+  return vec4(0.0);
+}
+
 void main() {
   vec2 uv = gl_FragCoord.xy / resolution.xy;
   float myFlatIdx = floor(gl_FragCoord.y) * resolution.x + floor(gl_FragCoord.x);
@@ -666,7 +762,13 @@ void main() {
   vec3 pos = texture2D(texturePosition, uv).xyz;
 
   if (pinned > 0.5) {
-    gl_FragColor = vec4(pos, 0.0);
+    if (uPinMotionActive > 0.5) {
+      vec3 pinTarget = texture2D(uRestPosition, uv).xyz + uPinOffset;
+      pinTarget = collideAllBody(pinTarget, pos, uFriction);
+      gl_FragColor = vec4(pinTarget, 0.0);
+    } else {
+      gl_FragColor = vec4(pos, 0.0);
+    }
     return;
   }
 
@@ -675,7 +777,7 @@ void main() {
   // the step so a dragged particle never fights the solver — its NEIGHBORS
   // still see it move (via texturePosition) and react normally.
   if (myFlatIdx == uDragParticleIndex) {
-    gl_FragColor = vec4(uDragTargetPosition, 0.0);
+    gl_FragColor = vec4(collideAllBody(uDragTargetPosition, pos, uFriction), 0.0);
     return;
   }
 
@@ -716,21 +818,42 @@ void main() {
 
 ${highQuality ? DIHEDRAL_BEND_MAIN_GLSL : DEFAULT_BEND_MAIN_GLSL}
 
-  // Body collision — after relaxation, before finalizing (relaxation can
-  // pull a particle back into the body; doing this last guarantees the
-  // frame's final position is outside every capsule regardless).
-  for (int i = 0; i < ${MAX_COLLISION_CAPSULES}; i++) {
-    if (i >= uCapsuleCount) break;
-    predicted = collideCapsule(predicted, prevPos, uCapA[i], uCapB[i], uCapR0[i], uCapR1[i], uCapZScale[i], uFriction);
+  // First body collision pass (capsules + exact mesh envelope) so
+  // self-collision sees post-body-collision positions.
+  predicted = collideAllBody(predicted, prevPos, uFriction);
+
+  // Self-collision: \`pos\` (this substep's UNMODIFIED starting position,
+  // not \`predicted\`) is passed through too — see selfCollisionCorrection's
+  // own header for why the spatial-hash tier needs it.
+  vec3 selfCorr = selfCollisionCorrection(predicted, pos, texture2D(uRestPosition, uv).xyz, myFlatIdx);
+  if (dot(selfCorr, selfCorr) > 1e-12) {
+    predicted += selfCorr;
+    // Re-enforce body collision so an outer fold can never shove an inner
+    // cloth layer inside the mannequin body!
+    predicted = collideAllBody(predicted, prevPos, uFriction);
   }
 
-  // Self-collision last: a fold pushed apart here should not get shoved
-  // back into the body by an earlier pass re-running on it. \`pos\` (this
-  // substep's UNMODIFIED starting position, not \`predicted\`) is passed
-  // through too — see selfCollisionCorrection's own header for why the
-  // spatial-hash tier needs it.
-  vec3 selfCorr = selfCollisionCorrection(predicted, pos, texture2D(uRestPosition, uv).xyz, myFlatIdx);
-  predicted += selfCorr;
+  // Structural edge-midpoint collision: prevents stretched triangle edges
+  // from slicing across convex body curves (knees, shins, breasts, shoulders).
+  vec3 edgePushSum = vec3(0.0);
+  float edgePushMax = 0.0;
+  float edgePushCount = 0.0;
+  ${['sA.x', 'sA.y', 'sA.z', 'sA.w', 'sB.x', 'sB.y', 'sB.z', 'sB.w'].map((slot) => `{
+    vec4 ep = edgeMidpointBodyPush(predicted, ${slot});
+    if (ep.w > 0.0) {
+      edgePushSum += ep.xyz;
+      edgePushMax = max(edgePushMax, ep.w);
+      edgePushCount += 1.0;
+    }
+  }`).join('\n  ')}
+  if (edgePushCount > 0.5) {
+    vec3 avgPush = edgePushSum / edgePushCount;
+    float avgLen = length(avgPush);
+    if (avgLen > 1e-6) {
+      predicted += (avgPush / avgLen) * max(avgLen, edgePushMax);
+    }
+    predicted = collideAllBody(predicted, prevPos, uFriction);
+  }
 
   if (predicted.y < uFloorY) predicted.y = uFloorY;
 
@@ -772,6 +895,23 @@ function buildCollisionUniformValues(collisionRig) {
     capZScale[i] = p.zScale
   }
   return { capA, capB, capR0, capR1, capZScale, count }
+}
+
+function buildEnvelopeUniformValues(envelopeFrames) {
+  const envA = Array.from({ length: ENV_SEGMENT_COUNT }, () => new THREE.Vector3())
+  const envB = Array.from({ length: ENV_SEGMENT_COUNT }, () => new THREE.Vector3())
+  const envRight = Array.from({ length: ENV_SEGMENT_COUNT }, () => new THREE.Vector3(1, 0, 0))
+  const envFwd = Array.from({ length: ENV_SEGMENT_COUNT }, () => new THREE.Vector3(0, 0, 1))
+  if (envelopeFrames && envelopeFrames.length >= ENV_SEGMENT_COUNT) {
+    for (let s = 0; s < ENV_SEGMENT_COUNT; s++) {
+      const f = envelopeFrames[s]
+      envA[s].set(f.a[0], f.a[1], f.a[2])
+      envB[s].set(f.b[0], f.b[1], f.b[2])
+      envRight[s].set(f.right[0], f.right[1], f.right[2])
+      envFwd[s].set(f.fwd[0], f.fwd[1], f.fwd[2])
+    }
+  }
+  return { envA, envB, envRight, envFwd }
 }
 
 // 1.2cm push-apart radius, 3.5cm rest-space exclusion — comfortably above
@@ -895,7 +1035,7 @@ export function dihedralStiffFor(fabric) {
 export const DIHEDRAL_MAX_DELTA = 0.06
 
 export class ClothSimulation {
-  constructor(renderer, cloth, neighbors, fabric, { floorY = 0, collisionRig = [], selfCollision = DEFAULT_SELF_COLLISION, pinnedMask = null, qualityTier = QUALITY_TIER_DEFAULT } = {}) {
+  constructor(renderer, cloth, neighbors, fabric, { floorY = 0, collisionRig = [], bodyEnvelope = null, envelopeFrames = null, selfCollision = DEFAULT_SELF_COLLISION, pinnedMask = null, qualityTier = QUALITY_TIER_DEFAULT } = {}) {
     this.frameCount = 0
     this.simParticleCount = cloth.simParticleCount
     this.texDim = textureDimFor(cloth.simParticleCount)
@@ -912,10 +1052,25 @@ export class ClothSimulation {
 
     const posTex = gpuCompute.createTexture()
     const prevTex = gpuCompute.createTexture()
+    const restTex = gpuCompute.createTexture()
     for (let i = 0; i < cloth.simParticleCount; i++) {
-      const x = cloth.simRestPositions[i * 3], y = cloth.simRestPositions[i * 3 + 1], z = cloth.simRestPositions[i * 3 + 2]
+      let pt = [
+        cloth.simRestPositions[i * 3],
+        cloth.simRestPositions[i * 3 + 1],
+        cloth.simRestPositions[i * 3 + 2],
+      ]
+      if (collisionRig && collisionRig.length > 0) {
+        pt = projectPointOutsideCapsules(pt, collisionRig)
+      }
+      if (bodyEnvelope && envelopeFrames) {
+        pt = projectPointOutsideBodyEnvelope(pt, bodyEnvelope, envelopeFrames)
+      }
+      const [x, y, z] = pt
       posTex.image.data[i * 4] = x; posTex.image.data[i * 4 + 1] = y; posTex.image.data[i * 4 + 2] = z; posTex.image.data[i * 4 + 3] = 0
       prevTex.image.data[i * 4] = x; prevTex.image.data[i * 4 + 1] = y; prevTex.image.data[i * 4 + 2] = z; prevTex.image.data[i * 4 + 3] = 0
+      restTex.image.data[i * 4] = x
+      restTex.image.data[i * 4 + 1] = y
+      restTex.image.data[i * 4 + 2] = z
     }
 
     const posVar = gpuCompute.addVariable('texturePosition', positionFragmentShader(this.texDim, this.qualityTier === QUALITY_TIER_HIGH), posTex)
@@ -935,19 +1090,15 @@ export class ClothSimulation {
       areaTex.image.data[i * 4 + 1] = pinnedMask && pinnedMask[i] ? 1 : 0
     }
 
-    // Permanently static (never ping-pongs, unlike texturePosition) — the
-    // self-collision exclusion test compares against the UNDEFORMED rest
-    // pose, not whatever texturePosition has drifted to.
-    const restTex = gpuCompute.createTexture()
-    for (let i = 0; i < cloth.simParticleCount; i++) {
-      restTex.image.data[i * 4] = cloth.simRestPositions[i * 3]
-      restTex.image.data[i * 4 + 1] = cloth.simRestPositions[i * 3 + 1]
-      restTex.image.data[i * 4 + 2] = cloth.simRestPositions[i * 3 + 2]
-    }
-
     const structTex = packNeighborTextures(neighbors.structural, neighbors.maxNeighbors, this.texDim)
     const bendTex = packNeighborTextures(neighbors.bend, neighbors.maxNeighbors, this.texDim)
     const cap = buildCollisionUniformValues(collisionRig)
+    const env = buildEnvelopeUniformValues(envelopeFrames)
+    const envActive = Boolean(bodyEnvelope?.texture && envelopeFrames && envelopeFrames.length >= ENV_SEGMENT_COUNT)
+    if (!envActive) {
+      this._fallbackEnvelopeTex = new THREE.DataTexture(new Float32Array(4), 1, 1, THREE.RGBAFormat, THREE.FloatType)
+      this._fallbackEnvelopeTex.needsUpdate = true
+    }
 
     Object.assign(posVar.material.uniforms, {
       uAreaShare: { value: areaTex },
@@ -955,7 +1106,18 @@ export class ClothSimulation {
       uStructNbrA: { value: structTex.nbrA }, uStructNbrB: { value: structTex.nbrB },
       uStructRestA: { value: structTex.restA }, uStructRestB: { value: structTex.restB },
       uBendNbrA: { value: bendTex.nbrA }, uBendNbrB: { value: bendTex.nbrB },
-      uBendRestA: { value: bendTex.restA }, uBendRestB: { value: bendTex.restB },
+      ...(this.qualityTier === QUALITY_TIER_HIGH ? {} : {
+        uBendRestA: { value: bendTex.restA },
+        uBendRestB: { value: bendTex.restB },
+      }),
+      uBodyEnvelope: { value: envActive ? bodyEnvelope.texture : this._fallbackEnvelopeTex },
+      uEnvEnabled: { value: envActive ? 1 : 0 },
+      uEnvA: { value: env.envA },
+      uEnvB: { value: env.envB },
+      uEnvRight: { value: env.envRight },
+      uEnvFwd: { value: env.envFwd },
+      uPinMotionActive: { value: 0 },
+      uPinOffset: { value: new THREE.Vector3() },
       uDt: { value: (1 / 60) / SUBSTEPS_START },
       uVelocityScale: { value: 1 },
       uGravityRamp: { value: 0 },
@@ -1153,6 +1315,37 @@ export class ClothSimulation {
     this.lastCostMs = costMs
   }
 
+  updateBodyCollider(collisionRig, envelopeFrames = null, pinOffset = null) {
+    const u = this.posVar.material.uniforms
+    if (collisionRig && collisionRig.length > 0) {
+      const count = Math.min(collisionRig.length, MAX_COLLISION_CAPSULES)
+      u.uCapsuleCount.value = count
+      for (let i = 0; i < count; i++) {
+        const p = collisionRig[i]
+        u.uCapA.value[i].set(p.a[0], p.a[1], p.a[2])
+        u.uCapB.value[i].set(p.b[0], p.b[1], p.b[2])
+        u.uCapR0.value[i] = p.ra
+        u.uCapR1.value[i] = p.rb
+        u.uCapZScale.value[i] = p.zScale
+      }
+    }
+    if (envelopeFrames && envelopeFrames.length >= ENV_SEGMENT_COUNT) {
+      for (let s = 0; s < ENV_SEGMENT_COUNT; s++) {
+        const f = envelopeFrames[s]
+        u.uEnvA.value[s].set(f.a[0], f.a[1], f.a[2])
+        u.uEnvB.value[s].set(f.b[0], f.b[1], f.b[2])
+        u.uEnvRight.value[s].set(f.right[0], f.right[1], f.right[2])
+        u.uEnvFwd.value[s].set(f.fwd[0], f.fwd[1], f.fwd[2])
+      }
+    }
+    if (pinOffset) {
+      u.uPinMotionActive.value = 1
+      u.uPinOffset.value.set(pinOffset[0], pinOffset[1], pinOffset[2])
+    } else {
+      u.uPinMotionActive.value = 0
+    }
+  }
+
   // Read-only snapshot for SolverHUD.jsx — never mutates controller state.
   getStats() {
     return { substeps: this.substeps, emaMs: this.budget.emaMs, lastCostMs: this.lastCostMs ?? 0 }
@@ -1165,5 +1358,6 @@ export class ClothSimulation {
   dispose() {
     this.gpuCompute.dispose()
     this.spatialSort?.dispose()
+    this._fallbackEnvelopeTex?.dispose()
   }
 }

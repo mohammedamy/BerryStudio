@@ -1,138 +1,481 @@
+import * as THREE from 'three'
 import { torsoProfile } from './computeBodyDims.js'
 import { femaleTorsoExtraRadius, maleTorsoExtraRadius } from './torsoSculpt.js'
 
-// Tapered-capsule ("round cone": distance-to-segment + linearly-interpolated
-// radius) collision primitives — a pure function of computeBodyDims()'s
-// output, recomputed only when measurements/category change, never per-frame.
+// Full-body, pose-synchronized tapered-capsule collision rig (up to 32
+// primitives) matching the unified sculpted human mannequin (`Avatar.jsx` /
+// `js/human-mannequin.js`).
 //
-// Deliberately matches the VISIBLE Avatar.jsx mesh (same torsoProfile points,
-// same neck/head/shoulder/arm placements), not the cloth-placement heuristic
-// in pattern/placement.js — collision's job is "don't let cloth clip through
-// what the user sees," and placement is already its own independent, looser
-// approximation by design (see that file's own comment).
-//
-// `zScale` lets a primitive collide against an ELLIPTICAL cross-section
-// instead of a circular one — the torso mesh itself is squashed in Z
-// (Avatar.jsx: scale={[1,1,female?0.72:0.78]}) to read as flatter
-// front-to-back than side-to-side, and skipping that in collision would push
-// cloth out to a rounder silhouette than the avatar it's draped on.
-//
-// Arms are a SINGLE tapered segment (shoulder->wrist) rather than the visual
-// mesh's 3 stacked capsules — that stacking is itself a "multi-segment hack"
-// to fake a taper with a primitive that doesn't support one; collision can
-// just use the taper directly, which is both simpler and smoother.
-//
-// Hip-to-thigh continuation, one exception to the "match the visible mesh"
-// rule above: Avatar.jsx draws legs as two SEPARATE capsules (offset ±hipR*
-// 0.5, narrow, one per leg) because that's what looks right to the eye. But
-// a garment hem drapes around BOTH legs together as one merged outer
-// silhouette, same as placement.js's placeHipPanel/radiusBelowHip already
-// assumes for where a hip-panel piece (a skirt) gets placed — collide
-// against the two separate leg meshes instead and most of a hem ring's
-// circumference (front, back, the gap between the legs) has nothing nearby
-// to collide with at all. Checked empirically: doing it that way first left
-// 83-96% of the T-shirt's own particles uncollided even at its REST pose
-// (before any physics), with the hem averaging a 5.8cm gap — and that hem
-// already sits below the torso profile's lowest point regardless, which is
-// what surfaced this: it free-fell from frame 1 with nothing to catch it,
-// before any skirt-like garment existed to make the gap matter. So: one
-// centered taper continuing straight down from the torso profile's own
-// last point, all the way to thighR — not copying Avatar.jsx's leg meshes.
-export function deriveCollisionRig(dims) {
-  const { hipY, shoulderY, span, neckTopY, headH, neckR, shoulderHalf, chestR, upperR, armLen, hipR, legLen, thighR, female, kid } = dims
+// Invariants preserved for downstream consumers:
+// - Primitives `0 .. torsoProfile(dims).length - 2` (the first 8 segments)
+//   are ALWAYS the `torsoProfile` spine chain so `deriveMeshFitCollisionRig`
+//   can measure & replace torso radii on external GLB avatars unchanged.
+// - Subsequent primitives cover the neck, cranium, sloped clavicles/deltoids,
+//   anterior bust/pectoral lobes, posterior gluteal lobes, groin saddle,
+//   bilateral posed upper arms -> elbows -> forearms -> hands, and bilateral
+//   posed thighs -> knees -> gastrocnemius calves -> ankles -> feet across
+//   `standing`, `apose`, `tpose`, `contrapposto`, `seated`, and live `walk`.
+export const MAX_COLLISION_CAPSULES = 32
+
+// Outward cloth-thickness + triangle-chord sag clearance (6mm) so neither
+// cloth particles nor stretched triangle edges ever graze or clip skin.
+const SKIN_CLEARANCE = 0.006
+
+function clamp(v, lo, hi) {
+  return v < lo ? lo : v > hi ? hi : v
+}
+
+function rotZVec(x, y, z, theta) {
+  const c = Math.cos(theta), s = Math.sin(theta)
+  return [x * c - y * s, x * s + y * c, z]
+}
+
+function rotXVec(x, y, z, phi) {
+  const c = Math.cos(phi), s = Math.sin(phi)
+  return [x, y * c - z * s, y * s + z * c]
+}
+
+function add3(a, b) {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+function lerp3(a, b, t) {
+  return [
+    a[0] + (b[0] - a[0]) * t,
+    a[1] + (b[1] - a[1]) * t,
+    a[2] + (b[2] - a[2]) * t,
+  ]
+}
+
+/**
+ * Analytically computes exact posed joint coordinates matching `js/human-mannequin.js`
+ * (`createSkeletonRig` + `applyMannequinPose`) for any static pose (`standing`,
+ * `apose`, `tpose`, `contrapposto`, `seated`). Shared by both `deriveCollisionRig`
+ * and `pattern/placement.js` so sleeves, skirts, dresses, and trousers spawn
+ * coaxially around the posed limbs at frame 0.
+ *
+ * Convention: `side = +1` is `+X` (`arm1` / `leg1` / `_r`), `side = -1` is `-X` (`arm-1` / `leg-1` / `_l`).
+ */
+export function computeMannequinPoseJoints(dims, pose = 'standing') {
+  const { hipY, shoulderY, neckTopY, headH, span, shoulderHalf, hipR, armLen, upperR, H, female, kid } = dims
+  const p = pose || 'standing'
+
+  const waistY = hipY + span * 0.44
+  const chestBoneY = hipY + span * 0.68
+  const neckBaseY = shoulderY + span * 0.02
+  const headCenterY = neckTopY + headH * 0.50
+
+  const shoulderPivotY = shoulderY - span * 0.035
+  const shoulderPivotX = shoulderHalf * 0.82
+  const upperArmLen = armLen * 0.48
+  const forearmLen = armLen * 0.46
+  const wristR = upperR * (female ? 0.34 : 0.36)
+  const handLen = wristR * 4.8
+
+  const hipPivotY = hipY - span * 0.04
+  const hipPivotX = hipR * (female ? 0.45 : 0.47)
+  const ankleY = Math.max(0.054, H * 0.047)
+  const totalLegSpan = Math.max(0.25, hipPivotY - ankleY)
+  const thighLen = totalLegSpan * 0.53
+  const calfLen = totalLegSpan * 0.47
+  const footLen = clamp(H * (kid ? 0.148 : (female ? 0.142 : 0.150)), 0.17, 0.29)
+  const footW = footLen * (female ? 0.37 : 0.39)
+
+  let pelvisRotZ = 0, spineRotZ = 0, chestRotZ = 0, headRotZ = 0
+  const armCfg = {
+    1: { z: 0.095, elbowX: -0.11 },
+    [-1]: { z: -0.095, elbowX: -0.11 },
+  }
+  const legCfg = {
+    1: { x: 0, z: 0, kneeX: 0 },
+    [-1]: { x: 0, z: 0, kneeX: 0 },
+  }
+
+  if (p === 'apose') {
+    armCfg[1] = { z: 0.45, elbowX: -0.06 }
+    armCfg[-1] = { z: -0.45, elbowX: -0.06 }
+  } else if (p === 'tpose') {
+    const tz = Math.PI / 2 - 0.04
+    armCfg[1] = { z: tz, elbowX: 0 }
+    armCfg[-1] = { z: -tz, elbowX: 0 }
+  } else if (p === 'contrapposto') {
+    pelvisRotZ = -0.045
+    spineRotZ = 0.035
+    chestRotZ = 0.025
+    headRotZ = -0.015
+    armCfg[1] = { z: 0.14, elbowX: -0.16 }
+    armCfg[-1] = { z: -0.08, elbowX: -0.09 }
+    legCfg[1] = { x: -0.08, z: 0.06, kneeX: 0.16 }
+    legCfg[-1] = { x: 0, z: 0.03, kneeX: 0 }
+  } else if (p === 'seated') {
+    armCfg[1] = { z: 0.09, elbowX: -0.22 }
+    armCfg[-1] = { z: -0.09, elbowX: -0.22 }
+    legCfg[1] = { x: -Math.PI / 2, z: 0, kneeX: Math.PI / 2 }
+    legCfg[-1] = { x: -Math.PI / 2, z: 0, kneeX: Math.PI / 2 }
+  }
+
+  const pelvisPos = [0, hipY, 0]
+  const spineWorldZ = pelvisRotZ + spineRotZ
+  const chestWorldZ = spineWorldZ + chestRotZ
+  const headWorldZ = chestWorldZ + headRotZ
+
+  const spinePos = add3(pelvisPos, rotZVec(0, waistY - hipY, 0, pelvisRotZ))
+  const chestPos = add3(spinePos, rotZVec(0, chestBoneY - waistY, 0, spineWorldZ))
+  const neckPos = add3(chestPos, rotZVec(0, neckBaseY - chestBoneY, 0, chestWorldZ))
+  const headPos = add3(neckPos, rotZVec(0, headCenterY - neckBaseY, 0, chestWorldZ))
+  const crownPos = add3(headPos, rotZVec(0, headH * 0.48, 0, headWorldZ))
+
+  const arms = {}
+  for (const side of [-1, 1]) {
+    const shoulder = add3(chestPos, rotZVec(side * shoulderPivotX, shoulderPivotY - chestBoneY, 0, chestWorldZ))
+    const totalArmZ = chestWorldZ + armCfg[side].z
+    const upperVec = rotZVec(0, -upperArmLen, 0, totalArmZ)
+    const elbow = add3(shoulder, upperVec)
+    const foreLocal = rotXVec(0, -forearmLen, 0, armCfg[side].elbowX)
+    const foreVec = rotZVec(foreLocal[0], foreLocal[1], foreLocal[2], totalArmZ)
+    const wrist = add3(elbow, foreVec)
+    const handLocal = rotXVec(0, -handLen, 0, armCfg[side].elbowX)
+    const handVec = rotZVec(handLocal[0], handLocal[1], handLocal[2], totalArmZ)
+    const handTip = add3(wrist, handVec)
+    arms[side] = { shoulder, elbow, wrist, handTip, upperArmLen, forearmLen, wristR, handLen, totalArmZ, elbowX: armCfg[side].elbowX }
+  }
+
+  const legs = {}
+  for (const side of [-1, 1]) {
+    const hip = add3(pelvisPos, rotZVec(side * hipPivotX, hipPivotY - hipY, 0, pelvisRotZ))
+    const legZ = pelvisRotZ + legCfg[side].z
+    const legX = legCfg[side].x
+    // Bone Euler order XYZ: local vector rotated by X then Z (when Y=0)
+    const thighLocal = rotXVec(0, -thighLen, 0, legX)
+    const thighVec = rotZVec(thighLocal[0], thighLocal[1], thighLocal[2], legZ)
+    const knee = add3(hip, thighVec)
+
+    const calfPitch = legX + legCfg[side].kneeX
+    const calfLocal = rotXVec(0, -calfLen, 0, calfPitch)
+    const calfVec = rotZVec(calfLocal[0], calfLocal[1], calfLocal[2], legZ)
+    const ankle = add3(knee, calfVec)
+
+    const heelLocal = rotXVec(0, -ankleY * 0.52, -footLen * 0.28, calfPitch)
+    const toeLocal = rotXVec(0, -ankleY * 0.62, footLen * 0.62, calfPitch)
+    const heel = add3(ankle, rotZVec(heelLocal[0], heelLocal[1], heelLocal[2], legZ))
+    const toe = add3(ankle, rotZVec(toeLocal[0], toeLocal[1], toeLocal[2], legZ))
+    legs[side] = { hip, knee, ankle, heel, toe, thighLen, calfLen, footLen, footW, hipPivotX }
+  }
+
+  return {
+    pelvisPos,
+    spinePos,
+    chestPos,
+    neckPos,
+    headPos,
+    crownPos,
+    arms,
+    legs,
+    wristR,
+    footW,
+    hipPivotX,
+    shoulderPivotX,
+    shoulderPivotY,
+  }
+}
+
+const _v = new THREE.Vector3()
+function worldPos(bone, ox = 0, oy = 0, oz = 0) {
+  return _v.set(ox, oy, oz).applyMatrix4(bone.matrixWorld).toArray()
+}
+
+/**
+ * Extracts live world-space joint coordinates directly from a posed/animated
+ * `js/human-mannequin.js` `limbs` rig (used by `Avatar.jsx` for both static
+ * poses and real-time `walk` gait frames).
+ */
+export function extractPoseJointsFromLimbs(dims, limbs) {
+  if (!limbs || !limbs.pelvis) return computeMannequinPoseJoints(dims, 'standing')
+  const { headH, upperR, H, hipR, shoulderHalf, shoulderY, span, female, kid } = dims
+  const wristR = upperR * (female ? 0.34 : 0.36)
+  const handLen = wristR * 4.8
+  const ankleY = Math.max(0.054, H * 0.047)
+  const footLen = clamp(H * (kid ? 0.148 : (female ? 0.142 : 0.150)), 0.17, 0.29)
+  const footW = footLen * (female ? 0.37 : 0.39)
+
+  const pelvisPos = worldPos(limbs.pelvis)
+  const spinePos = worldPos(limbs.spine)
+  const chestPos = worldPos(limbs.chest)
+  const neckPos = worldPos(limbs.neck)
+  const headPos = worldPos(limbs.head)
+  const crownPos = worldPos(limbs.head, 0, headH * 0.48, 0)
+
+  const arms = {}
+  for (const side of [-1, 1]) {
+    const bArm = side > 0 ? limbs.arm1 : limbs['arm-1']
+    const bElb = side > 0 ? limbs.elbow1 : limbs['elbow-1']
+    const bHnd = side > 0 ? limbs.hand1 : limbs['hand-1']
+    arms[side] = {
+      shoulder: worldPos(bArm),
+      elbow: worldPos(bElb),
+      wrist: worldPos(bHnd),
+      handTip: worldPos(bHnd, 0, -handLen, 0),
+      wristR,
+    }
+  }
+
+  const legs = {}
+  for (const side of [-1, 1]) {
+    const bLeg = side > 0 ? limbs.leg1 : limbs['leg-1']
+    const bKne = side > 0 ? limbs.knee1 : limbs['knee-1']
+    const bFot = side > 0 ? limbs.foot1 : limbs['foot-1']
+    legs[side] = {
+      hip: worldPos(bLeg),
+      knee: worldPos(bKne),
+      ankle: worldPos(bFot),
+      heel: worldPos(bFot, 0, -ankleY * 0.52, -footLen * 0.28),
+      toe: worldPos(bFot, 0, -ankleY * 0.62, footLen * 0.62),
+      footW,
+    }
+  }
+
+  return {
+    pelvisPos,
+    spinePos,
+    chestPos,
+    neckPos,
+    headPos,
+    crownPos,
+    arms,
+    legs,
+    wristR,
+    footW,
+    hipPivotX: hipR * (female ? 0.45 : 0.47),
+    shoulderPivotX: shoulderHalf * 0.82,
+    shoulderPivotY: shoulderY - span * 0.035,
+  }
+}
+
+export function deriveCollisionRig(dims, pose = 'standing', precomputedJoints = null) {
+  const { hipY, shoulderY, span, headH, neckR, chestR, upperR, hipR, thighR, female, kid } = dims
   const zScale = female ? 0.72 : 0.78
   const primitives = []
 
-  // Avatar.jsx's adult torso mesh isn't a plain lathe any more (see
-  // torsoSculpt.js) — it sculpts a breast/chest + lower-back curve into
-  // the surface itself, which can locally protrude beyond torsoProfile()'s
-  // own radius. `extraRadiusAt` reproduces exactly enough headroom to keep
-  // this rig's own promise ("match the VISIBLE mesh", this file's own
-  // header above) true for that sculpted surface too — see
-  // femaleTorsoExtraRadius's own header for the derivation and
-  // torsoSculpt.test.js for the sampled proof that it never falls short.
-  // WP-70: adult male bodies get the analogous (smaller) margin from
-  // maleTorsoExtraRadius, same reasoning, verified the same sampled way.
+  const joints = precomputedJoints || computeMannequinPoseJoints(dims, pose)
+  const pelvDX = joints.pelvisPos[0]
+  const pelvDY = joints.pelvisPos[1] - hipY
+  const pelvDZ = joints.pelvisPos[2]
+  const chestDX = joints.chestPos[0]
+  const chestDZ = joints.chestPos[2]
+
   const extraRadiusAt = (y) => {
-    if (kid) return 0
-    return female ? femaleTorsoExtraRadius(y, dims, zScale) : maleTorsoExtraRadius(y, dims, zScale)
+    const sculpt = kid ? 0 : (female ? femaleTorsoExtraRadius(y, dims, zScale) : maleTorsoExtraRadius(y, dims, zScale))
+    // Account for male upper-chest latissimus V-taper (1.07x) and hip trochanter fullness (1.015x)
+    const latMargin = (!female && !kid && y > hipY + span * 0.62) ? chestR * 0.05 : 0
+    const hipMargin = (y < hipY + span * 0.08) ? hipR * 0.02 : 0
+    return sculpt + latMargin + hipMargin + SKIN_CLEARANCE
   }
 
+  // 0..7 (8 primitives): Torso spine chain (kept at indices 0..7 for deriveMeshFitCollisionRig)
   const profile = torsoProfile(dims)
   for (let i = 0; i < profile.length - 1; i++) {
     const [r0, y0] = profile[i]
     const [r1, y1] = profile[i + 1]
-    primitives.push({ a: [0, y0, 0], b: [0, y1, 0], ra: r0 + extraRadiusAt(y0), rb: r1 + extraRadiusAt(y1), zScale })
+    const f0 = clamp((y0 - hipY) / Math.max(span, 0.1), 0, 1)
+    const f1 = clamp((y1 - hipY) / Math.max(span, 0.1), 0, 1)
+    const x0 = pelvDX * (1 - f0) + chestDX * f0
+    const x1 = pelvDX * (1 - f1) + chestDX * f1
+    const z0 = pelvDZ * (1 - f0) + chestDZ * f0
+    const z1 = pelvDZ * (1 - f1) + chestDZ * f1
+    primitives.push({
+      a: [x0, y0 + pelvDY, z0],
+      b: [x1, y1 + pelvDY, z1],
+      ra: r0 + extraRadiusAt(y0),
+      rb: r1 + extraRadiusAt(y1),
+      zScale,
+    })
   }
 
-  const neckCenterY = (neckTopY + shoulderY) / 2
-  const neckHalfLen = (headH * 0.35) / 2
+  // 8: Neck
   primitives.push({
-    a: [0, neckCenterY - neckHalfLen, 0], b: [0, neckCenterY + neckHalfLen, 0],
-    ra: neckR, rb: neckR, zScale: 1,
+    a: [chestDX, shoulderY - span * 0.02 + pelvDY, chestDZ],
+    b: joints.headPos,
+    ra: neckR * 1.08 + SKIN_CLEARANCE,
+    rb: neckR * 1.02 + SKIN_CLEARANCE,
+    zScale: 1,
   })
 
-  const headCenter = [0, neckTopY + headH * 0.5, 0]
-  const headR = headH * 0.48
-  primitives.push({ a: headCenter, b: headCenter, ra: headR, rb: headR, zScale: 1 })
+  // 9: Head & Cranium
+  const jawPos = lerp3(joints.neckPos, joints.headPos, 0.55)
+  primitives.push({
+    a: [jawPos[0], jawPos[1], jawPos[2] + headH * 0.02],
+    b: joints.crownPos,
+    ra: headH * 0.39 + SKIN_CLEARANCE,
+    rb: headH * 0.44 + SKIN_CLEARANCE,
+    zScale: 1,
+  })
 
+  // 10, 11: Left & Right sloped clavicle-to-acromion shoulder bridges
   for (const side of [-1, 1]) {
-    const shoulderCenter = [side * shoulderHalf * 0.9, shoulderY - span * 0.04, 0]
-    primitives.push({ a: shoulderCenter, b: shoulderCenter, ra: chestR * 0.3, rb: chestR * 0.3, zScale: 1 })
-  }
-
-  for (const side of [-1, 1]) {
-    const pivot = [side * shoulderHalf * 0.95, shoulderY - span * 0.04, 0]
-    const theta = side * 0.08 // matches Avatar.jsx's arm group lean rotation
-    const wrist = [
-      pivot[0] + armLen * Math.sin(theta),
-      pivot[1] - armLen * Math.cos(theta),
-      pivot[2],
+    const innerClav = [
+      joints.neckPos[0] + side * neckR * 0.80,
+      shoulderY + span * 0.014 + pelvDY,
+      joints.neckPos[2],
     ]
-    primitives.push({ a: pivot, b: wrist, ra: upperR, rb: upperR * 0.55, zScale: 1 })
+    const sh = joints.arms[side].shoulder
+    const outerAcromion = [
+      sh[0] + side * upperR * 0.16,
+      sh[1] + upperR * 0.18,
+      sh[2],
+    ]
+    primitives.push({
+      a: innerClav,
+      b: outerAcromion,
+      ra: upperR * 0.96 + SKIN_CLEARANCE,
+      rb: upperR * 1.05 + SKIN_CLEARANCE,
+      zScale: 1,
+    })
   }
 
-  // Hip-to-thigh: centered on the body's own axis (X=0), continuing
-  // directly from the torso profile's own last point — not two offset
-  // per-leg cylinders, see the module comment above. Tapers on to thighR
-  // (torsoProfile's own bottom radius, hipR*0.55, is already close to a
-  // typical thighR, so this taper is gentle) then runs a flat cylinder
-  // further down, giving a flared hip-panel garment (a skirt) real depth
-  // to drape into rather than stopping right at the taper.
-  const [hipBottomR, hipBottomY] = profile[0]
-  const thighTopY = hipBottomY - legLen * 0.18
-  const thighBottomY = hipBottomY - legLen * 0.5
-  primitives.push({ a: [0, thighTopY, 0], b: [0, hipBottomY, 0], ra: thighR, rb: hipBottomR + extraRadiusAt(hipBottomY), zScale })
-  primitives.push({ a: [0, thighBottomY, 0], b: [0, thighTopY, 0], ra: thighR, rb: thighR, zScale })
+  // 12, 13: Bilateral anterior bust / pectoral sculpt lobes
+  const bustY = hipY + span * (female ? 0.715 : 0.74) + pelvDY
+  const bustX = chestR * (female ? 0.43 : 0.44)
+  const bustR = chestR * (female ? (kid ? 0.36 : 0.46) : (kid ? 0.34 : 0.40)) + SKIN_CLEARANCE
+  const bustZ = chestR * zScale * (female ? (kid ? 0.58 : 0.68) : 0.60) + chestDZ
+  for (const side of [-1, 1]) {
+    const c = [chestDX + side * bustX, bustY, bustZ]
+    primitives.push({ a: c, b: c, ra: bustR, rb: bustR, zScale: 1 })
+  }
+
+  // 14, 15: Bilateral posterior gluteal / trochanteric lobes + 16: Pelvic groin saddle
+  const gluteY = hipY - span * 0.035 + pelvDY
+  const gluteX = hipR * 0.42
+  const gluteR = hipR * (female ? 0.54 : 0.51) + SKIN_CLEARANCE
+  const gluteZ = -hipR * zScale * (female ? 0.48 : 0.44) + pelvDZ
+  for (const side of [-1, 1]) {
+    const g = [pelvDX + side * gluteX, gluteY, gluteZ]
+    primitives.push({ a: g, b: g, ra: gluteR, rb: gluteR, zScale: 1 })
+  }
+  const pelvicSaddleY = hipY - span * 0.035 + pelvDY
+  primitives.push({
+    a: [pelvDX - joints.hipPivotX * 0.85, pelvicSaddleY, pelvDZ],
+    b: [pelvDX + joints.hipPivotX * 0.85, pelvicSaddleY, pelvDZ],
+    ra: hipR * zScale * 0.86 + SKIN_CLEARANCE,
+    rb: hipR * zScale * 0.86 + SKIN_CLEARANCE,
+    zScale: 1,
+  })
+
+  // 17..22: Pose-exact Bilateral Upper Arms, Forearms & Hands
+  for (const side of [-1, 1]) {
+    const arm = joints.arms[side]
+    // Upper arm (shoulder -> elbow)
+    primitives.push({
+      a: arm.shoulder,
+      b: arm.elbow,
+      ra: upperR * 1.04 + SKIN_CLEARANCE,
+      rb: upperR * 0.78 + SKIN_CLEARANCE,
+      zScale: 1,
+    })
+    // Forearm (elbow -> wrist)
+    primitives.push({
+      a: arm.elbow,
+      b: arm.wrist,
+      ra: upperR * 0.80 + SKIN_CLEARANCE,
+      rb: arm.wristR * 1.22 + SKIN_CLEARANCE,
+      zScale: 1,
+    })
+    // Hand & fingers (wrist -> fingertips)
+    primitives.push({
+      a: arm.wrist,
+      b: arm.handTip,
+      ra: arm.wristR * 1.42 + SKIN_CLEARANCE,
+      rb: arm.wristR * 1.12 + SKIN_CLEARANCE,
+      zScale: 1,
+    })
+  }
+
+  // 23..30: Pose-exact Bilateral Thighs, Upper Calves, Lower Shins & Feet
+  const calfPeakScale = female ? 0.70 : (kid ? 0.67 : 0.73)
+  for (const side of [-1, 1]) {
+    const leg = joints.legs[side]
+    const calfBelly = lerp3(leg.knee, leg.ankle, 0.36)
+    // Thigh (hip -> knee)
+    primitives.push({
+      a: leg.hip,
+      b: leg.knee,
+      ra: thighR * 1.05 + SKIN_CLEARANCE,
+      rb: thighR * 0.66 + SKIN_CLEARANCE,
+      zScale: 1,
+    })
+    // Upper calf (knee -> gastrocnemius belly)
+    primitives.push({
+      a: leg.knee,
+      b: calfBelly,
+      ra: thighR * 0.70 + SKIN_CLEARANCE,
+      rb: thighR * (calfPeakScale + 0.05) + SKIN_CLEARANCE,
+      zScale: 1,
+    })
+    // Lower calf / shin (gastrocnemius belly -> ankle)
+    primitives.push({
+      a: calfBelly,
+      b: leg.ankle,
+      ra: thighR * (calfPeakScale + 0.05) + SKIN_CLEARANCE,
+      rb: thighR * 0.48 + SKIN_CLEARANCE,
+      zScale: 1,
+    })
+    // Foot (heel -> toe)
+    primitives.push({
+      a: leg.heel,
+      b: leg.toe,
+      ra: leg.footW * 0.46 + SKIN_CLEARANCE,
+      rb: leg.footW * 0.44 + SKIN_CLEARANCE,
+      zScale: 1,
+    })
+  }
 
   return primitives
 }
 
-export const MAX_COLLISION_CAPSULES = 16
+export function deriveCollisionRigFromLimbs(dims, limbs) {
+  return deriveCollisionRig(dims, 'walk', extractPoseJointsFromLimbs(dims, limbs))
+}
 
-// Shoulder-seam pin zone. Body collision only ever pushes fabric outward
-// and damps sliding via friction — it can never fully arrest a slide (see
-// ClothSimulation.js's collideCapsule comment), and right at the shoulder,
-// where a garment's weight most needs to be caught, the surface curves
-// steeply enough that gravity's pull is mostly ALONG it rather than into
-// it, which starves the friction model's static budget at exactly the
-// point it matters most. A real T-shirt doesn't stay up through friction —
-// the shoulder SEAM is a hard structural anchor, stitched fabric that
-// can't slide past that point without stretching. This derives the
-// equivalent: a short line segment per side, from near the neckline to the
-// shoulder/arm joint (the second endpoint matches deriveCollisionRig's own
-// arm-capsule pivot exactly, so the pin zone and the visible joint agree).
-// Any sim particle whose REST position lands within PIN_RADIUS of either
-// segment should be held fixed — see ClothSimulation.js's existing
-// (previously unused) `pinned` flag, and deriveShoulderPinMask below which
-// turns this into the per-particle mask that flag consumes.
-const SHOULDER_PIN_RADIUS = 0.05 // 5cm — wide enough to catch a small cluster, not just 1-2 isolated vertices (which pinned a sharp point rather than a soft anchored region)
+/**
+ * Projects a CPU 3D point `[x, y, z]` outside every primitive of `collisionRig`
+ * (used to guarantee initial rest & pinned particles never start inside the body).
+ */
+export function projectPointOutsideCapsules(p, collisionRig) {
+  let px = p[0], py = p[1], pz = p[2]
+  for (let i = 0; i < collisionRig.length; i++) {
+    const cap = collisionRig[i]
+    const abx = cap.b[0] - cap.a[0]
+    const aby = cap.b[1] - cap.a[1]
+    const abz = cap.b[2] - cap.a[2]
+    const abLen2 = Math.max(abx * abx + aby * aby + abz * abz, 1e-8)
+    const t = clamp(((px - cap.a[0]) * abx + (py - cap.a[1]) * aby + (pz - cap.a[2]) * abz) / abLen2, 0, 1)
+    const cx = cap.a[0] + abx * t
+    const cy = cap.a[1] + aby * t
+    const cz = cap.a[2] + abz * t
+    const ox = px - cx, oy = py - cy, oz = pz - cz
+    const yWeight = (i === 0 && oy < 0) ? 5.5 : 1.0
+    const dist = Math.hypot(ox, oy * yWeight, oz / cap.zScale)
+    const r = cap.ra + (cap.rb - cap.ra) * t
+    if (dist < r) {
+      if (dist > 1e-6) {
+        const scale = r / dist
+        px = cx + ox * scale
+        if (!(i === 0 && oy < 0)) py = cy + oy * scale
+        pz = cz + oz * scale
+      } else {
+        pz = cz + r * cap.zScale
+      }
+    }
+  }
+  return [px, py, pz]
+}
+
+const SHOULDER_PIN_RADIUS = 0.05
 
 export function deriveShoulderPinSegments(dims) {
   const { shoulderHalf, shoulderY, span } = dims
   return [-1, 1].map((side) => ([
     [side * shoulderHalf * 0.15, shoulderY + span * 0.02, 0],
-    [side * shoulderHalf * 0.95, shoulderY - span * 0.04, 0],
+    [side * shoulderHalf * 0.90, shoulderY - span * 0.035, 0],
   ]))
 }
 
@@ -146,12 +489,6 @@ function distToSegment(p, a, b) {
   return Math.hypot(p[0] - cx, p[1] - cy, p[2] - cz)
 }
 
-// `simRestPositions`/`simParticleCount` come straight off assembleCloth's
-// returned `cloth` object — purely geometric (rest position only), so this
-// works unchanged for the default T-shirt, any bridge-imported garment, or
-// a seam-authored one: a garment with no fabric near the shoulder (a
-// skirt, an off-shoulder top) simply gets an all-zero mask, same
-// friction-only behavior as before this fix.
 export function deriveShoulderPinMask(simRestPositions, simParticleCount, dims) {
   const segments = deriveShoulderPinSegments(dims)
   const mask = new Uint8Array(simParticleCount)
@@ -164,34 +501,21 @@ export function deriveShoulderPinMask(simRestPositions, simParticleCount, dims) 
   return mask
 }
 
-// WP-7.5 waistband pin zone — same rationale as the shoulder pin above
-// (friction alone can slow a slide but never fully arrest one; a fitted
-// waistband is a hard structural anchor, elastic sewn to a fixed
-// circumference, that a real garment can't slide down past), but the
-// anchor geometry is a horizontal RING around the body rather than a short
-// line segment per side, so this needs its own (cylindrical, not
-// segment-distance) test rather than reusing distToSegment. Anchored at
-// `hipY + span*0.44` — the same waist keypoint torsoProfile/placement.js's
-// placeHipPanel/placeGorePanel already use, so the pin ring lines up with
-// where a waistband/hip-panel piece actually gets placed.
-const WAISTBAND_HEIGHT_TOLERANCE = 0.045 // 4.5cm vertical band
-const WAISTBAND_RADIAL_TOLERANCE = 0.05 // 5cm outward from the body's own waist radius — catches a waistband/fitted-skirt-top's own particles without also grabbing loose torso fabric well clear of the surface
+const WAISTBAND_HEIGHT_TOLERANCE = 0.045
+const WAISTBAND_RADIAL_TOLERANCE = 0.055
 
 export function deriveWaistbandPinRing(dims) {
   const { hipY, span, waistR, female } = dims
   return { y: hipY + span * 0.44, r: waistR, zScale: female ? 0.72 : 0.78 }
 }
 
-// `simRestPositions`/`simParticleCount` come straight off assembleCloth's
-// returned `cloth` object, same as deriveShoulderPinMask — a garment with
-// no fabric near the waist (a top, a cape) simply gets an all-zero mask.
 export function deriveWaistbandPinMask(simRestPositions, simParticleCount, dims) {
   const { y: waistY, r: waistR, zScale } = deriveWaistbandPinRing(dims)
   const mask = new Uint8Array(simParticleCount)
   for (let i = 0; i < simParticleCount; i++) {
     const px = simRestPositions[i * 3], py = simRestPositions[i * 3 + 1], pz = simRestPositions[i * 3 + 2]
     if (Math.abs(py - waistY) > WAISTBAND_HEIGHT_TOLERANCE) continue
-    const pr = Math.hypot(px, pz / zScale) // unsquash Z the same way collideCapsule does, for an elliptical cross-section
+    const pr = Math.hypot(px, pz / zScale)
     if (Math.abs(pr - waistR) < WAISTBAND_RADIAL_TOLERANCE) mask[i] = 1
   }
   return mask

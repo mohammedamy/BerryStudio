@@ -63,7 +63,7 @@ function makeUnionFind(n) {
 // addresses state by texel = particle index, so sharing an index is what
 // makes two rendered vertices sample the identical texel every frame at
 // zero extra cost, with no risk of a visible seam gap under stress).
-export function assembleCloth(triangulatedPieces, dims, seams) {
+export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing') {
   const byId = Object.fromEntries(triangulatedPieces.map((tp) => [tp.pieceId, tp]))
 
   const pieceOffset = {}
@@ -128,7 +128,7 @@ export function assembleCloth(triangulatedPieces, dims, seams) {
 
   for (const tp of triangulatedPieces) {
     const offset = pieceOffset[tp.pieceId]
-    const positions3D = placePiece(tp, dims)
+    const positions3D = placePiece(tp, dims, pose)
     const [cr, cg, cb] = hexToLinearRGB(tp.color)
 
     positions3D.forEach(([x, y, z], localIdx) => {
