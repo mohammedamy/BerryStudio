@@ -41,10 +41,23 @@
    own honesty notes for what the real model behind it can and can't do).
    ============================================================ */
 import { computePleats, computeGatherWidth, computeTucks } from './pleats.js';
-import { cosineSleeveOutline } from './pattern-builders.js';
+import { cosineSleeveOutline, qBezToCubic } from './pattern-builders.js';
 export const AIGen = (() => {
   const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
   const q = v => v / 4;
+  function threePtCubic(p0, pm, p1) {
+    const cx = 2 * pm[0] - 0.5 * (p0[0] + p1[0]);
+    const cy = 2 * pm[1] - 0.5 * (p0[1] + p1[1]);
+    return qBezToCubic(p0, [cx, cy], p1);
+  }
+  function neckCurveEntry(pts) {
+    if (!pts || pts.length < 2) return [];
+    if (pts.length === 3) {
+      return [{ fromIdx: 0, toIdx: 2, ...threePtCubic(pts[0], pts[1], pts[2]) }];
+    }
+    const p0 = pts[0], p1 = pts[pts.length - 1];
+    return [{ fromIdx: 0, toIdx: pts.length - 1, ...qBezToCubic(p0, [p0[0] + (p1[0] - p0[0]) * 0.55, p0[1]], p1) }];
+  }
   const DEFAULT_COLORS = ["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"];
   // curated fashion palette used to add colour variety when no image colour is available
   const SEED_COLORS = ["#b5495b","#2f6d6d","#c98a3e","#5b5ea6","#7a8450","#8a4f7d","#3d6b8a","#a65b3c","#4f7d5c","#8a3d5c"];
@@ -447,6 +460,7 @@ export const AIGen = (() => {
             ar:"قطعة أمامية مولّدة — فتحة الرقبة والحاشية والقصّة من المرجع."},
       outline:[...neckFront,[chestW,3],[chestW+1,bod*0.5],[waistW+1,bod],
                [hipW+1,bod+(gh-bod)*0.42], ...hemFront],
+      curves:[...neckCurveEntry(neckFront), { fromIdx: neckFront.length, toIdx: neckFront.length + 2, ...threePtCubic([chestW,3],[chestW+1,bod*0.5],[waistW+1,bod]) }],
       darts:waistDart, notches:[[chestW,3],[waistW+1,bod]],
       grain:[[chestW*0.5,9],[chestW*0.5,gh-6]],
       // wrap styles skew the front hem's near corner off X=0 (an honest
@@ -467,6 +481,7 @@ export const AIGen = (() => {
             ar:"قطعة خلفية مولّدة — تقابل القطعة الأمامية."},
       outline:[...neckBack,[chestW,3.5],[chestW+1,bod*0.5],[waistW+0.5,bod],
                [hipW+0.5,bod+(gh-bod)*0.42], ...hemBack],
+      curves:[...neckCurveEntry(neckBack), { fromIdx: neckBack.length, toIdx: neckBack.length + 2, ...threePtCubic([chestW,3.5],[chestW+1,bod*0.5],[waistW+0.5,bod]) }],
       darts:waistDart, notches:[[chestW,3.5]],
       grain:[[2,9],[2,gh-6]],
       role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[2],
@@ -506,10 +521,12 @@ export const AIGen = (() => {
     const front={ name:{en:"Front Leg", ar:"الساق الأمامية"},
       desc:{en:"Generated front trouser leg.", ar:"ساق أمامية مولّدة."},
       outline:[[2,0],[w,0],[w+2,11],[hem+2,len],[2,len],[-2,11]],
+      curves:[{ fromIdx: 1, toIdx: 3, ...threePtCubic([w,0],[w+2,11],[hem+2,len]) }],
       grain:[[w/2,7],[w/2,len-7]] };
     const back={ name:{en:"Back Leg", ar:"الساق الخلفية"},
       desc:{en:"Generated back trouser leg.", ar:"ساق خلفية مولّدة."},
       outline:[[2,0],[w+3,0],[w+5,11],[hem+3,len],[2,len],[-4,13]],
+      curves:[{ fromIdx: 1, toIdx: 3, ...threePtCubic([w+3,0],[w+5,11],[hem+3,len]) }],
       grain:[[w/2,7],[w/2,len-7]] };
     const band={ name:{en:"Waistband", ar:"الحزام"},
       desc:{en:"Generated waistband.", ar:"حزام مولّد."},
@@ -605,6 +622,7 @@ export const AIGen = (() => {
       desc:{en:"Generated romper shorts panel — joins the bodice at the waist seam.",
             ar:"لوحة شورت الأفرول المولّدة — تُوصل بالصدرية عند خط الخصر."},
       outline:[[2,0],[w,0],[w+2,crotchDrop],[hem+2,len],[2,len],[-2,crotchDrop]],
+      curves:[{ fromIdx: 1, toIdx: 3, ...threePtCubic([w,0],[w+2,crotchDrop],[hem+2,len]) }],
       darts:[], notches:[[w,0]],
       grain:[[w/2,len*0.35],[w/2,len-3]],
       // no declared role: cloth-lab's WP-6 placement vocabulary has no
@@ -626,6 +644,7 @@ export const AIGen = (() => {
       desc:{en:"Fitted front bodice ending at the natural waist, joined to the shorts below.",
             ar:"صدرية أمامية ضيقة تنتهي عند الخصر الطبيعي، تُوصل بالشورت أسفلها."},
       outline:[...neckFront,[chestW,3],[chestW+1,bodiceLen*0.55],[waistW+1,bodiceLen],[0,bodiceLen]],
+      curves:[...neckCurveEntry(neckFront), { fromIdx: neckFront.length, toIdx: neckFront.length + 2, ...threePtCubic([chestW,3],[chestW+1,bodiceLen*0.55],[waistW+1,bodiceLen]) }],
       darts:waistDart, notches:[[chestW,3],[waistW+1,bodiceLen]],
       grain:[[chestW*0.5,6],[chestW*0.5,bodiceLen-6]],
       role:"bodice-front-center", cutOnFold:true, chestEdgeIndices:[2], // WP-24
@@ -634,6 +653,7 @@ export const AIGen = (() => {
       name:{en:"Romper Back Bodice", ar:"ظهر صدرية الأفرول"},
       desc:{en:"Fitted back bodice, mirrors the front block.", ar:"ظهر صدرية ضيق يقابل القطعة الأمامية."},
       outline:[...neckBack,[chestW,3.5],[chestW+1,bodiceLen*0.55],[waistW+0.5,bodiceLen],[0,bodiceLen]],
+      curves:[...neckCurveEntry(neckBack), { fromIdx: neckBack.length, toIdx: neckBack.length + 2, ...threePtCubic([chestW,3.5],[chestW+1,bodiceLen*0.55],[waistW+0.5,bodiceLen]) }],
       darts:waistDart, notches:[[chestW,3.5]],
       grain:[[2,6],[2,bodiceLen-6]],
       role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[2],
@@ -825,6 +845,11 @@ export const AIGen = (() => {
         desc: { en: "Continuous front panel from the neckline straight through to the high-cut leg opening — no waist seam, matching real leotard construction.",
                 ar: "لوحة أمامية متصلة من فتحة الرقبة حتى فتحة الساق العالية — بدون خط خصر، كما في تفصيل الليوتارد الحقيقي." },
         outline,
+        curves: [
+          ...neckCurveEntry(p.neck),
+          { fromIdx: nl, toIdx: nl + 2, ...threePtCubic(p.shoulder, p.waistIn, p.waist) },
+          { fromIdx: nl + 3, toIdx: nl + 5, ...threePtCubic(p.hip, p.leg, p.gusset) },
+        ],
         role: "bodice-front-center", cutOnFold: true,
         grain: [[chestW * 0.4, 8], [chestW * 0.4, gLen - 8]],
         // BerryStudio-Upgrade-Plan-v5.md WP-44: `p.shoulder` is this
@@ -879,6 +904,7 @@ export const AIGen = (() => {
                 ar: diag ? "كوة صدر بقصة مائلة متباينة اللون" : "كوة صدر متباينة اللون" },
         desc: { en: "Contrast-colour chest yoke, seamed to the body panel below.", ar: "كوة صدر بلون متباين، متصلة بلوحة الجسم أسفلها بخياطة." },
         outline: [...p.neck, p.shoulder, [chestW * 0.85, y2], [0, y1]],
+        curves: neckCurveEntry(p.neck),
         role: "yoke", cutOnFold: true,
         grain: [[chestW * 0.35, 3], [chestW * 0.35, Math.max(y1, y2) - 3]],
         // WP-44: the split colour-block moves the true chestW vertex
@@ -903,6 +929,10 @@ export const AIGen = (() => {
       { name: { en: "Front Body", ar: "مقدمة الجسم" },
         desc: { en: "Lower front panel seamed to the yoke, continuing straight to the high-cut leg opening.", ar: "لوحة أمامية سفلية متصلة بالكوة، تمتد حتى فتحة الساق العالية." },
         outline: lowerOutline,
+        curves: [
+          { fromIdx: 1, toIdx: 3, ...threePtCubic([chestW * 0.85, y2], p.waistIn, p.waist) },
+          { fromIdx: 4, toIdx: 6, ...threePtCubic(p.hip, p.leg, p.gusset) },
+        ],
         role: "bodice-front-center", cutOnFold: true,
         grain: [[chestW * 0.4, Math.min(y1, y2) + 6], [chestW * 0.4, gLen - 8]],
         // WP-44: no chestEdgeIndices here — the true chest vertex sits in
@@ -955,16 +985,12 @@ export const AIGen = (() => {
     // back its fractional extra room without touching this edge's length).
     const hipDrop = 9, legY = bod + hipDrop + leg.rise, legW = hipW * leg.legWFactor, crotchY = legY + leg.crotch;
     const top = leotardBackTopPts(style, chestW, bod);
-    // WP-55: waist/hip/gusset's own small "+0.5/+0.4" ease offsets (same
-    // reasoning as hipDrop/legW/crotchY above) also sat directly on this
-    // side-seam edge, adding to the front/back length mismatch — matched
-    // to the front's own values. `armhole`'s own offset is a genuinely
-    // different point from the front's `shoulder` (back's top construction
-    // isn't the same shape as front's neckline), so rather than match it
-    // exactly, it's tuned (+2, up from the original +1) so the two edges'
-    // TOTAL lengths land within the 3mm tolerance across all 100 patterns
-    // (confirmed by direct measurement — max 2.5mm, not just a guess).
-    const armhole = [chestW + 2, 3.5], waistIn = [chestW * 0.94, bod * 0.58], waist = [waistW, bod];
+    // Side-seam vertices (`armhole`, `waistIn`, `waist`, `hip`, `legPt`,
+    // `gusset`) match `leotardFrontPts` by construction so both panels
+    // share the same true negative-ease finished chest (`4 * chestW` <=
+    // body chest on 4-way stretch fabric) AND exact 0.0mm side-seam
+    // (`leotardSide` / `leotardYokeSide`) parity.
+    const armhole = [chestW, 3], waistIn = [chestW * 0.92, bod * 0.58], waist = [waistW, bod];
     const hip = [hipW, bod + hipDrop], legPt = [legW, legY], gusset = [leg.gusset, crotchY], fold = [0, crotchY];
     const pieces = [];
     // WP-61: same neckline-binding attach mechanism as leotardFrontPieces
@@ -978,6 +1004,11 @@ export const AIGen = (() => {
         name: { en: "Back Body", ar: "خلفية الجسم" },
         desc: { en: "Continuous back panel, mirrors the front's waistless construction.", ar: "لوحة خلفية متصلة تقابل تفصيل المقدمة بدون خط خصر." },
         outline: [...top, armhole, waistIn, waist, hip, legPt, gusset, fold],
+        curves: [
+          ...neckCurveEntry(top),
+          { fromIdx: top.length, toIdx: top.length + 2, ...threePtCubic(armhole, waistIn, waist) },
+          { fromIdx: top.length + 3, toIdx: top.length + 5, ...threePtCubic(hip, legPt, gusset) },
+        ],
         role: "bodice-back-center", cutOnFold: true,
         grain: [[2, 8], [2, crotchY - 8]],
         // WP-44: same reasoning as leotardFrontPieces' own unsplit case —
@@ -1013,7 +1044,8 @@ export const AIGen = (() => {
         { name: { en: diag ? "Diagonal Colour-Block Back Yoke" : "Back Colour-Block Yoke",
                   ar: diag ? "كوة ظهر بقصة مائلة متباينة اللون" : "كوة ظهر متباينة اللون" },
           desc: { en: "Contrast-colour back yoke, seamed to the back body below — wraps around from the front yoke.", ar: "كوة ظهر بلون متباين، متصلة بخلفية الجسم أسفلها — تلتف من كوة المقدمة." },
-          outline: [...top, armhole, [chestW * 0.87, y2], [0, y1]],
+          outline: [...top, armhole, [chestW * 0.85, y2], [0, y1]],
+          curves: neckCurveEntry(top),
           role: "yoke", cutOnFold: true,
           grain: [[chestW * 0.35, 3], [chestW * 0.35, Math.max(y1, y2) - 3]],
           // WP-44: same reasoning as leotardFrontPieces' own split yoke —
@@ -1029,7 +1061,11 @@ export const AIGen = (() => {
           ] },
         { name: { en: "Back Body", ar: "خلفية الجسم" },
           desc: { en: "Lower back panel seamed to the back yoke, continuing straight to the high-cut leg opening.", ar: "لوحة خلفية سفلية متصلة بكوة الظهر، تمتد حتى فتحة الساق العالية." },
-          outline: [[0, y1], [chestW * 0.87, y2], waistIn, waist, hip, legPt, gusset, fold],
+          outline: [[0, y1], [chestW * 0.85, y2], waistIn, waist, hip, legPt, gusset, fold],
+          curves: [
+            { fromIdx: 1, toIdx: 3, ...threePtCubic([chestW * 0.85, y2], waistIn, waist) },
+            { fromIdx: 4, toIdx: 6, ...threePtCubic(hip, legPt, gusset) },
+          ],
           role: "bodice-back-center", cutOnFold: true,
           grain: [[2, Math.min(y1, y2) + 6], [2, crotchY - 8]],
           // WP-44: no chestEdgeIndices here, same reasoning as
@@ -1051,19 +1087,19 @@ export const AIGen = (() => {
       pieces.push({ name: { en: "Cross-Back Strap", ar: "حزام الظهر المتقاطع" },
         desc: { en: "Narrow strap crossing over the open back.", ar: "حزام رفيع يتقاطع فوق فتحة الظهر." },
         role: "other", bilateral: true,
-        outline: [[0, 0], [2.2, 0], [2.2, 24], [0, 24]], grain: [[1.1, 3], [1.1, 20]] });
+        outline: [[0, 0], [2.2, 0], [2.2, 24], [0, 24]], notches: [[2.2, 0]], grain: [[1.1, 3], [1.1, 20]] });
     }
     if (style.backStyle === "keyhole") {
       pieces.push({ name: { en: "Keyhole Binding", ar: "تحبيك فتحة القفل" },
         desc: { en: "Small bound trim finishing a keyhole opening at the back neckline.", ar: "شريط تحبيك صغير يُنهي فتحة قفل صغيرة عند خط الرقبة الخلفي." },
         role: "other",
-        outline: [[0, 0], [3.4, 0], [3.4, 2.2], [1.7, 3.4], [0, 2.2]], grain: [[1.7, 0.6], [1.7, 2.4]] });
+        outline: [[0, 0], [3.4, 0], [3.4, 2.2], [1.7, 3.4], [0, 2.2]], notches: [[1.7, 3.4]], grain: [[1.7, 0.6], [1.7, 2.4]] });
     }
     if (style.colorBlock === "mesh") {
       pieces.push({ name: { en: "Mesh Back Panel", ar: "لوحة شبك خلفية" },
         desc: { en: "Sheer power-mesh insert set into the upper back.", ar: "إدراج شبك شفاف مرن في أعلى الظهر." },
         role: "other",
-        outline: [[0, 0], [chestW * 0.7, 3], [chestW * 0.62, 14], [0, 15]], grain: [[chestW * 0.3, 3], [chestW * 0.3, 11]] });
+        outline: [[0, 0], [chestW * 0.7, 3], [chestW * 0.62, 14], [0, 15]], notches: [[chestW * 0.7, 3]], grain: [[chestW * 0.3, 3], [chestW * 0.3, 11]] });
     }
     return pieces;
   }
@@ -1072,7 +1108,7 @@ export const AIGen = (() => {
     const chestW = (q(m.chest) + 1) * fit, waistW = (q(m.waist) + 1.5) * fit, hipW = (q(m.hips) + 1) * fit;
     const bod = m.backLen;
     const frontPts = leotardFrontPts(style, chestW, waistW, hipW, bod);
-    const backTop = leotardBackTopPts(style, chestW, bod), backArmhole = [chestW + 1, 3.5];
+    const backTop = leotardBackTopPts(style, chestW, bod), backArmhole = [chestW, 3];
     const splitY = leotardSplitY(style, chestW, bod, frontPts, backTop, backArmhole);
     const pieces = [...leotardFrontPieces(style, chestW, waistW, hipW, bod, splitY), ...leotardBackPieces(style, chestW, waistW, hipW, bod, splitY)];
 
@@ -1080,7 +1116,7 @@ export const AIGen = (() => {
       pieces.push({ name: { en: "Side Mesh Insert", ar: "إدراج شبك جانبي" },
         desc: { en: "Contrast side panel set into the side seam from the armhole down to the leg opening.", ar: "لوحة جانبية متباينة تُدرج في الخط الجانبي من الإبط حتى فتحة الساق." },
         role: "other", bilateral: true,
-        outline: [[0, 0], [3.2, 4], [2.6, bod + 18], [0, bod + 14]], grain: [[1.6, 4], [1.6, bod + 10]] });
+        outline: [[0, 0], [3.2, 4], [2.6, bod + 18], [0, bod + 14]], notches: [[3.2, 4]], grain: [[1.6, 4], [1.6, bod + 10]] });
     }
 
     if (style.sleeveLenF > 0.05) {
@@ -1104,14 +1140,14 @@ export const AIGen = (() => {
       pieces.push({ name: { en: "Armhole Binding", ar: "تحبيك حلقة الكم" },
         desc: { en: "Bias binding strip finishing the sleeveless armhole edge.", ar: "شريط مائل يُنهي حافة حلقة الكم بلا أكمام." },
         role: "other", bilateral: true,
-        outline: [[0, 0], [m.bicep + 5, 0], [m.bicep + 5, 2.6], [0, 2.6]], grain: [[(m.bicep + 5) * 0.5, 0.6], [(m.bicep + 5) * 0.5, 2]] });
+        outline: [[0, 0], [m.bicep + 5, 0], [m.bicep + 5, 2.6], [0, 2.6]], notches: [[m.bicep + 5, 0]], grain: [[(m.bicep + 5) * 0.5, 0.6], [(m.bicep + 5) * 0.5, 2]] });
     }
 
     if (style.neckline === "mock") {
       const nc = m.neck / 2 + 2;
       pieces.push({ name: { en: "Mock Neck Stand", ar: "قاعدة الياقة القائمة" },
         desc: { en: "Short standing band finishing the mock/high neckline.", ar: "شريط قائم قصير يُنهي فتحة الرقبة العالية." },
-        outline: [[0, 0], [nc, 0], [nc, 4.5], [0, 5]], grain: [[2, 1], [nc - 2, 1]],
+        outline: [[0, 0], [nc, 0], [nc, 4.5], [0, 5]], notches: [[nc, 0]], grain: [[2, 1], [nc - 2, 1]],
         role: "collar-stand" });
     } else {
       const neckCirc = m.neck * 0.95;
@@ -1129,6 +1165,7 @@ export const AIGen = (() => {
         desc: { en: "Elastic binding strip finishing the neckline edge, front half and back half seamed to the body.", ar: "شريط أستك يُنهي حافة فتحة الرقبة، بنصفيه الأمامي والخلفي مخيطين إلى الجسم." },
         role: "other",
         outline: [[0, 0], [neckCirc * 0.5, 0], [neckCirc, 0], [neckCirc, 1.8], [neckCirc * 0.5, 1.8], [0, 1.8]],
+        notches: [[neckCirc * 0.5, 0]],
         grain: [[neckCirc * 0.5, 0.4], [neckCirc * 0.5, 1.4]],
         edges: [
           { fromIdx: 0, toIdx: 1, seamId: "leotardNeckFront" },
@@ -1148,6 +1185,7 @@ export const AIGen = (() => {
       desc: { en: "Elastic binding strip finishing each high-cut leg opening, front half and back half seamed to the body.", ar: "شريط أستك يُنهي حافة فتحة الساق العالية من الجانبين، بنصفيه الأمامي والخلفي مخيطين إلى الجسم." },
       role: "other", bilateral: true,
       outline: [[0, 0], [legCirc * 0.5, 0], [legCirc, 0], [legCirc, 1.6], [legCirc * 0.5, 1.6], [0, 1.6]],
+      notches: [[legCirc * 0.5, 0]],
       grain: [[legCirc * 0.5, 0.4], [legCirc * 0.5, 1.2]],
       edges: [
         { fromIdx: 0, toIdx: 1, seamId: "leotardLegFront" },
@@ -1172,7 +1210,7 @@ export const AIGen = (() => {
       { name: { en: "Crotch Gusset", ar: "دكة الجسم" },
         desc: { en: "Diamond gusset seamed into the crotch for stretch and coverage.", ar: "دكة ماسية تُخاط عند خط الجسم للمرونة والتغطية." },
         role: "other",
-        outline: [[0, 0], [3.6, 4.5], [0, 9], [-3.6, 4.5]], grain: [[0, 2], [0, 7]],
+        outline: [[0, 0], [3.6, 4.5], [0, 9], [-3.6, 4.5]], notches: [[0, 0], [0, 9]], grain: [[0, 2], [0, 7]],
         edges: [
           { fromIdx: 0, toIdx: 1, seamId: "leotardGussetFront_R" },
           { fromIdx: 1, toIdx: 2, seamId: "leotardGussetBack_R" },
@@ -1182,15 +1220,18 @@ export const AIGen = (() => {
       { name: { en: "Gusset Lining", ar: "بطانة الدكة" },
         desc: { en: "Second gusset layer for opacity and comfort.", ar: "طبقة ثانية للدكة لمزيد من التغطية والراحة." },
         role: "lining",
-        outline: [[0, 0], [3.6, 4.5], [0, 9], [-3.6, 4.5]], grain: [[0, 2], [0, 7]] },
+        outline: [[0, 0], [3.6, 4.5], [0, 9], [-3.6, 4.5]], notches: [[0, 0], [0, 9]], grain: [[0, 2], [0, 7]] },
     );
 
     if (style.skirt) {
       const skirtLen = 13, waistCirc = m.waist * 0.62, hemCirc = waistCirc * 1.9;
+      const p1 = [waistCirc / 2, 0], p2 = [(waistCirc + hemCirc) / 4, skirtLen * 0.5], p3 = [hemCirc / 2, skirtLen];
       const skPanel = (en, ar, role) => ({
         name: { en, ar },
         desc: { en: "Gathered ballet skirt panel attached at the hip seam.", ar: "لوحة تنورة باليه مكشكشة تُخاط عند خط الورك." },
-        outline: [[0, 0], [waistCirc / 2, 0], [hemCirc / 2, skirtLen], [0, skirtLen]],
+        outline: [[0, 0], p1, p2, p3, [0, skirtLen]],
+        curves: [{ fromIdx: 1, toIdx: 3, ...threePtCubic(p1, p2, p3) }],
+        notches: [p1, p2],
         grain: [[waistCirc / 4, 3], [waistCirc / 4, skirtLen - 3]],
         role,
       });

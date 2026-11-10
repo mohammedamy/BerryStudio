@@ -83,7 +83,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
   // sleeveWideF. Four real, distinct sleeve constructions.
   function bodiceFamily(m, opts) {
     const flareF = opts.flareF || 1, fitF = opts.fitF == null ? 1 : opts.fitF;
-    const chest = q(m.chest) * flareF, waist = q(m.waist) * flareF, hips = q(m.hips) * flareF;
+    const chest = q(m.chest) * Math.max(1, flareF), waist = q(m.waist) * flareF, hips = q(m.hips) * flareF;
     const necklineDepth = opts.wrap ? 11 : Math.max(4, 6 + (1 - fitF) * 5);
     const pieces = [];
     const suppression = fitF <= 0.9 ? 'princess' : (fitF >= 1.1 ? 'none' : 'darted');
@@ -119,7 +119,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
           grain: [[b.shoulderX * 0.4, 8], [b.shoulderX * 0.4, b.hemY - 8]], role: 'bodice-front-center', cutOnFold: true,
           edges: [{ fromIdx: b.frontCenter.princessFromIdx, toIdx: b.frontCenter.princessToIdx, seamId: `${seamId}PrincessFront` }] },
         { key: 'front_side', name: { en: `${opts.nameEn} Front Side`, ar: `جانب مقدمة ${opts.nameAr}` }, desc: { en: 'Side-front panel joining the armhole to the princess seam.', ar: 'لوحة الجانب الأمامي، تصل فتحة الإبط بخط الأميرة.' },
-          outline: b.frontSide, darts: [], notches: [], grain: [[b.sideX * 0.9, 10], [b.sideX * 0.9, b.hemY - 10]], role: 'bodice-front-side', bilateral: true,
+          outline: b.frontSide, darts: [], notches: [b.frontSide[5], b.frontSide[10]], grain: [[b.sideX * 0.9, 10], [b.sideX * 0.9, b.hemY - 10]], role: 'bodice-front-side', bilateral: true,
           // Only the princess seamId is declared here, not the outer
           // side-seam edge too: front-side/back-side use different bust/
           // waist/hip proportions BY DESIGN (real patternmaking — front
@@ -134,7 +134,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
           grain: [[b.shoulderX * 0.4, 8], [b.shoulderX * 0.4, b.hemY - 8]], role: 'bodice-back-center', cutOnFold: true,
           edges: [{ fromIdx: b.backCenter.princessFromIdx, toIdx: b.backCenter.princessToIdx, seamId: `${seamId}PrincessBack` }] },
         { key: 'back_side', name: { en: `${opts.nameEn} Back Side`, ar: `جانب خلفية ${opts.nameAr}` }, desc: { en: 'Side-back panel joining the armhole to the princess seam.', ar: 'لوحة الجانب الخلفي، تصل فتحة الإبط بخط الأميرة.' },
-          outline: b.backSide, darts: [], notches: [], grain: [[b.sideX * 0.9, 10], [b.sideX * 0.9, b.hemY - 10]], role: 'bodice-back-side', bilateral: true,
+          outline: b.backSide, darts: [], notches: [b.backSide[5], b.backSide[10]], grain: [[b.sideX * 0.9, 10], [b.sideX * 0.9, b.hemY - 10]], role: 'bodice-back-side', bilateral: true,
           edges: [{ fromIdx: b.backSide.princessFromIdx, toIdx: b.backSide.princessToIdx, seamId: `${seamId}PrincessBack` }] },
       );
     } else {
@@ -185,11 +185,14 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
     const hemLen = m.height * 0.32 * opts.lengthF;
     const hipDrop = Math.min(18, hemLen * 0.4);
     const pieces = [];
+    const threePt = (p0, pm, p1) => qBezToCubic(p0, [2 * pm[0] - 0.5 * (p0[0] + p1[0]), 2 * pm[1] - 0.5 * (p0[1] + p1[1])], p1);
     if (opts.pleated) {
       const pleat = computePleats(qw * 0.5, 3, 1.4);
       const halfW = qw * 0.5 + pleat.addedWidthCm / 2;
-      const front = [[0, 0], [halfW, 0], [qh * 0.58, hipDrop], [qh * 0.58, hemLen], [0, hemLen]];
-      const back = [[0, 0], [halfW, 0], [qh * 0.54, hipDrop], [qh * 0.54, hemLen], [0, hemLen]];
+      const front = withCurves([[0, 0], [halfW, 0], [qh * 0.58, hipDrop], [qh * 0.58, hemLen], [0, hemLen]],
+        [{ fromIdx: 1, toIdx: 3, ...threePt([halfW, 0], [qh * 0.58, hipDrop], [qh * 0.58, hemLen]) }]);
+      const back = withCurves([[0, 0], [halfW, 0], [qh * 0.54, hipDrop], [qh * 0.54, hemLen], [0, hemLen]],
+        [{ fromIdx: 1, toIdx: 3, ...threePt([halfW, 0], [qh * 0.54, hipDrop], [qh * 0.54, hemLen]) }]);
       const waistband = bandPc(halfW * 2, 4);
       pieces.push(
         { key: 'front', name: { en: `${opts.nameEn} Front`, ar: `مقدمة ${opts.nameAr}` }, desc: { en: 'Front panel with knife pleats gathered into the waistband.', ar: 'اللوحة الأمامية بطيات سكينية تُجمع في حزام الخصر.' },
@@ -197,11 +200,13 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         { key: 'back', name: { en: `${opts.nameEn} Back`, ar: `خلفية ${opts.nameAr}` }, desc: { en: 'Back panel with knife pleats and a centered zip opening.', ar: 'اللوحة الخلفية بطيات سكينية وفتحة سحاب خلفية في المنتصف.' },
           outline: back, darts: [], notches: [[halfW * 0.33, 0], [halfW * 0.67, 0]], grain: [[qw * 0.24, 6], [qw * 0.24, hemLen - 6]], role: 'skirt-back-gore', cutOnFold: true },
         { key: 'waistband', name: { en: 'Waistband', ar: 'حزام الخصر' }, desc: { en: 'Straight waistband, cut on the fold.', ar: 'حزام خصر مستقيم مقصوص على الطية.' },
-          outline: waistband, darts: [], notches: [], grain: [[2, 2], [halfW * 2 - 2, 2]], role: 'waistband', cutOnFold: true },
+          outline: waistband, darts: [], notches: [[halfW * 2, 0]], grain: [[2, 2], [halfW * 2 - 2, 2]], role: 'waistband', cutOnFold: true },
       );
     } else if (opts.straight) {
-      const front = [[0, 0], [qw * 0.52, 0], [qh * 0.58, hipDrop], [qh * 0.58, hemLen], [0, hemLen]];
-      const back = [[0, 0], [qw * 0.48, 0], [qh * 0.54, hipDrop], [qh * 0.54, hemLen], [0, hemLen]];
+      const front = withCurves([[0, 0], [qw * 0.52, 0], [qh * 0.58, hipDrop], [qh * 0.58, hemLen], [0, hemLen]],
+        [{ fromIdx: 1, toIdx: 3, ...threePt([qw * 0.52, 0], [qh * 0.58, hipDrop], [qh * 0.58, hemLen]) }]);
+      const back = withCurves([[0, 0], [qw * 0.48, 0], [qh * 0.54, hipDrop], [qh * 0.54, hemLen], [0, hemLen]],
+        [{ fromIdx: 1, toIdx: 3, ...threePt([qw * 0.48, 0], [qh * 0.54, hipDrop], [qh * 0.54, hemLen]) }]);
       const dart = [[qw * 0.26, 2], [qw * 0.26 - 1.5, 10], [qw * 0.26 + 1.5, 10]];
       pieces.push(
         { key: 'front', name: { en: `${opts.nameEn} Front`, ar: `مقدمة ${opts.nameAr}` }, desc: { en: 'Straight front panel with a waist dart — no flare.', ar: 'لوحة أمامية مستقيمة مع بنسة خصر — بدون اتساع.' },
@@ -223,12 +228,12 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         { key: 'side_gore_left', name: { en: 'Left Side Gore', ar: 'القطعة الجانبية اليسرى' }, desc: { en: 'Side gore, both edges angled.', ar: 'قطعة جانبية بخطين مائلين.' },
           outline: sideGore, darts: [], notches: [[sideGore[2][0], sideGore[2][1]], [sideGore[5][0], sideGore[5][1]]], grain: [[sideW * 0.5, 6], [sideW * 0.5, hemLen - 6]], role: 'skirt-side-gore-left' },
         { key: 'side_gore_right', name: { en: 'Right Side Gore', ar: 'القطعة الجانبية اليمنى' }, desc: { en: 'Side gore, both edges angled.', ar: 'قطعة جانبية بخطين مائلين.' },
-          outline: sideGore.map((p) => [p[0], p[1]]), darts: [], notches: [[sideGore[2][0], sideGore[2][1]], [sideGore[5][0], sideGore[5][1]]], grain: [[sideW * 0.5, 6], [sideW * 0.5, hemLen - 6]], role: 'skirt-side-gore-right' },
+          outline: withCurves(sideGore.map((p) => [p[0], p[1]]), sideGore.curves), darts: [], notches: [[sideGore[2][0], sideGore[2][1]], [sideGore[5][0], sideGore[5][1]]], grain: [[sideW * 0.5, 6], [sideW * 0.5, hemLen - 6]], role: 'skirt-side-gore-right' },
       );
     }
     const waistCirc = qw * 2;
     pieces.push({ key: 'waistband', name: { en: 'Waistband', ar: 'حزام الخصر' }, desc: { en: 'Straight waistband, cut on the fold.', ar: 'حزام خصر مستقيم مقصوص على الطية.' },
-      outline: bandPc(waistCirc / 2, 4), darts: [], notches: [], grain: [[2, 2], [waistCirc / 2 - 2, 2]], role: 'waistband', cutOnFold: true });
+      outline: bandPc(waistCirc / 2, 4), darts: [], notches: [[waistCirc / 2, 0]], grain: [[2, 2], [waistCirc / 2 - 2, 2]], role: 'waistband', cutOnFold: true });
     return hoistCurves(pieces);
   }
 
@@ -364,11 +369,11 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         outline: back, darts: [], notches: [[chestX, backUnderarmY]], grain: [[chestX * 0.5, yokeSeamY + 6], [chestX * 0.5, backHemY - 10]],
         role: 'bodice-back-center', cutOnFold: true, chestEdgeIndices: [2], edges: [{ fromIdx: 2, toIdx: 2 + backWaistPts.length + 2, seamId: `${opts.id}Side` }] },
       { key: 'yoke', name: { en: 'Back Yoke', ar: 'كوّة الظهر' }, desc: { en: 'Curved shoulder yoke, cut on the fold.', ar: 'كوّة كتف منحنية، مقصوصة على الطية.' },
-        outline: yoke, darts: [], notches: [], grain: [[qc * 0.15, 2], [qc * 0.15, 12.6]], role: 'yoke', cutOnFold: true },
+        outline: yoke, darts: [], notches: [yoke[yoke.shoulderIdx]], grain: [[qc * 0.15, 2], [qc * 0.15, 12.6]], role: 'yoke', cutOnFold: true },
       { key: 'collar', name: { en: 'Collar', ar: 'الياقة' }, desc: { en: 'Two-point collar, cut on the fold.', ar: 'ياقة بطرفين، مقصوصة على الطية.' },
-        outline: collar, darts: [], notches: [], grain: [[2, 2], [2, 5]], role: 'collar', cutOnFold: true },
+        outline: collar, darts: [], notches: [collar[collar.shoulderIdx]], grain: [[2, 2], [2, 5]], role: 'collar', cutOnFold: true },
       { key: 'stand', name: { en: 'Collar Stand', ar: 'قاعدة الياقة' }, desc: { en: 'Standing band the collar attaches to, cut on the fold.', ar: 'شريط واقف تُركَّب عليه الياقة، مقصوص على الطية.' },
-        outline: stand, darts: [], notches: [], grain: [[2, 1], [2, 2.2]], role: 'collar-stand', cutOnFold: true },
+        outline: stand, darts: [], notches: [stand[stand.shoulderIdx]], grain: [[2, 1], [2, 2.2]], role: 'collar-stand', cutOnFold: true },
       { key: 'placket', name: { en: 'Front Placket Facing', ar: 'بطانة حاشية الأزرار' }, desc: { en: 'Button placket facing behind the front opening.', ar: 'بطانة حاشية أزرار خلف فتحة المقدمة.' },
         outline: placket, darts: [], notches: [], grain: [[2, 4], [2, hipY - 8]], role: 'placket-facing' },
     ];
@@ -379,7 +384,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
           outline: sleeveUpper, darts: [], notches: [sleeveUpper[sleeveUpper.frontNotchIdx], sleeveUpper[sleeveUpper.backNotchIdx1], sleeveUpper[sleeveUpper.backNotchIdx2]],
           grain: [[q(m.bicep) * 0.5, 4], [q(m.bicep) * 0.5, sleeveLen - 6]], role: 'sleeve-upper', bilateral: true },
         { key: 'cuff', name: { en: 'Barrel Cuff', ar: 'أسورة برميلية' }, desc: { en: 'Buttoned barrel cuff at the sleeve hem.', ar: 'أسورة برميلية بأزرار عند نهاية الكم.' },
-          outline: bandPc(q(m.bicep) * 1.5, 6), darts: [], notches: [], grain: [[2, 1], [2, 5]], role: 'cuff', bilateral: true },
+          outline: bandPc(q(m.bicep) * 1.5, 6), darts: [], notches: [[q(m.bicep) * 0.75, 0]], grain: [[2, 1], [2, 5]], role: 'cuff', bilateral: true },
       );
     } else {
       const sleeve = setInSleeve(q(m.bicep) * 2, Math.max(8, sleeveLen * 0.4));
@@ -388,12 +393,12 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
           outline: sleeve, darts: [], notches: [sleeve[sleeve.frontNotchIdx], sleeve[sleeve.backNotchIdx1], sleeve[sleeve.backNotchIdx2]],
           grain: [[q(m.bicep), 3], [q(m.bicep), Math.max(8, sleeveLen * 0.4) - 3]], role: 'sleeve', bilateral: true },
         { key: 'hem_band', name: { en: 'Sleeve Hem Band', ar: 'شريط نهاية الكم' }, desc: { en: 'Turned-back band finishing the short sleeve.', ar: 'شريط مطوي يُنهي الكم القصير.' },
-          outline: bandPc(q(m.bicep) * 1.6, 3), darts: [], notches: [], grain: [[2, 1], [2, 2]], role: 'hem-band', bilateral: true },
+          outline: bandPc(q(m.bicep) * 1.6, 3), darts: [], notches: [[q(m.bicep) * 0.8, 0]], grain: [[2, 1], [2, 2]], role: 'hem-band', bilateral: true },
       );
     }
     if (opts.pocket) {
       pieces.push({ key: 'pocket', name: { en: 'Chest Pocket', ar: 'جيب الصدر' }, desc: { en: 'Patch pocket at the chest.', ar: 'جيب ملصق عند الصدر.' },
-        outline: pocketPatch(9, 10), darts: [], notches: [], grain: [[4.5, 1], [4.5, 7]], role: 'pocket' });
+        outline: pocketPatch(9, 10), darts: [], notches: [[4.5, 0]], grain: [[4.5, 1], [4.5, 7]], role: 'pocket' });
     }
     return hoistCurves(pieces);
   }
@@ -410,25 +415,25 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
     const hipX = qc * 0.95 * flareF, hemX = qc * 1.05 * flareF;
     const half = plainBodicePanel(shoulderX, 8, qc * 1.02, m.backLen * 0.32, qc, m.backLen * 1.15, hipX, len * 0.65, hemX, len);
     const front = mirrorHalfToFull(half);
-    const back = plainBodicePanel(shoulderX, 4, qc, m.backLen * 0.32, qc * 0.98, m.backLen * 1.15, hipX * 0.97, len * 0.65, hemX * 0.98, len);
+    const back = plainBodicePanel(shoulderX, 4, qc + 1.5, m.backLen * 0.32, qc * 0.98, m.backLen * 1.15, hipX * 0.97, len * 0.65, hemX * 0.98, len);
     const bicep = q(m.bicep) * 2.1 * (opts.sleeveWideF || 1.15);
     const sleeve = wideSleevePc(bicep * 0.7, m.sleeve * 0.55, 1.15);
 
     const pieces = [
       { key: 'front', name: { en: `${opts.nameEn} Front`, ar: `مقدمة ${opts.nameAr}` }, desc: { en: 'Open front panel, no center seam — worn open or tied.', ar: 'لوحة أمامية مفتوحة بدون خط وسط — تُلبس مفتوحة أو مربوطة.' },
-        outline: front, darts: [], notches: [], grain: [[qc * 0.35, 12], [qc * 0.35, len - 12]], role: 'front-panel' },
+        outline: front, darts: [], notches: [[half[half.chestIdx][0], half[half.chestIdx][1]]], grain: [[qc * 0.35, 12], [qc * 0.35, len - 12]], role: 'front-panel' },
       { key: 'back', name: { en: `${opts.nameEn} Back`, ar: `خلفية ${opts.nameAr}` }, desc: { en: 'Full back on the fold.', ar: 'ظهر كامل على الطية.' },
         outline: back, darts: [], notches: [[back[back.chestIdx][0], back[back.chestIdx][1]]], grain: [[shoulderX * 0.5, 12], [shoulderX * 0.5, len - 12]],
         role: 'bodice-back-center', cutOnFold: true, chestEdgeIndices: [back.chestIdx] },
       { key: 'sleeve', name: { en: 'Wide Sleeve', ar: 'كم واسع' }, desc: { en: 'Loose wide sleeve, cut as a mirrored pair.', ar: 'كم واسع مريح، يُقص كزوج متطابق.' },
-        outline: sleeve, darts: [], notches: [], grain: [[bicep * 0.2, 6], [bicep * 0.2, m.sleeve * 0.55 - 6]], role: 'sleeve', bilateral: true },
+        outline: sleeve, darts: [], notches: [sleeve[sleeve.frontNotchIdx], sleeve[sleeve.backNotchIdx1], sleeve[sleeve.backNotchIdx2]], grain: [[bicep * 0.2, 6], [bicep * 0.2, m.sleeve * 0.55 - 6]], role: 'sleeve', bilateral: true },
     ];
     if (opts.tie) {
       pieces.push({ key: 'sash', name: { en: 'Waist Sash', ar: 'حزام الخصر' }, desc: { en: 'Tie sash at the waist.', ar: 'حزام يُربط عند الخصر.' },
-        outline: bandPc(qc * 2, 6), darts: [], notches: [], grain: [[2, 1.5], [2, 4.5]], role: 'sash' });
+        outline: bandPc(qc * 2, 6), darts: [], notches: [[qc, 0]], grain: [[2, 1.5], [2, 4.5]], role: 'sash' });
     } else {
       pieces.push({ key: 'placket', name: { en: 'Front Placket Facing', ar: 'بطانة حاشية الأزرار' }, desc: { en: 'Button placket facing behind the front opening.', ar: 'بطانة حاشية أزرار خلف فتحة المقدمة.' },
-        outline: bandPc(4, len * 0.4), darts: [], notches: [], grain: [[2, 4], [2, len * 0.3]], role: 'placket-facing' });
+        outline: bandPc(4, len * 0.4), darts: [], notches: [[2, 0]], grain: [[2, 4], [2, len * 0.3]], role: 'placket-facing' });
     }
     return hoistCurves(pieces);
   }

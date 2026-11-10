@@ -188,7 +188,7 @@ function checkFoldSymmetry(piece) {
 // ---------- heuristic, cross-piece checks ----------
 // Same closed-world idiom as cloth-lab/src/pattern/importFromApp.js's
 // classify() — deliberately not a second, different heuristic.
-const IGNORE_RE = /waistband|collar|cuff|sash|tie|gusset|facing|pocket|lining|\bband\b|sleeve|كم/i;
+const IGNORE_RE = /waistband|collar|cuff|sash|tie|gusset|facing|pocket|lining|\bband\b|sleeve|strap|mesh back|cape|back (?:shoulder |storm (?:shield )?)?yoke|front skirt panel|كم/i;
 const FRONT_RE = /front|أمام/i;
 const BACK_RE = /back|خلف/i;
 

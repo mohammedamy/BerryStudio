@@ -498,15 +498,28 @@ export function pocketPatch(w, h) {
 // gore's own angled side edges ARE its suppression method (no dart
 // needed to go from waist to hip circumference). A HALF shape, cut on
 // the fold (one flat edge at x=0).
+function threePtCubic(p0, pm, p1) {
+  const c = [2 * pm[0] - 0.5 * (p0[0] + p1[0]), 2 * pm[1] - 0.5 * (p0[1] + p1[1])];
+  return qBezToCubic(p0, c, p1);
+}
+
 export function gorePanel(waistHalfW, hipHalfW, hemHalfW, waistToHip, hipToHem) {
-  return [[0, 0], [waistHalfW, 0], [hipHalfW, waistToHip], [hemHalfW, waistToHip + hipToHem], [0, waistToHip + hipToHem]];
+  const p1 = [waistHalfW, 0], p2 = [hipHalfW, waistToHip], p3 = [hemHalfW, waistToHip + hipToHem];
+  const outline = [[0, 0], p1, p2, p3, [0, waistToHip + hipToHem]];
+  return withCurves(outline, [{ fromIdx: 1, toIdx: 3, ...threePtCubic(p1, p2, p3) }]);
 }
 // A FULL (not cut-on-fold) gore, symmetric about its own vertical center
 // — both edges flare outward equally from waist to hem, unlike
 // gorePanel() above.
 export function sideGorePanel(waistW, hipW, hemW, waistToHip, hipToHem) {
   const hw = waistW / 2, hh = hipW / 2, hm = hemW / 2, hipY = waistToHip, hemY = waistToHip + hipToHem;
-  return [[-hw, 0], [hw, 0], [hh, hipY], [hm, hemY], [-hm, hemY], [-hh, hipY]];
+  const r1 = [hw, 0], r2 = [hh, hipY], r3 = [hm, hemY];
+  const l1 = [-hm, hemY], l2 = [-hh, hipY], l3 = [-hw, 0];
+  const outline = [l3, r1, r2, r3, l1, l2];
+  return withCurves(outline, [
+    { fromIdx: 1, toIdx: 3, ...threePtCubic(r1, r2, r3) },
+    { fromIdx: 4, toIdx: 5, ...threePtCubic(l1, [0.5 * (l1[0] + l2[0]), 0.5 * (l1[1] + l2[1])], l2) },
+  ]);
 }
 
 // One trouser leg panel (a full piece, mirrored L/R as a bilateral pair —
@@ -561,6 +574,9 @@ export function wideSleevePc(shoulderW, sleeveLen, wideF) {
   const cuffInnerX = Math.max(shoulderW * 0.25, shoulderW * 0.4 - sleeveLen * wideF * 0.15);
   const hemY = Math.max(5, sleeveLen);
   const outline = [...cap.points, [shoulderW * 0.6 + hemY * wideF * 0.5, hemY], [cuffInnerX, hemY]];
+  outline.frontNotchIdx = cap.frontNotchIdx;
+  outline.backNotchIdx1 = cap.backNotchIdx1;
+  outline.backNotchIdx2 = cap.backNotchIdx2;
   outline.crownIdx = cap.crownIdx;
   return withCurves(outline, cap.curves);
 }

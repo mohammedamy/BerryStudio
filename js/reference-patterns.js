@@ -196,7 +196,7 @@ import {
         {
           key: 'side_gore_right', name: { en: 'Right Side Gore', ar: 'القطعة الجانبية اليمنى' },
           desc: { en: 'Side gore, both edges angled, joining the front and back gores.', ar: 'قطعة جانبية بخطين مائلين، تصل القطعتين الأمامية والخلفية.' },
-          outline: sideGore.map((p) => [p[0], p[1]]), darts: [], notches: [[sideGore[2][0], sideGore[2][1]], [sideGore[5][0], sideGore[5][1]]],
+          outline: withCurves(sideGore.map((p) => [p[0], p[1]]), sideGore.curves), darts: [], notches: [[sideGore[2][0], sideGore[2][1]], [sideGore[5][0], sideGore[5][1]]],
           grain: [[sideW * 0.5, 6], [sideW * 0.5, hemLen - 6]],
           role: 'skirt-side-gore-right',
         },
@@ -374,8 +374,8 @@ import {
     pieces: (m) => {
       const qc = q(m.chest);
       const hemY = m.backLen + 24;
-      const front = plainBodicePanel(qc * 0.26, 6, qc + 1, m.backLen * 0.32, qc + 0.5, m.backLen, qc + 1, hemY - 12, qc + 1, hemY);
-      const back = plainBodicePanel(qc * 0.26, 3, qc + 1, m.backLen * 0.32, qc + 0.5, m.backLen, qc + 1, hemY - 12, qc + 1, hemY);
+      const front = plainBodicePanel(qc * 0.26, 6, qc + 1.5, m.backLen * 0.32, qc + 0.5, m.backLen, qc + 1, hemY - 12, qc + 1, hemY);
+      const back = plainBodicePanel(qc * 0.26, 3, qc + 1.5, m.backLen * 0.32, qc + 0.5, m.backLen, qc + 1, hemY - 12, qc + 1, hemY);
       const shoulderDart = [[qc * 0.18, 1], [qc * 0.18 - 1.2, -0.5], [qc * 0.18 + 1.2, -0.5]];
       const sleeve = setInSleeve(q(m.bicep) * 2, m.sleeve * 0.32);
       const neckband = bandPc(m.neck * 0.52, 3.5);
@@ -559,7 +559,7 @@ import {
           // underarm line, where the outline has already tapered back
           // down to chestX (matching the front's own width, per the
           // seamLengthParity fix above).
-          outline: back, darts: [], notches: [[0, yokeSeamY], [backHalfW, yokeSeamY]],
+          outline: back, darts: [], notches: [[chestX, backUnderarmY]],
           grain: [[backHalfW * 0.5, yokeSeamY + 6], [backHalfW * 0.5, backHemY - 10]],
           role: 'bodice-back-center', cutOnFold: true, chestEdgeIndices: [2],
           edges: [{ fromIdx: 2, toIdx: 2 + backWaistPts.length + 2, seamId: 'shirtSide' }],
@@ -734,8 +734,10 @@ import {
       const backPleat = computePleats(qw, 3, 1.6);
       const frontHalfW = qw + frontPleat.addedWidthCm;
       const backHalfW = qw + backPleat.addedWidthCm;
-      const front = [[0, 0], [frontHalfW, 0], [frontHalfW, hemLen], [0, hemLen]];
-      const back = [[0, 0], [backHalfW, 0], [backHalfW, hemLen], [0, hemLen]];
+      const front = withCurves([[0, 0], [frontHalfW, 0], [frontHalfW, hemLen], [0, hemLen]],
+        [{ fromIdx: 1, toIdx: 2, ...qBezToCubic([frontHalfW, 0], [frontHalfW, hemLen * 0.5], [frontHalfW, hemLen]) }]);
+      const back = withCurves([[0, 0], [backHalfW, 0], [backHalfW, hemLen], [0, hemLen]],
+        [{ fromIdx: 1, toIdx: 2, ...qBezToCubic([backHalfW, 0], [backHalfW, hemLen * 0.5], [backHalfW, hemLen]) }]);
       const frontNotches = frontPleat.pleats.map((pl) => [pl.positionOnEdge * frontHalfW, 0]);
       const backNotches = backPleat.pleats.map((pl) => [pl.positionOnEdge * backHalfW, 0]);
       const waistCirc = (qw * 2) + (qw * 2); // finished (post-pleat) waist, front+back doubled
@@ -908,7 +910,7 @@ import {
           desc: { en: 'Center-front panel; the raglan seam runs from the neckline to the underarm.', ar: 'لوحة المقدمة؛ يمتد خط الراغلان من الرقبة إلى الإبط.' },
           outline: front, darts: [], notches: [[front[front.raglanFromIdx][0], front[front.raglanFromIdx][1]]],
           grain: [[chestX * 0.4, hemY * 0.3], [chestX * 0.4, hemY - 8]],
-          role: 'bodice-front-center', cutOnFold: true, chestEdgeIndices: [front.chestIdx],
+          role: 'bodice-front-center', cutOnFold: true, chestEdgeIndices: [front.chestIdx - 1],
           edges: [
             { fromIdx: front.raglanFromIdx, toIdx: front.raglanToIdx, seamId: 'raglanFront' },
             // Side seam (underarm to hem) — a real seam between front and
@@ -923,7 +925,7 @@ import {
           desc: { en: 'Center-back panel; the raglan seam runs from the neckline to the underarm.', ar: 'لوحة الخلفية؛ يمتد خط الراغلان من الرقبة إلى الإبط.' },
           outline: back, darts: [], notches: [[back[back.raglanFromIdx][0], back[back.raglanFromIdx][1]]],
           grain: [[chestX * 0.4, hemY * 0.3], [chestX * 0.4, hemY - 8]],
-          role: 'bodice-back-center', cutOnFold: true, chestEdgeIndices: [back.chestIdx],
+          role: 'bodice-back-center', cutOnFold: true, chestEdgeIndices: [back.chestIdx - 1],
           edges: [
             { fromIdx: back.raglanFromIdx, toIdx: back.raglanToIdx, seamId: 'raglanBack' },
             { fromIdx: back.chestIdx, toIdx: back.chestIdx + 3, seamId: 'teeSide' },

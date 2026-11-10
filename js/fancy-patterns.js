@@ -243,6 +243,7 @@ export let FancyGen;
       { fromIdx: 0, toIdx: 4, c1: dc1, c2: dc2 },
       { fromIdx: 4, toIdx: 8, c1: dc3, c2: dc4 },
     ]);
+    under.notches = [under[2], under[6]];
     return { upper, under };
   }
   // One-piece sleeve with a true `-cos` S-curve cap (dresses/gowns/robes/coats).
@@ -323,7 +324,9 @@ export let FancyGen;
     const collarSeg = [[0,0], [h*0.5,-2], [h,1]];
     const collar = [ [0,0], ...qBez(...collarSeg, 6), [h,6], [0,7] ];
     withCurves(collar, [{ fromIdx: 0, toIdx: 6, ...qBezToCubic(...collarSeg) }]);
+    collar.notches = [collar[3]];
     const stand = [ [0,0],[h+2,0],[h+2,4],[0,4] ];
+    stand.notches = [[h + 2, 0]];
     return { collar, stand };
   }
   function jacketCollarBand(jb, seamPrefix) {
@@ -340,6 +343,7 @@ export let FancyGen;
     const frontLen = edgeLength(jb.front, edgeFor(jb.front, 'jacketFrontNeck'));
     const length = backLen + frontLen;
     const stand = [[0,0], [backLen,0], [length,0], [length,4], [backLen,4], [0,4]];
+    stand.notches = [[backLen, 0]];
     stand.edges = [
       { fromIdx: 0, toIdx: 1, seamId: `${seamPrefix}Back_R`, reverse: false },
       { fromIdx: 1, toIdx: 2, seamId: `${seamPrefix}Front_R` },
@@ -368,6 +372,7 @@ export let FancyGen;
       ]);
     }
     const stand = [[0,0], [backLen,0], [length,0], [length,4], [backLen,4], [0,4]];
+    stand.notches = [[backLen, 0]];
     stand.edges = [
       { fromIdx: 0, toIdx: 1, seamId: 'wf09NeckBack_R', reverse: false },
       { fromIdx: 1, toIdx: 2, seamId: 'wf09NeckFront_R' },
@@ -379,6 +384,7 @@ export let FancyGen;
     const outer = [[length+2,5], [length*0.5,7], [0,6]];
     const collar = [[0,0], [length,0], outer[0], ...qBez(...outer, 6)];
     withCurves(collar, [{ fromIdx: 2, toIdx: 8, ...qBezToCubic(...outer) }]);
+    collar.notches = [collar[5]];
     collar.edges = [
       { fromIdx: 0, toIdx: 1, seamId: 'wf09Collar_R' },
       { ...foldMirrorEdge(collar.length, 0, 1), seamId: 'wf09Collar_L' },
@@ -404,6 +410,7 @@ export let FancyGen;
       [h*0.3, depth+4],
       [0,10],
     ];
+    outline.notches = [outline[3], outline[10]];
     return withCurves(outline, [
       { fromIdx: 0, toIdx: 6, ...qBezToCubic(...seg1) },
       { fromIdx: 6, toIdx: 14, ...qBezToCubic(...seg2) },
@@ -424,17 +431,19 @@ export let FancyGen;
       ...qBez(...seg2, 7),
       [0,len],
     ];
+    outline.notches = [outline[1], outline[8]];
     return withCurves(outline, [
       { fromIdx: 1, toIdx: 8, ...qBezToCubic(...seg1) },
       { fromIdx: 8, toIdx: 15, ...qBezToCubic(...seg2) },
     ]);
   }
-  function cuffPc(wristW) { return [[0,0],[wristW+4,0],[wristW+4,7],[0,8]]; }
-  function waistbandPc(waistW, h) { h = h || 7; return [[0,0],[waistW+4,0],[waistW+6,h],[0,h]]; }
+  function cuffPc(wristW) { const out = [[0,0],[wristW+4,0],[wristW+4,7],[0,8]]; out.notches = [[wristW + 4, 0]]; return out; }
+  function waistbandPc(waistW, h) { h = h || 7; const out = [[0,0],[waistW+4,0],[waistW+6,h],[0,h]]; out.notches = [[waistW + 4, 0]]; return out; }
   // Welt/patch pocket, gently curved bottom.
   function pocketPc(w, h) {
     const seg = [[w,h], [w/2,h+3], [0,h]];
     const outline = [ [0,0],[w,0],[w,h], ...qBez(...seg, 6) ];
+    outline.notches = [[w, 0]];
     return withCurves(outline, [{ fromIdx: 2, toIdx: 8, ...qBezToCubic(...seg) }]);
   }
   // Triangular flare insert (godet) — two curved sides meeting at a point.
@@ -447,10 +456,12 @@ export let FancyGen;
       ...qBez(...seg1, 7),
       ...qBez(...seg2, 7),
     ];
-    return dedupeCloseWithCurves(outline, [
+    const res = dedupeCloseWithCurves(outline, [
       { fromIdx: 1, toIdx: 8, ...qBezToCubic(...seg1) },
       { fromIdx: 8, toIdx: 15, ...qBezToCubic(...seg2) },
     ]);
+    res.notches = [res[4], res[11]];
+    return res;
   }
   // One half of a two-piece hood — curved crown + curved face-opening.
   function hoodHalf(headC, depth) {
@@ -465,6 +476,7 @@ export let FancyGen;
       ...qBez(...seg2, 7),
       [w*0.95, 14],
     ];
+    outline.notches = [outline[7]];
     return withCurves(outline, [
       { fromIdx: 0, toIdx: 7, ...qBezToCubic(...seg1) },
       { fromIdx: 7, toIdx: 14, ...qBezToCubic(...seg2) },
@@ -827,11 +839,11 @@ export let FancyGen;
   function jacketFrontBack(m, len, o) {
     o = o || {};
     const qc = q(m.chest);
-    const hemW = qc * (o.hemFlareF || 1.05);
+    const underarmX = qc + 2.2, armY = len * 0.14;
+    const hemW = underarmX * (o.hemFlareF || 1.05);
     const closureX = o.closureX != null ? o.closureX : qc * 0.12;
 
-    const underarmX = qc * 0.85, armY = len * 0.14;
-    const sideBulge = qc * 0.15, sideInset = qc * 0.15;
+    const sideBulge = qc * 0.12, sideInset = qc * 0.12;
     const midY = (armY + len) / 2;
 
     // BerryStudio-Upgrade-Plan-v5.md WP-43 continued: before this, `back`
@@ -1001,6 +1013,7 @@ export let FancyGen;
     // below, called with the SAME topW/botW/len/curveOut for its own
     // upper portion) can be checked on the real matching edge.
     outline.edges = [{ fromIdx: 1, toIdx: 7, seamId: 'goreSide' }];
+    outline.notches = [outline[4]];
     return outline;
   }
   // A train skirt's back gore: real bridal-pattern construction is a
@@ -1033,6 +1046,7 @@ export let FancyGen;
       { fromIdx: 7, toIdx: 13, ...qBezToCubic(...trainSeg) },
     ]);
     outline.edges = [{ fromIdx: 1, toIdx: 7, seamId: 'goreSide' }];
+    outline.notches = [outline[4]];
     return outline;
   }
   // Asymmetric wrap/surplice front panel (wrap dresses, sherwani-style closures).
@@ -1054,6 +1068,7 @@ export let FancyGen;
     // the first place — the wrap panel only runs to `len*0.55`, the back
     // runs the full coat length).
     outline.edges = [{ fromIdx: 1, toIdx: 8, seamId: 'wrapCoatSide' }];
+    outline.notches = [outline[4]];
     return outline;
   }
   // Back panel for a wrap/asymmetric-closure coat (sherwani-style),
@@ -1083,6 +1098,7 @@ export let FancyGen;
       { fromIdx: 8, toIdx: 14, ...qBezToCubic(...hemSeg) },
     ]);
     outline.edges = [{ fromIdx: 1, toIdx: 8, seamId: 'wrapCoatSide' }];
+    outline.notches = [outline[4]];
     return outline;
   }
   // Trouser front/back panel with a curved crotch seam.
@@ -1140,6 +1156,7 @@ export let FancyGen;
       { fromIdx: 9, toIdx: 10, seamId: 'trouserInseam', reverse: false },
       { fromIdx: 10, toIdx: 0, mirrorSelf: true },
     ];
+    outline.notches = [outline[2], outline[5]];
     return outline;
   }
 

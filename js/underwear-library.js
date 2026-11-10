@@ -241,19 +241,19 @@ import { q, PATTERNS, LIBRARY } from './data.js';
         grain: [[qw * 0.15, backLen * 0.2], [qw * 0.15, backLen * 0.85]] },
       { key: "gusset", name: opts.gussetName || { en: "Crotch Gusset", ar: "دكة الجسم" },
         desc: opts.gussetDesc || { en: "Curved cotton-lining gusset seamed into the crotch, cut on the fold.", ar: "دكة قطنية منحنية تُخاط عند خط الجسم، تُقص على الطية." },
-        outline: gussetOval(gW, gH), role: "gusset", cutOnFold: true,
+        outline: gussetOval(gW, gH), notches: [[gW / 2, gH / 2]], role: "gusset", cutOnFold: true,
         grain: [[gW / 4, 2], [gW / 4, gH - 2]] },
       { key: "gussetLining", name: opts.gussetLiningName || { en: "Gusset Lining", ar: "بطانة الدكة" },
         desc: opts.gussetLiningDesc || { en: "Second gusset layer for opacity and comfort, cut on the fold.", ar: "طبقة ثانية للدكة لمزيد من التغطية والراحة، تُقص على الطية." },
-        outline: gussetOval(gW, gH), role: "lining", cutOnFold: true,
+        outline: gussetOval(gW, gH), notches: [[gW / 2, gH / 2]], role: "lining", cutOnFold: true,
         grain: [[gW / 4, 2], [gW / 4, gH - 2]] },
       { key: "waistElastic", name: opts.waistElasticName || { en: "Waist Elastic", ar: "أستك الخصر" },
         desc: opts.waistElasticDesc || { en: "Soft knit elastic stitched to the waist edge.", ar: "أستك ناعم يُخاط على حافة الخصر." },
-        outline: elasticStrip(waistCirc), role: "elastic-band",
+        outline: elasticStrip(waistCirc), notches: [[waistCirc, 0]], role: "elastic-band",
         grain: [[waistCirc / 2, 0.6], [waistCirc / 2, 1.6]] },
       { key: "legElastic", name: opts.legElasticName || { en: "Leg Elastic", ar: "أستك فتحة الساق" },
         desc: opts.legElasticDesc || { en: "Soft knit elastic stitched to each leg opening.", ar: "أستك ناعم يُخاط على كل فتحة ساق." },
-        outline: elasticStrip(legCirc, 1.6), role: "elastic-band", bilateral: true,
+        outline: elasticStrip(legCirc, 1.6), notches: [[legCirc, 0]], role: "elastic-band", bilateral: true,
         grain: [[legCirc / 2, 0.4], [legCirc / 2, 1.2]] },
     ];
     return pieces;
@@ -312,15 +312,17 @@ import { q, PATTERNS, LIBRARY } from './data.js';
     const cup = braCup(cupW, cupD, opts);
     const bridgeW = opts.plunge ? cupW * 0.18 : cupW * 0.30;
     const bandW = chestW * 0.62 * (opts.bandWidthF || 1);
+    const bridgeOut = curvedBandPc(bridgeW, cupD * 0.55, cupD * 0.04);
+    const bandOut = curvedBandPc(bandW, bandH);
 
     const pieces = [
       { key: "cup", name: { en: "Cup", ar: "الكأس" },
         desc: { en: "Curved soft cup, seamed at the underarm, top, and band edges; straight along the inner edge against the bridge.", ar: "كأس ناعم منحنٍ، مخيط عند الإبط والأعلى وحافة الحزام؛ مستقيم عند الحافة الداخلية الملاصقة للجسر." },
-        outline: cup, role: "cup", bilateral: true,
+        outline: cup, notches: [cup[6], cup[12]], role: "cup", bilateral: true,
         grain: [[cupW * 0.4, cupD * 0.1], [cupW * 0.4, cupD * 0.7]] },
       { key: "bridge", name: { en: "Center Bridge", ar: "الجسر الأوسط" },
         desc: { en: "Narrow center-front panel joining the two cups.", ar: "قطعة ضيقة في مقدمة الوسط تصل بين الكأسين." },
-        outline: curvedBandPc(bridgeW, cupD * 0.55, cupD * 0.04), role: "other", cutOnFold: true,
+        outline: bridgeOut, notches: [bridgeOut[4]], role: "other", cutOnFold: true,
         // WP-57 (docs/plan 4.md Phase 5): both grain points used to be
         // fixed cm values (y:2 and y:cupD*0.4) sized for a full-depth
         // adult cup. This piece's own height is `cupD * 0.55`, which for
@@ -339,14 +341,15 @@ import { q, PATTERNS, LIBRARY } from './data.js';
         grain: [[bridgeW / 2, cupD * 0.55 * 0.2], [bridgeW / 2, cupD * 0.55 * 0.8]] },
       { key: "band", name: { en: opts.longline ? "Longline Band" : "Band", ar: opts.longline ? "حزام ممتد" : "الحزام" },
         desc: { en: "Band/wing panel from the cup side around to the center back, with a curved top edge following the underbust.", ar: "قطعة الحزام/الجانب من جانب الكأس حتى وسط الظهر، بحافة علوية منحنية تتبع أسفل الصدر." },
-        outline: curvedBandPc(bandW, bandH), role: "band", bilateral: true,
+        outline: bandOut, notches: [bandOut[4]], role: "band", bilateral: true,
         grain: [[bandW / 2, 1.5], [bandW / 2, bandH - 1.5]] },
     ];
     if (opts.strap !== "none") {
+      const sW = opts.wideStrap ? 2.6 : 1.6;
       pieces.push({ key: "strap", name: { en: "Strap", ar: "الحمالة" },
         desc: { en: opts.strap === "racerback" ? "Racerback strap, angled in toward the center back." : "Adjustable shoulder strap.",
                 ar: opts.strap === "racerback" ? "حمالة رياضية بظهر متقاطع، مائلة نحو وسط الظهر." : "حمالة كتف قابلة للتعديل." },
-        outline: strapPc(opts.longline ? 14 : 18, opts.wideStrap ? 2.6 : 1.6), role: "strap", bilateral: true,
+        outline: strapPc(opts.longline ? 14 : 18, sW), notches: [[sW, 0]], role: "strap", bilateral: true,
         grain: [[0.8, 3], [0.8, (opts.longline ? 14 : 18) - 3]] });
     }
     return pieces;
@@ -383,15 +386,15 @@ import { q, PATTERNS, LIBRARY } from './data.js';
     return [
       { key: "front", name: { en: "Front Panel", ar: "القطعة الأمامية" },
         desc: { en: "Compression-fit front panel with a curved scoop neckline.", ar: "قطعة أمامية ضاغطة بفتحة رقبة منحنية." },
-        outline: front, role: "band", cutOnFold: true,
+        outline: front, notches: [front[12]], role: "band", cutOnFold: true,
         grain: [[chestW * 0.4, depth * 0.2], [chestW * 0.4, depth - 3]] },
       { key: "back", name: { en: opts.racer ? "Racerback Panel" : "Back Panel", ar: opts.racer ? "قطعة الظهر الرياضي" : "القطعة الخلفية" },
         desc: { en: opts.racer ? "Narrow racerback panel crossing high between the shoulder blades." : "Back panel with a plain scoop.", ar: opts.racer ? "قطعة ظهر رياضي ضيقة تتقاطع عاليًا بين لوحي الكتف." : "قطعة خلفية بفتحة بسيطة." },
-        outline: back, role: "band", cutOnFold: true,
+        outline: back, notches: [back[12]], role: "band", cutOnFold: true,
         grain: [[chestW * 0.3, depth * 0.2], [chestW * 0.3, depth - 3]] },
       { key: "bandElastic", name: { en: "Band Elastic", ar: "أستك الحزام" },
         desc: { en: "Wide elastic band finishing the bottom edge.", ar: "أستك عريض يُنهي الحافة السفلية." },
-        outline: elasticStrip(bandCirc, 3.5), role: "elastic-band",
+        outline: elasticStrip(bandCirc, 3.5), notches: [[bandCirc, 0]], role: "elastic-band",
         grain: [[bandCirc / 2, 1], [bandCirc / 2, 2.5]] },
     ];
   }

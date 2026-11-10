@@ -3,7 +3,17 @@
    pattern definitions. All measurements in centimetres.
    ============================================================ */
 
-import { cosineSleeveOutline, hoistCurves } from "./pattern-builders.js";
+import { cosineSleeveOutline, hoistCurves, qBezToCubic } from "./pattern-builders.js";
+
+function threePtCubic(p0, pm, p1) {
+  const cx = 2 * pm[0] - 0.5 * (p0[0] + p1[0]);
+  const cy = 2 * pm[1] - 0.5 * (p0[1] + p1[1]);
+  return qBezToCubic(p0, [cx, cy], p1);
+}
+
+function twoPtNeckCubic(p0, p1) {
+  return qBezToCubic(p0, [p0[0] + (p1[0] - p0[0]) * 0.55, p0[1]], p1);
+}
 
 export const SIZES = ["XXS","XS","S","M","L","XL","XXL","XXXL","XXXXL","5XL","6XL"];
 // Grade step relative to M (index 3). Each step = one size.
@@ -84,7 +94,7 @@ export const PATTERNS = {
     name: { en: "Fit & Flare Midi Dress", ar: "فستان ميدي متسع الخصر" },
     desc: { en: "Fit-and-flare midi dress with boat neck, 3/4 sleeves, and flared skirt.", ar: "فستان ميدي أنيق بخصر مجسم وفتحة قارب وأكمام ثلاثة أرباع وتنورة متسعة." },
     pieces: (m) => {
-      const cF = q(m.chest) + 1, wF = q(m.waist) + 2, hF = q(m.hips) + 1.5;
+      const cF = q(m.chest) + 1.5, wF = q(m.waist) + 2, hF = q(m.hips) + 1.5;
       const len = m.backLen + 58; // waist->hem
       const sleeve34Len = Math.round(m.sleeve * 0.72);
       const slvW = q(m.bicep) * 2;
@@ -95,6 +105,10 @@ export const PATTERNS = {
           name:{en:"Front Bodice",ar:"قصة أمامية"},
           desc:{en:"Front base for dresses, blouses and shirts.",ar:"الأساس الأمامي للفساتين والبلوزات والقمصان."},
           outline:[[0,0],[cF,1],[cF+1,m.backLen*0.55],[wF+1,m.backLen],[hF+1,m.backLen+24],[hF+1,len],[0,len]],
+          curves:[
+            { fromIdx: 0, toIdx: 1, ...twoPtNeckCubic([0,0],[cF,1]) },
+            { fromIdx: 1, toIdx: 3, ...threePtCubic([cF,1],[cF+1,m.backLen*0.55],[wF+1,m.backLen]) },
+          ],
           darts:[[[wF*0.5,m.backLen-9],[wF*0.5-2,m.backLen],[wF*0.5+2,m.backLen]]],
           notches:[[cF,1],[wF+1,m.backLen]],
           grain:[[cF*0.5,10],[cF*0.5,len-10]],
@@ -109,6 +123,10 @@ export const PATTERNS = {
           name:{en:"Back Bodice",ar:"قصة خلفية"},
           desc:{en:"Back base, mirrors the front with shaping.",ar:"الأساس الخلفي، يقابل الأمام مع تشكيل الوسط."},
           outline:[[0,0],[cF,1.5],[cF+1,m.backLen*0.55],[wF+0.5,m.backLen],[hF+0.5,m.backLen+24],[hF+0.5,len],[0,len]],
+          curves:[
+            { fromIdx: 0, toIdx: 1, ...twoPtNeckCubic([0,0],[cF,1.5]) },
+            { fromIdx: 1, toIdx: 3, ...threePtCubic([cF,1.5],[cF+1,m.backLen*0.55],[wF+0.5,m.backLen]) },
+          ],
           darts:[[[wF*0.5,m.backLen-11],[wF*0.5-2,m.backLen],[wF*0.5+2,m.backLen]]],
           notches:[[cF,1.5],[wF+0.5,m.backLen]],
           grain:[[2,10],[2,len-10]],
@@ -129,6 +147,8 @@ export const PATTERNS = {
           name:{en:"Front Skirt Panel",ar:"بنل التنورة الأمامي"},
           desc:{en:"Flared lower front for movement.",ar:"جزء أمامي سفلي واسع للحركة."},
           outline:[[0,0],[hF+1,0],[hF+6,len-m.backLen],[-4,len-m.backLen]],
+          curves:[{ fromIdx: 1, toIdx: 2, ...twoPtNeckCubic([hF+1,0],[hF+6,len-m.backLen]) }],
+          notches:[[(hF+1)*0.5,0]],
           grain:[[hF*0.5,6],[hF*0.5,len-m.backLen-6]],
           role:"peplum-front",
         },
@@ -150,11 +170,19 @@ export const PATTERNS = {
         { key:"front", name:{en:"Shirt Front",ar:"مقدمة القميص"},
           desc:{en:"Front with button placket edge.",ar:"المقدمة مع حاشية الأزرار."},
           outline:[[0,0],[cF,2],[cF+1,m.backLen*0.5],[cF,m.backLen],[cF,len],[0,len]],
+          curves:[
+            { fromIdx: 0, toIdx: 1, ...twoPtNeckCubic([0,0],[cF,2]) },
+            { fromIdx: 1, toIdx: 3, ...threePtCubic([cF,2],[cF+1,m.backLen*0.5],[cF,m.backLen]) },
+          ],
           notches:[[cF,m.backLen]], grain:[[3,8],[3,len-8]],
           role:"bodice-front-center", cutOnFold:true, chestEdgeIndices:[1] },
         { key:"back", name:{en:"Shirt Back with Yoke",ar:"ظهر القميص مع الكوة"},
           desc:{en:"Back panel joined to a shoulder yoke.",ar:"الظهر متصل بكوّة الكتف."},
           outline:[[0,0],[cF+1,2],[cF+2,m.backLen*0.5],[cF+1,len],[0,len]],
+          curves:[
+            { fromIdx: 0, toIdx: 1, ...twoPtNeckCubic([0,0],[cF+1,2]) },
+            { fromIdx: 1, toIdx: 3, ...threePtCubic([cF+1,2],[cF+2,m.backLen*0.5],[cF+1,len]) },
+          ],
           grain:[[3,8],[3,len-8]],
           // WP-44: side-seam notch at the same height as front's own
           // [cF,m.backLen] notch — this outline has no literal vertex
@@ -172,11 +200,14 @@ export const PATTERNS = {
         { key:"collar", name:{en:"Collar & Stand",ar:"الياقة والقاعدة"},
           desc:{en:"Two-piece collar with band.",ar:"ياقة من قطعتين مع القاعدة."},
           outline:[[0,0],[m.neck/2+3,0],[m.neck/2+3,7],[0,8]],
+          curves:[{ fromIdx: 2, toIdx: 3, ...twoPtNeckCubic([m.neck/2+3,7],[0,8]) }],
+          notches:[[(m.neck/2+3)*0.5,0]],
           grain:[[2,2],[m.neck/2,2]],
           role:"collar" },
         { key:"cuff", name:{en:"Cuff",ar:"الأساور"},
           desc:{en:"Buttoned wrist cuff.",ar:"أساور المعصم بالأزرار."},
           outline:[[0,0],[m.neck/2+6,0],[m.neck/2+6,7],[0,7]],
+          notches:[[(m.neck/2+6)*0.5,0]],
           grain:[[2,2],[m.neck/2,2]],
           role:"cuff" },
       ]);
@@ -196,11 +227,15 @@ export const PATTERNS = {
         { key:"front", name:{en:"Abaya Front",ar:"مقدمة العباية"},
           desc:{en:"Open front panel with draped fall.",ar:"بنل أمامي مفتوح بانسدال."},
           outline:[[0,0],[w,3],[w+14,len],[-2,len]],
+          curves:[{ fromIdx: 0, toIdx: 1, ...twoPtNeckCubic([0,0],[w,3]) }],
+          notches:[[w+7,(3+len)*0.5]],
           grain:[[6,8],[6,len-8]],
           role:"front-panel" },
         { key:"back", name:{en:"Abaya Back",ar:"ظهر العباية"},
           desc:{en:"Full back on the fold.",ar:"ظهر كامل على الطية."},
           outline:[[0,0],[w+2,3],[w+16,len],[0,len]],
+          curves:[{ fromIdx: 0, toIdx: 1, ...twoPtNeckCubic([0,0],[w+2,3]) }],
+          notches:[[w+9,(3+len)*0.5]],
           grain:[[4,8],[4,len-8]],
           // WP-24: front is an open, un-folded panel (not a mirrorable
           // half), so it deliberately gets no chestEdgeIndices hint — only
@@ -229,6 +264,10 @@ export const PATTERNS = {
         { key:"front", name:{en:"Thobe Front",ar:"مقدمة الثوب"},
           desc:{en:"Front with placket and pocket.",ar:"المقدمة مع الحاشية والجيب."},
           outline:[[0,0],[w,2],[w+4,m.backLen],[w+8,len],[0,len]],
+          curves:[
+            { fromIdx: 0, toIdx: 1, ...twoPtNeckCubic([0,0],[w,2]) },
+            { fromIdx: 1, toIdx: 3, ...threePtCubic([w,2],[w+4,m.backLen],[w+8,len]) },
+          ],
           grain:[[4,8],[4,len-8]],
           // WP-44: notch at the underarm-level vertex (outline[2]) — front
           // and back share the same point count and near-identical
@@ -240,6 +279,10 @@ export const PATTERNS = {
         { key:"back", name:{en:"Thobe Back",ar:"ظهر الثوب"},
           desc:{en:"Back on the fold.",ar:"الظهر على الطية."},
           outline:[[0,0],[w+1,2],[w+5,m.backLen],[w+9,len],[0,len]],
+          curves:[
+            { fromIdx: 0, toIdx: 1, ...twoPtNeckCubic([0,0],[w+1,2]) },
+            { fromIdx: 1, toIdx: 3, ...threePtCubic([w+1,2],[w+5,m.backLen],[w+9,len]) },
+          ],
           grain:[[4,8],[4,len-8]],
           notches:[[w+5,m.backLen]],
           role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[1] },
@@ -251,7 +294,9 @@ export const PATTERNS = {
           role:"sleeve", bilateral:true },
         { key:"gusset", name:{en:"Underarm Gusset",ar:"دكة تحت الإبط"},
           desc:{en:"Diamond gusset for ease of movement.",ar:"دكة ماسية لسهولة الحركة."},
-          outline:[[6,0],[12,10],[6,20],[0,10]], grain:[[6,3],[6,17]],
+          outline:[[6,0],[12,10],[6,20],[0,10]],
+          notches:[[6,0]],
+          grain:[[6,3],[6,17]],
           role:"other" },
       ]);
     }
@@ -269,7 +314,9 @@ export const PATTERNS = {
       return hoistCurves([
         { key:"bodice_front", name:{en:"Bodice Front",ar:"صدرية أمامية"},
           desc:{en:"Fitted front bodice.",ar:"صدرية أمامية ضيقة."},
-          outline:[[0,0],[cF,1],[cF,bod],[0,bod]], grain:[[cF/2,4],[cF/2,bod-4]],
+          outline:[[0,0],[cF,1],[cF,bod],[0,bod]],
+          curves:[{ fromIdx: 0, toIdx: 1, ...twoPtNeckCubic([0,0],[cF,1]) }],
+          grain:[[cF/2,4],[cF/2,bod-4]],
           // WP-44: front and back share this exact literal outline, so a
           // notch at the same chest-level vertex both already declare via
           // chestEdgeIndices matches by construction — no seamId needed.
@@ -277,12 +324,16 @@ export const PATTERNS = {
           role:"bodice-front-center", cutOnFold:true, chestEdgeIndices:[1] },
         { key:"bodice_back", name:{en:"Bodice Back",ar:"صدرية خلفية"},
           desc:{en:"Back bodice with button opening.",ar:"صدرية خلفية بفتحة أزرار."},
-          outline:[[0,0],[cF,1],[cF,bod],[0,bod]], grain:[[cF/2,4],[cF/2,bod-4]],
+          outline:[[0,0],[cF,1],[cF,bod],[0,bod]],
+          curves:[{ fromIdx: 0, toIdx: 1, ...twoPtNeckCubic([0,0],[cF,1]) }],
+          grain:[[cF/2,4],[cF/2,bod-4]],
           notches:[[cF,1]],
           role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[1] },
         { key:"skirt", name:{en:"Gathered Skirt",ar:"تنورة مكشكشة"},
           desc:{en:"Full rectangle skirt, gathered to waist.",ar:"تنورة مستطيلة كاملة تُكشكش عند الوسط."},
           outline:[[0,0],[m.waist*1.6,0],[m.waist*1.6,m.inseam*0.55],[0,m.inseam*0.55]],
+          curves:[{ fromIdx: 1, toIdx: 2, ...twoPtNeckCubic([m.waist*1.6,0],[m.waist*1.6,m.inseam*0.55]) }],
+          notches:[[m.waist*0.8,0]],
           grain:[[8,4],[8,m.inseam*0.5]],
           role:"hip-panel-front" },
         { key:"sleeve", name:{en:"Puff Sleeve",ar:"كم منفوش"},
@@ -306,18 +357,30 @@ export const PATTERNS = {
         { key:"front_leg", name:{en:"Front Leg",ar:"الساق الأمامية"},
           desc:{en:"Front trouser leg with crease.",ar:"الساق الأمامية مع الكسرة."},
           outline:[[0,0],[w,0],[w+2,10],[w,m.inseam+18],[2,m.inseam+18],[-2,10]],
+          curves:[
+            { fromIdx: 1, toIdx: 3, ...threePtCubic([w,0],[w+2,10],[w,m.inseam+18]) },
+            { fromIdx: 4, toIdx: 5, ...twoPtNeckCubic([2,m.inseam+18],[-2,10]) },
+          ],
+          notches:[[w+2,10]],
           grain:[[w/2,6],[w/2,m.inseam+12]],
           role:"trouser-front", bilateral:true,
           edges:[{fromIdx:1,toIdx:3,seamId:"boysTrouserOutseam",reverse:false},{fromIdx:4,toIdx:5,seamId:"boysTrouserInseam",reverse:false},{fromIdx:5,toIdx:0,mirrorSelf:true}] },
         { key:"back_leg", name:{en:"Back Leg",ar:"الساق الخلفية"},
           desc:{en:"Back leg with seat shaping.",ar:"الساق الخلفية مع تشكيل المقعد."},
           outline:[[0,0],[w+3,0],[w+5,10],[w+2,m.inseam+18],[2,m.inseam+18],[-4,12]],
+          curves:[
+            { fromIdx: 1, toIdx: 3, ...threePtCubic([w+3,0],[w+5,10],[w+2,m.inseam+18]) },
+            { fromIdx: 4, toIdx: 5, ...twoPtNeckCubic([2,m.inseam+18],[-4,12]) },
+          ],
+          notches:[[w+5,10]],
           grain:[[w/2,6],[w/2,m.inseam+12]],
           role:"trouser-back", bilateral:true,
           edges:[{fromIdx:1,toIdx:3,seamId:"boysTrouserOutseam",reverse:false},{fromIdx:4,toIdx:5,seamId:"boysTrouserInseam",reverse:false},{fromIdx:5,toIdx:0,mirrorSelf:true}] },
         { key:"waistband", name:{en:"Waistband",ar:"الحزام"},
           desc:{en:"Elastic waistband strip.",ar:"شريط حزام بأستك."},
-          outline:[[0,0],[m.waist+4,0],[m.waist+4,7],[0,7]], grain:[[3,2],[m.waist,2]],
+          outline:[[0,0],[m.waist+4,0],[m.waist+4,7],[0,7]],
+          notches:[[(m.waist+4)*0.5,0]],
+          grain:[[3,2],[m.waist,2]],
           role:"waistband" },
       ];
     }
