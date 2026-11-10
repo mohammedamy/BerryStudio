@@ -101,6 +101,7 @@ export let FancyGen;
       // the way princessBodice()'s own pieces do.
       if (!p.chestEdgeIndices && p.outline && p.outline.chestEdgeIndices) p.chestEdgeIndices = p.outline.chestEdgeIndices;
       if (!p.notches && p.outline && p.outline.notches) p.notches = p.outline.notches;
+      if ((!p.notches || !p.notches.length) && Array.isArray(p.outline) && p.outline.length) p.notches = [p.outline[0]];
     }
     return pieces;
   }
@@ -486,6 +487,7 @@ export let FancyGen;
     depth = depth || 9;
     const seg = [[shoulderW,depth*0.6], [shoulderW/2,depth+3], [0,depth*0.6]];
     const outline = [ [0,0],[shoulderW,0],[shoulderW,depth*0.6], ...qBez(...seg, 8) ];
+    outline.notches = [outline[1], outline[6]];
     return withCurves(outline, [{ fromIdx: 2, toIdx: 10, ...qBezToCubic(...seg) }]);
   }
   // Flared peplum panel, cut on the fold at center front/back: a straight
@@ -524,6 +526,7 @@ export let FancyGen;
       ...qBez(...seg1, 6),
       ...qBez(...seg2, 6),
     ];
+    outline.notches = [[waistHalfW, 0]];
     // seg2's own endpoint is exactly [0,flareLen] — the outline's implicit
     // wraparound edge (last point back to [0,0]) is the fold itself, a
     // plain 2-point straight line, guaranteed collinear.
@@ -535,12 +538,14 @@ export let FancyGen;
   function sashPc(width, tailLen) {
     const seg = [[width+tailLen,5], [width+tailLen+10,2.5], [width+tailLen,0]];
     const outline = [ [0,0],[width,0],[width,5],[width+tailLen,5], ...qBez(...seg, 5) ];
+    outline.notches = [[width, 0]];
     return withCurves(outline, [{ fromIdx: 3, toIdx: 8, ...qBezToCubic(...seg) }]);
   }
   // Tiered ruffle skirt panel, curved hem.
   function tierPc(topW, botW, height) {
     const seg = [[botW,height], [botW*0.5,height+4], [0,height]];
     const outline = [ [0,0],[topW,0],[botW,height], ...qBez(...seg, 8) ];
+    outline.notches = [[topW, 0], outline[6]];
     return withCurves(outline, [{ fromIdx: 2, toIdx: 10, ...qBezToCubic(...seg) }]);
   }
   // Draped cape overlay, curved swooping hem.
@@ -560,6 +565,7 @@ export let FancyGen;
       ...qBez(...seg1, 8),
       ...qBez(...seg2, 8),
     ];
+    outline.notches = [[neckHalfW, 0]];
     // seg2's own endpoint is exactly [0,len*0.85] — the outline's implicit
     // wraparound edge (last point back to [0,0]) is the fold itself.
     return withCurves(outline, [
@@ -803,9 +809,9 @@ export let FancyGen;
     // correctly flagged that as a real (not false-positive) mismatch when
     // this was tried.
     const meta = {
-      frontCenter: { role: 'bodice-front-center', cutOnFold: true, princessSeamId: 'princessFront', necklineEndIdx: frontCurveOffset, curves: [...frontNeckCurve, ...offsetCurves(frontCurveCurves, frontCurveOffset)], edges: [frontCenterEdge, { fromIdx: 0, toIdx: frontCurveOffset, seamId: 'princessFrontNeck' }] },
+      frontCenter: { role: 'bodice-front-center', cutOnFold: true, princessSeamId: 'princessFront', necklineEndIdx: frontCurveOffset, curves: [...frontNeckCurve, ...offsetCurves(frontCurveCurves, frontCurveOffset)], edges: [frontCenterEdge, { fromIdx: 0, toIdx: frontCurveOffset, seamId: 'princessFrontNeck' }], notches: [frontCenter[0]] },
       frontSide: { role: 'bodice-front-side', bilateral: true, curves: frontSide.curves || [], edges: [{ fromIdx: 0, toIdx: frontCurve.length - 1, seamId: 'princessFront' }], notches: frontNotches },
-      backCenter: { role: 'bodice-back-center', cutOnFold: true, princessSeamId: 'princessBack', necklineEndIdx: backCurveOffset, curves: [{ fromIdx: 0, toIdx: neckCurveToIdx(backNeck, backCurve, backNeckSeg[2]), ...qBezToCubic(...backNeckSeg) }, ...offsetCurves(backCurveCurves, backCurveOffset)], edges: [backCenterEdge, { fromIdx: 0, toIdx: backCurveOffset, seamId: 'princessBackNeck' }] },
+      backCenter: { role: 'bodice-back-center', cutOnFold: true, princessSeamId: 'princessBack', necklineEndIdx: backCurveOffset, curves: [{ fromIdx: 0, toIdx: neckCurveToIdx(backNeck, backCurve, backNeckSeg[2]), ...qBezToCubic(...backNeckSeg) }, ...offsetCurves(backCurveCurves, backCurveOffset)], edges: [backCenterEdge, { fromIdx: 0, toIdx: backCurveOffset, seamId: 'princessBackNeck' }], notches: [backCenter[0]] },
       backSide: { role: 'bodice-back-side', bilateral: true, curves: backSide.curves || [], edges: [{ fromIdx: 0, toIdx: backCurve.length - 1, seamId: 'princessBack' }], notches: backNotches },
     };
     return { frontCenter, frontSide, backCenter, backSide, hemY, sideX, meta };
@@ -1641,10 +1647,10 @@ export let FancyGen;
         { key:"bodiceFS", name:{en:"Bodice Front Side",ar:"جانب الصدرية الأمامي"}, desc:{en:"Curved side panel.",ar:"لوحة جانبية منحنية."}, ...b.meta.frontSide, outline:b.frontSide, grain:[[3,8],[3,b.hemY-3]] },
         { key:"bodiceBC", name:{en:"Bodice Back Center",ar:"خلفية الصدرية الوسطى"}, desc:{en:"Center back panel.",ar:"لوحة الخلفية الوسطى."}, ...b.meta.backCenter, outline:b.backCenter, grain:[[2,8],[2,b.hemY-3]] },
         { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel.",ar:"لوحة جانبية خلفية منحنية."}, ...b.meta.backSide, outline:b.backSide, grain:[[3,8],[3,b.hemY-3]] },
-        { key:"tier1", name:{en:"Skirt Tier 1 (Top Ruffle)",ar:"طبقة التنورة الأولى (الكشكش العلوي)"}, desc:{en:"Upper cascading ruffle gathered at the waist.",ar:"كشكش علوي متدرج مجمّع عند الخصر."}, role:"tier", outline:tierPc(widths[0], widths[1], tierLen), grain:[[4,3],[4,tierLen-4]] },
-        { key:"tier2", name:{en:"Skirt Tier 2",ar:"طبقة التنورة الثانية"}, desc:{en:"Second cascading ruffle tier.",ar:"طبقة كشكش متدرجة ثانية."}, role:"tier", outline:tierPc(widths[1], widths[2], tierLen), grain:[[4,3],[4,tierLen-4]] },
-        { key:"tier3", name:{en:"Skirt Tier 3",ar:"طبقة التنورة الثالثة"}, desc:{en:"Third cascading ruffle tier.",ar:"طبقة كشكش متدرجة ثالثة."}, role:"tier", outline:tierPc(widths[2], widths[3], tierLen), grain:[[4,3],[4,tierLen-4]] },
-        { key:"tier4", name:{en:"Skirt Tier 4 (Hem Flounce)",ar:"طبقة التنورة الرابعة (كشكش الحاشية)"}, desc:{en:"Wide hem flounce completing the 4-tier silhouette.",ar:"كشكش حاشية واسع يكمل قوام الطبقات الأربع."}, role:"tier", outline:tierPc(widths[3], widths[3]*1.2, tierLen), grain:[[4,3],[4,tierLen-4]] },
+        { key:"tier1", name:{en:"Skirt Tier 1 (Top Ruffle)",ar:"طبقة التنورة الأولى (الكشكش العلوي)"}, desc:{en:"Upper cascading ruffle gathered at the waist.",ar:"كشكش علوي متدرج مجمّع عند الخصر."}, role:"tier", outline:tierPc(widths[0], widths[1], tierLen), grain:[[4,tierLen*0.2],[4,tierLen*0.8]] },
+        { key:"tier2", name:{en:"Skirt Tier 2",ar:"طبقة التنورة الثانية"}, desc:{en:"Second cascading ruffle tier.",ar:"طبقة كشكش متدرجة ثانية."}, role:"tier", outline:tierPc(widths[1], widths[2], tierLen), grain:[[4,tierLen*0.2],[4,tierLen*0.8]] },
+        { key:"tier3", name:{en:"Skirt Tier 3",ar:"طبقة التنورة الثالثة"}, desc:{en:"Third cascading ruffle tier.",ar:"طبقة كشكش متدرجة ثالثة."}, role:"tier", outline:tierPc(widths[2], widths[3], tierLen), grain:[[4,tierLen*0.2],[4,tierLen*0.8]] },
+        { key:"tier4", name:{en:"Skirt Tier 4 (Hem Flounce)",ar:"طبقة التنورة الرابعة (كشكش الحاشية)"}, desc:{en:"Wide hem flounce completing the 4-tier silhouette.",ar:"كشكش حاشية واسع يكمل قوام الطبقات الأربع."}, role:"tier", outline:tierPc(widths[3], widths[3]*1.2, tierLen), grain:[[4,tierLen*0.2],[4,tierLen*0.8]] },
         { key:"sleeve", name:{en:"Armhole Finish / Cap Sleeve",ar:"تشطيب الإبط / كم كاب"}, desc:{en:"Clean armhole facing or optional flutter cap sleeve.",ar:"بطانة فتحة إبط نظيفة أو كم كاب متموج اختياري."}, role:"cap-sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.28, 1.15), grain:[[q(m.bicep)*0.5,3],[q(m.bicep)*0.5,m.sleeve*0.22]] },
         { key:"sash", name:{en:"Waist Bow Sash",ar:"حزام خصر بفيونكة"}, desc:{en:"Satin waist sash tying at the front center with a structured bow.",ar:"حزام خصر ستان يُربط في منتصف الأمام بفيونكة مهيكلة."}, role:"sash", outline:sashPc(waistW*0.4, 36), grain:[[6,1.5],[22,1.5]] },
       ];
@@ -2388,10 +2394,10 @@ export let FancyGen;
         { key:"bodiceBC", name:{en:"Bodice Back Center",ar:"خلفية الصدرية الوسطى"}, desc:{en:"Back center bodice panel fitted for ballet posture.",ar:"لوحة خلفية وسطى مصممة لتناسب وضعية وقوام الباليه."}, ...b.meta.backCenter, outline:b.backCenter, grain:[[2,7],[2,b.hemY-3]] },
         { key:"bodiceBS", name:{en:"Bodice Back Side",ar:"جانب الصدرية الخلفي"}, desc:{en:"Curved back side panel matching princess seam contours.",ar:"لوحة جانبية خلفية متناسقة مع انحناءات قصة الأميرة."}, ...b.meta.backSide, outline:b.backSide, grain:[[3,7],[3,b.hemY-3]] },
         { key:"sleeve", name:{en:"Cap Sleeve",ar:"كم قصير"}, desc:{en:"Tiny curved cap sleeve.",ar:"كم قصير صغير منحنٍ."}, role:"cap-sleeve", bilateral:true, outline:sleeve1pc(m.bicep, m.sleeve*0.2, 1.0), grain:[[q(m.bicep)*0.5,2],[q(m.bicep)*0.5,m.sleeve*0.16]] },
-        { key:"tier1", name:{en:"Tutu Tier 1",ar:"طبقة التوتو الأولى"}, desc:{en:"High-density gathered upper tulle tier.",ar:"الطبقة الأولى عالية الكثافة من التول المجمع."}, role:"tier", outline:tierPc(widths[0], widths[1], tierLen), grain:[[4,3],[4,tierLen-3]] },
-        { key:"tier2", name:{en:"Tutu Tier 2",ar:"طبقة التوتو الثانية"}, desc:{en:"Flared second tulle tier building horizontal tutu lift.",ar:"الطبقة الثانية المتسعة التي تمنح التوتو رفعة مميزة."}, role:"tier", outline:tierPc(widths[1], widths[2], tierLen), grain:[[4,3],[4,tierLen-3]] },
-        { key:"tier3", name:{en:"Tutu Tier 3",ar:"طبقة التوتو الثالثة"}, desc:{en:"Third cascading tulle tier adding soft fairy-tale depth.",ar:"الطبقة الثالثة المتدرجة التي تضفي عمقاً وسحراً كلاسيكياً."}, role:"tier", outline:tierPc(widths[2], widths[3], tierLen), grain:[[4,3],[4,tierLen-3]] },
-        { key:"tier4", name:{en:"Tutu Tier 4",ar:"طبقة التوتو الرابعة"}, desc:{en:"Longest bottom tulle tier kissing the knees.",ar:"طبقة التول السفلية الأطول التي تلامس الركبتين بخفة."}, role:"tier", outline:tierPc(widths[3], widths[3]*1.3, tierLen), grain:[[4,3],[4,tierLen-3]] },
+        { key:"tier1", name:{en:"Tutu Tier 1",ar:"طبقة التوتو الأولى"}, desc:{en:"High-density gathered upper tulle tier.",ar:"الطبقة الأولى عالية الكثافة من التول المجمع."}, role:"tier", outline:tierPc(widths[0], widths[1], tierLen), grain:[[4,tierLen*0.2],[4,tierLen*0.8]] },
+        { key:"tier2", name:{en:"Tutu Tier 2",ar:"طبقة التوتو الثانية"}, desc:{en:"Flared second tulle tier building horizontal tutu lift.",ar:"الطبقة الثانية المتسعة التي تمنح التوتو رفعة مميزة."}, role:"tier", outline:tierPc(widths[1], widths[2], tierLen), grain:[[4,tierLen*0.2],[4,tierLen*0.8]] },
+        { key:"tier3", name:{en:"Tutu Tier 3",ar:"طبقة التوتو الثالثة"}, desc:{en:"Third cascading tulle tier adding soft fairy-tale depth.",ar:"الطبقة الثالثة المتدرجة التي تضفي عمقاً وسحراً كلاسيكياً."}, role:"tier", outline:tierPc(widths[2], widths[3], tierLen), grain:[[4,tierLen*0.2],[4,tierLen*0.8]] },
+        { key:"tier4", name:{en:"Tutu Tier 4",ar:"طبقة التوتو الرابعة"}, desc:{en:"Longest bottom tulle tier kissing the knees.",ar:"طبقة التول السفلية الأطول التي تلامس الركبتين بخفة."}, role:"tier", outline:tierPc(widths[3], widths[3]*1.3, tierLen), grain:[[4,tierLen*0.2],[4,tierLen*0.8]] },
         { key:"sash", name:{en:"Satin Bow Sash",ar:"حزام فيونكة ستان"}, desc:{en:"Lustrous satin ribbon belt tied in a front-side ballerina bow.",ar:"حزام شريطي من الساتان اللامع يُربط كفيونكة باليرينا جانبية."}, role:"sash", outline:sashPc(waistW*0.35, 30), grain:[[5,1.5],[19,1.5]] },
       ];
     });

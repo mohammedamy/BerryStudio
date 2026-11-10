@@ -109,7 +109,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
           outline: back, darts: [], notches: [[back[back.chestIdx][0], back[back.chestIdx][1]]], grain: [[shoulderX * 0.5, 10], [shoulderX * 0.5, hemY - 10]],
           role: 'bodice-back-center', cutOnFold: true, chestEdgeIndices: [back.chestIdx] },
         { key: 'tie', name: { en: 'Wrap Tie', ar: 'رباط اللف' }, desc: { en: 'Long tie closing the wrap front.', ar: 'رباط طويل يُغلق المقدمة الملفوفة.' },
-          outline: bandPc(waist * 2.2, 4), darts: [], notches: [], grain: [[2, 1], [2, 3]], role: 'wrap-tie' },
+          outline: bandPc(waist * 2.2, 4), darts: [], notches: [[waist * 1.1, 0]], grain: [[2, 1], [2, 3]], role: 'wrap-tie' },
       );
     } else if (suppression === 'princess') {
       const b = princessPanel({ chest, waist, hips, backLen: m.backLen, necklineDepth, hemBelowHip: opts.hemBelowHip, squareNeck: opts.squareNeck });
@@ -271,7 +271,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         // its last point), `mirrorSelf: true` since that's this SAME
         // piece's own bilateral L/R copies meeting each other (the
         // crotch seam), not a seam to a different declared piece.
-        grain: [[qt * 0.6, riseLen + 10], [qt * 0.6, riseLen + legLen - 10]], role: 'trouser-front', bilateral: true,
+        grain: [[qt * 0.6, riseLen + legLen * 0.2], [qt * 0.6, riseLen + legLen * 0.8]], role: 'trouser-front', bilateral: true,
         // WP-63 (docs/plan 4.md Phase 5, cloth-lab compatibility pass):
         // the waist edge is the implicit closing edge — the panel's own
         // last point (waist, inseam side) back to its first (waist,
@@ -287,7 +287,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         ] },
       { key: 'back', name: { en: `${opts.nameEn} Back`, ar: `خلفية ${opts.nameAr}` }, desc: { en: 'Back leg panel with a deeper curved crotch seam, per real block convention.', ar: 'لوحة الساق الخلفية بخط تفصيل منحنٍ أعمق، حسب القاعدة الحقيقية.' },
         outline: back, darts: [], notches: [[back[back.crotchIdx][0], back[back.crotchIdx][1]], [back[back.hemOutIdx][0], back[back.hemOutIdx][1]]],
-        grain: [[qt * 0.6, riseLen + 10], [qt * 0.6, riseLen + legLen - 10]], role: 'trouser-back', bilateral: true,
+        grain: [[qt * 0.6, riseLen + legLen * 0.2], [qt * 0.6, riseLen + legLen * 0.8]], role: 'trouser-back', bilateral: true,
         edges: [
           { fromIdx: 0, toIdx: back.hemOutIdx, seamId: `${opts.id}Outseam` },
           { fromIdx: back.hemInIdx, toIdx: back.length - 1, mirrorSelf: true },
@@ -323,13 +323,13 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
     ];
     if (tailored) {
       pieces.push({ key: 'fly', name: { en: 'Fly Placket Facing', ar: 'بطانة سحاب الفتحة الأمامية' }, desc: { en: 'Facing strip behind the front fly zip.', ar: 'شريط بطانة خلف سحاب الفتحة الأمامية.' },
-        outline: bandPc(3.5, riseLen - 4), darts: [], notches: [], grain: [[1.5, 2], [1.5, riseLen - 8]], role: 'placket-facing' });
+        outline: bandPc(3.5, riseLen - 4), darts: [], notches: [[1.75, 0]], grain: [[1.5, 2], [1.5, riseLen - 8]], role: 'placket-facing' });
       pieces.push({ key: 'pocket', name: { en: 'Welt Side Pocket', ar: 'جيب جانبي مطوي' }, desc: { en: 'Welt pocket facing at the side seam.', ar: 'بطانة جيب مطوي عند الخط الجانبي.' },
-        outline: pocketPatch(9, 3), darts: [], notches: [], grain: [[4.5, 1], [4.5, 2]], role: 'pocket', bilateral: true });
+        outline: pocketPatch(9, 3), darts: [], notches: [[4.5, 0]], grain: [[4.5, 1], [4.5, 2]], role: 'pocket', bilateral: true });
     }
     if (opts.cargo) {
       pieces.push({ key: 'cargo_pocket', name: { en: 'Cargo Pocket', ar: 'جيب كارجو' }, desc: { en: 'Patch pocket with a flap at the thigh.', ar: 'جيب ملصق بغطاء عند الفخذ.' },
-        outline: pocketPatch(11, 12), darts: [], notches: [], grain: [[5.5, 2], [5.5, 9]], role: 'pocket', bilateral: true });
+        outline: pocketPatch(11, 12), darts: [], notches: [[5.5, 0]], grain: [[5.5, 2], [5.5, 9]], role: 'pocket', bilateral: true });
     }
     return hoistCurves(pieces);
   }
@@ -375,7 +375,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
       { key: 'stand', name: { en: 'Collar Stand', ar: 'قاعدة الياقة' }, desc: { en: 'Standing band the collar attaches to, cut on the fold.', ar: 'شريط واقف تُركَّب عليه الياقة، مقصوص على الطية.' },
         outline: stand, darts: [], notches: [stand[stand.shoulderIdx]], grain: [[2, 1], [2, 2.2]], role: 'collar-stand', cutOnFold: true },
       { key: 'placket', name: { en: 'Front Placket Facing', ar: 'بطانة حاشية الأزرار' }, desc: { en: 'Button placket facing behind the front opening.', ar: 'بطانة حاشية أزرار خلف فتحة المقدمة.' },
-        outline: placket, darts: [], notches: [], grain: [[2, 4], [2, hipY - 8]], role: 'placket-facing' },
+        outline: placket, darts: [], notches: [[1.9, 0]], grain: [[2, 4], [2, hipY - 8]], role: 'placket-facing' },
     ];
     if (long) {
       const sleeveUpper = sleeveUpperPc(q(m.bicep) * 2, sleeveLen);
@@ -413,7 +413,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
     const len = m.height * 0.56 * opts.lengthF;
     const flareF = opts.flareF || 1.2;
     const hipX = qc * 0.95 * flareF, hemX = qc * 1.05 * flareF;
-    const half = plainBodicePanel(shoulderX, 8, qc * 1.02, m.backLen * 0.32, qc, m.backLen * 1.15, hipX, len * 0.65, hemX, len);
+    const half = plainBodicePanel(shoulderX, 8, qc * 1.02, m.backLen * 0.32, qc, m.backLen * 1.15, hipX, len * 0.65, hemX, len, true);
     const front = mirrorHalfToFull(half);
     const back = plainBodicePanel(shoulderX, 4, qc + 1.5, m.backLen * 0.32, qc * 0.98, m.backLen * 1.15, hipX * 0.97, len * 0.65, hemX * 0.98, len);
     const bicep = q(m.bicep) * 2.1 * (opts.sleeveWideF || 1.15);

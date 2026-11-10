@@ -153,7 +153,8 @@ import { q, PATTERNS, LIBRARY } from './data.js';
     const waistX = (front ? qw * 0.52 : qw * 0.56);
     const sideDX = rise * 0.35, sideDY = rise * 0.42; // shared side-seam vector, front == back
     const cornerX = waistX + sideDX, cornerY = 1.2 + sideDY;
-    const hipX = (front ? qh * 0.58 : qh * 0.64) * coverage;
+    const rawHipX = (front ? qh * 0.58 : qh * 0.64) * coverage;
+    const hipX = Math.abs(rawHipX - cornerX) < 0.25 ? cornerX + 0.3 : rawHipX;
     const crotchDepth = qh * 0.32 * legF + legLength;
     const crotchY = cornerY + crotchDepth + (front ? 0 : 2);
     const crotchX = qh * 0.13;

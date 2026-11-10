@@ -659,7 +659,7 @@ export function convertAppPattern(payload) {
     }
   }
 
-  const allInputPieces = payload.pieces || []
+  const allInputPieces = (payload.pieces || []).map((p, idx) => (p && (!p.id || !p.label)) ? { ...p, id: p.id || p.key || `p_${idx}`, label: p.label || p.name } : p)
   const hasSleeves = allInputPieces.some((p) => {
     if (p.visible === false) return false
     const r = resolveSchemaRole(p.role)

@@ -210,7 +210,7 @@ import {
         {
           key: 'placket', name: { en: 'Back Zip Placket Facing', ar: 'بطانة فتحة السحاب الخلفية' },
           desc: { en: 'Facing strip behind the centered back zip.', ar: 'شريط بطانة خلف السحاب الخلفي في المنتصف.' },
-          outline: placket, darts: [], notches: [],
+          outline: placket, darts: [], notches: [[placket[1][0] / 2, 0]],
           grain: [[2, 2], [2, hipDrop + 6]],
           role: 'placket-facing',
         },
@@ -973,7 +973,7 @@ import {
     },
     pieces: (m) => {
       const qw = q(m.waist), qh = q(m.hips), qt = q(m.thigh);
-      const riseLen = 22, legLen = m.inseam * 0.42;
+      const riseLen = m.backLen * (22 / 33), legLen = m.inseam * 0.42;
       const front = legPanel(qw * 0.52 + 0.75, qh * 0.58 + 1.25, qt * 1.3, riseLen, legLen, true);
       const back = legPanel(qw * 0.48 + 0.75, qh * 0.54 + 1.25, qt * 1.3, riseLen, legLen, false);
       const waistCirc = (qw * 0.52 + 0.75 + qw * 0.2) * 2 + (qw * 0.48 + 0.75 + qw * 0.2) * 2;
@@ -987,7 +987,7 @@ import {
           key: 'front', name: { en: 'Shorts Front', ar: 'مقدمة الشورت' },
           desc: { en: 'Front leg panel with a curved crotch seam.', ar: 'لوحة الساق الأمامية بخط تفصيل منحنٍ.' },
           outline: front, darts: [], notches: [[front[front.crotchIdx][0], front[front.crotchIdx][1]], [front[front.hemOutIdx][0], front[front.hemOutIdx][1]]],
-          grain: [[qt * 0.6, riseLen + 6], [qt * 0.6, riseLen + legLen - 6]],
+          grain: [[qt * 0.6, riseLen + legLen * 0.2], [qt * 0.6, riseLen + legLen * 0.8]],
           role: 'other', bilateral: true,
           edges: [{ fromIdx: 0, toIdx: front.hemOutIdx, seamId: 'shortsOutseam' }],
         },
@@ -995,7 +995,7 @@ import {
           key: 'back', name: { en: 'Shorts Back', ar: 'خلفية الشورت' },
           desc: { en: 'Back leg panel with a deeper curved crotch seam, per real block convention.', ar: 'لوحة الساق الخلفية بخط تفصيل منحنٍ أعمق، حسب القاعدة الحقيقية.' },
           outline: back, darts: [], notches: [[back[back.crotchIdx][0], back[back.crotchIdx][1]], [back[back.hemOutIdx][0], back[back.hemOutIdx][1]]],
-          grain: [[qt * 0.6, riseLen + 6], [qt * 0.6, riseLen + legLen - 6]],
+          grain: [[qt * 0.6, riseLen + legLen * 0.2], [qt * 0.6, riseLen + legLen * 0.8]],
           role: 'other', bilateral: true,
           edges: [{ fromIdx: 0, toIdx: back.hemOutIdx, seamId: 'shortsOutseam' }],
         },
@@ -1009,7 +1009,7 @@ import {
         {
           key: 'fly', name: { en: 'Fly Placket Facing', ar: 'بطانة سحاب الفتحة الأمامية' },
           desc: { en: 'Facing strip behind the front fly zip.', ar: 'شريط بطانة خلف سحاب الفتحة الأمامية.' },
-          outline: fly, darts: [], notches: [],
+          outline: fly, darts: [], notches: [[fly[1][0] / 2, 0]],
           grain: [[1.5, 2], [1.5, riseLen - 8]],
           role: 'placket-facing',
         },

@@ -157,7 +157,10 @@ export function withCurves(outline, curves) {
 // piece object itself — called once per pattern after all pieces are
 // built, same as js/underwear-library.js's hoistCurves().
 export function hoistCurves(pieces) {
-  for (const p of pieces) if (!p.curves && p.outline && p.outline.curves) p.curves = p.outline.curves;
+  for (const p of pieces) {
+    if (!p.curves && p.outline && p.outline.curves) p.curves = p.outline.curves;
+    if ((!p.notches || !p.notches.length) && p.outline && p.outline.notches) p.notches = p.outline.notches;
+  }
   return pieces;
 }
 export function dedupeJoin(a, b) {
@@ -201,7 +204,9 @@ export function foldMirrorEdge(nOrig, fromIdx, toIdx) {
 // the straight grain, no curve needed (a real straight strip, not a
 // stand-in for a curved piece).
 export function bandPc(lengthCm, heightCm) {
-  return [[0, 0], [lengthCm, 0], [lengthCm, heightCm], [0, heightCm]];
+  const out = [[0, 0], [lengthCm, 0], [lengthCm, heightCm], [0, heightCm]];
+  out.notches = [[lengthCm * 0.5, 0]];
+  return out;
 }
 
 // Half collar (classic two-point shirt collar), cut on the fold at
