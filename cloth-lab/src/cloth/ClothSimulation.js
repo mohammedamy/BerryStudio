@@ -918,7 +918,7 @@ function buildEnvelopeUniformValues(envelopeFrames) {
 // the ~2cm Delaunay triangulation spacing (see triangulate.js) so directly
 // adjacent mesh vertices are always excluded as "normal local fabric," while
 // still catching a genuine tight self-fold (see selfCollisionGlsl above).
-const DEFAULT_SELF_COLLISION = { radius: 0.012, restThreshold: 0.035 }
+const DEFAULT_SELF_COLLISION = { radius: 0.012, restThreshold: 0.065 }
 
 // WP-35: 'default' (unchanged) or 'high' — the true dihedral-angle bend
 // tier. Exported so callers (ClothMesh.jsx, Settings UI) share one literal

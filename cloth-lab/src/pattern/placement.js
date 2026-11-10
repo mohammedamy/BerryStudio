@@ -87,26 +87,49 @@ function applySeatedSkirtDrape(x, worldY, z, dims, zSign, pose) {
 
 export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, angleSpan = Math.PI * 0.85, pose = 'standing' } = {}) {
   const topWorldY = dims.shoulderY - dims.span * 0.03
+  const zScale = dims.female ? 0.78 : 0.82
+  let minX = Infinity, maxX = -Infinity
+  for (const [x] of positions2D) {
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+  }
+  const cx = (minX < -1e-2 && maxX > 1e-2 && Math.abs(minX + maxX) < (maxX - minX) * 0.25)
+    ? 0
+    : (Number.isFinite(minX) && Number.isFinite(maxX) ? (minX + maxX) / 2 : 0)
   return positions2D.map(([xCm, yCm]) => {
     const worldY = topWorldY - cm(yCm)
     const r = radiusAtHeight(dims, worldY) * easeFactor
-    const halfCirc = Math.PI * r
-    const theta = (cm(xCm) / halfCirc) * angleSpan
+    const hipBlend = smoothstep(dims.hipY + dims.span * 0.12, dims.hipY - dims.span * 0.08, worldY)
+    const effZScale = lerp(zScale, 0.94, hipBlend)
+    const halfCirc = Math.PI * r * (1 + effZScale) * 0.5
+    const theta = clamp((cm(xCm - cx) / Math.max(1e-4, halfCirc)) * angleSpan, -Math.PI * 0.92, Math.PI * 0.92)
     const x = r * Math.sin(theta)
-    const z = zSign * r * Math.cos(theta)
+    const z = zSign * r * effZScale * Math.cos(theta)
     return applySeatedSkirtDrape(x, worldY, z, dims, zSign, pose)
   })
 }
 
 export function placeHipPanel(positions2D, dims, { zSign, easeFactor = 1.16, angleSpan = Math.PI * 0.85, pose = 'standing' } = {}) {
   const topWorldY = dims.hipY + dims.span * 0.44
+  const zScale = dims.female ? 0.75 : 0.80
+  let minX = Infinity, maxX = -Infinity
+  for (const [x] of positions2D) {
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+  }
+  const cx = (minX < -1e-2 && maxX > 1e-2 && Math.abs(minX + maxX) < (maxX - minX) * 0.25)
+    ? 0
+    : (Number.isFinite(minX) && Number.isFinite(maxX) ? (minX + maxX) / 2 : 0)
+  const halfSpanCm = Math.max(0, (maxX - minX) / 2)
   return positions2D.map(([xCm, yCm]) => {
     const worldY = topWorldY - cm(yCm)
     const r = radiusAtHeight(dims, worldY) * easeFactor
-    const halfCirc = Math.PI * r
-    const theta = (cm(xCm) / halfCirc) * angleSpan
+    const hipBlend = smoothstep(dims.hipY + dims.span * 0.12, dims.hipY - dims.span * 0.08, worldY)
+    const effZScale = lerp(zScale, 0.94, hipBlend)
+    const halfCirc = Math.max(Math.PI * r * (1 + effZScale) * 0.5, cm(halfSpanCm) * 1.05)
+    const theta = clamp((cm(xCm - cx) / Math.max(1e-4, halfCirc)) * angleSpan, -Math.PI * 0.92, Math.PI * 0.92)
     const x = r * Math.sin(theta)
-    const z = zSign * r * Math.cos(theta)
+    const z = zSign * r * effZScale * Math.cos(theta)
     return applySeatedSkirtDrape(x, worldY, z, dims, zSign, pose)
   })
 }
@@ -400,21 +423,24 @@ export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */,
 const GORE_ANGLE = Math.PI * 0.42
 export function placeGorePanel(positions2D, dims, angleCenter, pose = 'standing') {
   const topWorldY = dims.hipY + dims.span * 0.44
+  const zScale = dims.female ? 0.72 : 0.78
   const xs = positions2D.map(([x]) => x)
   const minX = Math.min(...xs), maxX = Math.max(...xs)
   const width = Math.max(1e-6, maxX - minX)
   const ys = positions2D.map(([, y]) => y)
   const hemReachCm = Math.max(1e-6, Math.max(...ys) - Math.min(...ys))
-  const hipEdgeR = radiusAtHeight(dims, dims.hipY) * 1.12
+  const hipEdgeR = radiusAtHeight(dims, dims.hipY) * 1.15
   return positions2D.map(([xCm, yCm]) => {
     const worldY = topWorldY - cm(yCm)
     const r = worldY >= dims.hipY
-      ? radiusAtHeight(dims, worldY) * 1.12
-      : lerp(hipEdgeR, hipEdgeR * 1.9, Math.min(1, (dims.hipY - worldY) / cm(hemReachCm)))
+      ? radiusAtHeight(dims, worldY) * 1.15
+      : lerp(hipEdgeR, hipEdgeR * 1.65, Math.min(1, (dims.hipY - worldY) / cm(hemReachCm)))
+    const hipBlend = smoothstep(dims.hipY + dims.span * 0.12, dims.hipY - dims.span * 0.08, worldY)
+    const effZScale = lerp(zScale, 0.96, hipBlend)
     const t = (xCm - minX) / width
     const theta = angleCenter + (t - 0.5) * GORE_ANGLE
     const x = r * Math.sin(theta)
-    const z = r * Math.cos(theta)
+    const z = r * effZScale * Math.cos(theta)
     return applySeatedSkirtDrape(x, worldY, z, dims, Math.cos(angleCenter) >= 0 ? 1 : -1, pose)
   })
 }
@@ -426,19 +452,34 @@ const bboxCenterX = (positions2D) => {
 }
 
 export function placeAttachNeck(positions2D, dims, side = 0) {
-  const topWorldY = dims.shoulderY + dims.span * 0.025
-  const yShoulder = dims.shoulderY - dims.span * 0.03
+  const topWorldY = dims.shoulderY + dims.span * 0.055
+  const yNeckBase = dims.shoulderY - dims.span * 0.015
+  const yChestSlope = dims.shoulderY - dims.span * 0.16
+  const torsoZScale = dims.female ? 0.80 : 0.82
   const cx = bboxCenterX(positions2D)
   const thetaCenter = side * Math.PI * 0.45
   return positions2D.map(([xCm, yCm]) => {
     const worldY = topWorldY - cm(yCm)
-    const baseR = worldY >= yShoulder
-      ? lerp(dims.chestR * 1.18, dims.neckR * 1.38, Math.min(1, (worldY - yShoulder) / (topWorldY - yShoulder)))
-      : radiusAtHeight(dims, worldY) * 1.20
-    const r = Math.max(dims.neckR * 1.38, baseR)
-    const phi = thetaCenter + cm(xCm - cx) / r
-    const rOut = r + 0.008 * (Math.abs(phi) / Math.PI)
-    return [rOut * Math.sin(phi), worldY, rOut * Math.cos(phi)]
+    let r
+    let effZScale
+    if (worldY >= yNeckBase) {
+      const tNeck = clamp((topWorldY - worldY) / Math.max(1e-6, topWorldY - yNeckBase), 0, 1)
+      r = lerp(dims.neckR * 1.28, dims.neckR * 1.36, tNeck)
+      effZScale = lerp(0.96, 0.90, tNeck)
+    } else {
+      const tSlope = clamp((yNeckBase - worldY) / Math.max(1e-6, yNeckBase - yChestSlope), 0, 1)
+      const bustLift = (dims.female && !dims.kid)
+        ? dims.chestR * 0.07 * Math.exp(-Math.pow((worldY - (dims.hipY + dims.span * 0.70)) / (dims.span * 0.15), 2))
+        : 0
+      const torsoR = radiusAtHeight(dims, worldY) * 1.145 + bustLift
+      r = lerp(dims.neckR * 1.36, torsoR, tSlope)
+      effZScale = lerp(0.90, torsoZScale, tSlope)
+    }
+    const rEff = r * (1 + effZScale) * 0.5
+    const phi = thetaCenter + cm(xCm - cx) / Math.max(0.05, rEff)
+    const minR = (dims.neckR * 1.24) / Math.min(1, effZScale)
+    const rOut = Math.max(minR, r + 0.004 * (Math.abs(phi) / Math.PI))
+    return [rOut * Math.sin(phi), worldY, rOut * effZScale * Math.cos(phi)]
   })
 }
 
@@ -448,14 +489,16 @@ export function placeAttachWaist(positions2D, dims, zSign = 1, pose = 'standing'
   const cx = bboxCenterX(positions2D)
   return positions2D.map(([xCm, yCm]) => {
     const worldY = topWorldY - cm(yCm)
-    const baseR = Math.max(dims.waistR * 0.96, radiusAtHeight(dims, worldY)) * 1.21
-    // Keep zScale at waist (satisfying elliptical waist ring pin/test), then open up
-    // below hipY so long peplums/overskirts (`womens_dress` `skirt_front`) sit outside `frontPanel`!
+    // Keep 1.21 * zScale at waist (satisfying elliptical waist ring pin/test), then blend
+    // to 1.135 * 0.94 below hipY so long peplums/overskirts (`womens_dress` `skirt_front`)
+    // drape flush against `frontPanel` (1.13 * 0.94) instead of ballooning out in front.
     const hipBlend = smoothstep(dims.hipY + dims.span * 0.12, dims.hipY - dims.span * 0.08, worldY)
-    const effZScale = lerp(zScale, 0.96, hipBlend)
+    const scaleFactor = lerp(1.21, 1.135, hipBlend)
+    const baseR = Math.max(dims.waistR * 0.96, radiusAtHeight(dims, worldY)) * scaleFactor
+    const effZScale = lerp(zScale, 0.94, hipBlend)
     const rEff = baseR * (1 + effZScale) * 0.5
     const phi = cm(xCm - cx) / rEff
-    const rOut = baseR + 0.008 * (Math.abs(phi) / Math.PI)
+    const rOut = baseR + 0.003 * (Math.abs(phi) / Math.PI)
     const x = rOut * Math.sin(phi)
     const z = zSign * rOut * effZScale * Math.cos(phi)
     return applySeatedSkirtDrape(x, worldY, z, dims, zSign, pose)
@@ -464,26 +507,32 @@ export function placeAttachWaist(positions2D, dims, zSign = 1, pose = 'standing'
 
 export function placeAttachHem(positions2D, dims, side = 0, pose = 'standing') {
   const topWorldY = dims.hipY - dims.legLen * 0.1
+  const zScale = dims.female ? 0.78 : 0.82
   const cx = bboxCenterX(positions2D)
   const thetaCenter = side * Math.PI * 0.35
   return positions2D.map(([xCm, yCm]) => {
     const worldY = topWorldY - cm(yCm)
-    const r = Math.max(dims.hipR * 0.95, radiusAtHeight(dims, worldY)) * 1.22
-    const phi = thetaCenter + cm(xCm - cx) / r
-    const rOut = r + 0.008 * (Math.abs(phi) / Math.PI)
-    return applySeatedSkirtDrape(rOut * Math.sin(phi), worldY, rOut * Math.cos(phi), dims, 1, pose)
+    const baseR = Math.max(dims.hipR * 0.95, radiusAtHeight(dims, worldY)) * 1.15
+    const rEff = baseR * (1 + zScale) * 0.5
+    const phi = thetaCenter + cm(xCm - cx) / rEff
+    const minR = (dims.neckR * 1.24) / zScale
+    const rOut = Math.max(minR, baseR + 0.004 * (Math.abs(phi) / Math.PI))
+    return applySeatedSkirtDrape(rOut * Math.sin(phi), worldY, rOut * zScale * Math.cos(phi), dims, Math.cos(phi) >= 0 ? 1 : -1, pose)
   })
 }
 
 export function placeAttachBody(positions2D, dims, zSign = 1) {
-  const topWorldY = dims.hipY + dims.span * 0.62
+  const topWorldY = dims.hipY + dims.span * 0.58
+  const zScale = dims.female ? 0.80 : 0.84
   const cx = bboxCenterX(positions2D)
   return positions2D.map(([xCm, yCm]) => {
     const worldY = topWorldY - cm(yCm)
-    const r = radiusAtHeight(dims, worldY) * 1.24
-    const phi = cm(xCm - cx) / r
-    const rOut = r + 0.008 * (Math.abs(phi) / Math.PI)
-    return [rOut * Math.sin(phi), worldY, zSign * rOut * Math.cos(phi)]
+    const baseR = Math.max(dims.chestR * 0.94, radiusAtHeight(dims, worldY)) * 1.15
+    const rEff = baseR * (1 + zScale) * 0.5
+    const phi = cm(xCm - cx) / rEff
+    const minR = (dims.neckR * 1.24) / zScale
+    const rOut = Math.max(minR, baseR + 0.004 * (Math.abs(phi) / Math.PI))
+    return [rOut * Math.sin(phi), worldY, zSign * rOut * zScale * Math.cos(phi)]
   })
 }
 

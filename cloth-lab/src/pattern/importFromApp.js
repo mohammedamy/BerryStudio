@@ -336,6 +336,22 @@ function subdivideFoldBodiceArmhole(local) {
   return [local[0], shoulder, underarm, hem, local[3]]
 }
 
+// When a cut-on-fold upper-body panel goes straight from center-neck local[0]
+// (x ≈ 0) to the outer shoulder tip local[1] (x >= 12 cm) in a single segment,
+// insert a collinear neck-shoulder junction at 36% of that top span so 0 -> 1
+// stays an open neckline hole and only 1 -> 2 is sewn as the shoulder seam.
+function subdivideFoldBodiceNeckOpening(local) {
+  if (local.length < 4) return local
+  const p0 = local[0], p1 = local[1]
+  if (p0[0] > 2 || p1[0] < 12) return local
+  const { minY, maxY } = bbox(local)
+  const h = Math.max(1, maxY - minY)
+  if (Math.abs(p1[1] - p0[1]) > h * 0.16) return local
+  const tNeck = 0.36
+  const neckShoulder = [p0[0] + (p1[0] - p0[0]) * tNeck, p0[1] + (p1[1] - p0[1]) * tNeck]
+  return [p0, neckShoulder, ...local.slice(1)]
+}
+
 // Same collinear underarm subdivision for a symmetric 4-point full-width (non-fold)
 // rectangular/trapezoidal bodice panel when sleeves are present.
 function subdivideFullRectBodiceArmhole(local) {
@@ -370,15 +386,29 @@ function deriveTorsoEdgeInstructions(outline, { includeTop, necklineEndIdx, side
   let leftHemIdx = half + 1, leftHemY = -Infinity
   for (let i = half + 1; i < n; i++) if (outline[i][1] > leftHemY) { leftHemY = outline[i][1]; leftHemIdx = i }
 
-  const rightNeckEnd = necklineEndIdx != null ? necklineEndIdx : 1
-  const leftNeckEnd = necklineEndIdx != null ? n - necklineEndIdx : n - 1
   const rightSideEnd = sideEndIdx != null ? sideEndIdx : rightHemIdx
   const leftSideStart = sideEndIdx != null ? n - sideEndIdx : leftHemIdx
+  const h = Math.max(1, rightHemY - outline[0][1])
+  const hasNeckStep = includeTop &&
+    necklineEndIdx == null &&
+    rightSideEnd >= 3 &&
+    Math.abs(outline[0][0]) <= 2 &&
+    outline[1][0] > outline[0][0] + 2 &&
+    outline[2][0] > outline[1][0] + 4 &&
+    Math.abs(outline[2][1] - outline[0][1]) <= h * 0.16 &&
+    Math.abs(outline[1][0] + outline[n - 1][0]) < 1
+
+  const rightTopFrom = hasNeckStep ? 1 : 0
+  const rightTopTo = hasNeckStep ? 2 : 1
+  const leftTopFrom = hasNeckStep ? n - 2 : n - 1
+  const leftTopTo = hasNeckStep ? n - 1 : 0
+  const rightNeckEnd = necklineEndIdx != null ? necklineEndIdx : rightTopTo
+  const leftNeckEnd = necklineEndIdx != null ? n - necklineEndIdx : leftTopFrom
 
   const out = []
-  if (includeTop) out.push({ name: 'rightTop', from: 0, to: 1 })
+  if (includeTop) out.push({ name: 'rightTop', from: rightTopFrom, to: rightTopTo })
   if (rightNeckEnd !== rightSideEnd) out.push({ name: 'rightSide', from: rightNeckEnd, to: rightSideEnd })
-  if (includeTop) out.push({ name: 'leftTop', from: n - 1, to: 0 })
+  if (includeTop) out.push({ name: 'leftTop', from: leftTopFrom, to: leftTopTo })
   if (leftSideStart !== leftNeckEnd) out.push({ name: 'leftSide', from: leftSideStart, to: leftNeckEnd })
   return out
 }
@@ -429,6 +459,20 @@ function deriveSleevedTorsoEdges(outline, { includeTop, necklineEndIdx, sideEndI
           shoulderIdx = minIdx + 1
         }
       }
+      if (shoulderIdx === minIdx && minIdx >= 2 && outline[minIdx][0] - outline[minIdx - 1][0] >= 2.0) {
+        crownIdx = minIdx - 1
+      }
+    } else if (
+      rightSideEnd >= 3 &&
+      Math.abs(outline[0][0]) <= 2 &&
+      outline[1][0] > outline[0][0] + 2 &&
+      outline[2][0] > outline[1][0] + 4 &&
+      Math.abs(outline[2][1] - outline[0][1]) <= h * 0.16 &&
+      Math.abs(outline[1][0] + outline[n - 1][0]) < 1
+    ) {
+      // Leave 0 -> 1 (and n-1 -> 0) open as the neck hole; sew 1 -> 2 (and n-2 -> n-1) as shoulder seams
+      crownIdx = 1
+      shoulderIdx = 2
     } else {
       crownIdx = 0
       shoulderIdx = 1
@@ -651,9 +695,10 @@ export function convertAppPattern(payload) {
       const slotKey = { 'bodice-front': 'frontPanel', 'bodice-back': 'backPanel', 'skirt-front': 'hipPanelFront', 'skirt-back': 'hipPanelBack' }[cls]
       const isSkirt = cls.startsWith('skirt')
       const fold = isFoldPiece(local)
-      const baseLocal = hasSleeves && !isSkirt
+      const armholeLocal = hasSleeves && !isSkirt
         ? (fold ? subdivideFoldBodiceArmhole(local) : subdivideFullRectBodiceArmhole(local))
         : local
+      const baseLocal = fold && !isSkirt ? subdivideFoldBodiceNeckOpening(armholeLocal) : armholeLocal
       const outline = fold ? unfoldPiece(baseLocal) : baseLocal
       rawPieces.push({ id: p.id, label: p.label, outline, color: p.color, darts: p.darts })
       roles[p.id] = slotKey
@@ -715,8 +760,15 @@ export function convertAppPattern(payload) {
 
     if (cutOnFold) {
       const isUpperPanel = placement === 'frontPanel' || placement === 'backPanel'
-      const canSubdivide = hasSleeves && isUpperPanel && !princessSeamId && !edges?.length && necklineEndIdx == null && sideEndIdx == null
-      const baseLocal = canSubdivide ? subdivideFoldBodiceArmhole(local) : local
+      const canSubdivideArmhole = isUpperPanel && !princessSeamId && !edges?.length && necklineEndIdx == null && sideEndIdx == null
+      const armholeLocal = canSubdivideArmhole && hasSleeves ? subdivideFoldBodiceArmhole(local) : local
+      const canSubdivideNeck = isUpperPanel && !princessSeamId && necklineEndIdx == null && sideEndIdx == null &&
+        (!edges?.length || edges.every((e) => e && e.fromIdx >= 1 && e.toIdx >= 1))
+      const baseLocal = canSubdivideNeck ? subdivideFoldBodiceNeckOpening(armholeLocal) : armholeLocal
+      const neckAdded = baseLocal.length - armholeLocal.length
+      const adjEdges = neckAdded > 0 && edges?.length
+        ? edges.map((e) => ({ ...e, fromIdx: e.fromIdx + neckAdded, toIdx: e.toIdx + neckAdded }))
+        : edges
       const outline = unfoldPiece(baseLocal)
       rawPieces.push({ id: p.id, label: p.label, outline, color: p.color, darts: p.darts })
       roles[p.id] = placement
@@ -726,20 +778,20 @@ export function convertAppPattern(payload) {
         pushClaimedEdge(p.id, left.name, left.from, left.to, outline.length)
         ;(seamIdEdges[princessSeamId + '_R'] ||= []).push({ pieceId: p.id, fromIdx: right.from, toIdx: right.to })
         ;(seamIdEdges[princessSeamId + '_L'] ||= []).push({ pieceId: p.id, fromIdx: left.from, toIdx: left.to })
-        pushSeamIdEdges(p.id, edges, outline.length)
+        pushSeamIdEdges(p.id, adjEdges, outline.length)
       } else {
         if (autoTorsoSeams && (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack')) {
-          const authoredTop = necklineEndIdx != null && edges?.some(e => e.seamId && e.fromIdx === 0 && e.toIdx === necklineEndIdx)
-          const authoredSides = edges?.filter(e => e.seamId && /Side_[RL]$/.test(e.seamId)).length >= 2
+          const authoredTop = necklineEndIdx != null && adjEdges?.some(e => e.seamId && e.fromIdx === 0 && e.toIdx === necklineEndIdx)
+          const authoredSides = adjEdges?.filter(e => e.seamId && /Side_[RL]$/.test(e.seamId)).length >= 2
           const geo = hasSleeves && isUpperPanel
-            ? deriveSleevedTorsoEdges(outline, { includeTop: !authoredTop, necklineEndIdx, sideEndIdx, edges, curves: p.curves || p.outline?.curves })
+            ? deriveSleevedTorsoEdges(outline, { includeTop: !authoredTop, necklineEndIdx, sideEndIdx, edges: adjEdges, curves: p.curves || p.outline?.curves })
             : deriveTorsoEdgeInstructions(outline, { includeTop: !authoredTop && isUpperPanel, necklineEndIdx, sideEndIdx })
           if (!authoredSides && geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
             bySlot[placement].push({ id: p.id, label })
             for (const e of geo) pushClaimedEdge(p.id, e.name, e.from, e.to, outline.length)
           }
         }
-        pushSeamIdEdges(p.id, edges, outline.length)
+        pushSeamIdEdges(p.id, adjEdges, outline.length)
       }
       recognized.push({ id: p.id, label })
       continue
@@ -849,12 +901,23 @@ export function convertAppPattern(payload) {
 
   // Front/back torso & hip seams (both paths converge here)
   const hasEdge = (id, name) => edgeInstructions.some((e) => e.pieceId === id && e.edgeName === name)
+  const getEdgeSpanX = (id, name) => {
+    const e = edgeInstructions.find((inst) => inst.pieceId === id && inst.edgeName === name)
+    const piece = rawPieces.find((p) => p.id === id)
+    if (!e || !piece?.outline?.length) return 0
+    const a = piece.outline[e.fromIdx], b = piece.outline[e.toIdx]
+    return a && b ? Math.abs(b[0] - a[0]) : 0
+  }
   for (const [frontKey, backKey, includeTop] of [['frontPanel', 'backPanel', true], ['hipPanelFront', 'hipPanelBack', false]]) {
     if (bySlot[frontKey].length === 1 && bySlot[backKey].length === 1) {
       const f = bySlot[frontKey][0].id, b = bySlot[backKey][0].id
       if (includeTop && [f, b].every((id) => hasEdge(id, 'rightTop') && hasEdge(id, 'leftTop'))) {
-        seamInstructions.push({ id: frontKey + '_rightTop', a: { piece: f, edge: 'rightTop' }, b: { piece: b, edge: 'rightTop' }, reverse: false })
-        seamInstructions.push({ id: frontKey + '_leftTop', a: { piece: f, edge: 'leftTop' }, b: { piece: b, edge: 'leftTop' }, reverse: false })
+        const fSpan = getEdgeSpanX(f, 'rightTop'), bSpan = getEdgeSpanX(b, 'rightTop')
+        const spanRatio = Math.max(fSpan, bSpan) / Math.max(1e-6, Math.min(fSpan, bSpan))
+        if (spanRatio <= 2.2) {
+          seamInstructions.push({ id: frontKey + '_rightTop', a: { piece: f, edge: 'rightTop' }, b: { piece: b, edge: 'rightTop' }, reverse: false })
+          seamInstructions.push({ id: frontKey + '_leftTop', a: { piece: f, edge: 'leftTop' }, b: { piece: b, edge: 'leftTop' }, reverse: false })
+        }
       }
       seamInstructions.push({ id: frontKey + '_rightSide', a: { piece: f, edge: 'rightSide' }, b: { piece: b, edge: 'rightSide' }, reverse: false })
       seamInstructions.push({ id: frontKey + '_leftSide', a: { piece: f, edge: 'leftSide' }, b: { piece: b, edge: 'leftSide' }, reverse: false })

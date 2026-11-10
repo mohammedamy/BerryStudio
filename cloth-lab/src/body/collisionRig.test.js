@@ -9,6 +9,7 @@ import {
   deriveShoulderPinMask,
   deriveWaistbandPinRing,
   deriveWaistbandPinMask,
+  deriveGarmentPinMask,
   MAX_COLLISION_CAPSULES,
 } from './collisionRig.js'
 import {
@@ -152,3 +153,66 @@ describe('deriveWaistbandPinMask', () => {
     expect(Array.from(mask)).toEqual([0, 0])
   })
 })
+
+describe('deriveGarmentPinMask', () => {
+  it('anchors unsewn attachment pieces (attachBody / attachNeck / attachHem) and single-corner-pinned components so no piece flies or dangles', () => {
+    const dims = computeBodyDims(WOMEN_M, 'women')
+    const [, [innerR]] = deriveShoulderPinSegments(dims)
+    // 4 particles forming a disconnected quad where only particle 0 is near the shoulder
+    const simRestPositions = new Float32Array([
+      innerR[0], innerR[1], 0,
+      innerR[0] + 0.16, innerR[1], 0.12,
+      innerR[0] + 0.16, innerR[1] - 0.25, 0.12,
+      innerR[0], innerR[1] - 0.25, 0.12,
+    ])
+    const cloth = {
+      simParticleCount: 4,
+      simRestPositions,
+      renderTriangles: new Uint32Array([0, 1, 2, 0, 2, 3]),
+      renderVertexToSimParticle: new Uint32Array([0, 1, 2, 3]),
+      pieceOffset: { p0: 0 },
+    }
+    const triangulated = [{
+      pieceId: 'p0',
+      role: 'frontPanel',
+      positions2D: [[0, 0], [16, 0], [16, 25], [0, 25]],
+    }]
+    const mask = deriveGarmentPinMask(cloth, triangulated, dims)
+    // Both top corners (0 and 1) must be pinned, not just corner 0!
+    expect(mask[0]).toBe(1)
+    expect(mask[1]).toBe(1)
+    expect(mask[2]).toBe(0)
+    expect(mask[3]).toBe(0)
+  })
+
+  it('does not pin waist-height midsection vertices of upper-body frontPanel or sleeve roles', () => {
+    const dims = computeBodyDims(WOMEN_M, 'women')
+    const [, [innerR, outerR]] = deriveShoulderPinSegments(dims)
+    const { y: waistY, r: waistR } = deriveWaistbandPinRing(dims)
+    const simRestPositions = new Float32Array([
+      innerR[0], innerR[1], 0,
+      outerR[0], outerR[1], 0,
+      waistR, waistY, 0,
+      -waistR, waistY, 0,
+    ])
+    const cloth = {
+      simParticleCount: 4,
+      simRestPositions,
+      renderTriangles: new Uint32Array([0, 1, 2, 0, 2, 3]),
+      renderVertexToSimParticle: new Uint32Array([0, 1, 2, 3]),
+      pieceOffset: { dress0: 0 },
+    }
+    const triangulated = [{
+      pieceId: 'dress0',
+      role: 'frontPanel',
+      positions2D: [[0, 0], [12, 0], [12, 45], [0, 45]],
+    }]
+    const mask = deriveGarmentPinMask(cloth, triangulated, dims)
+    expect(mask[0]).toBe(1)
+    expect(mask[1]).toBe(1)
+    expect(mask[2]).toBe(0)
+    expect(mask[3]).toBe(0)
+  })
+})
+
+

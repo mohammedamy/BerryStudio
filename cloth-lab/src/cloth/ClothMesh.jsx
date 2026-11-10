@@ -6,7 +6,7 @@ import { triangulateAll } from '../pattern/triangulate'
 import { assembleCloth, deriveNeighbors, deriveNormalRing } from './assemble'
 import { ClothSimulation, textureDimFor, QUALITY_TIER_DEFAULT } from './ClothSimulation'
 import { FABRIC_PRESETS, DEFAULT_FABRIC } from './fabricPresets'
-import { deriveCollisionRig, deriveShoulderPinMask, deriveWaistbandPinMask } from '../body/collisionRig'
+import { deriveCollisionRig, deriveGarmentPinMask } from '../body/collisionRig'
 import { getAssetBase } from '../assetBase'
 import { updateExportGeometry } from '../export/prepareScene'
 import { SAFE_CLOTH_NORMAL_GLSL } from './surfaceShader'
@@ -67,7 +67,7 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
     const cloth = assembleCloth(triangulated, dims, seams, pose)
     const neighbors = deriveNeighbors(cloth, 8)
     const normalRing = deriveNormalRing(cloth, neighbors, 4)
-    return { cloth, neighbors, normalRing }
+    return { triangulated, cloth, neighbors, normalRing }
   }, [dims, pieces, seams, pose])
 
   const geometry = useMemo(() => {
@@ -224,9 +224,7 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
     const collisionRig = meshFitRigRef?.current || procCollider?.collisionRig || deriveCollisionRig(dims, pose)
     const bodyEnvelope = procCollider?.bodyEnvelope || null
     const envelopeFrames = procCollider?.envelopeFrames || null
-    const shoulderMask = deriveShoulderPinMask(assembled.cloth.simRestPositions, assembled.cloth.simParticleCount, dims)
-    const waistbandMask = deriveWaistbandPinMask(assembled.cloth.simRestPositions, assembled.cloth.simParticleCount, dims)
-    const pinnedMask = shoulderMask.map((v, i) => (v || waistbandMask[i] ? 1 : 0))
+    const pinnedMask = deriveGarmentPinMask(assembled.cloth, assembled.triangulated, dims)
     const sim = new ClothSimulation(gl, assembled.cloth, assembled.neighbors, fabric, { collisionRig, bodyEnvelope, envelopeFrames, pinnedMask, qualityTier })
     sim.preRelax()
     simRef.current = sim

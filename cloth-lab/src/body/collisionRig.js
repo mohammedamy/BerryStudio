@@ -493,7 +493,7 @@ export function deriveShoulderPinMask(simRestPositions, simParticleCount, dims) 
   const segments = deriveShoulderPinSegments(dims)
   const mask = new Uint8Array(simParticleCount)
   for (let i = 0; i < simParticleCount; i++) {
-    const p = [simRestPositions[i * 3], simRestPositions[i * 3 + 1], simRestPositions[i * 3 + 2]]
+    const p = [simRestPositions[i * 3], simRestPositions[i * 3 + 1], simRestPositions[i * 3 + 2] * 0.42]
     for (const [a, b] of segments) {
       if (distToSegment(p, a, b) < SHOULDER_PIN_RADIUS) { mask[i] = 1; break }
     }
@@ -520,3 +520,171 @@ export function deriveWaistbandPinMask(simRestPositions, simParticleCount, dims)
   }
   return mask
 }
+
+const WAIST_OR_HEM_ATTACH_ROLES = new Set([
+  'attachWaist', 'attachWaistBack', 'attachHem',
+  'goreFront', 'goreBack', 'goreSideLeft', 'goreSideRight',
+])
+
+const LOWER_BODY_WAIST_PIN_ROLES = new Set([
+  'hipPanelFront', 'hipPanelBack',
+  'legFront', 'legBack',
+  'goreFront', 'goreBack', 'goreSideLeft', 'goreSideRight',
+  'attachWaist', 'attachWaistBack',
+])
+
+export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
+  const { simParticleCount, simRestPositions, renderTriangles, renderVertexToSimParticle, pieceOffset } = cloth
+  const shoulderMask = deriveShoulderPinMask(simRestPositions, simParticleCount, dims)
+  const waistbandMask = deriveWaistbandPinMask(simRestPositions, simParticleCount, dims)
+  const mask = new Uint8Array(simParticleCount)
+  for (let i = 0; i < simParticleCount; i++) {
+    if (shoulderMask[i]) mask[i] = 1
+  }
+
+  // Only apply waistband ring pins to lower-body/waist roles (skirts, trousers,
+  // gores, waistbands) so full-length dresses, shirts, and sleeves hang freely
+  // from the shoulders without being pinched at the waist or inner elbows.
+  if (Array.isArray(triangulatedPieces) && triangulatedPieces.length > 0 && pieceOffset && renderVertexToSimParticle) {
+    for (const tp of triangulatedPieces) {
+      if (!LOWER_BODY_WAIST_PIN_ROLES.has(tp.role)) continue
+      const offset = pieceOffset[tp.pieceId]
+      const pts = tp.positions2D
+      if (offset == null || !pts) continue
+      for (let localIdx = 0; localIdx < pts.length; localIdx++) {
+        const sp = renderVertexToSimParticle[offset + localIdx]
+        if (waistbandMask[sp]) mask[sp] = 1
+      }
+    }
+  } else {
+    for (let i = 0; i < simParticleCount; i++) {
+      if (waistbandMask[i]) mask[i] = 1
+    }
+  }
+
+  // Stage 2: Pin attachment bands for unsewn accessory/overlay roles so
+  // collars, pockets, cuffs, waistbands, tiers, gores, and facings stay
+  // stitched to their anatomical placement instead of falling or flapping.
+  if (Array.isArray(triangulatedPieces) && pieceOffset && renderVertexToSimParticle) {
+    for (const tp of triangulatedPieces) {
+      const offset = pieceOffset[tp.pieceId]
+      const pts = tp.positions2D
+      if (offset == null || !pts || pts.length === 0) continue
+      const { role } = tp
+      if (
+        role !== 'attachNeck' &&
+        role !== 'attachBody' &&
+        role !== 'attachBodyBack' &&
+        !WAIST_OR_HEM_ATTACH_ROLES.has(role)
+      ) continue
+
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+      for (const [x, y] of pts) {
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+      }
+      const widthCm = Math.max(1e-6, maxX - minX)
+      const heightCm = Math.max(1e-6, maxY - minY)
+
+      for (let localIdx = 0; localIdx < pts.length; localIdx++) {
+        const [xCm, yCm] = pts[localIdx]
+        const sp = renderVertexToSimParticle[offset + localIdx]
+        if (role === 'attachNeck') {
+          const topBand = yCm <= minY + Math.max(2.0, heightCm * 0.25)
+          const isPlacketOrFacing = widthCm <= 16 || heightCm / widthCm >= 2.2
+          const compactStitch = (heightCm <= 18 || isPlacketOrFacing) && (
+            yCm >= maxY - Math.max(1.6, heightCm * 0.16) ||
+            xCm <= minX + Math.max(1.6, widthCm * 0.18) ||
+            xCm >= maxX - Math.max(1.6, widthCm * 0.18)
+          )
+          if (topBand || compactStitch) mask[sp] = 1
+        } else if (role === 'attachBody' || role === 'attachBodyBack') {
+          const topBand = yCm <= minY + Math.max(2.0, heightCm * 0.22)
+          const compactStitch = heightCm <= 28 && (
+            yCm >= maxY - Math.max(1.8, heightCm * 0.20) ||
+            xCm <= minX + Math.max(1.8, widthCm * 0.14) ||
+            xCm >= maxX - Math.max(1.8, widthCm * 0.14)
+          )
+          if (topBand || compactStitch) mask[sp] = 1
+        } else if (WAIST_OR_HEM_ATTACH_ROLES.has(role)) {
+          const topBand = yCm <= minY + Math.max(2.0, heightCm * 0.16)
+          const narrowBand = heightCm <= 12 && yCm >= maxY - Math.max(1.6, heightCm * 0.22)
+          if (topBand || narrowBand) mask[sp] = 1
+        }
+      }
+    }
+  }
+
+  // Stage 3: Connected-component safeguard — ensure every disconnected mesh
+  // component has broad horizontal support along its top edge rather than
+  // 0 pins (free-falling to the floor) or 1 corner pin (dangling like a ribbon).
+  if (renderTriangles && renderVertexToSimParticle && simParticleCount > 0) {
+    const parent = new Int32Array(simParticleCount)
+    for (let i = 0; i < simParticleCount; i++) parent[i] = i
+    const find = (x) => {
+      let r = x
+      while (parent[r] !== r) r = parent[r]
+      let c = x
+      while (c !== r) { const nxt = parent[c]; parent[c] = r; c = nxt }
+      return r
+    }
+    const union = (a, b) => {
+      const ra = find(a), rb = find(b)
+      if (ra !== rb) parent[ra] = rb
+    }
+    for (let t = 0; t < renderTriangles.length; t += 3) {
+      const a = renderVertexToSimParticle[renderTriangles[t]]
+      const b = renderVertexToSimParticle[renderTriangles[t + 1]]
+      const c = renderVertexToSimParticle[renderTriangles[t + 2]]
+      union(a, b)
+      union(b, c)
+    }
+
+    const components = new Map()
+    for (let i = 0; i < simParticleCount; i++) {
+      const r = find(i)
+      let list = components.get(r)
+      if (!list) { list = []; components.set(r, list) }
+      list.push(i)
+    }
+
+    for (const comp of components.values()) {
+      let minY = Infinity, maxY = -Infinity
+      for (const sp of comp) {
+        const py = simRestPositions[sp * 3 + 1]
+        if (py < minY) minY = py
+        if (py > maxY) maxY = py
+      }
+      const spanY = Math.max(0, maxY - minY)
+      const topProbeY = maxY - Math.max(0.03, spanY * 0.18)
+      let topMinX = Infinity, topMaxX = -Infinity
+      let pinnedCount = 0, pinnedMinX = Infinity, pinnedMaxX = -Infinity
+      for (const sp of comp) {
+        const px = simRestPositions[sp * 3]
+        const py = simRestPositions[sp * 3 + 1]
+        if (py >= topProbeY) {
+          if (px < topMinX) topMinX = px
+          if (px > topMaxX) topMaxX = px
+        }
+        if (mask[sp]) {
+          pinnedCount++
+          if (px < pinnedMinX) pinnedMinX = px
+          if (px > pinnedMaxX) pinnedMaxX = px
+        }
+      }
+      const topSpanX = Math.max(0, topMaxX - topMinX)
+      const pinnedSpanX = pinnedCount > 1 ? (pinnedMaxX - pinnedMinX) : 0
+      if (pinnedCount < 3 || (topSpanX > 0.04 && pinnedSpanX < topSpanX * 0.35)) {
+        const pinBandY = maxY - Math.max(0.025, spanY * 0.14)
+        for (const sp of comp) {
+          if (simRestPositions[sp * 3 + 1] >= pinBandY) mask[sp] = 1
+        }
+      }
+    }
+  }
+
+  return mask
+}
+
