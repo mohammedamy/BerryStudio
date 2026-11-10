@@ -45,17 +45,26 @@ describe('Sew step', () => {
     expect(editor.seams).toHaveLength(1)
     expect(node.querySelectorAll('.cl-seam-badge').length).toBe(2)
   })
-  it('renders Arabic piece names', async () => {
+  it('renders Arabic piece names and splits an edge in half with one click', async () => {
     await mount('ar')
     expect(node.textContent).toContain('اللوحة الأمامية')
     expect(node.textContent).not.toContain('[object Object]')
+    await run(() => edges().find(g => g.closest('[data-piece="front"]')).dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    const splitBtn = [...node.querySelectorAll('button')].find(b => b.textContent.includes('قسّم الحافة لنصفين'))
+    expect(splitBtn).toBeTruthy()
+    await run(() => splitBtn.click())
+    expect(editor.drafts[0].outline).toHaveLength(5)
+    expect(Object.keys(editor.drafts[0].edges)).toHaveLength(2)
   })
 })
 
 describe('friendly wording', () => {
-  it('turns importer edge names into plain words', () => {
+  it('turns importer edge names into plain words including anatomical sleeve labels', () => {
     expect(edgeLabel('side_seam_l', 'en')).not.toMatch(/_/)
     expect(edgeLabel('shoulder', 'ar')).toContain('كتف')
+    expect(edgeLabel('capFront', 'ar')).toContain('نصف رأس الكم الأمامي')
+    expect(edgeLabel('capBack', 'ar')).toContain('نصف رأس الكم الخلفي')
+    expect(edgeLabel('rightArmhole', 'ar')).toContain('حردة الإبط')
   })
   it('names unnamed stretches by where they sit on the piece', () => {
     const draft = { outline: [[0, 0], [20, 0], [20, 30], [0, 30]] }

@@ -200,56 +200,77 @@ export let FancyGen;
 
   // ---------------- reusable mechanical components ----------------
 
-  // Tailored two-piece sleeve (upper/outer + under/inner), curved cap.
+  // Tailored two-piece sleeve (upper/outer + under/inner) with a true `-cos` S-curve cap.
   function sleeve2pc(bicep, sleeveLen) {
     const bw = bicep / 2;
-    const capTop = [bw*0.55, -9];
-    const upperSeg1 = [[0,6], [bw*0.3,-8], capTop];   // [p0, c, p1]
-    const upperSeg2 = [capTop, [bw*1.3,-7], [bw*1.7,8]];
+    const hemY = Math.max(sleeveLen, 16);
+    const capH = Math.max(7.5, Math.min(13.5, bw * 0.72));
+    const up0 = [0, 0];
+    const capTop = [bw * 0.85, -capH];
+    const up2 = [bw * 1.7, 0.8];
+    const uc1 = [bw * 0.34, 0];
+    const uc2 = [bw * 0.55, -capH];
+    const uc3 = [bw * 1.18, -capH];
+    const uc4 = [bw * 1.42, 0.8];
     const upper = [
-      [0, 6],
-      ...qBez(...upperSeg1, 6),
-      ...qBez(...upperSeg2, 6),
-      [bw*1.55, sleeveLen-6],
-      [bw*0.15, sleeveLen-2],
+      up0,
+      ...cBez(up0, uc1, uc2, capTop, 6),
+      ...cBez(capTop, uc3, uc4, up2, 6),
+      [bw * 1.54, hemY - 2],
+      [bw * 0.16, hemY],
     ];
     withCurves(upper, [
-      { fromIdx: 0, toIdx: 6, ...qBezToCubic(...upperSeg1) },
-      { fromIdx: 6, toIdx: 12, ...qBezToCubic(...upperSeg2) },
+      { fromIdx: 0, toIdx: 6, c1: uc1, c2: uc2 },
+      { fromIdx: 6, toIdx: 12, c1: uc3, c2: uc4 },
     ]);
-    const underSeg = [[0,11], [bw*0.5,3], [bw*1.15,13]];
+    upper.notches = [upper[2], upper[6], upper[10]];
+
+    const dp0 = [0, 1.0];
+    const dMid = [bw * 0.58, 2.4];
+    const dp2 = [bw * 1.15, 1.2];
+    const dc1 = [bw * 0.22, 1.0];
+    const dc2 = [bw * 0.38, 2.4];
+    const dc3 = [bw * 0.78, 2.4];
+    const dc4 = [bw * 0.95, 1.2];
     const under = [
-      [0, 11],
-      ...qBez(...underSeg, 6),
-      [bw*1.02, sleeveLen-9],
-      [bw*0.1, sleeveLen-5],
+      dp0,
+      ...cBez(dp0, dc1, dc2, dMid, 4),
+      ...cBez(dMid, dc3, dc4, dp2, 4),
+      [bw * 1.02, hemY - 4],
+      [bw * 0.12, hemY - 2],
     ];
-    withCurves(under, [{ fromIdx: 0, toIdx: 6, ...qBezToCubic(...underSeg) }]);
+    withCurves(under, [
+      { fromIdx: 0, toIdx: 4, c1: dc1, c2: dc2 },
+      { fromIdx: 4, toIdx: 8, c1: dc3, c2: dc4 },
+    ]);
     return { upper, under };
   }
-  // Simple one-piece sleeve with a curved cap (dresses/gowns/robes).
+  // One-piece sleeve with a true `-cos` S-curve cap (dresses/gowns/robes/coats).
   function sleeve1pc(bicep, sleeveLen, wideF) {
     wideF = wideF || 1;
-    const bw = (bicep/2) * wideF;
-    const capTop = [bw, -10];
-    const seg1 = [[0,6], [bw*0.4,-9], capTop];
-    const seg2 = [capTop, [bw*1.6,-8], [bw*2,6]];
-    // WP-53 (docs/plan 4.md Phase 4): the cap's own base sits at y=6 —
-    // for a genuinely short sleeve (e.g. a ruffle band on a small kids'
-    // measurement set, sleeveLen*0.2-ish), a raw `sleeveLen` hem can land
-    // AT or ABOVE that base line, inverting the shape into a real self-
-    // intersection (2 real failures across gf08/gf10 at the smallest
-    // KIDS_AGES extremes, part of docs/plan 4.md §5.1 Phase 0's finding).
-    // Clamped to a safe minimum clearance below the cap base — normal-
-    // length sleeves (sleeveLen already well past 6+6) are unaffected.
-    const hemY = Math.max(sleeveLen, 12);
+    const bw = (bicep / 2) * wideF;
+    const capH = Math.max(5.5, Math.min(14, bw * 0.62));
+    const p0 = [0, 0];
+    const capTop = [bw, -capH];
+    const p2 = [bw * 2, 0];
+    const fc1 = [bw * 0.40, 0];
+    const fc2 = [bw * 0.64, -capH];
+    const bc1 = [bw * 1.38, -capH];
+    const bc2 = [bw * 1.64, 0];
+    // Clamped to a safe minimum clearance below the y=0 cap base so short
+    // kids' ruffle/cap sleeves (gf08/gf10 at KIDS_AGES '2-3') stay well-formed.
+    const hemY = Math.max(sleeveLen, 7.5);
     const outline = [
-      [0,6], ...qBez(...seg1, 6), ...qBez(...seg2, 6),
-      [bw*1.85, hemY], [0.1, hemY-2],
+      p0,
+      ...cBez(p0, fc1, fc2, capTop, 6),
+      ...cBez(capTop, bc1, bc2, p2, 6),
+      [bw * 1.86, hemY],
+      [bw * 0.14, Math.max(6, hemY - 1.2)],
     ];
+    outline.notches = [outline[2], outline[6], outline[10]];
     return withCurves(outline, [
-      { fromIdx: 0, toIdx: 6, ...qBezToCubic(...seg1) },
-      { fromIdx: 6, toIdx: 12, ...qBezToCubic(...seg2) },
+      { fromIdx: 0, toIdx: 6, c1: fc1, c2: fc2 },
+      { fromIdx: 6, toIdx: 12, c1: bc1, c2: bc2 },
     ]);
   }
   // BerryStudio-Upgrade-Plan-v5.md WP-43 continued: the second half of the

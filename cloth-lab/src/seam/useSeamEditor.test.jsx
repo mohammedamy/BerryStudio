@@ -81,4 +81,41 @@ describe('novice-first editing (autoPlace)',()=>{
     await mountAuto();await run(()=>editor.chooseSpan(0,1,2))
     let garment;await run(()=>{garment=editor.finalize({ignorePending:true})});expect(garment.pieces).toHaveLength(4)
   })
+  it('splits a selected 2-point straight edge into two clickable halves with one click and sews each half separately',async()=>{
+    await mountAuto()
+    // Select top edge 0 -> 1 on p0 (a 4-point rectangle) and split it in half
+    await run(()=>editor.chooseSpan(0,0,1))
+    expect(editor.pendingEdges).toHaveLength(1)
+    await run(()=>editor.splitSelectedEdge())
+    // Outline gained a midpoint at [10, 0], first half 0->1 is selected, second half 1->2 is also named
+    expect(editor.drafts[0].outline).toHaveLength(5)
+    expect(editor.drafts[0].outline[1]).toEqual([10,0])
+    expect(Object.keys(editor.drafts[0].edges)).toEqual(['edge_0_1','edge_1_2'])
+    expect(editor.pendingEdges).toHaveLength(1)
+    expect(editor.pendingEdges[0].edgeName).toBe('edge_0_1')
+    // Sew first half to p1 top edge, and second half to p2 top edge!
+    await run(()=>editor.chooseSpan(1,0,1))
+    await run(()=>editor.sewSelected())
+    await run(()=>editor.chooseEdge(0,'edge_1_2'))
+    await run(()=>editor.chooseSpan(2,0,1))
+    await run(()=>editor.sewSelected())
+    expect(editor.seams).toHaveLength(2)
+    let garment;await run(()=>{garment=editor.finalize()})
+    expect(garment.pieces[0].outline).toHaveLength(5)
+    // Reset restores original unsplit 4-point geometry and seed seams
+    await run(()=>editor.resetToAutoSeams())
+    expect(editor.drafts[0].outline).toHaveLength(4)
+    expect(editor.seams).toHaveLength(0)
+  })
+  it('splits a multi-vertex curved edge at its 50% arc-length vertex',async()=>{
+    const curved=[{id:'sleeve',sourceId:'sleeve',outline:[[0,10],[5,3],[15,0],[25,3],[30,10],[26,50],[4,50]],label:'Sleeve'}]
+    node=document.createElement('div');root=createRoot(node)
+    function CurvedTest(){editor=useSeamEditor(curved,{sleeve:'sleeve'},[{pieceId:'sleeve',edgeName:'cap',fromIdx:0,toIdx:4}],[],{},null,{autoPlace:true});return null}
+    await act(async()=>root.render(<CurvedTest/>))
+    await run(()=>editor.chooseEdge(0,'cap'))
+    await run(()=>editor.splitSelectedEdge())
+    expect(editor.drafts[0].edges.cap).toBeUndefined()
+    expect(editor.drafts[0].edges.edge_0_2).toEqual({from:0,to:2})
+    expect(editor.drafts[0].edges.edge_2_4).toEqual({from:2,to:4})
+  })
 })

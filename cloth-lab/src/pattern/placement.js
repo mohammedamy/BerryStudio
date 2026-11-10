@@ -112,26 +112,52 @@ export function placeLegPanel(positions2D, dims, { side, zSign, easeFactor = 1.1
 // outside the true (narrower) arm surface there, the same "flat placement
 // vs. tapered collision" mismatch the torso hem had.
 export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */, easeFactor = 1.15) {
-  const shoulderWorldY = dims.shoulderY - dims.span * 0.04
-  const shoulderWorldX = side * dims.shoulderHalf * 0.95
-  const leanOut = side * 0.12 // radians, arm slightly away from torso
+  if (!positions2D.length) return []
+  let minX = Infinity, maxX = -Infinity, minY = Infinity
+  for (const [x, y] of positions2D) {
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+  }
+  const width = maxX - minX
+  // 1D centerline samples (e.g. unit-test probes with constant X) keep the
+  // direct arc-length wrap around the arm axis.
+  if (!(width > 1e-6)) {
+    const shoulderWorldY = dims.shoulderY - dims.span * 0.04
+    const shoulderWorldX = side * dims.shoulderHalf * 0.95
+    const leanOut = side * 0.12 // radians, arm slightly away from torso
+    return positions2D.map(([xCm, yCm]) => {
+      const alongArm = cm(yCm)
+      const t = Math.min(1, alongArm / dims.armLen)
+      const radius = lerp(dims.upperR, dims.upperR * 0.55, t) * easeFactor
+      const circumference = 2 * Math.PI * radius
+      const phi = (cm(xCm) / circumference) * 2 * Math.PI
+      const localX = radius * Math.sin(phi)
+      const localZ = radius * Math.cos(phi)
+      const worldY = shoulderWorldY - alongArm * Math.cos(leanOut)
+      const worldX = shoulderWorldX + alongArm * Math.sin(leanOut) + localX * Math.cos(leanOut)
+      return [worldX, worldY, localZ]
+    })
+  }
+  // Real 2D sleeve piece: center of X (`capTop`) sits on the outer shoulder
+  // (`+side * radius`), the front half (`capFront`) wraps across `+Z` toward
+  // the front bodice armhole, the back half (`capBack`) wraps across `-Z`
+  // toward the back bodice armhole, and the two long underarm seams meet at
+  // the inner armpit (`-side * radius`) on both right (+1) and left (-1) arms.
+  const cx = (minX + maxX) / 2
+  const halfW = width / 2
+  const shoulderWorldY = dims.shoulderY + dims.span * 0.01
+  const shoulderWorldX = side * dims.shoulderHalf * 0.96
+  const leanOut = side * 0.14
   return positions2D.map(([xCm, yCm]) => {
-    const alongArm = cm(yCm)
-    const t = Math.min(1, alongArm / dims.armLen)
-    const radius = lerp(dims.upperR, dims.upperR * 0.55, t) * easeFactor
-    const circumference = 2 * Math.PI * radius
-    const phi = (cm(xCm) / circumference) * 2 * Math.PI
-    const localX = radius * Math.sin(phi)
-    const localZ = radius * Math.cos(phi)
+    const alongArm = cm(yCm - minY)
+    const t = Math.min(1, Math.max(0, alongArm / dims.armLen))
+    const radius = lerp(dims.upperR * 1.08, dims.upperR * 0.58, t) * easeFactor
+    const s = Math.max(-1, Math.min(1, (xCm - cx) / halfW))
+    const alpha = s * Math.PI * 0.96
+    const localX = side * radius * Math.cos(alpha)
+    const localZ = -side * radius * Math.sin(alpha)
     const worldY = shoulderWorldY - alongArm * Math.cos(leanOut)
-    // `leanOut` already carries the per-side sign (side * 0.12), and Math.sin
-    // is odd, so Math.sin(leanOut) is itself already signed correctly per
-    // side — multiplying by `side` again here squares it back to +1 and
-    // cancels the sign, pushing BOTH arms toward the same absolute X
-    // direction as you go down the arm instead of mirroring outward. That
-    // left one side's sleeve curving in toward the torso/centerline instead
-    // of hanging away from the body (reported: a sleeve visibly bending
-    // toward the lower body while the actual arm underneath stays straight).
     const worldX = shoulderWorldX + alongArm * Math.sin(leanOut) + localX * Math.cos(leanOut)
     return [worldX, worldY, localZ]
   })

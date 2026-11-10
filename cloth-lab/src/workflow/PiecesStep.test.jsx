@@ -21,9 +21,10 @@ describe('Pieces step', () => {
     expect(html).not.toContain('[object Object]')
     expect(html).not.toContain('Needs a choice')
   })
-  it('renders Arabic labels', () => {
+  it('renders Arabic labels and sleeve auto-sew guidance chip', () => {
     const html = render('ar')
     expect(html).toContain('الصدر الأمامي')
+    expect(html).toContain('نصف الرأس للأمام')
     expect(html).not.toContain('[object Object]')
   })
   it('uses friendly names instead of schema role ids', () => {

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { PLACEMENTS, labelOf, shapeKey } from './patternPlan'
-import { asUserAnswer } from './autoSetup'
+import { asUserAnswer, guessCopies } from './autoSetup'
 import { resolveSchemaRole } from '../pattern/roles'
 
 // Step 1 of the guided workflow. Every piece arrives already set up (see
@@ -73,14 +73,24 @@ function statusOf(row, questions, ar) {
   return ['edited', text('Your setup', 'إعدادك')]
 }
 
+const SLEEVE_ROLES = new Set(['sleeve', 'cap-sleeve', 'puff-sleeve', 'butterfly-sleeve'])
+
 function PieceCard({ row, questions, lang, onAnswer }) {
   const ar = lang === 'ar', text = (en, arabic) => ar ? arabic : en
   const { piece, answer, role, excluded, valid } = row
   const [open, setOpen] = useState(false)
   const [tone, status] = statusOf(row, questions, ar)
   const copies = effectiveCopies(piece, answer, role)
-  const set = (field, value) => onAnswer(piece.id, { ...asUserAnswer(answer), shape: shapeKey(piece), [field]: value })
+  const set = (field, value) => {
+    const base = asUserAnswer(answer)
+    const next = { ...base, shape: shapeKey(piece), [field]: value }
+    if (field === 'role' && (!answer?.copies || answer?.autoFields?.includes('copies'))) {
+      next.copies = guessCopies(piece, value)
+    }
+    onAnswer(piece.id, next)
+  }
   const hasDarts = (piece.darts || []).length > 0
+  const isSleeve = SLEEVE_ROLES.has(role)
   const editing = open || tone === 'attention'
   return <article className={`cl-piece-card tone-${tone}${editing ? ' is-open' : ''}`}>
     <div className="cl-card-top">
@@ -92,6 +102,7 @@ function PieceCard({ row, questions, lang, onAnswer }) {
           {role && <li>{roleLabel(role, lang)}</li>}
           <li>{pick(COPIES, copies, ar)}</li>
           {hasDarts && <li>{answer.darts === 'close' ? text('Darts sewn', 'بنسات مخيطة') : text('Darts marked', 'بنسات كعلامة')}</li>}
+          {isSleeve && <li>{text('Auto-sewn: front/back cap + side tube · cuff open', 'خياطة تلقائية: نصف الرأس للأمام · النصف للخلف · الجانبان معاً · الأسفل حر')}</li>}
         </ul>}
         {!valid && <p className="cl-card-note">{text('This outline is incomplete. Fix it in the pattern editor to include it.', 'حدود هذه القطعة غير مكتملة. أصلحها في محرر الباترون لتضمينها.')}</p>}
         {valid && excluded && <p className="cl-card-note">{piece.visible === false ? text('Hidden in your pattern, so it is left out.', 'مخفية في الباترون، لذلك استُبعدت.') : text('Not part of this try-on.', 'ليست جزءاً من هذه التجربة.')}</p>}

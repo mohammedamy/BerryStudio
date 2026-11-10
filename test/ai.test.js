@@ -168,7 +168,10 @@ test('buildSkirt: gatherRatio takes priority over a simultaneously-set pleatCoun
   assert.ok(Math.abs(frontSkirtWidth(built) - computeGatherWidth(w, 1.4)) < 1e-9);
 });
 
-const sleeveCapWidth = (built) => built.pieces.find((p) => p.name.en === 'Sleeve').outline[2][0];
+const sleeveCapWidth = (built) => {
+  const xs = built.pieces.find((p) => p.name.en === 'Sleeve').outline.map((pt) => pt[0]);
+  return Math.max(...xs) - Math.min(...xs);
+};
 
 test('sleeve cap: no technique selected keeps the cap at its plain finished width (byte-identical baseline)', () => {
   const style = { ...AIGen.deriveStyle('short sleeve top', 'en'), type: 'top', sleeveLenF: 1 };

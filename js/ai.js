@@ -41,6 +41,7 @@
    own honesty notes for what the real model behind it can and can't do).
    ============================================================ */
 import { computePleats, computeGatherWidth, computeTucks } from './pleats.js';
+import { cosineSleeveOutline } from './pattern-builders.js';
 export const AIGen = (() => {
   const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
   const q = v => v / 4;
@@ -390,7 +391,7 @@ export const AIGen = (() => {
   // when none of the three are set.
   function sleevePiece(style, m){
     const slen=clamp(m.sleeve*style.sleeveLenF, 8, m.sleeve*1.35);
-    const bic=q(m.bicep)*style.sleeveWideF, cap=6*style.sleeveWideF;
+    const bic=q(m.bicep)*style.sleeveWideF, cap=Math.max(4.5, 6.5*style.sleeveWideF);
     const finishedCapW = bic*2;
     let capW = finishedCapW, capMeta = null;
     if (style.sleeveGatherRatio > 1){
@@ -402,13 +403,23 @@ export const AIGen = (() => {
       const { addedWidthCm, pleats } = computeTucks(finishedCapW, style.sleeveTuckCount, 1);
       capW = finishedCapW + addedWidthCm; capMeta = pleats;
     }
+    const cuffW = clamp(finishedCapW * 0.82, capW * 0.52, capW * 0.88);
+    const outline = cosineSleeveOutline({
+      width: capW,
+      sleeveLen: slen,
+      capHeight: cap,
+      cuffWidth: cuffW,
+      frontHollow: !(style.sleeveGatherRatio > 1),
+    });
     const piece = {
       name:{en:"Sleeve", ar:"كم"},
       desc:{en:"Generated sleeve — length and width read from the reference.",
             ar:"كم مولّد — الطول والاتساع من المرجع."},
-      outline:[[0,0],[capW/2,-cap],[capW,0],[capW-1,slen],[1,slen]],
-      darts:[], notches:[[capW/2,-cap]],
-      grain:[[capW/2,4],[capW/2,slen-4]],
+      outline,
+      curves: outline.curves,
+      darts:[],
+      notches:[outline[outline.frontNotchIdx], outline[outline.crownIdx], outline[outline.backNotchIdx1], outline[outline.backNotchIdx2]],
+      grain:[[capW/2, 4], [capW/2, Math.max(5.5, slen - 4)]],
       role:"sleeve", bilateral:true,
     };
     if (capMeta) piece.pleats = capMeta;
@@ -1073,12 +1084,21 @@ export const AIGen = (() => {
     }
 
     if (style.sleeveLenF > 0.05) {
-      const slen = clamp(m.sleeve * style.sleeveLenF, 6, m.sleeve * 1.1);
-      const bic = q(m.bicep) * style.sleeveWideF * 0.88, cap = 5.5 * style.sleeveWideF;
+      const slen = clamp(m.sleeve * style.sleeveLenF, 7, m.sleeve * 1.1);
+      const bic = q(m.bicep) * style.sleeveWideF * 0.88, cap = Math.max(4.5, 6 * style.sleeveWideF);
+      const slvOutline = cosineSleeveOutline({
+        width: bic * 2,
+        sleeveLen: slen,
+        capHeight: cap,
+        cuffWidth: bic * 2 * 0.82,
+        frontHollow: true,
+      });
       pieces.push({ name: { en: "Sleeve", ar: "كم" },
         desc: { en: "Fitted stretch sleeve — length and width read from the style.", ar: "كم مرن ضيق — الطول والاتساع حسب التصميم." },
-        outline: [[0, 0], [bic, -cap], [bic * 2, 0], [bic * 2 - 1, slen], [1, slen]],
-        notches: [[bic, -cap]], grain: [[bic, 4], [bic, slen - 4]],
+        outline: slvOutline,
+        curves: slvOutline.curves,
+        notches: [slvOutline[slvOutline.frontNotchIdx], slvOutline[slvOutline.crownIdx], slvOutline[slvOutline.backNotchIdx1], slvOutline[slvOutline.backNotchIdx2]],
+        grain: [[bic, 3], [bic, Math.max(5, slen - 3)]],
         role: "sleeve", bilateral: true });
     } else {
       pieces.push({ name: { en: "Armhole Binding", ar: "تحبيك حلقة الكم" },
@@ -1224,22 +1244,180 @@ export const AIGen = (() => {
     const sy = (lenRef && lenNow) ? lenNow/lenRef : 1;
     return { sx: clamp(sx,0.6,1.7), sy: clamp(sy,0.6,1.7) };
   }
+  const SLEEVE_CAP_ROLES = new Set([
+    "sleeve", "sleeve-upper", "cap-sleeve", "puff-sleeve", "butterfly-sleeve",
+  ]);
+  const NON_SLEEVE_ROLES = new Set([
+    "bodice-front", "bodice-back", "front-panel", "back-panel",
+    "bodice-front-center", "bodice-front-side", "bodice-back-center", "bodice-back-side",
+    "skirt-front", "skirt-back", "hip-panel-front", "hip-panel-back",
+    "skirt-front-gore", "skirt-back-gore", "skirt-side-gore-left", "skirt-side-gore-right",
+    "shorts-front", "shorts-back", "trouser-front", "trouser-back",
+    "collar", "undercollar", "collar-stand", "collar-band",
+    "facing", "placket-facing", "lapel-facing",
+    "yoke", "epaulette", "pocket", "waistband", "cuff", "rib-cuff", "hem-band",
+    "belt", "sash", "wrap-tie", "lining", "hood", "sleeve-under",
+    "peplum-front", "peplum-back", "godet", "tier", "cape", "cape-overlay",
+    "cup", "band", "strap", "elastic-band", "gusset",
+  ]);
+  function pieceSleeveText(p) {
+    if (!p) return "";
+    const parts = [p.id, p.key];
+    if (typeof p.name === "string") parts.push(p.name);
+    else if (p.name) parts.push(p.name.en, p.name.ar);
+    if (p.label) parts.push(p.label.en, p.label.ar);
+    return parts.filter(Boolean).join(" ");
+  }
+  function isSleevePiece(p) {
+    if (!p) return false;
+    if (SLEEVE_CAP_ROLES.has(p.role)) return true;
+    if (p.role && NON_SLEEVE_ROLES.has(p.role)) return false;
+    const txt = pieceSleeveText(p);
+    if (!txt) return false;
+    if (/sleeveless|no[-\s]*sleeve|armhole\s*(?:binding|facing)|بدون\s*(?:كم|أكمام)|بلا\s*(?:كم|أكمام)|\bcuff\b|أسورة|أساور|تحبيك|بطانة|سفلي|\bunder(?:sleeve|\s+sleeve)?\b/i.test(txt)) {
+      return false;
+    }
+    return /\bsleeves?\b|كم|أكمام/i.test(txt);
+  }
+  function buildCosineSleeveGeometry(p, m, sleeveHint) {
+    const txt = pieceSleeveText(p);
+    const isPuff = p.role === "puff-sleeve" || /puff|منفوش|منفوخ|gather|مكشكش/i.test(txt);
+    const isBell = p.role === "butterfly-sleeve" || /bell|bishop|butterfly|flutter|kimono|واسع|فراشة|جرسي/i.test(txt);
+    const isCap = p.role === "cap-sleeve" || /\bcap\b|كاب/i.test(txt);
+
+    let hasBox = false, minX = 0, maxX = 0, minY = 0, maxY = 0;
+    if (Array.isArray(p.outline) && p.outline.length >= 3) {
+      const xs = p.outline.map((pt) => Number(pt[0])).filter(Number.isFinite);
+      const ys = p.outline.map((pt) => Number(pt[1])).filter(Number.isFinite);
+      if (xs.length >= 3 && ys.length >= 3) {
+        minX = Math.min(...xs); maxX = Math.max(...xs);
+        minY = Math.min(...ys); maxY = Math.max(...ys);
+        if ((maxX - minX) >= 12 && (maxY - minY) >= 7) hasBox = true;
+      }
+    }
+
+    let capW, underarmLen, capH, dx = 0, dy = 0;
+    if (hasBox) {
+      const rawW = maxX - minX;
+      const rawH = maxY - minY;
+      capW = rawW;
+      capH = clamp(rawW * 0.34, 4.5, Math.min(14, rawH * 0.42));
+      underarmLen = Math.max(6, rawH - capH);
+      dx = minX;
+      dy = minY + capH;
+    } else {
+      const bicep = (m && Number(m.bicep)) || 30;
+      const sleeveLenMeas = (m && Number(m.sleeve)) || 58;
+      const hint = sleeveHint || {};
+      const hintLenF = (hint.lengthF != null && hint.lengthF > 0.05) ? Number(hint.lengthF) : null;
+      const hintWideF = (hint.widthF != null && hint.widthF > 0.2) ? Number(hint.widthF) : null;
+      const lenF = hintLenF != null ? hintLenF
+        : isCap ? 0.28
+        : (/short|قصير/i.test(txt) || isPuff) ? 0.42
+        : /3\/4|three[-\s]*quarter|ثلاثة\s*أرباع|elbow|كوع/i.test(txt) ? 0.72
+        : 1.0;
+      const wideF = hintWideF != null ? hintWideF
+        : (isPuff || isBell) ? 1.35
+        : 1.0;
+      capW = Math.max(18, (bicep / 2) * wideF + 4);
+      underarmLen = clamp(sleeveLenMeas * lenF, 7, sleeveLenMeas * 1.35);
+      capH = clamp((bicep / 4) * 0.85 * Math.min(wideF, 1.25), 5, 13.5);
+    }
+
+    const cuffW = isBell ? capW * 1.08 : isPuff ? capW * 0.74 : capW * 0.80;
+    const base = cosineSleeveOutline({
+      width: capW,
+      sleeveLen: underarmLen,
+      capHeight: capH,
+      cuffWidth: cuffW,
+      frontHollow: !isPuff,
+    });
+    const shiftPt = (pt) => [+(pt[0] + dx).toFixed(3), +(pt[1] + dy).toFixed(3)];
+    const outline = base.map(shiftPt);
+    const curves = (base.curves || []).map((c) => ({
+      fromIdx: c.fromIdx,
+      toIdx: c.toIdx,
+      c1: shiftPt(c.c1),
+      c2: shiftPt(c.c2),
+    }));
+    outline.curves = curves;
+    const notches = [
+      outline[base.frontNotchIdx],
+      outline[base.crownIdx],
+      outline[base.backNotchIdx1],
+      outline[base.backNotchIdx2],
+    ];
+    const cx = +(capW / 2 + dx).toFixed(3);
+    const gTop = +(Math.min(4, underarmLen * 0.25) + dy).toFixed(3);
+    const gBot = +(Math.max(gTop + 2, underarmLen - Math.min(4, underarmLen * 0.2) + dy)).toFixed(3);
+    return {
+      outline,
+      curves,
+      notches,
+      grain: [[cx, gTop], [cx, gBot]],
+      role: SLEEVE_CAP_ROLES.has(p.role) ? p.role : (isPuff ? "puff-sleeve" : isCap ? "cap-sleeve" : "sleeve"),
+    };
+  }
+  function normalizeAISleevePieces(pieces, m, sleeveHint) {
+    if (!Array.isArray(pieces)) return pieces;
+    for (let i = 0; i < pieces.length; i++) {
+      const p = pieces[i];
+      if (!isSleevePiece(p)) continue;
+      const built = buildCosineSleeveGeometry(p, m, sleeveHint);
+      pieces[i] = {
+        ...p,
+        name: p.name || labelFor(p),
+        outline: built.outline,
+        curves: built.curves,
+        notches: built.notches,
+        grain: built.grain,
+        role: built.role,
+        bilateral: p.bilateral != null ? p.bilateral : true,
+        cutOnFold: false,
+      };
+    }
+    return pieces;
+  }
   function buildFromMeasuredPieces(spec, m){
     const { sx, sy } = scaleFactors(spec.garment && spec.garment.referenceMeasurementsCm, m);
-    return (spec.pieces||[]).filter(p=>Array.isArray(p.outlineCm) && p.outlineCm.length>=3).map(p=>{
-      const outline = p.outlineCm.map(([x,y])=>[+(x*sx).toFixed(2), +(y*sy).toFixed(2)]);
-      const xs = outline.map(pt=>pt[0]), ys = outline.map(pt=>pt[1]);
-      const cx = (Math.min(...xs)+Math.max(...xs))/2, minY=Math.min(...ys), maxY=Math.max(...ys);
-      const pad = Math.max(1, (maxY-minY)*0.08);
-      return {
-        name: labelFor(p),
-        desc:{ en:"Traced from a reference tech-pack image — real measurements, not a style-factor guess.",
-               ar:"مُستخرجة من صورة كراسة قياسات مرجعية — قياسات حقيقية وليست تخمينًا نسبيًا." },
-        outline, darts:[], notches:[],
-        grain:[[cx, minY+pad], [cx, maxY-pad]],
-        role: p.role, cutOnFold: !!p.cutOnFold,
-      };
-    });
+    const sleeveHint = spec.construction && spec.construction.sleeve;
+    return (spec.pieces||[])
+      .filter(p => (Array.isArray(p.outlineCm) && p.outlineCm.length >= 3) || isSleevePiece(p))
+      .map(p => {
+        if (isSleevePiece(p)) {
+          const scaledOutline = (Array.isArray(p.outlineCm) && p.outlineCm.length >= 3)
+            ? p.outlineCm.map(([x, y]) => [+(x * sx).toFixed(2), +(y * sy).toFixed(2)])
+            : null;
+          const built = buildCosineSleeveGeometry({ ...p, outline: scaledOutline }, m, sleeveHint);
+          return {
+            name: labelFor(p),
+            desc: {
+              en: "Parametric -cos sleeve cap drafted deterministically from wearer/reference measurements.",
+              ar: "باترون كم بمنحنى (-cos) قياسي مولّد تلقائيًا بدقة حسب القياسات.",
+            },
+            outline: built.outline,
+            curves: built.curves,
+            darts: [],
+            notches: built.notches,
+            grain: built.grain,
+            role: built.role,
+            bilateral: true,
+            cutOnFold: false,
+          };
+        }
+        const outline = p.outlineCm.map(([x,y])=>[+(x*sx).toFixed(2), +(y*sy).toFixed(2)]);
+        const xs = outline.map(pt=>pt[0]), ys = outline.map(pt=>pt[1]);
+        const cx = (Math.min(...xs)+Math.max(...xs))/2, minY=Math.min(...ys), maxY=Math.max(...ys);
+        const pad = Math.max(1, (maxY-minY)*0.08);
+        return {
+          name: labelFor(p),
+          desc:{ en:"Traced from a reference tech-pack image — real measurements, not a style-factor guess.",
+                 ar:"مُستخرجة من صورة كراسة قياسات مرجعية — قياسات حقيقية وليست تخمينًا نسبيًا." },
+          outline, darts:[], notches:[],
+          grain:[[cx, minY+pad], [cx, maxY-pad]],
+          role: p.role, cutOnFold: !!p.cutOnFold,
+        };
+      });
   }
 
   // ---------- thinking-stage summary text ----------
@@ -1338,6 +1516,7 @@ export const AIGen = (() => {
       try {
         const r = await remote(endpoint, { prompt, image:imageDataURL, category, measurements });
         if(r && Array.isArray(r.pieces) && r.pieces.length){
+          normalizeAISleevePieces(r.pieces, measurements);
           stage("done");
           return { pieces:r.pieces, colors:r.colors||DEFAULT_COLORS.slice(), colorInt:null, summary:r.summary||"", source:"remote" };
         }
@@ -1379,7 +1558,11 @@ export const AIGen = (() => {
   // Prompt Builder can reuse the SAME seeded-variety convention this file
   // already relies on (same input -> same output, different input -> real
   // variety) instead of a second, drifting reimplementation.
-  return { analyzeImage, deriveStyle, build, buildFromMeasuredPieces, summary, attributes, generate, sampleMatte, hashStr, pick };
+  return {
+    analyzeImage, deriveStyle, build, buildFromMeasuredPieces,
+    isSleevePiece, normalizeAISleevePieces,
+    summary, attributes, generate, sampleMatte, hashStr, pick,
+  };
 })();
 // TEMP compat alias for one release — see BerryStudio-Upgrade-Plan WP-0.1.
 if (typeof window !== 'undefined') window.AIGen = AIGen;

@@ -9,30 +9,45 @@ import { createDraftPiece, addEdge, finalizeDraftPiece, removeEdge } from '../pa
 // visible and reversible in the Sew step (see `autoPlaced`/`dartNotices`).
 // A restored session always keeps exactly what the user saved.
 export function useSeamEditor(rawPieces, roles, seedEdges, seedSeams, placementHints, restored, options = {}) {
-  const [initial] = useState(() => {
-    const drafts = rawPieces.map(rp => createDraftPiece(rp, roles[rp.id], placementHints?.[rp.id]))
+  function buildInitialState(restoredState) {
+    const freshDrafts = rawPieces.map(rp => createDraftPiece(rp, roles[rp.id], placementHints?.[rp.id]))
     const warnings = []
     for (const e of seedEdges || []) {
-      const draft = drafts.find(d => d.id === e.pieceId)
+      const draft = freshDrafts.find(d => d.id === e.pieceId)
       if (draft) try { addEdge(draft, e.edgeName, e.fromIdx, e.toIdx) } catch (error) { warnings.push(error.message) }
     }
-    const seams = (seedSeams || []).filter(s => [s.a, s.b].every(e => drafts.find(d => d.id === e.piece)?.edges[e.edge]))
-    // Restore only against identical source geometry; the caller validates the
-    // design key before supplying this state. The perimeter is validated again
-    // at finalize, so malformed saved state cannot reach the GPU.
-    const savedById = new Map((restored?.drafts || []).map(d => [d.id, d]))
-    if (Array.isArray(restored?.drafts) && savedById.size === drafts.length && drafts.every(d => JSON.stringify(d.outline) === JSON.stringify(savedById.get(d.id)?.outline))) {
-      drafts.forEach(d => { d.edges = savedById.get(d.id).edges || d.edges })
-      return { drafts, seams: restored.seams || seams, warnings, separate: restored.separate || [], reviewed: restored.reviewed || [], autoPlaced: [], dartNotices: [] }
+    const freshSeams = (seedSeams || []).filter(s => [s.a, s.b].every(e => freshDrafts.find(d => d.id === e.piece)?.edges[e.edge]))
+    // Restore only against identical source geometry (or a user-split outline
+    // from the same sourceId); the caller validates the design key before
+    // supplying this state. The perimeter is validated again at finalize.
+    const savedById = new Map((restoredState?.drafts || []).map(d => [d.id, d]))
+    const canRestore = Array.isArray(restoredState?.drafts) && savedById.size === freshDrafts.length && freshDrafts.every(d => {
+      const saved = savedById.get(d.id)
+      if (!saved) return false
+      if (JSON.stringify(d.outline) === JSON.stringify(saved.outline)) return true
+      return Boolean(saved.splitCustom && saved.sourceId === d.sourceId && Array.isArray(saved.outline) && saved.outline.length >= 3)
+    })
+    if (canRestore) {
+      freshDrafts.forEach(d => {
+        const saved = savedById.get(d.id)
+        if (saved.splitCustom && Array.isArray(saved.outline)) {
+          d.outline = saved.outline
+          d.splitCustom = true
+        }
+        d.edges = saved.edges || d.edges
+      })
+      return { drafts: freshDrafts, seams: restoredState.seams || freshSeams, warnings, separate: restoredState.separate || [], reviewed: restoredState.reviewed || [], autoPlaced: [], dartNotices: [] }
     }
     if (options.autoPlace) {
-      const sewn = d => seams.some(s => (s.a.piece === d.id || s.b.piece === d.id) && (drafts.length === 1 || s.a.piece !== s.b.piece))
-      const autoPlaced = drafts.filter(d => !sewn(d)).map(d => d.id)
-      const dartNotices = drafts.filter(d => d.joinReview && sewn(d)).map(d => d.id)
-      return { drafts, seams, warnings, separate: autoPlaced, reviewed: dartNotices, autoPlaced, dartNotices }
+      const sewn = d => freshSeams.some(s => (s.a.piece === d.id || s.b.piece === d.id) && (freshDrafts.length === 1 || s.a.piece !== s.b.piece))
+      const autoPlaced = freshDrafts.filter(d => !sewn(d)).map(d => d.id)
+      const dartNotices = freshDrafts.filter(d => d.joinReview && sewn(d)).map(d => d.id)
+      return { drafts: freshDrafts, seams: freshSeams, warnings, separate: autoPlaced, reviewed: dartNotices, autoPlaced, dartNotices }
     }
-    return { drafts, seams, warnings, separate: [], reviewed: [], autoPlaced: [], dartNotices: [] }
-  })
+    return { drafts: freshDrafts, seams: freshSeams, warnings, separate: [], reviewed: [], autoPlaced: [], dartNotices: [] }
+  }
+
+  const [initial] = useState(() => buildInitialState(restored))
   const [drafts, setDrafts] = useState(initial.drafts)
   const [seams, setSeams] = useState(initial.seams)
   const [separate, setSeparate] = useState(initial.separate)
@@ -80,6 +95,106 @@ export function useSeamEditor(rawPieces, roles, seedEdges, seedSeams, placementH
       return copy
     }))
     setPendingStart(null); setPendingEdges([]); setError(null)
+  }
+  // Splits the currently selected edge into two equal halves so a user can sew
+  // half of an edge (e.g. front half of sleeve cap) to one panel and the other
+  // half to another panel in a single click — even on a 2-point straight line.
+  function splitSelectedEdge() {
+    if (pendingEdges.length !== 1) return
+    const sel = pendingEdges[0]
+    const draft = drafts[sel.pieceIdx]
+    if (!draft) return
+    const n = draft.outline.length
+    const chain = []
+    for (let step = 0; step <= n; step++) {
+      const idx = (sel.from + step) % n
+      chain.push(idx)
+      if (idx === sel.to && step > 0) break
+    }
+    if (chain.length < 2) return
+    try {
+      const copy = { ...draft, outline: draft.outline.slice(), edges: { ...draft.edges } }
+      if (copy.edges[sel.edgeName]) removeEdge(copy, sel.edgeName)
+      let fromIdx = sel.from
+      let midIdx
+      let toIdx = sel.to
+      if (chain.length >= 3) {
+        const cum = [0]
+        for (let k = 1; k < chain.length; k++) {
+          const a = copy.outline[chain[k - 1]], b = copy.outline[chain[k]]
+          cum.push(cum[k - 1] + Math.hypot(b[0] - a[0], b[1] - a[1]))
+        }
+        const half = cum[cum.length - 1] / 2
+        let bestK = 1, bestDiff = Infinity
+        for (let k = 1; k < chain.length - 1; k++) {
+          const diff = Math.abs(cum[k] - half)
+          if (diff < bestDiff) { bestDiff = diff; bestK = k }
+        }
+        midIdx = chain[bestK]
+      } else {
+        const p = copy.outline[fromIdx], q = copy.outline[toIdx]
+        const midPt = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]
+        if (fromIdx === n - 1 && toIdx === 0) {
+          copy.outline.push(midPt)
+          midIdx = n
+        } else {
+          const insertAt = fromIdx + 1
+          copy.outline.splice(insertAt, 0, midPt)
+          const remapped = {}
+          for (const [k, e] of Object.entries(copy.edges)) {
+            remapped[k] = {
+              ...e,
+              from: e.from >= insertAt ? e.from + 1 : e.from,
+              to: e.to >= insertAt ? e.to + 1 : e.to,
+            }
+          }
+          copy.edges = remapped
+          midIdx = insertAt
+          toIdx = insertAt + 1
+        }
+        copy.splitCustom = true
+      }
+      const uniqueName = (base) => {
+        if (!copy.edges[base]) return base
+        let c = 2
+        while (copy.edges[`${base}_${c}`]) c++
+        return `${base}_${c}`
+      }
+      const nameA = uniqueName(`edge_${fromIdx}_${midIdx}`)
+      addEdge(copy, nameA, fromIdx, midIdx)
+      const nameB = uniqueName(`edge_${midIdx}_${toIdx}`)
+      addEdge(copy, nameB, midIdx, toIdx)
+
+      const nextSeams = seams.filter(s => !(
+        (s.a.piece === copy.id && s.a.edge === sel.edgeName) ||
+        (s.b.piece === copy.id && s.b.edge === sel.edgeName)
+      ))
+      if (nextSeams.length !== seams.length) {
+        setSeams(nextSeams)
+        if (options.autoPlace) {
+          const loose = drafts
+            .map(d => d.id)
+            .filter(p => !nextSeams.some(s => (s.a.piece === p || s.b.piece === p) && (drafts.length === 1 || s.a.piece !== s.b.piece)))
+          if (loose.length) setSeparate(ids => [...new Set([...ids, ...loose])])
+        }
+      }
+      setDrafts(ds => ds.map((d, i) => i === sel.pieceIdx ? copy : d))
+      setPendingEdges([{ pieceIdx: sel.pieceIdx, edgeName: nameA, from: fromIdx, to: midIdx }])
+      setPendingStart(null)
+      setError(null)
+      changed()
+    } catch (e) { setError(e.message) }
+  }
+  function resetToAutoSeams() {
+    const fresh = buildInitialState(null)
+    setDrafts(fresh.drafts)
+    setSeams(fresh.seams)
+    setSeparate(fresh.separate)
+    setReviewed(fresh.reviewed)
+    setPendingStart(null)
+    setPendingEdges([])
+    setError(null)
+    changed()
   }
   function commitSeam(reverse) {
     if (pendingEdges.length < 2) return
@@ -194,7 +309,7 @@ export function useSeamEditor(rawPieces, roles, seedEdges, seedSeams, placementH
       return { pieces, seams, sourceIds: drafts.map(d => d.sourceId) }
     } catch (e) { setError(e.message); return null }
   }
-  return { drafts, pendingStart, pendingEdges, seams, separate, reviewed, acknowledgeJoins: id => setReviewed(ids => [...new Set([...ids, id])]), unjoined, error, revision, warnings: initial.warnings, assignedByPiece, gapsByPiece, seamMarks, autoPlaced: initial.autoPlaced, dartNotices: initial.dartNotices, handleVertexClick, chooseEdge, chooseSpan, clearPending, commitSeam, sewSelected, removeSeam, toggleReverse, markSeparate, finalize }
+  return { drafts, pendingStart, pendingEdges, seams, separate, reviewed, acknowledgeJoins: id => setReviewed(ids => [...new Set([...ids, id])]), unjoined, error, revision, warnings: initial.warnings, assignedByPiece, gapsByPiece, seamMarks, autoPlaced: initial.autoPlaced, dartNotices: initial.dartNotices, handleVertexClick, chooseEdge, chooseSpan, clearPending, splitSelectedEdge, resetToAutoSeams, commitSeam, sewSelected, removeSeam, toggleReverse, markSeparate, finalize }
 }
 
 // Start→end vector of a (pending) edge on a draft's local outline.

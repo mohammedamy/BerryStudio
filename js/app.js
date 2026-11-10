@@ -1760,7 +1760,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const box=$("#aiSvgStatus");
     if(box){ box.innerHTML=`<div class="ai-stage active"><span class="dot"></span><span>${T("aiSvgStageSending")}</span></div>`; box.classList.add("show"); }
     try{
-      const res = await generateSVGPatternFromImage({ adapter, cfg, imageDataURL: aiImage });
+      const res = await generateSVGPatternFromImage({ adapter, cfg, imageDataURL: aiImage, measurements: currentMeas() });
       if(!res.ok){ toast(T(classifySVGFailReason(res.reason))); return; }
       const n = Canvas.importPieces(res.pieces, {kind:'ai-svg-image', validation:res.validation.summary});
       hideEmpty(); renderLayersPane();
@@ -4284,6 +4284,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         visible: p.visible !== false,
         label: p.name || {en:"Piece "+(i+1), ar:"قطعة "+(i+1)},
         outline: p.outline,
+        curves: p.curves || (p.outline && p.outline.curves) || undefined,
         darts: p.darts, notches: p.notches, grain: p.grain,
         // BerryStudio-Upgrade-Plan WP-6: forward declared metadata so
         // cloth-lab's importer can use it instead of guessing from `label`

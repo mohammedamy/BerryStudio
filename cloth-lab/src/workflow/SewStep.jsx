@@ -16,7 +16,24 @@ import { labelOf } from './patternPlan'
 //    in the list;
 //  - pieces the importer couldn't sew are already "placed on the body"
 //    (non-blocking); the panel offers to sew them, never forces it.
-const WORDS_AR = { right: 'يمين', left: 'يسار', side: 'جانب', top: 'أعلى', bottom: 'أسفل', shoulder: 'كتف', neckline: 'خط الرقبة', neck: 'رقبة', armhole: 'فتحة الإبط', waist: 'خصر', hem: 'ذيل', front: 'أمام', back: 'خلف', seam: 'وصلة', cap: 'رأس', dart: 'بنسة', sleeve: 'كم', center: 'منتصف', inseam: 'خياطة داخلية', outseam: 'خياطة خارجية', princess: 'برنسيس', mirror: 'مرآة', a: 'أ', b: 'ب' }
+const WORDS_AR = { right: 'يمين', left: 'يسار', side: 'جانب', top: 'أعلى', bottom: 'أسفل', shoulder: 'كتف', neckline: 'خط الرقبة', neck: 'رقبة', armhole: 'فتحة الإبط', waist: 'خصر', hem: 'ذيل', front: 'أمام', back: 'خلف', seam: 'وصلة', cap: 'رأس', dart: 'بنسة', sleeve: 'كم', center: 'منتصف', inseam: 'خياطة داخلية', outseam: 'خياطة خارجية', princess: 'برنسيس', mirror: 'مرآة', cuff: 'أسورة', outer: 'خارجي', a: 'أ', b: 'ب' }
+const ANATOMICAL_LABELS = {
+  capFront: ['front sleeve cap', 'نصف رأس الكم الأمامي'],
+  capBack: ['back sleeve cap', 'نصف رأس الكم الخلفي'],
+  frontSeam: ['front sleeve seam', 'جانب الكم الطويل (أمام)'],
+  backSeam: ['back sleeve seam', 'جانب الكم الطويل (خلف)'],
+  rightArmhole: ['right armhole', 'حردة الإبط اليمنى'],
+  leftArmhole: ['left armhole', 'حردة الإبط اليسرى'],
+  armhole: ['armhole', 'حردة الإبط'],
+  rightTop: ['right shoulder', 'الكتف الأيمن'],
+  leftTop: ['left shoulder', 'الكتف الأيسر'],
+  rightShoulder: ['right shoulder', 'الكتف الأيمن'],
+  leftShoulder: ['left shoulder', 'الكتف الأيسر'],
+  shoulder: ['shoulder', 'الكتف'],
+  rightSide: ['right side seam', 'الجانب الأيمن'],
+  leftSide: ['left side seam', 'الجانب الأيسر'],
+  outerSide: ['side seam', 'الخط الجانبي'],
+}
 // Anonymous edges (picked by the user, named `edge_<from>_<to>`) are
 // described by where they sit on the piece as drawn: top/bottom edge,
 // left/right side.
@@ -29,11 +46,19 @@ export function positionLabel(draft, from, to, lang = 'en') {
   const [mx, my] = midpoint(sidePath(out, from, to))
   const fx = (mx - minX) / ((maxX - minX) || 1), fy = (my - minY) / ((maxY - minY) || 1)
   const dx = Math.abs(out[to][0] - out[from][0]), dy = Math.abs(out[to][1] - out[from][1])
-  if (dx >= dy) return fy < 0.5 ? (ar ? 'الحافة العليا' : 'top edge') : (ar ? 'الحافة السفلى' : 'bottom edge')
+  if (dx >= dy) {
+    if (fy < 0.5) {
+      if (fx < 0.42) return ar ? 'النصف العلوي الأيسر' : 'upper-left half'
+      if (fx > 0.58) return ar ? 'النصف العلوي الأيمن' : 'upper-right half'
+      return ar ? 'الحافة العليا' : 'top edge'
+    }
+    return ar ? 'الحافة السفلى' : 'bottom edge'
+  }
   return fx < 0.5 ? (ar ? 'الجانب الأيسر' : 'left side') : (ar ? 'الجانب الأيمن' : 'right side')
 }
 export function edgeLabel(name, lang = 'en', draft) {
-  const m = /^edge_(\d+)_(\d+)$/.exec(name)
+  if (ANATOMICAL_LABELS[name]) return ANATOMICAL_LABELS[name][lang === 'ar' ? 1 : 0]
+  const m = /^edge_(\d+)_(\d+)(?:_\d+)?$/.exec(name)
   if (m) return positionLabel(draft, +m[1], +m[2], lang)
   const words = String(name).replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('_', ' ').toLowerCase().split(/\s+/).filter(Boolean)
   return lang === 'ar' ? words.map(w => WORDS_AR[w] || w).join(' ') : words.join(' ')
@@ -93,6 +118,7 @@ function PieceBoard({ draft, pieceIdx, editor, lang, precise, highlight, status 
       </g> })}
       {precise && draft.outline.map(([x, y], i) => <circle key={i} className="cl-point" cx={x} cy={y} r={scale * .018} fill={editor.pendingStart?.pieceIdx === pieceIdx && editor.pendingStart.vertIdx === i ? '#ffc34a' : '#e6e7eb'} role="button" tabIndex={0} aria-label={`${name} ${text('point', 'نقطة')} ${i + 1}`} onClick={() => editor.handleVertexClick(pieceIdx, i)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); editor.handleVertexClick(pieceIdx, i) } }}><title>{i + 1}</title></circle>)}
     </svg>
+    {draft.role === 'sleeve' && <footer className="cl-board-foot">{text('Bottom cuff edge stays open for the arm', 'الحافة السفلية حرة لخروج الذراع')}</footer>}
   </article>
 }
 
@@ -106,7 +132,7 @@ export default function SewStep({ editor, lang }) {
   const { drafts, pendingEdges, pendingStart, seams } = editor
   const pieceName = id => { const d = drafts.find(x => x.id === id); if (!d) return id; const side = d.id.endsWith('_l') ? text(' (left)', ' (يسار)') : d.id.endsWith('_r') ? text(' (right)', ' (يمين)') : ''; return labelOf(d, lang) + side }
   const pendingText = e => `${pieceName(drafts[e.pieceIdx]?.id)} · ${edgeLabel(e.edgeName, lang, drafts[e.pieceIdx])}`
-  const sewnCount = id => seams.filter(s => (s.a.piece === id || s.b.piece === id) && s.a.piece !== s.b.piece).length
+  const sewnCount = id => seams.filter(s => (s.a.piece === id || s.b.piece === id) && !/^dart_/.test(s.a.edge)).length
   const statusFor = d => {
     if (editor.unjoined?.some(u => u.id === d.id)) return { tone: 'attention', label: text('Needs a decision', 'يحتاج قراراً') }
     if (editor.separate?.includes(d.id)) return { tone: 'guess', label: text('Not attached', 'غير موصولة') }
@@ -145,8 +171,15 @@ export default function SewStep({ editor, lang }) {
     </div>
   </div>
   else if (pendingEdges.length === 1) banner = <div className="cl-banner tone-active" role="status">
-    <div className="cl-banner-text"><strong>{text('Now click the edge it sews to', 'الآن انقر الحافة التي تُخاط بها')}</strong><span>{text('Selected:', 'المحدد:')} {pendingText(pendingEdges[0])}</span></div>
-    <div className="cl-banner-actions"><button className="cl-btn cl-btn-ghost" onClick={editor.clearPending}>{text('Cancel', 'إلغاء')}</button></div>
+    <div className="cl-banner-text">
+      <strong>{text('Now click the edge it sews to', 'الآن انقر الحافة التي تُخاط بها')}</strong>
+      <span>{text('Selected:', 'المحدد:')} {pendingText(pendingEdges[0])}</span>
+      <small>{text('Tip: click another edge on the same piece to sew it into a tube, or split this edge in half first.', 'نصيحة: يمكنك نقر حافة أخرى على نفس القطعة لقفلها كأسطوانة، أو تقسيم هذه الحافة لنصفين بضغطة واحدة.')}</small>
+    </div>
+    <div className="cl-banner-actions">
+      {editor.splitSelectedEdge && <button className="cl-btn" onClick={editor.splitSelectedEdge}>{text('✂ Split edge in half', '✂ قسّم الحافة لنصفين')}</button>}
+      <button className="cl-btn cl-btn-ghost" onClick={editor.clearPending}>{text('Cancel', 'إلغاء')}</button>
+    </div>
   </div>
   else if (pendingStart) banner = <div className="cl-banner tone-active" role="status">
     <div className="cl-banner-text"><strong>{text('Now click the end point on the same piece', 'الآن انقر نقطة النهاية على القطعة نفسها')}</strong><span>{text('Start point', 'نقطة البداية')} {pendingStart.vertIdx + 1} · {pieceName(drafts[pendingStart.pieceIdx]?.id)}</span></div>
@@ -159,7 +192,7 @@ export default function SewStep({ editor, lang }) {
       <li>{text('Press “Sew these edges”', 'اضغط «خِط هذه الحواف»')}</li>
     </ol>
     <span className="cl-banner-hint">{seams.length
-      ? text('Most seams are already done for you — this step is optional.', 'معظم الوصلات جاهزة مسبقاً — هذه الخطوة اختيارية.')
+      ? text('Most seams are already done for you — sleeves automatically sew half the cap to Front, half to Back, and close their long side seams while keeping the cuff open.', 'معظم الوصلات جاهزة مسبقاً — الأكمام تُخاط تلقائياً (نصف الرأس للأمام، والنصف للخلف، والحافتان الطويلتان معاً، والحافة السفلية حرة).')
       : text('This pattern came without seams, so pieces will hang in place. You can try it on now, or sew matching edges (e.g. side to side) for a closer fit.', 'هذا الباترون بلا وصلات، لذا ستتدلى القطع في مكانها. يمكنك التجربة الآن، أو خياطة الحواف المتقابلة (مثل الجانب بالجانب) لملاءمة أفضل.')}</span>
   </div>
 
@@ -170,7 +203,10 @@ export default function SewStep({ editor, lang }) {
           <span className="cl-eyebrow">{text('Step 2 of 3 · Sew', 'الخطوة ٢ من ٣ · الخياطة')}</span>
           <h2>{text('Check how the pieces join', 'تحقق من وصل القطع')}</h2>
         </div>
-        <label className="cl-toggle"><input type="checkbox" checked={precise} onChange={e => { setPrecise(e.target.checked); if (!e.target.checked && pendingStart) editor.clearPending() }} />{text('Precise mode (pick points)', 'وضع دقيق (اختيار النقاط)')}</label>
+        <div className="cl-sew-head-actions">
+          {editor.resetToAutoSeams && <button className="cl-btn cl-btn-ghost cl-btn-sm" onClick={editor.resetToAutoSeams}>{text('↺ Reset auto-seams', '↺ إعادة الوصل التلقائي')}</button>}
+          <label className="cl-toggle"><input type="checkbox" checked={precise} onChange={e => { setPrecise(e.target.checked); if (!e.target.checked && pendingStart) editor.clearPending() }} />{text('Precise mode (pick points)', 'وضع دقيق (اختيار النقاط)')}</label>
+        </div>
       </div>
       <div className="cl-banner-wrap">{banner}
         {editor.error && <div className="cl-callout tone-warn" role="alert">{friendlyError(editor.error, ar)}</div>}
@@ -199,12 +235,22 @@ export default function SewStep({ editor, lang }) {
         <h3>{text('Seams', 'الوصلات')} <span className="cl-count">{seams.length}</span></h3>
         {seams.length === 0 && <p className="cl-muted">{text('No seams yet. Pieces will simply hang in place.', 'لا وصلات بعد. ستتدلى القطع في مكانها فقط.')}</p>}
         <ul className="cl-seam-list">
-          {seams.map(s => { const mark = editor.seamMarks?.[`${s.a.piece}:${s.a.edge}`]; return <li key={s.id}>
-            <span className="cl-seam-dot" style={{ background: mark?.color }}>{mark?.n}</span>
-            <span className="cl-seam-text">{s.a.piece === s.b.piece && /^dart_/.test(s.a.edge) ? `${pieceName(s.a.piece)} · ${text('dart', 'بنسة')}` : <>{pieceName(s.a.piece)} <small>{edgeLabel(s.a.edge, lang, drafts.find(d => d.id === s.a.piece))}</small> ⟷ {pieceName(s.b.piece)} <small>{edgeLabel(s.b.edge, lang, drafts.find(d => d.id === s.b.piece))}</small></>}</span>
-            <button className="cl-icon-btn" onClick={() => editor.toggleReverse(s.id)} title={text('Flip direction (if this seam looks twisted)', 'اعكس الاتجاه (إن بدت الوصلة ملتوية)')} aria-label={text('Flip direction', 'اعكس الاتجاه')}>⇅</button>
-            <button className="cl-icon-btn tone-danger" onClick={() => editor.removeSeam(s.id)} title={text('Remove seam', 'إزالة الوصلة')} aria-label={text('Remove seam', 'إزالة الوصلة')}>×</button>
-          </li> })}
+          {seams.map(s => {
+            const mark = editor.seamMarks?.[`${s.a.piece}:${s.a.edge}`]
+            const draftA = drafts.find(d => d.id === s.a.piece)
+            const draftB = drafts.find(d => d.id === s.b.piece)
+            const samePiece = s.a.piece === s.b.piece
+            return <li key={s.id}>
+              <span className="cl-seam-dot" style={{ background: mark?.color }}>{mark?.n}</span>
+              <span className="cl-seam-text">{samePiece && /^dart_/.test(s.a.edge)
+                ? `${pieceName(s.a.piece)} · ${text('dart', 'بنسة')}`
+                : samePiece
+                  ? <>{pieceName(s.a.piece)} · <small>{edgeLabel(s.a.edge, lang, draftA)}</small> ⟷ <small>{edgeLabel(s.b.edge, lang, draftB)}</small></>
+                  : <>{pieceName(s.a.piece)} <small>{edgeLabel(s.a.edge, lang, draftA)}</small> ⟷ {pieceName(s.b.piece)} <small>{edgeLabel(s.b.edge, lang, draftB)}</small></>}</span>
+              <button className="cl-icon-btn" onClick={() => editor.toggleReverse(s.id)} title={text('Flip direction (if this seam looks twisted)', 'اعكس الاتجاه (إن بدت الوصلة ملتوية)')} aria-label={text('Flip direction', 'اعكس الاتجاه')}>⇅</button>
+              <button className="cl-icon-btn tone-danger" onClick={() => editor.removeSeam(s.id)} title={text('Remove seam', 'إزالة الوصلة')} aria-label={text('Remove seam', 'إزالة الوصلة')}>×</button>
+            </li>
+          })}
         </ul>
       </div>
       {loose.length > 0 && <div className="cl-panel-block">

@@ -29,6 +29,12 @@
 import { computeGatherWidth } from './pleats.js';
 
 // ---------------- curve sampling ----------------
+// Exact raised-cosine (-cos) Hermite/Bezier handle factor: matches
+// y(x) = y0 - H * (1 - cos(pi * (x - x0) / dx)) / 2 with horizontal
+// tangents (slope = 0) at both the underarm base and crown peak, an
+// S-curve inflection at mid-armscye, and midpoint slope (pi/2)*(H/dx).
+export const COSINE_CAP_K = 1 - 2 / Math.PI;
+
 export function qBez(p0, c, p1, n) {
   n = n || 8;
   const pts = [];
@@ -38,11 +44,106 @@ export function qBez(p0, c, p1, n) {
   }
   return pts;
 }
+export function cBez(p0, c1, c2, p1, n) {
+  n = n || 6;
+  const pts = [];
+  for (let i = 1; i <= n; i++) {
+    const t = i / n, u = 1 - t;
+    pts.push([
+      u * u * u * p0[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * p1[0],
+      u * u * u * p0[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * p1[1],
+    ]);
+  }
+  return pts;
+}
 export function qBezToCubic(p0, c, p1) {
   return {
     c1: [p0[0] + (2 / 3) * (c[0] - p0[0]), p0[1] + (2 / 3) * (c[1] - p0[1])],
     c2: [p1[0] + (2 / 3) * (c[0] - p1[0]), p1[1] + (2 / 3) * (c[1] - p1[1])],
   };
+}
+
+// Raised-cosine (-cos) S-curve sleeve cap from `frontBase` -> `capTop` -> `backBase`.
+// Unlike an inverted-|x| triangle or single quadratic arc, both underarm endpoints
+// and the crown peak have horizontal tangents (dy/dx = 0): the curve swoops
+// concave-up out of the underarm hollow, inflects smoothly mid-armscye, rounds
+// over the crown dome, and mirrors smoothly down to the opposite underarm.
+export function cosineSleeveCap(frontBase, capTop, backBase, opts) {
+  const o = opts || {};
+  const n = o.samplesPerHalf || 6;
+  const fromOffset = o.fromIdxOffset || 0;
+  const kFU = o.kFrontUnderarm != null ? o.kFrontUnderarm : COSINE_CAP_K;
+  const kFC = o.kFrontCrown != null ? o.kFrontCrown : COSINE_CAP_K;
+  const kBC = o.kBackCrown != null ? o.kBackCrown : COSINE_CAP_K;
+  const kBU = o.kBackUnderarm != null ? o.kBackUnderarm : COSINE_CAP_K;
+
+  const dx1 = capTop[0] - frontBase[0];
+  const dx2 = backBase[0] - capTop[0];
+  const fc1 = [frontBase[0] + dx1 * kFU, frontBase[1]];
+  const fc2 = [capTop[0] - dx1 * kFC, capTop[1]];
+  const bc1 = [capTop[0] + dx2 * kBC, capTop[1]];
+  const bc2 = [backBase[0] - dx2 * kBU, backBase[1]];
+
+  const frontPts = cBez(frontBase, fc1, fc2, capTop, n);
+  const backPts = cBez(capTop, bc1, bc2, backBase, n);
+  const points = [frontBase, ...frontPts, ...backPts];
+  const curves = [
+    { fromIdx: fromOffset, toIdx: fromOffset + n, c1: fc1, c2: fc2 },
+    { fromIdx: fromOffset + n, toIdx: fromOffset + 2 * n, c1: bc1, c2: bc2 },
+  ];
+  return {
+    points,
+    curves,
+    crownIdx: fromOffset + n,
+    backUnderarmIdx: fromOffset + 2 * n,
+    frontNotchIdx: fromOffset + Math.max(1, Math.round(n * 0.35)),
+    backNotchIdx1: fromOffset + n + Math.max(1, Math.round(n * 0.55)),
+    backNotchIdx2: fromOffset + n + Math.min(n - 1, Math.max(2, Math.round(n * 0.72))),
+  };
+}
+
+// Complete one-piece flat-pattern sleeve outline with a true `-cos` S-curve cap,
+// cubic Bezier `.curves` metadata, and standard front/crown/back notch indices.
+export function cosineSleeveOutline(opts) {
+  const width = Math.max(8, Number(opts.width) || 32);
+  const halfW = width / 2;
+  const baseY = Number(opts.baseY) || 0;
+  const capH = opts.capHeight != null ? Math.max(2.5, Number(opts.capHeight)) : Math.max(4.5, halfW * 0.58);
+  const hemY = Math.max(baseY + 5, Number(opts.sleeveLen) || 40);
+  const rawCuffW = opts.cuffWidth != null ? Number(opts.cuffWidth) : width * 0.78;
+  let cuffLeft = (width - rawCuffW) / 2;
+  let cuffRight = width - cuffLeft;
+  // Keep non-zero taper/flare outside checkFoldSymmetry's 2%-of-width candidate-fold band
+  if (Math.abs(cuffLeft) > 1e-6 && Math.abs(cuffLeft) < width * 0.035) {
+    const sign = cuffLeft >= 0 ? 1 : -1;
+    cuffLeft = sign * width * 0.04;
+    cuffRight = width - cuffLeft;
+  }
+  const frontHollow = opts.frontHollow !== false;
+  const cap = cosineSleeveCap(
+    [0, baseY],
+    [halfW, baseY - capH],
+    [width, baseY + (Number(opts.backDrop) || 0)],
+    {
+      samplesPerHalf: opts.samplesPerHalf || 6,
+      kFrontUnderarm: frontHollow ? 0.41 : COSINE_CAP_K,
+      kFrontCrown: frontHollow ? 0.35 : COSINE_CAP_K,
+      kBackCrown: frontHollow ? 0.39 : COSINE_CAP_K,
+      kBackUnderarm: frontHollow ? 0.34 : COSINE_CAP_K,
+    },
+  );
+  const cuffDropL = Number(opts.cuffLeftDrop) || 0;
+  const outline = [...cap.points, [cuffRight, hemY], [cuffLeft, hemY + cuffDropL]];
+  withCurves(outline, cap.curves);
+  outline.frontUnderarmIdx = 0;
+  outline.crownIdx = cap.crownIdx;
+  outline.capCenterIdx = cap.crownIdx;
+  outline.backUnderarmIdx = cap.backUnderarmIdx;
+  outline.frontNotchIdx = cap.frontNotchIdx;
+  outline.backNotchIdx1 = cap.backNotchIdx1;
+  outline.backNotchIdx2 = cap.backNotchIdx2;
+  outline.capWidthCm = width;
+  return outline;
 }
 // Attaches `.curves` directly to the outline array (same idiom every
 // other generator file in this codebase uses) so a piece definition can
@@ -150,80 +251,78 @@ export function collarStand(halfNeck, standH) {
   return outline;
 }
 
-// Set-in sleeve cap: asymmetric front/back cap curve (the front cap sits
-// shallower than the back, a real drafting convention — the front
-// armhole is cut slightly higher than the back so the sleeve cap eases
-// in correctly). Walks: underarm-front -> (curve) -> cap top -> (curve)
-// -> underarm-back -> straight down the back edge -> across the cuff ->
-// straight up the front edge, closing. Front gets ONE notch partway up
-// its curve, back gets TWO close together — the single/double sleeve-
-// notch convention real patterns use to mark which half is which without
-// reading a label.
+// Set-in sleeve cap: raised-cosine (-cos) S-curve with subtle front/back
+// tailoring asymmetry (deeper front underarm hollow + fuller back crown ease,
+// preserving horizontal tangents at both underarms and the crown peak).
+// Walks: underarm-front -> (-cos S-curve) -> cap top -> (-cos S-curve)
+// -> underarm-back -> tapered back seam -> across the cuff -> tapered front
+// seam, closing. Front gets ONE notch partway up its curve, back gets TWO
+// close together — the single/double sleeve-notch convention real patterns
+// use to mark which half is which without reading a label.
 export function setInSleeve(bicep, sleeveLen, capHeightF) {
   capHeightF = capHeightF == null ? 1 : capHeightF;
   const halfBicep = bicep / 2;
-  const capH = halfBicep * 0.62 * capHeightF;
-  const capTop = [halfBicep, -capH];
-  const frontBase = [0, -capH * 0.85];
-  const backBase = [bicep, -capH * 0.72];
-  const frontSeg = [frontBase, [halfBicep * 0.42, -capH * 0.98], capTop];
-  const backSeg = [capTop, [halfBicep * 1.58, -capH * 0.95], backBase];
-  const frontPts = qBez(...frontSeg, 6);
-  const backPts = qBez(...backSeg, 6);
-  const outline = [frontBase, ...frontPts, ...backPts, [bicep, sleeveLen], [0, sleeveLen]];
-  withCurves(outline, [
-    { fromIdx: 0, toIdx: frontPts.length, ...qBezToCubic(...frontSeg) },
-    { fromIdx: frontPts.length, toIdx: frontPts.length + backPts.length, ...qBezToCubic(...backSeg) },
-  ]);
-  outline.frontNotchIdx = 2; // partway up the front cap curve
-  outline.backNotchIdx1 = frontPts.length + 2; // two adjacent points on the back cap curve
-  outline.backNotchIdx2 = frontPts.length + 3;
-  return outline;
+  const capH = halfBicep * 0.58 * capHeightF;
+  return cosineSleeveOutline({
+    width: bicep,
+    sleeveLen: Math.max(5, sleeveLen),
+    capHeight: capH,
+    cuffWidth: bicep * 0.84,
+    frontHollow: true,
+    samplesPerHalf: 6,
+  });
 }
 
 // Two-piece sleeve: an outer/upper panel carrying the full (front+back)
-// cap curve, and a smaller inner/under panel completing the underarm —
+// `-cos` S-curve cap, and a smaller inner/under panel completing the underarm —
 // a genuinely different sleeve CONSTRUCTION from the one-piece set-in
 // sleeve above.
 export function sleeveUpperPc(bicep, sleeveLen) {
-  const halfBicep = bicep / 2, capH = halfBicep * 0.6;
-  const capTop = [halfBicep, -capH];
-  const frontBase = [bicep * 0.1, -capH * 0.8];
-  const backBase = [bicep * 0.9, -capH * 0.68];
-  const frontSeg = [frontBase, [halfBicep * 0.42, -capH * 0.95], capTop];
-  const backSeg = [capTop, [halfBicep * 1.58, -capH * 0.92], backBase];
-  const frontPts = qBez(...frontSeg, 6), backPts = qBez(...backSeg, 6);
-  const outline = [frontBase, ...frontPts, ...backPts, [bicep * 0.82, sleeveLen], [bicep * 0.18, sleeveLen]];
-  withCurves(outline, [
-    { fromIdx: 0, toIdx: frontPts.length, ...qBezToCubic(...frontSeg) },
-    { fromIdx: frontPts.length, toIdx: frontPts.length + backPts.length, ...qBezToCubic(...backSeg) },
-  ]);
-  outline.frontNotchIdx = 2;
-  outline.backNotchIdx1 = frontPts.length + 2;
-  outline.backNotchIdx2 = frontPts.length + 3;
+  const halfBicep = bicep / 2, capH = halfBicep * 0.56;
+  const cap = cosineSleeveCap(
+    [bicep * 0.08, 0],
+    [halfBicep, -capH],
+    [bicep * 0.92, 0],
+    {
+      samplesPerHalf: 6,
+      kFrontUnderarm: 0.41,
+      kFrontCrown: 0.35,
+      kBackCrown: 0.39,
+      kBackUnderarm: 0.34,
+    },
+  );
+  const hemY = Math.max(5, sleeveLen);
+  const outline = [...cap.points, [bicep * 0.82, hemY], [bicep * 0.18, hemY]];
+  withCurves(outline, cap.curves);
+  outline.frontNotchIdx = cap.frontNotchIdx;
+  outline.backNotchIdx1 = cap.backNotchIdx1;
+  outline.backNotchIdx2 = cap.backNotchIdx2;
+  outline.crownIdx = cap.crownIdx;
   return outline;
 }
 export function sleeveUnderPc(bicep, sleeveLen) {
   const w = bicep * 0.24;
-  const topSeg = [[0, 0], [w * 0.5, -3], [w, 0]];
-  const topPts = qBez(...topSeg, 5);
-  const outline = [[0, 0], ...topPts, [w * 0.85, sleeveLen * 0.85], [w * 0.15, sleeveLen * 0.85]];
-  return withCurves(outline, [{ fromIdx: 0, toIdx: topPts.length, ...qBezToCubic(...topSeg) }]);
+  const cap = cosineSleeveCap([0, 0], [w * 0.5, -2.6], [w, 0], { samplesPerHalf: 4 });
+  const hemY = Math.max(5, sleeveLen * 0.85);
+  const outline = [...cap.points, [w * 0.85, hemY], [w * 0.15, hemY]];
+  return withCurves(outline, cap.curves);
 }
 
-// Gathered puff sleeve: the cap is cut WIDER than the armhole it sews
-// into (js/pleats.js's computeGatherWidth) and eased in with gathering
+// Gathered puff sleeve: the `-cos` S-curve cap is cut WIDER than the armhole
+// it sews into (js/pleats.js's computeGatherWidth) and eased in with gathering
 // stitches, unlike a set-in sleeve's cap curve which matches the armhole
 // directly.
 export function puffSleevePc(bicep, sleeveLen, gatherRatio) {
   const rawW = computeGatherWidth(bicep, gatherRatio);
-  const halfW = rawW / 2, capH = halfW * 0.55;
-  const seg = [[0, 0], [halfW, -capH], [rawW, 0]];
-  const capPts = qBez(...seg, 8);
-  const outline = [[0, 0], ...capPts, [rawW * 0.82, sleeveLen], [rawW * 0.18, sleeveLen]];
-  withCurves(outline, [{ fromIdx: 0, toIdx: capPts.length, ...qBezToCubic(...seg) }]);
-  outline.capCenterIdx = Math.round(capPts.length / 2); // gather-center, matches the shoulder seam
-  return outline;
+  const halfW = rawW / 2, capH = halfW * 0.52;
+  return cosineSleeveOutline({
+    width: rawW,
+    sleeveLen: Math.max(5, sleeveLen),
+    capHeight: capH,
+    cuffWidth: rawW * 0.64,
+    frontHollow: false,
+    samplesPerHalf: 6,
+  });
 }
 
 // Princess-seam curve (bust/waist/hip shaping): three quadratic segments
@@ -445,13 +544,13 @@ export function legPanel(waistW, hipW, hemW, riseLen, inseamLen, isFront) {
 }
 
 // A dramatic wide sleeve wedge (kimono/batwing/cape-sleeve style): a
-// wide curved shoulder-to-underarm edge flaring to a relatively narrow
-// cuff — a genuinely different sleeve construction from a fitted set-in
-// cap or a gathered puff, closer to a flare/godet than a tailored sleeve.
+// wide `-cos` S-curved shoulder-to-underarm edge flaring to the sleeve hem —
+// a genuinely different sleeve construction from a fitted set-in cap or a
+// gathered puff, closer to a flare/godet than a tailored sleeve.
 export function wideSleevePc(shoulderW, sleeveLen, wideF) {
   wideF = wideF == null ? 1 : wideF;
-  const seg = [[0, 0], [shoulderW * 0.5, -shoulderW * 0.15 * wideF], [shoulderW, 0]];
-  const topPts = qBez(...seg, 6);
+  const capH = Math.max(3, shoulderW * 0.18 * wideF);
+  const cap = cosineSleeveCap([0, 0], [shoulderW * 0.5, -capH], [shoulderW, 0], { samplesPerHalf: 6 });
   // The cuff-inner corner is kept a guaranteed minimum distance from the
   // piece's own x=0 (never closer than 25% of shoulderW) — otherwise, for
   // some shoulderW/sleeveLen/wideF combinations, it lands close enough to
@@ -460,8 +559,10 @@ export function wideSleevePc(shoulderW, sleeveLen, wideF) {
   // candidate fold and correctly reports it as not straight (it isn't —
   // this piece has no fold at all, it's a bilateral mirrored pair).
   const cuffInnerX = Math.max(shoulderW * 0.25, shoulderW * 0.4 - sleeveLen * wideF * 0.15);
-  const outline = [[0, 0], ...topPts, [shoulderW * 0.6 + sleeveLen * wideF * 0.5, sleeveLen], [cuffInnerX, sleeveLen]];
-  return withCurves(outline, [{ fromIdx: 0, toIdx: topPts.length, ...qBezToCubic(...seg) }]);
+  const hemY = Math.max(5, sleeveLen);
+  const outline = [...cap.points, [shoulderW * 0.6 + hemY * wideF * 0.5, hemY], [cuffInnerX, hemY]];
+  outline.crownIdx = cap.crownIdx;
+  return withCurves(outline, cap.curves);
 }
 
 // Mirrors a fold-half outline (produced by plainBodicePanel()/

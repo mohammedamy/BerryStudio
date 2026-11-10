@@ -244,6 +244,7 @@ export function buildSystemPrompt(category, lang) {
     'TWO different modes, depending on what the reference image actually is:',
     '1) A PHOTO of a worn garment, or a text-only description with no image: use the relative silhouette/construction factors below — you cannot read exact measurements off a photo, only relative proportions (longer/shorter, fuller/slimmer than the category standard).',
     "2) A TECHNICAL FLAT-SKETCH / tech-pack / spec-sheet image — one that shows individual pattern pieces as line drawings with printed dimension numbers and a body-measurement table (e.g. 'Front Bodice', 'Chest: 85', 'Length: 63') — READ THE ACTUAL NUMBERS off the diagram instead of guessing a style factor. For each piece whose shape and dimensions you can read, set `pieces[].outlineCm` to its traced outline as [x,y] corner coordinates in centimeters (start near a top corner, trace in one direction — clockwise or counterclockwise — using the printed widths/heights/curve depths as the coordinate deltas; a simple rectangle strip is 4 points, a tapered panel is as many corners as it visibly has). Give the piece a proper `label:{en,ar}` (e.g. 'Front Placket', not a generic role name). If the image prints its own body-measurement table (chest/waist/hips/height/etc.), copy those into `garment.referenceMeasurementsCm` so the traced piece gets correctly rescaled to the actual wearer instead of only ever fitting the reference sheet's own size. `silhouette`/`construction` factors are optional and ignored for any piece that has `outlineCm` — do not spend effort guessing them for a piece you already traced exactly.",
+    "   SLEEVE FAST-PATH (mode 2 & all modes): NEVER spend tokens tracing raw `outlineCm` polygon coordinates for a `sleeve`, `sleeve-upper`, `puff-sleeve`, `cap-sleeve`, or `butterfly-sleeve` piece — omit `outlineCm` on sleeve pieces and set `construction.sleeve` (`kind`, `lengthF`, `widthF`) instead so BerryStudio's deterministic `-cos` S-curve sleeve engine drafts the exact tailoring cap instantly.",
     '',
     "Silhouette factors (mode 1 only) are multipliers on the engine's own base measurements, not absolute lengths:",
     "- silhouette.lengthF (0-3): 1.0 = the category's standard garment length; ~0.6-0.85 = short/mini; ~1.1-1.35 = long/maxi.",
@@ -367,6 +368,7 @@ function isBareSpec(spec) {
 
 function fromLegacyResult(json, measurements, lang) {
   if (json.legacy === 'pieces') {
+    AIGen.normalizeAISleevePieces(json.pieces, measurements);
     return { pieces: json.pieces, colors: json.colors || undefined, colorInt: null, summary: json.summary || '', source: 'remote' };
   }
   const style = { ...AIGen.deriveStyle({ metrics: null, prompt: '', category: undefined, imageDataURL: null }), ...json.style };
@@ -517,6 +519,8 @@ Technical Details: You MUST include standard pattern markings on every single pi
 
 Proportions: Draw the pieces proportionally to each other, representing a standard fit.
 
+Sleeve Fast-Path: Do NOT spend tokens hand-crafting complex Bezier sleeve-cap curves. For any sleeve piece, emit a simple proportional bounding <rect id="Sleeve" .../> (or <g id="Sleeve"> with its overall width and length) — the CAD engine automatically replaces any labeled Sleeve shape with an exact parametric raised-cosine (-cos) S-curve sleeve block.
+
 Labels: Briefly label each piece (e.g., 'Center Front', 'Side Back', 'Sleeve') and indicate cutting instructions (e.g., 'Cut 1 on fold', 'Cut 2').
 Output: Output ONLY the 2D pattern pieces laid out structurally as a master pattern draft ready for a CAD software reference. Make your output in the form of . SVG file`;
 
@@ -546,7 +550,7 @@ export function extractSVGMarkup(text) {
 // js/ai-providers.js exactly like generateFromSpec()'s own params (this
 // module still never touches KeyStore/DOM/fetch directly — see
 // test/ai-svg-pattern.test.js for a plain-mock-adapter test of this).
-export async function generateSVGPatternFromImage({ adapter, cfg, imageDataURL, opts }) {
+export async function generateSVGPatternFromImage({ adapter, cfg, imageDataURL, measurements, opts }) {
   if (!imageDataURL) return { ok: false, reason: 'no-image' };
   const call = (nudge) => adapter.complete(cfg, {
     system: SVG_PATTERN_PROMPT,
@@ -568,6 +572,7 @@ export async function generateSVGPatternFromImage({ adapter, cfg, imageDataURL, 
   if (!svg) return { ok: false, reason: 'no-svg-in-reply' };
   const parsed = parseSVGPattern(svg);
   if (!parsed.pieces.length) return { ok: false, reason: 'no-shapes', warnings: parsed.warnings, svg };
+  AIGen.normalizeAISleevePieces(parsed.pieces, measurements || (opts && opts.measurements));
   // Direct image-to-SVG output is still untrusted provider material. Keep it
   // outside the canvas unless the same geometry gate used by deterministic
   // paths reports no failures; warnings remain visible for review.
