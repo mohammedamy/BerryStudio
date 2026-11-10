@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from '../cloth-lab/node_modules/three/build/three.module.js';
 import { computeMeasurements } from '../js/data.js';
 import {
+  applyNaturalHumanMotion,
   buildHumanMannequin,
   computeHumanBodyDims,
   createHumanSkinMaterial,
@@ -138,5 +139,61 @@ test('Unified Human Mannequin: responsive to size & measurement changes (XS vs X
     const topo = analyzeTopology(posed.bodyMesh.geometry);
     assert.equal(topo.boundaryEdges, 0, `${pose}: baked pose remains 100% watertight`);
     assert.ok(topo.signedVolume > 0.015, `${pose}: baked pose preserves positive volume`);
+  }
+});
+
+test('Unified Human Mannequin: natural asymmetric gait, plantar floor grounding, garment arm clearance, and idle breathing', () => {
+  const vTmp = new THREE.Vector3();
+  for (const cat of ['women', 'men', 'girls', 'boys']) {
+    const m = computeMeasurements({ category: cat, size: 'M', standard: 'intl' });
+    const man = buildHumanMannequin(THREE, cat, m);
+    const { limbs, dims, landmarks, bodyMesh, skeleton, group } = man;
+    const freq = (cat === 'girls' || cat === 'boys') ? 3.35 : 2.95;
+
+    let maxKneeFlex = 0;
+    for (let step = 0; step < 24; step++) {
+      const t = (step / 24) * ((2 * Math.PI) / freq);
+      applyNaturalHumanMotion(limbs, dims, landmarks, {
+        time: t,
+        walking: true,
+        category: cat,
+        minArmAbduct: 0.24,
+        blend: 1.0,
+      });
+      group.updateMatrixWorld(true);
+      skeleton.update();
+
+      // Knees never hyperextend forward
+      assert.ok(limbs.knee1.rotation.x >= -1e-4, `${cat}: knee1 must never hyperextend (${limbs.knee1.rotation.x})`);
+      assert.ok(limbs['knee-1'].rotation.x >= -1e-4, `${cat}: knee-1 must never hyperextend (${limbs['knee-1'].rotation.x})`);
+      maxKneeFlex = Math.max(maxKneeFlex, limbs.knee1.rotation.x, limbs['knee-1'].rotation.x);
+
+      // Garment-aware abduction guard keeps arms outside flared garments
+      assert.ok(limbs.arm1.rotation.z >= 0.239, `${cat}: arm1 respects minArmAbduct (${limbs.arm1.rotation.z})`);
+      assert.ok(limbs['arm-1'].rotation.z <= -0.239, `${cat}: arm-1 respects minArmAbduct (${limbs['arm-1'].rotation.z})`);
+
+      // Counter-rotating pelvis & ribcage during active stride
+      if (Math.abs(limbs.pelvis.rotation.y) > 0.01) {
+        assert.equal(Math.sign(limbs.chest.rotation.y), -Math.sign(limbs.pelvis.rotation.y), `${cat}: chest counter-rotates pelvis yaw`);
+      }
+
+      // Plantar foot grounding: lowest vertex stays planted near floor y = 0
+      let minY = Infinity;
+      const posCount = bodyMesh.geometry.attributes.position.count;
+      for (let i = 0; i < posCount; i++) {
+        bodyMesh.getVertexPosition(i, vTmp);
+        vTmp.applyMatrix4(bodyMesh.matrixWorld);
+        if (vTmp.y < minY) minY = vTmp.y;
+      }
+      assert.ok(minY >= -0.015 && minY <= 0.018, `${cat} step ${step}: plantar sole stays grounded near y=0 (got ${minY.toFixed(4)}m)`);
+    }
+    assert.ok(maxKneeFlex > 0.35, `${cat}: swing-phase knee clearance flexion reaches natural amplitude (${maxKneeFlex.toFixed(3)} rad)`);
+
+    // Living idle posture: gentle breathing & weight shift while feet stay planted
+    applyNaturalHumanMotion(limbs, dims, landmarks, { time: 0.0, walking: false, category: cat, blend: 1.0 });
+    const chestPitch0 = limbs.chest.rotation.x;
+    applyNaturalHumanMotion(limbs, dims, landmarks, { time: 1.15, walking: false, category: cat, blend: 1.0 });
+    const chestPitch1 = limbs.chest.rotation.x;
+    assert.notEqual(chestPitch0, chestPitch1, `${cat}: idle breathing gently animates thoracic posture`);
   }
 });
