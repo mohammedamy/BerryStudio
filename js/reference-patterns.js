@@ -53,7 +53,7 @@ import {
   bandPc, pointedCollar, collarStand, setInSleeve,
   princessCurve, legPanel, princessPanel, gorePanel, sideGorePanel,
   plainBodicePanel, yokeCurvePc, pocketPatch, sleeveUpperPc, sleeveUnderPc,
-  puffSleevePc, roundCollarPc, raglanBodyPanel, raglanSleevePc,
+  puffSleevePc, roundCollarPc, raglanBodyPanel, raglanSleevePc, foldMirrorEdge,
 } from './pattern-builders.js';
 
 (function () {
@@ -437,7 +437,10 @@ import {
       const back = legPanel(qw * 0.48 + 0.5, qh * 0.54 + 1, qt * 1.5, riseLen, legLen, false);
       const frontDart = [[qw * 0.3, 9], [qw * 0.3 - 1.5, 0], [qw * 0.3 + 1.5, 0]];
       const waistCirc = (qw * 0.52 + 0.5 + qw * 0.2) * 2 + (qw * 0.48 + 0.5 + qw * 0.2) * 2;
-      const waistband = bandPc(waistCirc / 2, 4);
+      const wbHalf = waistCirc / 2, wbMid = wbHalf * 0.5;
+      const waistband = [[0, 0], [wbMid, 0], [wbHalf, 0], [wbHalf, 4], [wbMid, 4], [0, 4]];
+      const wbFrontLeft = foldMirrorEdge(waistband.length, 0, 1);
+      const wbBackLeft = foldMirrorEdge(waistband.length, 1, 2);
       const fly = bandPc(3.5, riseLen - 4);
       const pocket = pocketPatch(9, 3);
 
@@ -447,23 +450,37 @@ import {
           desc: { en: 'Front leg panel with a curved crotch seam and a single waist dart.', ar: 'لوحة الساق الأمامية بخط تفصيل منحنٍ وبنسة خصر واحدة.' },
           outline: front, darts: [frontDart], notches: [[front[front.crotchIdx][0], front[front.crotchIdx][1]], [front[front.hemOutIdx][0], front[front.hemOutIdx][1]]],
           grain: [[qt * 0.6, riseLen + 10], [qt * 0.6, riseLen + legLen - 10]],
-          role: 'other', bilateral: true,
-          edges: [{ fromIdx: 0, toIdx: front.hemOutIdx, seamId: 'trouserOutseam' }],
+          role: 'trouser-front', bilateral: true,
+          edges: [
+            { fromIdx: 0, toIdx: front.hemOutIdx, seamId: 'trouserOutseam' },
+            { fromIdx: front.hemInIdx, toIdx: front.length - 1, mirrorSelf: true },
+            { fromIdx: front.length - 1, toIdx: 0, seamId: 'trouserWaistFront' },
+          ],
         },
         {
           key: 'back', name: { en: 'Trouser Back', ar: 'خلفية البنطلون' },
           desc: { en: 'Back leg panel with a deeper curved crotch seam, per real block convention.', ar: 'لوحة الساق الخلفية بخط تفصيل منحنٍ أعمق، حسب القاعدة الحقيقية.' },
           outline: back, darts: [], notches: [[back[back.crotchIdx][0], back[back.crotchIdx][1]], [back[back.hemOutIdx][0], back[back.hemOutIdx][1]]],
           grain: [[qt * 0.6, riseLen + 10], [qt * 0.6, riseLen + legLen - 10]],
-          role: 'other', bilateral: true,
-          edges: [{ fromIdx: 0, toIdx: back.hemOutIdx, seamId: 'trouserOutseam' }],
+          role: 'trouser-back', bilateral: true,
+          edges: [
+            { fromIdx: 0, toIdx: back.hemOutIdx, seamId: 'trouserOutseam' },
+            { fromIdx: back.hemInIdx, toIdx: back.length - 1, mirrorSelf: true },
+            { fromIdx: back.length - 1, toIdx: 0, seamId: 'trouserWaistBack' },
+          ],
         },
         {
           key: 'waistband', name: { en: 'Waistband', ar: 'حزام الخصر' },
           desc: { en: 'Straight waistband, cut on the fold.', ar: 'حزام خصر مستقيم مقصوص على الطية.' },
-          outline: waistband, darts: [], notches: [[waistCirc / 4, 0]],
-          grain: [[2, 2], [waistCirc / 2 - 2, 2]],
+          outline: waistband, darts: [], notches: [[wbMid, 0]],
+          grain: [[2, 2], [wbHalf - 2, 2]],
           role: 'waistband', cutOnFold: true,
+          edges: [
+            { fromIdx: 0, toIdx: 1, seamId: 'trouserWaistFront_R' },
+            { fromIdx: 1, toIdx: 2, seamId: 'trouserWaistBack_R' },
+            { fromIdx: wbFrontLeft.fromIdx, toIdx: wbFrontLeft.toIdx, seamId: 'trouserWaistFront_L' },
+            { fromIdx: wbBackLeft.fromIdx, toIdx: wbBackLeft.toIdx, seamId: 'trouserWaistBack_L' },
+          ],
         },
         {
           key: 'fly', name: { en: 'Fly Placket Facing', ar: 'بطانة سحاب الفتحة الأمامية' },
@@ -910,7 +927,7 @@ import {
           desc: { en: 'Center-front panel; the raglan seam runs from the neckline to the underarm.', ar: 'لوحة المقدمة؛ يمتد خط الراغلان من الرقبة إلى الإبط.' },
           outline: front, darts: [], notches: [[front[front.raglanFromIdx][0], front[front.raglanFromIdx][1]]],
           grain: [[chestX * 0.4, hemY * 0.3], [chestX * 0.4, hemY - 8]],
-          role: 'bodice-front-center', cutOnFold: true, chestEdgeIndices: [front.chestIdx - 1],
+          role: 'bodice-front-center', cutOnFold: true, chestEdgeIndices: [front.chestIdx],
           edges: [
             { fromIdx: front.raglanFromIdx, toIdx: front.raglanToIdx, seamId: 'raglanFront' },
             // Side seam (underarm to hem) — a real seam between front and
@@ -925,7 +942,7 @@ import {
           desc: { en: 'Center-back panel; the raglan seam runs from the neckline to the underarm.', ar: 'لوحة الخلفية؛ يمتد خط الراغلان من الرقبة إلى الإبط.' },
           outline: back, darts: [], notches: [[back[back.raglanFromIdx][0], back[back.raglanFromIdx][1]]],
           grain: [[chestX * 0.4, hemY * 0.3], [chestX * 0.4, hemY - 8]],
-          role: 'bodice-back-center', cutOnFold: true, chestEdgeIndices: [back.chestIdx - 1],
+          role: 'bodice-back-center', cutOnFold: true, chestEdgeIndices: [back.chestIdx],
           edges: [
             { fromIdx: back.raglanFromIdx, toIdx: back.raglanToIdx, seamId: 'raglanBack' },
             { fromIdx: back.chestIdx, toIdx: back.chestIdx + 3, seamId: 'teeSide' },
@@ -977,7 +994,10 @@ import {
       const front = legPanel(qw * 0.52 + 0.75, qh * 0.58 + 1.25, qt * 1.3, riseLen, legLen, true);
       const back = legPanel(qw * 0.48 + 0.75, qh * 0.54 + 1.25, qt * 1.3, riseLen, legLen, false);
       const waistCirc = (qw * 0.52 + 0.75 + qw * 0.2) * 2 + (qw * 0.48 + 0.75 + qw * 0.2) * 2;
-      const waistband = bandPc(waistCirc / 2, 4.5); // flat elastic-back band — see header
+      const wbHalf = waistCirc / 2, wbMid = wbHalf * 0.5;
+      const waistband = [[0, 0], [wbMid, 0], [wbHalf, 0], [wbHalf, 4.5], [wbMid, 4.5], [0, 4.5]];
+      const wbFrontLeft = foldMirrorEdge(waistband.length, 0, 1);
+      const wbBackLeft = foldMirrorEdge(waistband.length, 1, 2);
       const fly = bandPc(3, riseLen - 4);
       const cargoPocket = pocketPatch(8, 8);
       const cargoFlap = pocketPatch(8.5, 3);
@@ -988,23 +1008,37 @@ import {
           desc: { en: 'Front leg panel with a curved crotch seam.', ar: 'لوحة الساق الأمامية بخط تفصيل منحنٍ.' },
           outline: front, darts: [], notches: [[front[front.crotchIdx][0], front[front.crotchIdx][1]], [front[front.hemOutIdx][0], front[front.hemOutIdx][1]]],
           grain: [[qt * 0.6, riseLen + legLen * 0.2], [qt * 0.6, riseLen + legLen * 0.8]],
-          role: 'other', bilateral: true,
-          edges: [{ fromIdx: 0, toIdx: front.hemOutIdx, seamId: 'shortsOutseam' }],
+          role: 'trouser-front', bilateral: true,
+          edges: [
+            { fromIdx: 0, toIdx: front.hemOutIdx, seamId: 'shortsOutseam' },
+            { fromIdx: front.hemInIdx, toIdx: front.length - 1, mirrorSelf: true },
+            { fromIdx: front.length - 1, toIdx: 0, seamId: 'shortsWaistFront' },
+          ],
         },
         {
           key: 'back', name: { en: 'Shorts Back', ar: 'خلفية الشورت' },
           desc: { en: 'Back leg panel with a deeper curved crotch seam, per real block convention.', ar: 'لوحة الساق الخلفية بخط تفصيل منحنٍ أعمق، حسب القاعدة الحقيقية.' },
           outline: back, darts: [], notches: [[back[back.crotchIdx][0], back[back.crotchIdx][1]], [back[back.hemOutIdx][0], back[back.hemOutIdx][1]]],
           grain: [[qt * 0.6, riseLen + legLen * 0.2], [qt * 0.6, riseLen + legLen * 0.8]],
-          role: 'other', bilateral: true,
-          edges: [{ fromIdx: 0, toIdx: back.hemOutIdx, seamId: 'shortsOutseam' }],
+          role: 'trouser-back', bilateral: true,
+          edges: [
+            { fromIdx: 0, toIdx: back.hemOutIdx, seamId: 'shortsOutseam' },
+            { fromIdx: back.hemInIdx, toIdx: back.length - 1, mirrorSelf: true },
+            { fromIdx: back.length - 1, toIdx: 0, seamId: 'shortsWaistBack' },
+          ],
         },
         {
           key: 'waistband', name: { en: 'Elastic-Back Waistband', ar: 'حزام خصر بمطاط خلفي' },
           desc: { en: 'Flat waistband with a back elastic insert — no waist dart needed.', ar: 'حزام خصر مسطّح بإدراج مطاطي خلفي — دون حاجة لبنسة خصر.' },
-          outline: waistband, darts: [], notches: [[waistCirc / 4, 0]],
-          grain: [[2, 2], [waistCirc / 2 - 2, 2]],
+          outline: waistband, darts: [], notches: [[wbMid, 0]],
+          grain: [[2, 2], [wbHalf - 2, 2]],
           role: 'waistband', cutOnFold: true,
+          edges: [
+            { fromIdx: 0, toIdx: 1, seamId: 'shortsWaistFront_R' },
+            { fromIdx: 1, toIdx: 2, seamId: 'shortsWaistBack_R' },
+            { fromIdx: wbFrontLeft.fromIdx, toIdx: wbFrontLeft.toIdx, seamId: 'shortsWaistFront_L' },
+            { fromIdx: wbBackLeft.fromIdx, toIdx: wbBackLeft.toIdx, seamId: 'shortsWaistBack_L' },
+          ],
         },
         {
           key: 'fly', name: { en: 'Fly Placket Facing', ar: 'بطانة سحاب الفتحة الأمامية' },

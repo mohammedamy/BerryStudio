@@ -98,6 +98,21 @@ function checkClosedOutline(piece) {
     const a = o[i], b = o[(i + 1) % o.length];
     if (a[0] === b[0] && a[1] === b[1]) return { status: 'fail', message: `duplicate consecutive point at index ${i}` };
   }
+  const notches = piece.notches || [];
+  for (let ni = 0; ni < notches.length; ni++) {
+    const npt = notches[ni];
+    if (!Array.isArray(npt) || npt.length < 2 || !Number.isFinite(npt[0]) || !Number.isFinite(npt[1])) {
+      return { status: 'fail', message: `non-finite or malformed notch at index ${ni}` };
+    }
+    let minDist = Infinity;
+    for (let i = 0; i < o.length; i++) {
+      const { dist } = pointToSegmentInfo(npt, o[i], o[(i + 1) % o.length]);
+      if (dist < minDist) minDist = dist;
+    }
+    if (minDist > 2) {
+      return { status: 'fail', message: `notch at index ${ni} lies ${minDist.toFixed(2)}cm off the piece outline` };
+    }
+  }
   return { status: 'pass' };
 }
 
@@ -253,6 +268,11 @@ const ROLE_PAIR = {
   // way through to the name-guessing heuristic. A real, declared
   // relationship deserves "Verified," the same as every other pair above.
   'brief-front': 'brief-back',
+  'trouser-front': 'trouser-back',
+  'peplum-front': 'peplum-back',
+  'bodice-front': 'bodice-back',
+  'skirt-front': 'skirt-back',
+  'shorts-front': 'shorts-back',
 };
 
 // WP-58 (docs/plan 4.md Phase 5): TWO pieces sharing a role are usually
@@ -277,6 +297,34 @@ function isBilateralLR(a, b) {
   return aHas && bHas && stripped(a) === stripped(b);
 }
 
+// Multi-layer garments (e.g. a 3-piece suit with both a Jacket Front/Back
+// and a Vest Front/Back) legitimately have N >= 2 fronts and N backs
+// sharing the same role ('front-panel'/'back-panel'), each declaring a
+// shared seamId edge ('jacketSide') whose arc length matches ONLY its
+// true layer counterpart. Only pairs when a unique, unambiguous 1-to-1
+// bijection exists within SEAM_LENGTH_TOL_MM — never guesses.
+function pairBySharedSeamBijection(fronts, backs) {
+  if (fronts.length < 1 || fronts.length !== backs.length) return null;
+  const candidates = fronts.map((f) => {
+    const matches = [];
+    for (let bi = 0; bi < backs.length; bi++) {
+      const b = backs[bi];
+      const shared = sharedSeamEdge(f, b);
+      if (!shared) continue;
+      const lf = walkEdgeLength(f.outline, shared.front.fromIdx, shared.front.toIdx);
+      const lb = walkEdgeLength(b.outline, shared.back.fromIdx, shared.back.toIdx);
+      if (lf != null && lb != null && Math.abs(lf - lb) * 10 <= SEAM_LENGTH_TOL_MM) {
+        matches.push(bi);
+      }
+    }
+    return matches;
+  });
+  if (candidates.some((m) => m.length !== 1)) return null;
+  const chosenBacks = new Set(candidates.map((m) => m[0]));
+  if (chosenBacks.size !== backs.length) return null;
+  return fronts.map((f, fi) => ({ front: f, back: backs[candidates[fi][0]], verified: true }));
+}
+
 function pairByRole(pieces) {
   const byRole = {};
   for (const p of pieces) if (p.role) (byRole[p.role] = byRole[p.role] || []).push(p);
@@ -284,13 +332,13 @@ function pairByRole(pieces) {
   const used = new Set();
   for (const [frontRole, backRole] of Object.entries(ROLE_PAIR)) {
     const fronts = byRole[frontRole] || [], backs = byRole[backRole] || [];
-    // Only pair when there's exactly one of each role in this piece set —
-    // 2+ pieces sharing a role (e.g. a wrap design's two independent front
-    // panels) has no single unambiguous pairing; same "never guess"
-    // principle cloth-lab's importFromApp.js already applies. The one
-    // documented exception is a real bilateral Left/Right pair (see
-    // isBilateralLR() above) against a single back — both genuinely
-    // pair with it, not a guess.
+    // Only pair when there's a single unambiguous pairing in this piece set —
+    // 2+ pieces sharing a role with no distinguishing seam-length bijection
+    // has no single unambiguous pairing; same "never guess" principle
+    // cloth-lab's importFromApp.js already applies. Documented exceptions:
+    // (1) a real bilateral Left/Right pair (see isBilateralLR() above)
+    // against a single back, and (2) multi-layer N-front/N-back garments
+    // with a unique 1-to-1 declared shared-seam-length bijection.
     if (fronts.length === 1 && backs.length === 1) {
       pairs.push({ front: fronts[0], back: backs[0], verified: true });
       used.add(fronts[0]); used.add(backs[0]);
@@ -298,6 +346,33 @@ function pairByRole(pieces) {
       pairs.push({ front: fronts[0], back: backs[0], verified: true });
       pairs.push({ front: fronts[1], back: backs[0], verified: true });
       used.add(fronts[0]); used.add(fronts[1]); used.add(backs[0]);
+    } else {
+      const bijected = pairBySharedSeamBijection(fronts, backs);
+      if (bijected) {
+        for (const pair of bijected) {
+          pairs.push(pair);
+          used.add(pair.front);
+          used.add(pair.back);
+        }
+      }
+    }
+  }
+  // Same-role front/back pairs (e.g. a colour-blocked leotard's Front Yoke
+  // and Back Yoke both declaring role 'yoke' and sharing 'leotardYokeSide'):
+  // when exactly two unused pieces share a role, one is labelled Front and
+  // the other Back, and they declare a shared seamId edge matching within
+  // SEAM_LENGTH_TOL_MM, that's an authored front/back seam relationship.
+  for (const group of Object.values(byRole)) {
+    const unused = group.filter((p) => !used.has(p));
+    if (unused.length !== 2) continue;
+    const f = unused.find((p) => FRONT_RE.test(pieceLabel(p)) && !BACK_RE.test(pieceLabel(p)));
+    const b = unused.find((p) => BACK_RE.test(pieceLabel(p)) && !FRONT_RE.test(pieceLabel(p)));
+    if (!f || !b || f === b) continue;
+    const bijected = pairBySharedSeamBijection([f], [b]);
+    if (bijected) {
+      pairs.push(bijected[0]);
+      used.add(f);
+      used.add(b);
     }
   }
   const remaining = pieces.filter((p) => !used.has(p));

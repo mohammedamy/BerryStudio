@@ -49,10 +49,18 @@ function outlinePathOps(p, X, Y) {
     if (c && c.toIdx > i && c.toIdx < n && c.c1 && c.c2) {
       cs += `${X(c.c1[0]).toFixed(2)} ${Y(c.c1[1]).toFixed(2)} ${X(c.c2[0]).toFixed(2)} ${Y(c.c2[1]).toFixed(2)} ${X(o[c.toIdx][0]).toFixed(2)} ${Y(o[c.toIdx][1]).toFixed(2)} c\n`;
       i = c.toIdx;
+    } else if (c && c.toIdx === 0 && i > 0 && c.c1 && c.c2) {
+      cs += `${X(c.c1[0]).toFixed(2)} ${Y(c.c1[1]).toFixed(2)} ${X(c.c2[0]).toFixed(2)} ${Y(c.c2[1]).toFixed(2)} ${X(o[0][0]).toFixed(2)} ${Y(o[0][1]).toFixed(2)} c\n`;
+      i = n;
+      break;
     } else {
       i++;
       cs += `${X(o[i][0]).toFixed(2)} ${Y(o[i][1]).toFixed(2)} l\n`;
     }
+  }
+  const closeC = curveByFrom.get(n - 1);
+  if (i === n - 1 && closeC && closeC.toIdx === 0 && closeC.c1 && closeC.c2) {
+    cs += `${X(closeC.c1[0]).toFixed(2)} ${Y(closeC.c1[1]).toFixed(2)} ${X(closeC.c2[0]).toFixed(2)} ${Y(closeC.c2[1]).toFixed(2)} ${X(o[0][0]).toFixed(2)} ${Y(o[0][1]).toFixed(2)} c\n`;
   }
   return cs;
 }

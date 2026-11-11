@@ -42,10 +42,18 @@ function outlinePathD(outline, curves) {
     if (c && c.toIdx > i && c.toIdx < n && c.c1 && c.c2) {
       d += ` C ${c.c1[0].toFixed(2)} ${c.c1[1].toFixed(2)} ${c.c2[0].toFixed(2)} ${c.c2[1].toFixed(2)} ${outline[c.toIdx][0].toFixed(2)} ${outline[c.toIdx][1].toFixed(2)}`;
       i = c.toIdx;
+    } else if (c && c.toIdx === 0 && i > 0 && c.c1 && c.c2) {
+      d += ` C ${c.c1[0].toFixed(2)} ${c.c1[1].toFixed(2)} ${c.c2[0].toFixed(2)} ${c.c2[1].toFixed(2)} ${outline[0][0].toFixed(2)} ${outline[0][1].toFixed(2)}`;
+      i = n;
+      break;
     } else {
       i++;
       d += ` L ${outline[i][0].toFixed(2)} ${outline[i][1].toFixed(2)}`;
     }
+  }
+  const closeC = curveByFrom.get(n - 1);
+  if (i === n - 1 && closeC && closeC.toIdx === 0 && closeC.c1 && closeC.c2) {
+    d += ` C ${closeC.c1[0].toFixed(2)} ${closeC.c1[1].toFixed(2)} ${closeC.c2[0].toFixed(2)} ${closeC.c2[1].toFixed(2)} ${outline[0][0].toFixed(2)} ${outline[0][1].toFixed(2)}`;
   }
   return d + ' Z';
 }

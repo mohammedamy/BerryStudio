@@ -25,7 +25,10 @@ const ROLE_VOCABULARY = new Set([
   'collar', 'undercollar', 'collar-stand', 'collar-band', 'lapel-facing', 'placket-facing',
   'hood', 'cape', 'cape-overlay', 'yoke', 'epaulette',
   'peplum-front', 'peplum-back', 'sash', 'wrap-tie', 'belt', 'waistband',
-  'godet', 'tier', 'pocket', 'facing', 'lining', 'cuff', 'rib-cuff', 'hem-band', 'other',
+  'godet', 'tier', 'pocket', 'facing', 'lining', 'cuff', 'rib-cuff', 'hem-band',
+  'cup', 'band', 'strap', 'elastic-band', 'gusset',
+  'trouser-front', 'trouser-back',
+  'other',
 ]);
 
 test('all 12 reference patterns are registered', () => {

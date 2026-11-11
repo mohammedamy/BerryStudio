@@ -224,6 +224,7 @@ export function pointedCollar(halfNeck, standH, pointDrop) {
     [0, standH],
   ];
   withCurves(outline, [{ fromIdx: 0, toIdx: neckPts.length, ...qBezToCubic(...neckSeg) }]);
+  outline.shoulderIdx = Math.round(neckPts.length / 2); // shoulder-seam match point along neck edge (matches collarStand)
   outline.frontIdx = neckPts.length; // front-point base, matches the collar stand's own front end
   return outline;
 }
@@ -235,11 +236,11 @@ export function roundCollarPc(halfNeck, width) {
   const neckPts = qBez(...neckSeg, 6);
   const outerSeg = [[halfNeck, 0], [halfNeck * 0.55, width * 1.15], [0, width]];
   const outerPts = qBez(...outerSeg, 6);
-  const outline = [[0, 0], ...neckPts.slice(0, -1), ...outerPts];
-  const off = neckPts.length; // = 6, where outerPts' own [halfNeck,0] start lands
+  const outline = [[0, 0], ...neckPts, ...outerPts];
+  const off = neckPts.length; // = 6, where neckPts ends at [halfNeck, 0] and outerSeg begins
   withCurves(outline, [
     { fromIdx: 0, toIdx: off, ...qBezToCubic(...neckSeg) },
-    { fromIdx: off, toIdx: off + outerPts.length - 1, ...qBezToCubic(...outerSeg) },
+    { fromIdx: off, toIdx: off + outerPts.length, ...qBezToCubic(...outerSeg) },
   ]);
   outline.frontIdx = off; // where the neckline edge meets the outer edge, at CF
   return outline;
@@ -425,14 +426,15 @@ export function plainBodicePanel(shoulderX, necklineY, chestX, underarmY, waistX
   const underarmPt = [chestX, underarmY];
   const armSeg = [shoulderPt, [shoulderX + (chestX - shoulderX) * 0.6, topY + underarmY * 0.12], underarmPt];
   const armPts = qBez(...armSeg, 6);
-  const outline = [[0, necklineY], ...neckPts.slice(0, -1), ...armPts, [waistX, waistY], [hipX, hipY], [hemX, hemY], [0, hemY]];
-  const neckOff = 1 + (neckPts.length - 1);
+  const outline = [[0, necklineY], ...neckPts, ...armPts, [waistX, waistY], [hipX, hipY], [hemX, hemY], [0, hemY]];
+  const neckOff = neckPts.length; // shoulderPt index (qBez omits p0 and ends at shoulderPt)
   withCurves(outline, [
     { fromIdx: 0, toIdx: neckOff, ...qBezToCubic(...neckSeg) },
     { fromIdx: neckOff, toIdx: neckOff + armPts.length, ...qBezToCubic(...armSeg) },
   ]);
-  outline.waistIdx = neckOff + armPts.length;
-  outline.chestIdx = neckOff + armPts.length - 1; // underarm point, at chest/bust level
+  outline.shoulderIdx = neckOff;
+  outline.chestIdx = neckOff + armPts.length; // underarm point, at chest/bust level
+  outline.waistIdx = neckOff + armPts.length + 1;
   return outline;
 }
 
@@ -445,8 +447,8 @@ export function raglanBodyPanel(neckX, necklineY, chestX, underarmY, waistX, wai
   const neckPts = qBez(...neckSeg, 4);
   const raglanSeg = [[neckX, 0], [neckX + (chestX - neckX) * 0.3, underarmY * 0.5], [chestX, underarmY]];
   const raglanPts = qBez(...raglanSeg, 6);
-  const outline = [[0, necklineY], ...neckPts.slice(0, -1), ...raglanPts, [waistX, waistY], [hipX, hipY], [hemX, hemY], [0, hemY]];
-  const neckOff = 1 + (neckPts.length - 1);
+  const outline = [[0, necklineY], ...neckPts, ...raglanPts, [waistX, waistY], [hipX, hipY], [hemX, hemY], [0, hemY]];
+  const neckOff = neckPts.length; // [neckX, 0] index
   withCurves(outline, [
     { fromIdx: 0, toIdx: neckOff, ...qBezToCubic(...neckSeg) },
     { fromIdx: neckOff, toIdx: neckOff + raglanPts.length, ...qBezToCubic(...raglanSeg) },
@@ -456,31 +458,33 @@ export function raglanBodyPanel(neckX, necklineY, chestX, underarmY, waistX, wai
   outline.chestIdx = outline.raglanToIdx;
   return outline;
 }
-// The matching raglan sleeve: a front raglan edge and a back raglan edge
+// The matching raglan sleeve: a back raglan edge and a front raglan edge
 // (built in the SAME shared coordinate frame as the body panels), meeting
 // at the top near the neckline, with the ordinary sleeve tube below.
 export function raglanSleevePc(neckX, chestX, underarmY, sleeveLen) {
   const raglanSeg = [[neckX, 0], [neckX + (chestX - neckX) * 0.3, underarmY * 0.5], [chestX, underarmY]];
-  const raglanPts = qBez(...raglanSeg, 6); // front raglan edge, neckX,0 -> chestX,underarmY
+  const raglanPts = qBez(...raglanSeg, 6); // front raglan edge, [neckX,0] -> [chestX,underarmY]
   const cuffHalf = chestX * 0.32;
-  const backRaglanSeg = raglanSeg.map((p) => [neckX - (p[0] - neckX), p[1]]); // mirrored, for the back edge
-  const backRaglanPts = raglanPts.slice().reverse().map((p) => [neckX - (p[0] - neckX), p[1]]); // walked underarm -> neckX
-  const outline = [
-    [neckX, 0], ...raglanPts,
-    [chestX * 0.62, underarmY + sleeveLen], [chestX * 0.62 - cuffHalf * 2, underarmY + sleeveLen],
-    ...backRaglanPts,
+  const backRaglanSeg = [
+    [2 * neckX - chestX, underarmY],
+    [neckX - (chestX - neckX) * 0.3, underarmY * 0.5],
+    [neckX, 0],
   ];
-  outline.frontRaglanFromIdx = 0;
-  outline.frontRaglanToIdx = raglanPts.length;
-  outline.backRaglanFromIdx = raglanPts.length + 2;
-  outline.backRaglanToIdx = outline.length - 1;
+  const backRaglanPts = qBez(...backRaglanSeg, 6); // walked back-underarm -> [neckX,0]
+  const outline = [
+    [2 * neckX - chestX, underarmY],
+    ...backRaglanPts,
+    ...raglanPts,
+    [chestX * 0.62, underarmY + sleeveLen],
+    [chestX * 0.62 - cuffHalf * 2, underarmY + sleeveLen],
+  ];
+  outline.backRaglanFromIdx = 0;
+  outline.backRaglanToIdx = backRaglanPts.length;
+  outline.frontRaglanFromIdx = backRaglanPts.length;
+  outline.frontRaglanToIdx = backRaglanPts.length + raglanPts.length;
   return withCurves(outline, [
-    { fromIdx: 0, toIdx: raglanPts.length, ...qBezToCubic(...raglanSeg) },
-    // backRaglanPts walks underarm->neck (reversed direction relative to
-    // backRaglanSeg, which is defined neck->underarm like the front) —
-    // same c1/c2 swap convention js/pattern-flat.js's unfoldPiece uses
-    // for a reflected-and-reversed curve copy.
-    { fromIdx: outline.backRaglanFromIdx, toIdx: outline.backRaglanToIdx, c1: qBezToCubic(...backRaglanSeg).c2, c2: qBezToCubic(...backRaglanSeg).c1 },
+    { fromIdx: outline.backRaglanFromIdx, toIdx: outline.backRaglanToIdx, ...qBezToCubic(...backRaglanSeg) },
+    { fromIdx: outline.frontRaglanFromIdx, toIdx: outline.frontRaglanToIdx, ...qBezToCubic(...raglanSeg) },
   ]);
 }
 

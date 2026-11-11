@@ -240,7 +240,7 @@ export const PATTERNS = {
           // WP-24: front is an open, un-folded panel (not a mirrorable
           // half), so it deliberately gets no chestEdgeIndices hint — only
           // this cut-on-fold back does.
-          role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[1] },
+          role:"back-panel", cutOnFold:true, chestEdgeIndices:[1] },
         { key:"sleeve", name:{en:"Bishop Sleeve",ar:"كم واسع بأساور"},
           desc:{en:"Loose flared bishop sleeve with wrist gathering.",ar:"كم واسع منسدل مع كشكشة عند المعصم."},
           outline:slvOutline,

@@ -1837,7 +1837,15 @@ export const Canvas = (() => {
       if (c && c.toIdx>i && c.toIdx<n && c.c1 && c.c2){
         d += ` C ${c.c1[0]} ${c.c1[1]} ${c.c2[0]} ${c.c2[1]} ${o[c.toIdx][0]} ${o[c.toIdx][1]}`;
         i = c.toIdx;
+      } else if (c && c.toIdx===0 && i>0 && c.c1 && c.c2){
+        d += ` C ${c.c1[0]} ${c.c1[1]} ${c.c2[0]} ${c.c2[1]} ${o[0][0]} ${o[0][1]}`;
+        i = n;
+        break;
       } else { i++; d += ` L ${o[i][0]} ${o[i][1]}`; }
+    }
+    const closeC = curveByFrom.get(n-1);
+    if (i===n-1 && closeC && closeC.toIdx===0 && closeC.c1 && closeC.c2){
+      d += ` C ${closeC.c1[0]} ${closeC.c1[1]} ${closeC.c2[0]} ${closeC.c2[1]} ${o[0][0]} ${o[0][1]}`;
     }
     return d + " Z";
   }

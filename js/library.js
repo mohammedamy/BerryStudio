@@ -424,7 +424,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         outline: front, darts: [], notches: [[half[half.chestIdx][0], half[half.chestIdx][1]]], grain: [[qc * 0.35, 12], [qc * 0.35, len - 12]], role: 'front-panel' },
       { key: 'back', name: { en: `${opts.nameEn} Back`, ar: `خلفية ${opts.nameAr}` }, desc: { en: 'Full back on the fold.', ar: 'ظهر كامل على الطية.' },
         outline: back, darts: [], notches: [[back[back.chestIdx][0], back[back.chestIdx][1]]], grain: [[shoulderX * 0.5, 12], [shoulderX * 0.5, len - 12]],
-        role: 'bodice-back-center', cutOnFold: true, chestEdgeIndices: [back.chestIdx] },
+        role: 'back-panel', cutOnFold: true, chestEdgeIndices: [back.chestIdx] },
       { key: 'sleeve', name: { en: 'Wide Sleeve', ar: 'كم واسع' }, desc: { en: 'Loose wide sleeve, cut as a mirrored pair.', ar: 'كم واسع مريح، يُقص كزوج متطابق.' },
         outline: sleeve, darts: [], notches: [sleeve[sleeve.frontNotchIdx], sleeve[sleeve.backNotchIdx1], sleeve[sleeve.backNotchIdx2]], grain: [[bicep * 0.2, 6], [bicep * 0.2, m.sleeve * 0.55 - 6]], role: 'sleeve', bilateral: true },
     ];

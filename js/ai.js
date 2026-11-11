@@ -381,7 +381,18 @@ export const AIGen = (() => {
   }
 
   // ---------- parametric builders ----------
-  function build(style, m){
+  function build(rawStyle, m){
+    const style = {
+      type: "dress",
+      lengthF: 1,
+      flareF: 1,
+      fitF: 1,
+      sleeveLenF: 0.5,
+      sleeveWideF: 1,
+      neckline: "round",
+      hemShape: "straight",
+      ...rawStyle,
+    };
     let pieces;
     if(style.type==="trousers") pieces = buildTrousers(style,m);
     else if(style.type==="skirt") pieces = buildSkirt(style,m);
@@ -454,6 +465,7 @@ export const AIGen = (() => {
     const hemFront  = hemPts(style, 0-wrapCut, hemW, gh, gh, "front");
     const hemBack   = hemPts(style, 0, hemW, gh, gh, "back");
 
+    const hasMatchedSideSeam = !style.wrap && ["straight", "curved"].includes(style.hemShape);
     const front = {
       name:{en:en+" Front", ar:"مقدمة "+ar},
       desc:{en:"Generated front — neckline, hem and fit read from the reference.",
@@ -474,17 +486,19 @@ export const AIGen = (() => {
       // Ease's fold-doubling assumption doesn't hold for wrap's un-folded
       // asymmetric front, so it deliberately gets no hint.
       ...(style.wrap ? {} : { chestEdgeIndices:[2] }),
+      ...(hasMatchedSideSeam ? { edges: [{ fromIdx: neckFront.length, toIdx: neckFront.length + 4, seamId: "top-side" }] } : {}),
     };
     const back = {
       name:{en:en+" Back", ar:"ظهر "+ar},
       desc:{en:"Generated back panel — mirrors the front block.",
             ar:"قطعة خلفية مولّدة — تقابل القطعة الأمامية."},
-      outline:[...neckBack,[chestW,3.5],[chestW+1,bod*0.5],[waistW+0.5,bod],
+      outline:[...neckBack,[chestW,3],[chestW+1,bod*0.5],[waistW+0.5,bod],
                [hipW+0.5,bod+(gh-bod)*0.42], ...hemBack],
-      curves:[...neckCurveEntry(neckBack), { fromIdx: neckBack.length, toIdx: neckBack.length + 2, ...threePtCubic([chestW,3.5],[chestW+1,bod*0.5],[waistW+0.5,bod]) }],
-      darts:waistDart, notches:[[chestW,3.5]],
+      curves:[...neckCurveEntry(neckBack), { fromIdx: neckBack.length, toIdx: neckBack.length + 2, ...threePtCubic([chestW,3],[chestW+1,bod*0.5],[waistW+0.5,bod]) }],
+      darts:waistDart, notches:[[chestW,3],[waistW+0.5,bod]],
       grain:[[2,9],[2,gh-6]],
       role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[2],
+      ...(hasMatchedSideSeam ? { edges: [{ fromIdx: neckBack.length, toIdx: neckBack.length + 4, seamId: "top-side" }] } : {}),
     };
     const pieces=[front, back];
 
@@ -648,15 +662,17 @@ export const AIGen = (() => {
       darts:waistDart, notches:[[chestW,3],[waistW+1,bodiceLen]],
       grain:[[chestW*0.5,6],[chestW*0.5,bodiceLen-6]],
       role:"bodice-front-center", cutOnFold:true, chestEdgeIndices:[2], // WP-24
+      edges:[{ fromIdx: neckFront.length, toIdx: neckFront.length + 2, seamId: "romper-bodice-side" }],
     };
     const back = {
       name:{en:"Romper Back Bodice", ar:"ظهر صدرية الأفرول"},
       desc:{en:"Fitted back bodice, mirrors the front block.", ar:"ظهر صدرية ضيق يقابل القطعة الأمامية."},
-      outline:[...neckBack,[chestW,3.5],[chestW+1,bodiceLen*0.55],[waistW+0.5,bodiceLen],[0,bodiceLen]],
-      curves:[...neckCurveEntry(neckBack), { fromIdx: neckBack.length, toIdx: neckBack.length + 2, ...threePtCubic([chestW,3.5],[chestW+1,bodiceLen*0.55],[waistW+0.5,bodiceLen]) }],
-      darts:waistDart, notches:[[chestW,3.5]],
+      outline:[...neckBack,[chestW,3],[chestW+1,bodiceLen*0.55],[waistW+0.5,bodiceLen],[0,bodiceLen]],
+      curves:[...neckCurveEntry(neckBack), { fromIdx: neckBack.length, toIdx: neckBack.length + 2, ...threePtCubic([chestW,3],[chestW+1,bodiceLen*0.55],[waistW+0.5,bodiceLen]) }],
+      darts:waistDart, notches:[[chestW,3],[waistW+0.5,bodiceLen]],
       grain:[[2,6],[2,bodiceLen-6]],
       role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[2],
+      edges:[{ fromIdx: neckBack.length, toIdx: neckBack.length + 2, seamId: "romper-bodice-side" }],
     };
     const pieces=[front, back];
 
