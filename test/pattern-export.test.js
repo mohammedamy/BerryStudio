@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDXF, buildHPGL, buildPDF, computeTileGrid, parseDXFEntities, isTurnPoint } from '../js/pattern-export.js';
+import {
+  buildDXF, buildHPGL, buildPDF, computeTileGrid, parseDXFEntities, isTurnPoint,
+  buildSVG, buildEPS, buildSpecCSV, buildTechPackMarkdown, buildTechPackHTML, buildPatternJSON,
+} from '../js/pattern-export.js';
 
 // A rectangle (4 real 90° corners) plus a coarsely-sampled "curve" (a
 // gently bulging edge, points staying near-collinear) — the test shape
@@ -175,4 +178,75 @@ test('buildPDF ({tiled:true}) also draws a real cubic bezier for a piece with p.
   const bigCurved = { ...CURVED_PIECE, outline: CURVED_PIECE.outline.map(([x, y]) => [x * 5, y]) , curves: [{ ...CURVED_PIECE.curves[0], c1: [55, 7], c2: [55, 14] }] };
   const pdf = buildPDF([bigCurved], { tiled: true, pageSize: 'a4', overlapMm: 10 });
   assert.match(pdf, /\bc\n/);
+});
+
+// ---- Master Atelier Deliverable Exporters (SVG, EPS, CSV, TechPack HTML/MD, JSON) ----
+
+test('buildSVG emits 1:1 cm viewBox, cut-line, seam-allowance, grainline, dart, notch, and 10cm calibration scale', () => {
+  const svg = buildSVG([RECT_PIECE, CURVED_PIECE], { seamAllowanceCm: 1.0, lang: 'en', title: 'Atelier Test' });
+  assert.match(svg, /<svg[^>]+width="[\d.]+cm"/);
+  assert.match(svg, /class="cut-line"/);
+  assert.match(svg, /class="seam-allowance"/);
+  assert.match(svg, /class="grainline"/);
+  assert.match(svg, /class="dart"/);
+  assert.match(svg, /class="notch"/);
+  assert.match(svg, /10 cm \(1:1 Calibration\)/);
+  // CURVED_PIECE must emit a real cubic Bezier "C" command
+  assert.match(svg, /\bC\s+[\d.-]+/);
+  assert.equal(buildSVG([]), '');
+});
+
+test('buildEPS emits valid PostScript EPSF-3.0 with BoundingBox, lineto, and curveto', () => {
+  const eps = buildEPS([RECT_PIECE, CURVED_PIECE]);
+  assert.match(eps, /^%!PS-Adobe-3\.0 EPSF-3\.0/);
+  assert.match(eps, /%%BoundingBox: 0 0 \d+ \d+/);
+  assert.match(eps, /\blineto\b/);
+  assert.match(eps, /\bcurveto\b/);
+  assert.match(eps, /showpage\n%%EOF\n$/);
+  assert.equal(buildEPS([]), '');
+});
+
+test('buildSpecCSV emits UTF-8 BOM, piece cut-list rows, measurements, and fabric consumption estimate', () => {
+  const csv = buildSpecCSV([RECT_PIECE], {
+    title: 'Couture Dress',
+    category: 'women',
+    size: 'M',
+    seamAllowanceCm: 1.2,
+    measurements: { chest: 90, waist: 72, hip: 96 },
+  });
+  assert.ok(csv.startsWith('\uFEFF'));
+  assert.match(csv, /Piece_No,Key,Name_EN,Name_AR,Role,Cut_Qty/);
+  assert.match(csv, /Test Rect/);
+  assert.match(csv, /Est_Fabric_150cm_Width_m/);
+  assert.equal(buildSpecCSV([]), '');
+});
+
+test('buildTechPackMarkdown and buildTechPackHTML include piece schedule, sewing sequence, and embedded vector flat', () => {
+  const meta = {
+    title: 'Atelier Blazer',
+    category: 'women',
+    size: 'M',
+    standard: 'intl',
+    seamAllowanceCm: 1.0,
+    measurements: { chest: 90, waist: 72, hip: 96, height: 168 },
+    lang: 'en',
+  };
+  const md = buildTechPackMarkdown([RECT_PIECE], meta);
+  assert.match(md, /# Atelier Blazer/);
+  assert.match(md, /Pattern Piece Cut Schedule/);
+  assert.match(md, /Atelier Sewing & Assembly Sequence/);
+
+  const html = buildTechPackHTML([RECT_PIECE], meta);
+  assert.match(html, /<!DOCTYPE html>/i);
+  assert.match(html, /Atelier Blazer/);
+  assert.match(html, /<svg\b/);
+});
+
+test('buildPatternJSON serializes clean round-trippable pattern metadata and piece geometry', () => {
+  const jsonText = buildPatternJSON([RECT_PIECE, CURVED_PIECE], { title: 'JSON Spec', category: 'women', size: 'M' });
+  const parsed = JSON.parse(jsonText);
+  assert.equal(parsed.app, 'BerryStudio');
+  assert.equal(parsed.version, 2);
+  assert.equal(parsed.pieces.length, 2);
+  assert.equal(parsed.pieces[1].curves.length, 1);
 });

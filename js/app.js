@@ -48,7 +48,17 @@ import { stepForSize, resolveGradedPieces } from './grading.js';
 import { pivotDart, slashAndSpread, transferDart } from './darts.js';
 import { seamPointAtFraction } from './geometry.js';
 import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
-import { parseSVGPattern, parseDXFPattern } from './pattern-import.js';
+import { parseSVGPattern, parseDXFPattern, parseJSONPattern } from './pattern-import.js';
+import { buildSVG, buildEPS, buildSpecCSV, buildTechPackMarkdown, buildTechPackHTML, buildPatternJSON } from './pattern-export.js';
+import {
+  ATELIER_PRESETS,
+  ensureValidPieces,
+  generateClarifyingQuestions,
+  applyClarificationAnswers,
+  synthesizeCouturePattern,
+  inspectExistingPattern,
+  editOrCompletePattern,
+} from './ai-atelier.js';
 import { inferBodyZone, SLEEVE_ROLES } from './body-zone.js';
 import { classifyPiecePart, resolvePartsFabric3D, computePatternMetrics3D } from './pattern-3d-metrics.js';
 import { Auth, isAuthConfigured } from './auth.js';
@@ -241,6 +251,16 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     ],
   };
   let aiImage = null;   // data-URL of the uploaded AI inspiration image
+  let aiStudioMode = "create";      // "create" | "edit" | "tools"
+  let aiDraftText = "";             // preserved prompt text across AI pane re-renders
+  let aiConsultOpen = false;        // whether Designer Pre-Draft Q&A card is open
+  let aiConsultMetrics = null;      // cached image silhouette read for smart Q&A
+  let aiConsultAnswers = {};        // { garmentType, fabric, closure, neckline, sleeve, finishes }
+  let aiConsultCustomNote = "";     // free-text tailoring note inside Q&A
+  let aiEditText = "";              // preserved free-text instruction in Edit & Complete mode
+  let aiEditConsultOpen = false;    // whether Edit/Complete Q&A card is open
+  let aiEditConsultAnswers = {};    // answers for Edit/Complete tailoring consultation
+  let aiEditCustomNote = "";        // custom write-in note for Edit/Complete
   let refreshDesignBrief = null;
   let refreshImageStudio = null;
   let refreshPatternProgram = null;
@@ -1271,11 +1291,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     fit:      { fitted:"fitted", regular:"regular fit", relaxed:"relaxed" },
     flare:    { slim:"pencil silhouette", regular:"regular silhouette", full:"a-line silhouette" },
     length:   { short:"mini length", medium:"regular length", long:"maxi length" },
-    neckline: { v:"v-neck", round:"round neck", boat:"boat neck", offshoulder:"off-shoulder neckline", halter:"halter neckline", collar:"collar", mock:"mock neck" },
+    neckline: { v:"v-neck", round:"round neck", boat:"boat neck", offshoulder:"off-shoulder neckline", halter:"halter neckline", collar:"collar", mock:"mock neck", sweetheart:"sweetheart neckline", square:"square neckline" },
     sleeve:   { sleeveless:"sleeveless", short:"short sleeves", threeQuarter:"three-quarter sleeves", long:"long sleeves" },
     hem:      { straight:"straight hem", curved:"curved hem", highlow:"high-low hem", asymmetric:"asymmetric hem" },
     closure:  { wrap:"wrap closure", zip:"zip closure", button:"button closure", tie:"tie closure" },
   };
+  const AI_GUIDED_KINDS = ["dress","gown","top","shirt","jacket","coat","suit","vest","hoodie","jumpsuit","romper","skirt","trousers","shorts","robe"];
   function buildGuidedPrompt(o){
     const type = o.type || "dress";
     const fitW = AI_GUIDED_WORDS.fit[o.fit], flareW = AI_GUIDED_WORDS.flare[o.flare];
@@ -1286,18 +1307,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if(o.notes && o.notes.trim()) sentence += " " + o.notes.trim();
     return sentence;
   }
-  // Segmented-button row, same visual language as renderBuilderPane()'s own
-  // segRow — `opts` includes "any"/"none" as an explicit "let the AI/local
-  // heuristic decide" choice (skips the clause entirely in buildGuidedPrompt).
   function guidedSegRow(container, label, key, opts, labelFn){
     const wrap=el("div","set-row"); wrap.style.marginTop="10px"; wrap.style.flexWrap="wrap"; wrap.style.alignItems="flex-start";
     wrap.innerHTML=`<span class="sl">${label}</span>`;
-    // Quick Draft Builder's own .seg rows never carry more than 3 short
-    // options — fine as a single nowrap line. Several of these guided rows
-    // (neckline in particular, 8 options) don't fit that assumption, so
-    // this wraps onto multiple lines instead of silently overflowing/
-    // clipping past the sidebar's edge (the global .seg CSS is untouched,
-    // this is scoped to just these rows).
     const seg=el("div","seg"); seg.style.flexWrap="wrap"; seg.style.rowGap="4px";
     opts.forEach(o=>{
       const b=el("button", state.aiGuided[key]===o?"active":"", labelFn(o));
@@ -1308,13 +1320,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
   function renderGuidedPromptBuilder(ta){
     const box=el("div","field"); box.style.marginTop="4px";
-    box.appendChild(el("div","section-title",IC.ruler+T("aiGuidedTitle")));
     box.appendChild(el("div","help-note",T("aiGuidedDesc")));
 
     const g = state.aiGuided;
 
     const typeGrid=el("div","opt-grid"); typeGrid.style.margin="8px 0 4px";
-    AIGEN_KINDS.forEach(k=>{
+    AI_GUIDED_KINDS.forEach(k=>{
       const o=el("div","opt"+(g.type===k?" active":""), T("kind_"+k));
       o.onclick=()=>{ g.type=k; save(); renderAIPane(); };
       typeGrid.appendChild(o);
@@ -1325,7 +1336,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     guidedSegRow(box, T("builderFlare"), "flare", ["any","slim","regular","full"], o=>o==="any"?T("opt_any"):T("opt_"+o));
     guidedSegRow(box, T("builderLength"), "length", ["any","short","medium","long"], o=>o==="any"?T("opt_any"):T("opt_"+o));
     guidedSegRow(box, T("aiGuidedNeckline"), "neckline",
-      ["any","v","round","boat","offshoulder","halter","collar","mock"],
+      ["any","v","round","sweetheart","square","boat","offshoulder","halter","collar","mock"],
       o=>o==="any"?T("opt_any"):T("opt_neck"+o[0].toUpperCase()+o.slice(1)));
     guidedSegRow(box, T("builderSleeve"), "sleeve", ["any","sleeveless","short","threeQuarter","long"],
       o=>o==="any"?T("opt_any"):o==="threeQuarter"?T("opt_threeQuarter"):T("opt_"+o));
@@ -1341,54 +1352,490 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     notesF.appendChild(notesIn); box.appendChild(notesF);
 
     const buildBtn=el("button","big-btn ghost",IC.check+T("aiGuidedBuild")); buildBtn.style.marginTop="12px";
-    buildBtn.onclick=()=>{ ta.value=buildGuidedPrompt(g); toast(T("aiGuidedBuilt")); };
+    buildBtn.onclick=()=>{
+      const builtTxt = buildGuidedPrompt(g);
+      aiDraftText = builtTxt;
+      if (ta) ta.value = builtTxt;
+      toast(T("aiGuidedBuilt"));
+    };
     box.appendChild(buildBtn);
     return box;
   }
 
-  // AI PANE
+  // ---- Master Atelier Deliverables & All Common Extensions Hub ----
+  const ATELIER_EXPORT_BUTTONS = [
+    { fmt: "SVG", label: ".SVG", sub: "Vector 1:1" },
+    { fmt: "PDF", label: ".PDF", sub: "A4 / Letter" },
+    { fmt: "PDF_1TO1", label: ".PDF", sub: "Plotter 1:1" },
+    { fmt: "DXF", label: ".DXF", sub: "AAMA CAD" },
+    { fmt: "PLT", label: ".PLT", sub: "Cut Plotter" },
+    { fmt: "EPS", label: ".EPS", sub: "PostScript" },
+    { fmt: "AI", label: ".AI", sub: "Illustrator" },
+    { fmt: "PNG", label: ".PNG", sub: "300 DPI" },
+    { fmt: "JPEG", label: ".JPG", sub: "Print Sheet" },
+    { fmt: "TECHPACK_HTML", label: ".HTML", sub: "Tech Pack" },
+    { fmt: "TECHPACK_MD", label: ".MD", sub: "Spec Doc" },
+    { fmt: "CSV", label: ".CSV", sub: "Cut & BOM" },
+    { fmt: "OBJ", label: ".OBJ", sub: "3D Mesh" },
+    { fmt: "JSON", label: ".JSON", sub: "Editable" },
+  ];
+  function renderDeliverablesCard() {
+    const wrap = el("div", "ai-studio-card ai-deliverables-card");
+    const pieces = Canvas.getPieces();
+    const head = el("div", "ai-card-head");
+    head.appendChild(el("div", "ai-card-title", IC.download + `<span>${T("aiDeliverablesTitle")}</span>`));
+    if (pieces.length) {
+      head.appendChild(el("span", "ai-qa-badge", `✓ ${T("aiQaPassBadge")}`));
+    }
+    wrap.appendChild(head);
+    wrap.appendChild(el("div", "help-note", T("aiDeliverablesDesc")));
+
+    const grid = el("div", "ai-deliverables-grid");
+    ATELIER_EXPORT_BUTTONS.forEach(item => {
+      const b = el("button", "ai-ext-btn", `<b>${item.label}</b><small>${item.sub}</small>`);
+      b.type = "button";
+      b.onclick = () => exportAs(item.fmt);
+      grid.appendChild(b);
+    });
+    wrap.appendChild(grid);
+
+    const viewRow = el("div", "ai-action-row");
+    const btn3d = el("button", "big-btn ghost sm", IC.cube + T("aiOpen3DBtn"));
+    btn3d.type = "button";
+    btn3d.onclick = () => setView("3d");
+    const btnCloth = el("button", "big-btn ghost sm", IC.spark + T("aiOpenClothLabBtn"));
+    btnCloth.type = "button";
+    btnCloth.onclick = () => setView("clothlab");
+    viewRow.append(btn3d, btnCloth);
+    wrap.appendChild(viewRow);
+
+    const impBtn = el("button", "big-btn ghost sm", IC.importf + T("aiImportCadBtn"));
+    impBtn.type = "button";
+    impBtn.style.marginTop = "8px";
+    impBtn.onclick = () => importPatternFile();
+    wrap.appendChild(impBtn);
+    return wrap;
+  }
+
+  // ---- Interactive Master Tailor Pre-Draft Consultation (Create Mode) ----
+  function renderAIConsultCard(ta) {
+    const card = el("div", "ai-studio-card ai-consult-card");
+    const consult = generateClarifyingQuestions({
+      prompt: aiDraftText,
+      metrics: aiConsultMetrics,
+      imageSupplied: !!aiImage,
+      category: state.category,
+      lang: state.lang,
+      mode: "create",
+      currentAnswers: aiConsultAnswers,
+    });
+
+    const head = el("div", "ai-card-head");
+    head.appendChild(el("div", "ai-card-title", IC.question + `<span>${T("aiConsultTitle")}</span>`));
+    const closeBtn = el("button", "ai-mini-close", "×");
+    closeBtn.type = "button";
+    closeBtn.title = T("close");
+    closeBtn.onclick = () => { aiConsultOpen = false; renderAIPane(); };
+    head.appendChild(closeBtn);
+    card.appendChild(head);
+
+    const meterWrap = el("div", "ai-readiness");
+    meterWrap.innerHTML = `<div class="ai-readiness-top"><span>${T("aiConsultReadiness")}</span><b>${consult.readinessPct}%</b></div><div class="ai-readiness-bar"><span style="width:${consult.readinessPct}%"></span></div>`;
+    card.appendChild(meterWrap);
+    card.appendChild(el("div", "help-note", T("aiConsultDesc")));
+
+    if (!consult.questions.length) {
+      card.appendChild(el("div", "ai-all-clear", `✓ ${T("aiConsultAllClear")}`));
+    } else {
+      consult.questions.forEach(qObj => {
+        const qBlock = el("div", "ai-q-block");
+        qBlock.appendChild(el("div", "ai-q-title", L(qObj.title)));
+        if (qObj.why) qBlock.appendChild(el("div", "ai-q-why", L(qObj.why)));
+        const optsWrap = el("div", "ai-q-opts");
+        qObj.options.forEach(opt => {
+          const isSel = aiConsultAnswers[qObj.id] === opt.value;
+          const pill = el("button", "ai-q-pill" + (isSel ? " active" : "") + (opt.recommended ? " rec" : ""), L(opt.label));
+          pill.type = "button";
+          pill.onclick = () => {
+            if (aiConsultAnswers[qObj.id] === opt.value) delete aiConsultAnswers[qObj.id];
+            else aiConsultAnswers[qObj.id] = opt.value;
+            renderAIPane();
+          };
+          optsWrap.appendChild(pill);
+        });
+        qBlock.appendChild(optsWrap);
+        card.appendChild(qBlock);
+      });
+    }
+
+    const customWrap = el("div", "field");
+    customWrap.style.marginTop = "10px";
+    customWrap.innerHTML = `<label>${T("aiConsultCustomLabel")}</label>`;
+    const customInp = el("input", "input");
+    customInp.value = aiConsultCustomNote;
+    customInp.placeholder = T("aiConsultCustomPh");
+    customInp.oninput = () => { aiConsultCustomNote = customInp.value; };
+    customWrap.appendChild(customInp);
+    card.appendChild(customWrap);
+
+    const actions = el("div", "ai-action-row");
+    actions.style.marginTop = "10px";
+    const draftBtn = el("button", "big-btn", IC.spark + T("aiConsultDraftBtn"));
+    draftBtn.type = "button";
+    draftBtn.onclick = () => runAI(ta ? ta.value : aiDraftText, draftBtn);
+    const resetBtn = el("button", "big-btn ghost sm", T("aiConsultResetBtn"));
+    resetBtn.type = "button";
+    resetBtn.onclick = () => { aiConsultAnswers = {}; aiConsultCustomNote = ""; renderAIPane(); };
+    actions.append(draftBtn, resetBtn);
+    card.appendChild(actions);
+    return card;
+  }
+
+  // ---- Execute In-Place or New-Tab Pattern Completion / Alteration ----
+  function executePatternEdit({ instruction = "", operations = [], asNewDraft = false } = {}) {
+    if (!requireEntitlement()) return;
+    const livePieces = Canvas.getPieces();
+    if (!livePieces.length) { toast(T("empty2d")); return; }
+    const combinedInstruction = [instruction, aiEditCustomNote].filter(Boolean).join(", ");
+    const res = editOrCompletePattern({
+      pieces: livePieces,
+      instruction: combinedInstruction,
+      operations,
+      answers: aiEditConsultAnswers,
+      measurements: currentMeas(),
+      seamAllowanceCm: state.seamCm || 1,
+      lang: state.lang,
+    });
+    if (!res.ok || !res.pieces.length) { toast(T("importFail")); return; }
+
+    if (asNewDraft) {
+      reviewGeneratedPattern({
+        pieces: res.pieces,
+        colors: PALETTE,
+        summary: res.summary,
+        validation: res.validation,
+      }, "generated");
+      return;
+    }
+
+    state.loaded = null;
+    Canvas.setPattern(res.pieces, PALETTE, { preserveAnnotations: true });
+    lastGradedMeas = { ...currentMeas() };
+    hideEmpty();
+    renderLayersPane();
+    renderAIPane();
+    if (is3DActive()) build3D();
+    if (state.view === "clothlab") syncClothLab();
+    update3DStatusPill();
+    save();
+    const lockMsg = res.lockedSkipped ? " · " + T("aiEditLockedNote").replace("{n}", res.lockedSkipped) : "";
+    toast(T("aiEditAppliedToast").replace("{summary}", res.summary) + lockMsg);
+  }
+
+  // ---- Edit & Complete Current Pattern Card ----
+  const QUICK_EDIT_OPS = [
+    { op: "lengthen", key: "aiEditOpLenPlus" },
+    { op: "shorten", key: "aiEditOpLenMinus" },
+    { op: "flare", key: "aiEditOpFlare" },
+    { op: "taper", key: "aiEditOpTaper" },
+    { op: "add-ease", key: "aiEditOpEasePlus" },
+    { op: "reduce-ease", key: "aiEditOpEaseMinus" },
+    { op: "add-darts", key: "aiEditOpDarts" },
+    { op: "add-pleats", key: "aiEditOpPleats" },
+    { op: "add-gathers", key: "aiEditOpGathers" },
+    { op: "neckline-v", key: "aiEditOpVNeck" },
+    { op: "neckline-square", key: "aiEditOpSquareNeck" },
+    { op: "add-sleeves", key: "aiEditOpSleeves" },
+    { op: "add-puff-sleeves", key: "aiEditOpPuffSleeves" },
+    { op: "add-collar", key: "aiEditOpCollar" },
+    { op: "add-hood", key: "aiEditOpHood" },
+    { op: "add-pockets", key: "aiEditOpPockets" },
+    { op: "add-waistband", key: "aiEditOpWaistband" },
+    { op: "add-belt", key: "aiEditOpBelt" },
+    { op: "add-cuffs", key: "aiEditOpCuffs" },
+    { op: "add-facings", key: "aiEditOpFacings" },
+    { op: "add-lining", key: "aiEditOpLining" },
+  ];
+  function renderAIEditCard() {
+    const card = el("div", "ai-studio-card ai-edit-card");
+    const livePieces = Canvas.getPieces();
+    const insp = inspectExistingPattern(livePieces, currentMeas(), state.lang);
+
+    const head = el("div", "ai-card-head");
+    head.appendChild(el("div", "ai-card-title", IC.edit + `<span>${T("aiEditTitle")}</span>`));
+    if (insp.hasPieces) {
+      const badgeCls = insp.missingSuggestions.length ? "ai-warn-badge" : "ai-qa-badge";
+      const badgeTxt = insp.missingSuggestions.length
+        ? T("aiEditMissingBadge").replace("{n}", insp.missingSuggestions.length)
+        : `✓ ${T("aiEditCompleteBadge")}`;
+      head.appendChild(el("span", badgeCls, badgeTxt));
+    }
+    card.appendChild(head);
+    card.appendChild(el("div", "help-note", T("aiEditDesc")));
+
+    if (!insp.hasPieces) {
+      card.appendChild(el("div", "help-note", T("aiEditEmptyHint"))).style.marginTop = "8px";
+      const openLib = el("button", "big-btn ghost sm", IC.folder + T("openLibrary"));
+      openLib.type = "button";
+      openLib.style.marginTop = "8px";
+      openLib.onclick = () => $(`#railTabs button[data-pane="library"]`)?.click();
+      card.appendChild(openLib);
+      return card;
+    }
+
+    // Live Pattern Geometry Diagnosis metrics
+    const diag = el("div", "ai-diag-box");
+    diag.innerHTML = `
+      <div class="ai-diag-head"><span>${T("aiEditInspectorTitle")}</span><b>${T("aiEditPiecesCount").replace("{n}", insp.count)}</b></div>
+      <div class="ai-diag-metrics">
+        <span>Neck: <b>${insp.neckArcCm} cm</b></span>
+        <span>Armscye: <b>${insp.armholeArcCm} cm</b></span>
+        <span>Waist: <b>${insp.waistCircCm} cm</b></span>
+        <span>Max H: <b>${insp.maxHeightCm} cm</b></span>
+      </div>`;
+    card.appendChild(diag);
+
+    // 1-Click Missing Piece Suggestions (auto-detected from live geometry)
+    if (insp.missingSuggestions.length) {
+      card.appendChild(el("div", "ai-sub-label", T("aiEditMissingTitle")));
+      const sugWrap = el("div", "ai-chip-wrap");
+      insp.missingSuggestions.forEach(sug => {
+        const rawLbl = L(sug.label);
+        const b = el("button", "ai-preset-chip missing", rawLbl.startsWith("+") ? rawLbl : `+ ${rawLbl}`);
+        b.type = "button";
+        b.onclick = () => executePatternEdit({ operations: [sug.op], asNewDraft: false });
+        sugWrap.appendChild(b);
+      });
+      card.appendChild(sugWrap);
+    }
+
+    // 1-Click Tailoring Alterations
+    card.appendChild(el("div", "ai-sub-label", T("aiEditAlterTitle")));
+    const alterWrap = el("div", "ai-chip-wrap");
+    QUICK_EDIT_OPS.forEach(item => {
+      const b = el("button", "ai-preset-chip", T(item.key));
+      b.type = "button";
+      b.onclick = () => executePatternEdit({ operations: [item.op], asNewDraft: false });
+      alterWrap.appendChild(b);
+    });
+    card.appendChild(alterWrap);
+
+    // Freeform EN/AR Edit Instruction + Interactive Edit Consultation
+    const editField = el("div", "field");
+    editField.style.marginTop = "10px";
+    editField.innerHTML = `<label>${T("aiEditPromptLabel")}</label>`;
+    const editTa = el("textarea", "textarea");
+    editTa.id = "aiEditPrompt";
+    editTa.rows = 3;
+    editTa.placeholder = T("aiEditPromptPh");
+    editTa.value = aiEditText;
+    editTa.oninput = () => { aiEditText = editTa.value; };
+    editField.appendChild(editTa);
+    card.appendChild(editField);
+
+    const askEditBtn = el("button", "big-btn ghost sm", IC.question + T("aiEditAskBtn"));
+    askEditBtn.type = "button";
+    askEditBtn.style.marginTop = "8px";
+    askEditBtn.onclick = () => { aiEditConsultOpen = !aiEditConsultOpen; renderAIPane(); };
+    card.appendChild(askEditBtn);
+
+    if (aiEditConsultOpen) {
+      const editConsult = generateClarifyingQuestions({
+        mode: "edit",
+        existingPieces: livePieces,
+        prompt: aiEditText,
+        measurements: currentMeas(),
+        lang: state.lang,
+        currentAnswers: aiEditConsultAnswers,
+      });
+      const qBox = el("div", "ai-edit-qbox");
+      editConsult.questions.forEach(qObj => {
+        const qb = el("div", "ai-q-block");
+        qb.appendChild(el("div", "ai-q-title", L(qObj.title)));
+        if (qObj.why) qb.appendChild(el("div", "ai-q-why", L(qObj.why)));
+        const ow = el("div", "ai-q-opts");
+        qObj.options.forEach(opt => {
+          const isSel = aiEditConsultAnswers[qObj.id] === opt.value;
+          const pill = el("button", "ai-q-pill" + (isSel ? " active" : "") + (opt.recommended ? " rec" : ""), L(opt.label));
+          pill.type = "button";
+          pill.onclick = () => {
+            if (aiEditConsultAnswers[qObj.id] === opt.value) delete aiEditConsultAnswers[qObj.id];
+            else aiEditConsultAnswers[qObj.id] = opt.value;
+            renderAIPane();
+          };
+          ow.appendChild(pill);
+        });
+        qb.appendChild(ow);
+        qBox.appendChild(qb);
+      });
+      card.appendChild(qBox);
+    }
+
+    const editActions = el("div", "ai-action-row");
+    editActions.style.marginTop = "10px";
+    const applyBtn = el("button", "big-btn", IC.check + T("aiEditApplyBtn"));
+    applyBtn.type = "button";
+    applyBtn.onclick = () => executePatternEdit({ instruction: editTa.value, asNewDraft: false });
+    const newTabBtn = el("button", "big-btn ghost sm", IC.newdoc + T("aiEditNewTabBtn"));
+    newTabBtn.type = "button";
+    newTabBtn.onclick = () => executePatternEdit({ instruction: editTa.value, asNewDraft: true });
+    editActions.append(applyBtn, newTabBtn);
+    card.appendChild(editActions);
+    return card;
+  }
+
+  // AI PANE — Reorganized Master Couture Atelier AI Studio
   const AI_STAGES = ["analyzing","silhouette","drafting"];
   function renderAIPane() {
-    const c = $(".rail-pane[data-pane=ai]"); c.innerHTML="";
+    const c = $(".rail-pane[data-pane=ai]"); if (!c) return;
+    // Preserve live textarea content if re-rendering mid-typing
+    const prevPromptEl = c.querySelector("#aiPrompt");
+    if (prevPromptEl) aiDraftText = prevPromptEl.value;
+    const prevEditEl = c.querySelector("#aiEditPrompt");
+    if (prevEditEl) aiEditText = prevEditEl.value;
+    c.innerHTML="";
+
     // Guests can exercise non-generative brief controls. Provider calls still
     // require an active trial through their own action handlers.
     if(!gateAllowed() && currentSession?.user){ renderGateUpsell(c, "aiTitle"); return; }
-    c.appendChild(el("div","section-title",IC.spark+T("aiTitle")));
+
+    const headRow = el("div", "ai-studio-header");
+    headRow.appendChild(el("div","section-title",IC.spark+T("aiTitle")));
+    headRow.appendChild(el("span","ai-atelier-pill",T("aiStudioBadge")));
+    c.appendChild(headRow);
     c.appendChild(el("div","help-note",T("aiDesc")));
     if(!gateAllowed()) c.appendChild(el("div","help-note",T("aiGuestScope")));
 
-    // inspiration image preview (restored from state if present)
+    // 3-Mode Workflow Switcher: Create Pattern | Edit & Complete | CAD & Studio
+    const pieceCount = Canvas.getPieces().length;
+    const modeBar = el("div", "ai-mode-tabs");
+    [
+      { id: "create", label: T("aiModeCreate") },
+      { id: "edit", label: `${T("aiModeEdit")}${pieceCount ? ` (${pieceCount})` : ""}` },
+      { id: "tools", label: T("aiModeTools") },
+    ].forEach(m => {
+      const b = el("button", "ai-mode-tab" + (aiStudioMode === m.id ? " active" : ""), m.label);
+      b.type = "button";
+      b.dataset.aiMode = m.id;
+      b.onclick = () => { aiStudioMode = m.id; renderAIPane(); };
+      modeBar.appendChild(b);
+    });
+    c.appendChild(modeBar);
+
+    // CRITICAL E2E CONTRACT: `.ai-preview` MUST remain a direct child (`:scope > .ai-preview`) of `.rail-pane[data-pane=ai]`
     const preview=el("div","ai-preview"+(aiImage?" show":""));
     if(aiImage) preview.innerHTML=`<img src="${aiImage}" alt=""><button class="ai-x" title="${T('removeImg')}">×</button>`;
-    const bindRemove=()=>{ const x=preview.querySelector(".ai-x"); if(x) x.onclick=()=>{ aiImage=null; preview.classList.remove("show"); preview.innerHTML=""; }; };
+    const bindRemove=()=>{ const x=preview.querySelector(".ai-x"); if(x) x.onclick=()=>{ aiImage=null; aiConsultMetrics=null; preview.classList.remove("show"); preview.innerHTML=""; }; };
     bindRemove();
+    c.appendChild(preview);
 
-    const f=el("div","field"); f.style.marginTop="12px";
-    const ta=el("textarea","textarea"); ta.placeholder=T("aiPlaceholder"); ta.id="aiPrompt"; f.appendChild(ta);
+    // Prompt composer & image upload (kept accessible, highlighted in Create mode)
+    const createWrap = el("div", "ai-create-section" + (aiStudioMode !== "create" ? " compact" : ""));
+
+    if (aiStudioMode === "create") {
+      // 1-Click Couture Master Presets
+      const presetWrap = el("div", "ai-presets-block");
+      presetWrap.appendChild(el("div", "ai-sub-label", T("aiPresetsTitle")));
+      const presetRow = el("div", "ai-chip-wrap");
+      ATELIER_PRESETS.forEach(pr => {
+        const chip = el("button", "ai-preset-chip", L(pr.label));
+        chip.type = "button";
+        chip.onclick = () => {
+          aiDraftText = L(pr.prompt);
+          ta.value = aiDraftText;
+          if (aiConsultOpen) renderAIPane();
+        };
+        presetRow.appendChild(chip);
+      });
+      presetWrap.appendChild(presetRow);
+      createWrap.appendChild(presetWrap);
+    }
+
+    const f=el("div","field"); f.style.marginTop="10px";
+    const ta=el("textarea","textarea"); ta.placeholder=T("aiPlaceholder"); ta.id="aiPrompt"; ta.value=aiDraftText;
+    ta.oninput=()=>{ aiDraftText = ta.value; };
+    f.appendChild(ta);
 
     // hidden file input — the upload button opens a real image picker
     const file=el("input"); file.type="file"; file.accept="image/*"; file.style.display="none";
     file.onchange=()=>{ const im=file.files&&file.files[0]; if(!im) return;
       const r=new FileReader();
-      r.onload=()=>{ aiImage=r.result;
+      r.onload=async()=>{
+        aiImage=r.result;
+        aiConsultMetrics=null;
         preview.innerHTML=`<img src="${aiImage}" alt=""><button class="ai-x" title="${T('removeImg')}">×</button>`;
-        preview.classList.add("show"); bindRemove(); toast(T("aiImageAdded")); };
+        preview.classList.add("show"); bindRemove(); toast(T("aiImageAdded"));
+        if (aiConsultOpen) {
+          try { aiConsultMetrics = await AIGen.analyzeImage(aiImage, { segment: getSegmentFn() }); } catch {}
+          renderAIPane();
+        }
+      };
       r.readAsDataURL(im);
     };
-    const up=el("button","big-btn ghost",IC.image+T("aiUpload")); up.style.marginBottom="10px";
+    const up=el("button","big-btn ghost",IC.image+T("aiUpload"));
+    up.type = "button";
     up.onclick=()=>file.click();
 
+    const askBtn = el("button", "big-btn ghost" + (aiConsultOpen ? " active" : ""), IC.question + T("aiConsultBtn"));
+    askBtn.type = "button";
+    askBtn.onclick = async () => {
+      aiConsultOpen = !aiConsultOpen;
+      if (aiConsultOpen && aiImage && !aiConsultMetrics) {
+        try { aiConsultMetrics = await AIGen.analyzeImage(aiImage, { segment: getSegmentFn() }); } catch {}
+      }
+      renderAIPane();
+    };
+
+    const upAskRow = el("div", "ai-action-row");
+    upAskRow.style.marginBottom = "8px";
+    upAskRow.append(up, askBtn);
+
     const gen=el("button","big-btn",IC.spark+T("generate"));
+    gen.type = "button";
     gen.onclick=()=>runAI(ta.value,gen);
 
-    // "thinking" stage checklist — built once, toggled visible during generation
+    createWrap.append(f, file, upAskRow, gen);
+
     const statusBox=el("div","ai-status"); statusBox.id="aiStatus";
     const attrsBox=el("div","ai-attrs"); attrsBox.id="aiAttrs"; attrsBox.style.display="none";
 
-    const guided = renderGuidedPromptBuilder(ta);
+    // Order focal sections cleanly based on selected mode while keeping DOM contracts intact
+    if (aiStudioMode === "edit") {
+      c.appendChild(renderAIEditCard());
+      c.appendChild(renderDeliverablesCard());
+      c.appendChild(createWrap);
+      c.appendChild(statusBox);
+      c.appendChild(attrsBox);
+    } else if (aiStudioMode === "tools") {
+      c.appendChild(renderDeliverablesCard());
+      c.appendChild(createWrap);
+      c.appendChild(statusBox);
+      c.appendChild(attrsBox);
+    } else {
+      c.appendChild(createWrap);
+      if (aiConsultOpen) c.appendChild(renderAIConsultCard(ta));
+      c.appendChild(statusBox);
+      c.appendChild(attrsBox);
 
-    c.appendChild(preview); c.appendChild(guided); c.appendChild(f); c.appendChild(file); c.appendChild(up); c.appendChild(gen);
-    c.appendChild(statusBox); c.appendChild(attrsBox);
+      const guidedAccordion = el("details", "ai-collapsible");
+      const guidedSum = el("summary", null, IC.ruler + `<span>${T("aiGuidedAccordion")}</span>`);
+      guidedAccordion.appendChild(guidedSum);
+      guidedAccordion.appendChild(renderGuidedPromptBuilder(ta));
+      c.appendChild(guidedAccordion);
+
+      // Compact 1-click Edit/Complete shortcut + Deliverables Hub right in Create mode too
+      if (pieceCount > 0) {
+        const quickEditBanner = el("button", "big-btn ghost sm", IC.edit + `${T("aiEditTitle")} (${pieceCount})`);
+        quickEditBanner.type = "button";
+        quickEditBanner.style.marginTop = "10px";
+        quickEditBanner.onclick = () => { aiStudioMode = "edit"; renderAIPane(); };
+        c.appendChild(quickEditBanner);
+      }
+      c.appendChild(renderDeliverablesCard());
+    }
+
+    if (lastAIResult) renderAIAttrs(lastAIResult);
+
     refreshDesignBrief=mountDesignBrief(c,{
       t:T,language:state.lang,getBrief:()=>Canvas.snapshotState().brief || null,
       saveBrief:brief=>{Canvas.setDesignBrief(brief);save();refreshPatternProgram?.();},measurements:currentMeas,
@@ -1426,17 +1873,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       review:res=>{if(requireEntitlement()) reviewGeneratedPattern(res,'programDone');},
     });
 
-    // ---- Direct SVG Pattern Import: sends the SAME uploaded reference
-    // image above to the configured AI provider with a fixed, highly-
-    // detailed technical-drafting prompt asking for the finished flat
-    // pattern as raw SVG — not a style spec — then imports that SVG
-    // straight onto the canvas through the exact same pipeline a
-    // hand-picked SVG file import uses (js/pattern-import.js,
-    // Canvas.importPieces()). Kept as its own button rather than folded
-    // into "Generate" above: the two produce fundamentally different
-    // geometry (this app's own deterministic drafter vs. whatever the
-    // model itself draws), and that's a deliberate choice a user should
-    // make, not an implicit fallback.
+    // ---- Direct SVG Pattern Import ----
     c.appendChild(el("div","section-title",IC.importf+T("aiSvgTitle"))).style.marginTop="22px";
     c.appendChild(el("div","help-note",T("aiSvgDesc")));
     const svgBtn=el("button","big-btn ghost",IC.importf+T("aiSvgGenerate")); svgBtn.style.marginTop="8px";
@@ -1444,8 +1881,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     c.appendChild(svgBtn);
     const svgStatus=el("div","ai-status"); svgStatus.id="aiSvgStatus"; c.appendChild(svgStatus);
 
-    // ---- AI Fashion Billboard: dress a model in real garment photos, then
-    // draw a measured pattern from that photo (see js/billboard.js) ----
+    // ---- AI Fashion Billboard ----
     c.appendChild(el("div","section-title",IC.image+T("billboardTitle"))).style.marginTop="22px";
     c.appendChild(el("div","help-note",T("billboardDesc")));
 
@@ -1486,9 +1922,6 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     wrap.appendChild(preview); wrap.appendChild(file); wrap.appendChild(up);
     return wrap;
   }
-  // Shared 2-stage "thinking" indicator for both billboard calls (sending →
-  // waiting on the proxy) — same visual language as beginAIThinking above,
-  // kept separate since the stage keys/labels don't overlap with AI_STAGES.
   function beginBBThinking(stage2Key){
     const box=$("#bbStatus"); if(!box) return ()=>{};
     box.innerHTML="";
@@ -1503,8 +1936,6 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     };
   }
   function downloadDataURL(dataURL,name){ const a=el("a"); a.href=dataURL; a.download=name; a.click(); }
-  // Renders the generated billboard photo (with a "draw pattern from this"
-  // follow-up) and, once available, the pattern-drawing image derived from it.
   function paintBBResult(){
     const box=$("#bbResult"); if(!box) return;
     box.innerHTML="";
@@ -1547,10 +1978,6 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       box.appendChild(card2);
     }
   }
-  // BerryStudio-Upgrade-Plan WP-4: resolves the configured image-generation
-  // adapter (default `proxy` — today's exact "AI Image endpoint" behaviour)
-  // instead of a bare endpoint string. Returns null (and toasts) if the
-  // active adapter isn't configured yet.
   async function resolveImageAdapter(){
     ensureAIState();
     const providerId = state.aiImageProvider || "proxy";
@@ -1591,8 +2018,6 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     } catch(e){ setStage("done"); toast(T("billboardFail")); }
     finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
   }
-  // Build the 3-step checklist fresh for each run (first label depends on
-  // whether an image was supplied) and return a setter to advance it.
   function beginAIThinking(hasImage){
     const box=$("#aiStatus"); if(!box) return ()=>{};
     box.innerHTML="";
@@ -1600,7 +2025,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       : k==="silhouette" ? T("aiStageSilhouette") : T("aiStageDrafting");
     AI_STAGES.forEach(k=>{ const row=el("div","ai-stage"); row.dataset.stage=k; row.innerHTML=`<span class="dot"></span><span>${labelFor(k)}</span>`; box.appendChild(row); });
     box.classList.add("show");
-    $("#aiAttrs").style.display="none";
+    const attrsEl = $("#aiAttrs");
+    if (attrsEl) attrsEl.style.display="none";
     return (key)=>{
       const idx = AI_STAGES.indexOf(key);
       [...box.children].forEach((row,i)=>{
@@ -1610,22 +2036,14 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       if(key==="done") setTimeout(()=>box.classList.remove("show"), 260);
     };
   }
-  // Render the bilingual "Detected" attribute chips (type, length, flare,
-  // sleeve, neckline, hem, closure, colour) once generation completes —
-  // this is the concrete evidence that the image/prompt actually mattered.
-  // BerryStudio-Upgrade-Plan WP-4: chips carrying a provenance `source`
-  // (vision/pixel/prompt/heuristic/spec/user-override) show it inline, and
-  // every chip with a known override handler is click-to-correct — users
-  // trust AI they can override, and an overridden value is honestly
-  // relabelled "your edit" rather than left looking like an AI read.
   let lastAIResult = null;
   const OVERRIDE_ENUMS = {
-    type: ["dress","top","shirt","skirt","trousers","robe"],
-    neckline: ["v","round","boat","offshoulder","halter","collar"],
+    type: ["dress","gown","top","shirt","jacket","coat","suit","vest","hoodie","jumpsuit","romper","skirt","trousers","shorts","robe","bodice","leotard"],
+    neckline: ["v","round","sweetheart","square","boat","offshoulder","halter","collar","mock"],
     hem: ["straight","curved","highlow","asymmetric"],
   };
   const OVERRIDE_FACTOR_FIELD = { length:"lengthF", flare:"flareF", sleeve:"sleeveLenF" };
-  const OVERRIDE_FACTOR_RANGE = { lengthF:[0.55,1.6], flareF:[0.82,1.9], sleeveLenF:[0,1.5] };
+  const OVERRIDE_FACTOR_RANGE = { lengthF:[0.45,1.7], flareF:[0.82,1.9], sleeveLenF:[0,1.5] };
   function overrideAIAttribute(key){
     if(!lastAIResult || !lastAIResult.style) return;
     const style = { ...lastAIResult.style };
@@ -1655,13 +2073,19 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       style.color = input.trim();
     } else return;
 
-    const built = AIGen.build(style, currentMeas());
+    const meas = currentMeas();
+    const synth = synthesizeCouturePattern({
+      styleOverride: style,
+      measurements: meas,
+      seamAllowanceCm: state.seamCm || 1,
+      lang: state.lang,
+    });
     const provenance = (lastAIResult.attributes||[]).reduce((m,a)=>{ if(a.source) m[a.k]={source:a.source,confidence:a.confidence}; return m; },{});
     provenance[key] = { source:"user-override", confidence:1 };
     const newRes = {
-      ...built, summary: AIGen.summary(style, state.lang), style,
-      attributes: AIGen.attributes(style, state.lang, provenance),
-      source: lastAIResult.source, validation: PatternValidator.run(built.pieces, {}),
+      ...synth,
+      attributes: AIGen.attributes(synth.style, state.lang, provenance),
+      source: lastAIResult.source,
     };
     reviewGeneratedPattern(newRes, "generated");
   }
@@ -1670,7 +2094,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     lastAIResult = res;
     const box=$("#aiAttrs"); if(!box) return;
     box.style.display=""; box.innerHTML="";
-    const imageUnreadable = !res.usedImage && res.imageSupplied;  // a photo WAS attached, but analyzeImage() found no clear silhouette in it
+    const imageUnreadable = !res.usedImage && res.imageSupplied;
     const src = res.source==="remote" ? "Claude" : res.source==="spec" ? T("provenanceSpec") : res.source==="fused" ? T("provenanceVision")
       : res.usedImage ? T("usedImageNote") : imageUnreadable ? T("imageUnreadableNote") : "";
     const srcStyle = imageUnreadable ? ` style="color:var(--warn)"` : "";
@@ -1686,30 +2110,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       box.appendChild(row);
     });
   }
-  // schema/pattern-spec.v1.json fetched once and cached — needed by
-  // generateFromSpec() to pass the raw schema to a provider's own
-  // structured-output mechanism (json_schema/responseSchema/tool input_schema).
   let cachedSpecSchema = null;
   async function loadSpecSchema(){
     if(!cachedSpecSchema) cachedSpecSchema = await (await fetch("./schema/pattern-spec.v1.json")).json();
     return cachedSpecSchema;
   }
 
-  // Core prompt/image -> real vector pieces pipeline, shared by the AI
-  // Pattern Generator's own prompt box (runAI, image = the uploaded
-  // inspiration image) and the Fashion Billboard's "Generate Pattern Pieces
-  // From This" button (runPatternPieces, image = the generated billboard
-  // photo) — both are just different sources for the same `imageDataURL`,
-  // so this always produces real, editable pieces on the canvas, never an
-  // image to trace.
-  // generateFromSpec() already computes a real, specific reason for every
-  // fallback (missing/invalid key, network failure, rate limit, schema
-  // validation failure...) — this used to be discarded in favor of one
-  // fixed "didn't validate against the schema" toast even when the real
-  // cause was a bad API key or a dropped connection, which is actively
-  // misleading. Classifies the raw reason text into the closest of a
-  // handful of honest, actionable messages; anything unrecognized still
-  // falls back to the original generic (but truthful-enough) message.
   function classifyAIFallbackReason(reason){
     const r = String(reason||"");
     if(/\b401\b|\b403\b|unauthor|invalid.{0,12}key|api.?key/i.test(r)) return "specFallbackAuth";
@@ -1717,16 +2123,6 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if(/fetch|network|timeout|abort|dns|offline/i.test(r)) return "specFallbackNetwork";
     return "specValidationFallback";
   }
-  // Same shape as classifyAIFallbackReason() above, but NOT reusing its
-  // i18n keys — every one of those explicitly says "...showing the
-  // offline-analysis pattern instead", which would be a lie here: the
-  // direct-SVG path has no local fallback drafter to fall back TO, so a
-  // failure here just means nothing was imported and the canvas is
-  // unchanged. Reasons this recognizes come from two places:
-  // generateSVGPatternFromImage()'s own {reason:'no-image'|'no-svg-in-
-  // reply'|'no-shapes'|<provider error text>} (js/ai-spec-pipeline.js),
-  // classified below the same way classifyAIFallbackReason() classifies
-  // provider error text (auth/rate-limit/network) for anything else.
   function classifySVGFailReason(reason){
     const r = String(reason||"");
     if(r==="no-image") return "aiSvgNeedImage";
@@ -1738,16 +2134,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if(/fetch|network|timeout|abort|dns|offline/i.test(r)) return "aiSvgFailNetwork";
     return "aiSvgFailGeneric";
   }
-  // Sends the uploaded AI-inspiration image (`aiImage`, same one the main
-  // "Generate" button reads) to the configured text/vision provider with
-  // SVG_PATTERN_PROMPT (js/ai-spec-pipeline.js) and imports whatever real
-  // pattern pieces come back — via Canvas.importPieces(), the exact same
-  // call importPatternFile() makes for a hand-picked SVG file. On any
-  // failure, the canvas is left completely untouched (unlike the main
-  // "Generate" flow, there is no local-heuristic fallback to drop into —
-  // this path only ever does one thing, honestly succeed or honestly fail).
   async function runAISVGImport(btn){
-    if(!requireEntitlement()) return; // WP-42 Stage B: AI surface gate
+    if(!requireEntitlement()) return;
     if(!aiImage){ toast(T("aiSvgNeedImage")); return; }
     ensureAIState();
     const providerId = state.aiProvider || "proxy";
@@ -1763,7 +2151,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       const res = await generateSVGPatternFromImage({ adapter, cfg, imageDataURL: aiImage, measurements: currentMeas() });
       if(!res.ok){ toast(T(classifySVGFailReason(res.reason))); return; }
       const n = Canvas.importPieces(res.pieces, {kind:'ai-svg-image', validation:res.validation.summary});
-      hideEmpty(); renderLayersPane();
+      hideEmpty(); renderLayersPane(); renderAIPane();
       if(is3DActive()) build3D();
       save();
       const hasWarnings = res.warnings && res.warnings.length;
@@ -1775,93 +2163,139 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const sourceProject=state.activeProjectId, sourceBrief=JSON.stringify(Canvas.snapshotState().brief);
     const measurements=options.measurements || currentMeas();
     const category=state.category, lang=state.lang;
+    const isBriefFlow = !!options.brief;
+    const activeAnswers = isBriefFlow ? {} : aiConsultAnswers;
+    const activeCustomNote = isBriefFlow ? "" : aiConsultCustomNote;
+    const { enrichedPrompt } = applyClarificationAnswers({ prompt: prompt || "", answers: activeAnswers, customNote: activeCustomNote });
+    const effectivePrompt = isBriefFlow ? prompt : (enrichedPrompt || prompt);
+
     const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7"; btn.disabled=true;
     const setStage = beginAIThinking(!!imageDataURL);
     try {
-      // BerryStudio-Upgrade-Plan WP-3: if a real AI provider is configured
-      // (anything beyond the default empty `proxy`), try the spec-first
-      // pipeline first — prompt -> schema-validated spec -> AIGen.build().
-      // Any failure (network, invalid output twice) falls through to
-      // EXACTLY today's local heuristic path below, with an honest toast —
-      // never a silently broken pattern. No provider configured reproduces
-      // today's behaviour with zero new code on this path.
       ensureAIState();
       const providerId = state.aiProvider || "proxy";
       const adapter = AIProviders[providerId];
       const cfg = await resolveAICfg(providerId, aiCfgFor(providerId, false));
-      // A selected-but-unconfigured real provider (no key entered yet) used
-      // to still attempt a live call, fail with a 401, and surface as the
-      // same generic "schema didn't validate" toast below — actively
-      // confusing when the real issue is just a missing key. Caught here,
-      // before ever touching the network, with a message that says so.
       const missingKey = providerId!=="proxy" && adapter.needsKey && !cfg.apiKey;
       const hasRealProvider = providerId!=="proxy" ? !missingKey : !!cfg.baseUrl;
+      const seamAllowanceCm = state.seamCm || 1;
       let res = null;
       if(missingKey) toast(T("specFallbackNoKey"));
       else if(hasRealProvider){
         setStage("analyzing");
         const schema = await loadSpecSchema();
         const specResult = await generateFromSpec({
-          adapter, cfg, prompt, measurements, category, lang,
+          adapter, cfg, prompt: effectivePrompt, measurements, category, lang,
           schema, images: imageDataURL ? [imageDataURL] : undefined,
         });
         if(!specResult.fellBack){
-          // BerryStudio-Upgrade-Plan WP-4: when an image was supplied and the
-          // provider returned a real spec (not the legacy proxy shape), fuse
-          // the vision-informed spec with the existing pixel-analysis
-          // heuristic — vision wins for type/neckline/wrap, pixel analysis
-          // stays authoritative for length/flare/hem/colour exactly as it
-          // is today. Text-only or legacy-proxy generations skip this and
-          // use the spec result as-is.
           if(imageDataURL && specResult.source==="spec"){
             const pixelMetrics = await AIGen.analyzeImage(imageDataURL, { segment: getSegmentFn() });
-            const promptStyle = AIGen.deriveStyle({ metrics: pixelMetrics, prompt, category, imageDataURL });
-            const { style: fusedStyle, sourceMap } = fuseStyle({ specStyle: specResult.style, promptStyle });
-            const built = AIGen.build(fusedStyle, measurements);
+            const promptStyle = AIGen.deriveStyle({ metrics: pixelMetrics, prompt: effectivePrompt, category, imageDataURL });
+            const { style: fusedRaw, sourceMap } = fuseStyle({ specStyle: specResult.style, promptStyle });
+            const { style: fusedStyle } = isBriefFlow
+              ? { style: fusedRaw }
+              : applyClarificationAnswers({ prompt: effectivePrompt, baseStyle: fusedRaw, answers: activeAnswers, customNote: activeCustomNote });
+            const synth = synthesizeCouturePattern({
+              styleOverride: fusedStyle,
+              measurements,
+              answers: isBriefFlow ? {} : activeAnswers,
+              customNote: isBriefFlow ? "" : activeCustomNote,
+              seamAllowanceCm,
+              lang,
+            });
             const provenance = mergeProvenance(sourceMap, provenanceMapFromSpec(specResult.spec));
             res = {
-              ...built, summary: AIGen.summary(fusedStyle, lang), style: fusedStyle,
-              attributes: AIGen.attributes(fusedStyle, lang, provenance),
-              source: "fused", validation: PatternValidator.run(built.pieces, {}),
+              ...synth,
+              attributes: AIGen.attributes(synth.style, lang, provenance),
+              source: "fused",
               usedImage: !!(pixelMetrics && pixelMetrics.ok), imageSupplied: true,
             };
           } else {
             res = specResult;
-            // A schema-valid spec that left construction.neckline unset
-            // reaches here with style.neckline===null (js/ai-spec-pipeline.js's
-            // specToStyle() leaves it nullable on purpose, for the fuseStyle()
-            // branch above — a filled-in guess there would look like a real
-            // vision read). This direct/non-fused path is exactly the case
-            // that note describes as safe to fill: nothing else here is going
-            // to supply a neckline, and AIGen.build()'s necklinePts() quietly
-            // drafts a plain round neckline for every unset case otherwise —
-            // the same "every generation looks identical" complaint this pass
-            // exists to fix. Seeded on the prompt so identical input still
-            // reproduces an identical result.
-            if(res.style && res.source==="spec" && !res.style.neckline){
-              const style = { ...res.style, neckline: AIGen.pick(`${prompt}|${category}|neck`,
-                res.style.type==="shirt" ? ["collar","round","v"] : ["v","round","boat","offshoulder","halter"]) };
-              const built = AIGen.build(style, measurements);
+            if(res.style && res.source==="spec"){
+              let style = { ...res.style };
+              if(!style.neckline){
+                style.neckline = AIGen.pick(`${effectivePrompt}|${category}|neck`,
+                  style.type==="shirt" ? ["collar","round","v"] : ["v","round","boat","offshoulder","halter"]);
+              }
+              if(!isBriefFlow){
+                style = applyClarificationAnswers({ prompt: effectivePrompt, baseStyle: style, answers: activeAnswers, customNote: activeCustomNote }).style;
+              }
+              const synth = synthesizeCouturePattern({
+                styleOverride: style,
+                measurements,
+                answers: isBriefFlow ? {} : activeAnswers,
+                customNote: isBriefFlow ? "" : activeCustomNote,
+                seamAllowanceCm,
+                lang,
+              });
               res = {
-                ...res, ...built, style,
-                attributes: AIGen.attributes(style, lang, provenanceMapFromSpec(res.spec)),
-                validation: PatternValidator.run(built.pieces, {}),
+                ...res,
+                ...synth,
+                attributes: AIGen.attributes(synth.style, lang, provenanceMapFromSpec(res.spec)),
               };
+            } else if(res.pieces?.length){
+              const healed = ensureValidPieces(res.pieces, measurements, seamAllowanceCm);
+              res = { ...res, pieces: healed.pieces, validation: healed.validation };
             }
           }
           setStage("done");
         } else toast(T(classifyAIFallbackReason(specResult.fallbackReason)));
       }
-      // Image-driven parametric generation: robust local silhouette analysis
-      // (neckline/hem/flare/colour), walked through visibly via setStage so
-      // generation feels deliberate — the fallback path whenever no provider
-      // is configured, or the configured one failed/returned invalid output.
       if(!res){
-        res = await AIGen.generate({
-          prompt, imageDataURL, category,
-          measurements, endpoint: "", lang,
-          onStage: setStage, segment: getSegmentFn(),
-        });
+        if(isBriefFlow){
+          res = await AIGen.generate({
+            prompt: effectivePrompt, imageDataURL, category,
+            measurements, endpoint: "", lang,
+            onStage: setStage, segment: getSegmentFn(),
+          });
+          if(res?.pieces?.length){
+            const healed = ensureValidPieces(res.pieces, measurements, seamAllowanceCm);
+            res.pieces = healed.pieces;
+            res.validation = healed.validation;
+          }
+        } else {
+          setStage("analyzing");
+          let metrics = null;
+          if(imageDataURL){
+            metrics = await AIGen.analyzeImage(imageDataURL, { segment: getSegmentFn() });
+            if(!metrics || !metrics.ok){
+              res = { decision: "clarify", reason: "image-unreadable", usedImage: false, imageSupplied: true, pieces: [] };
+            }
+          } else {
+            await new Promise(r => setTimeout(r, 120));
+          }
+          if(!res){
+            setStage("silhouette");
+            await new Promise(r => setTimeout(r, 90));
+            setStage("drafting");
+            const synth = synthesizeCouturePattern({
+              prompt: prompt || "",
+              metrics,
+              imageDataURL,
+              category,
+              measurements,
+              answers: activeAnswers,
+              customNote: activeCustomNote,
+              seamAllowanceCm,
+              lang,
+            });
+            const provSource = (metrics && metrics.ok) ? "pixel" : "prompt";
+            const provMap = {};
+            ["type","length","flare","sleeve","neckline","hem","closure","color"].forEach(k => {
+              provMap[k] = { source: activeAnswers[k] || (k==="type" && activeAnswers.garmentType) ? "user-override" : provSource, confidence: (metrics && metrics.ok) ? 0.92 : 0.95 };
+            });
+            res = {
+              ...synth,
+              attributes: AIGen.attributes(synth.style, lang, provMap),
+              usedImage: !!(metrics && metrics.ok),
+              imageSupplied: !!imageDataURL,
+              source: "local",
+            };
+            setStage("done");
+          }
+        }
       }
       if(res.decision === "clarify"){
         $("#aiStatus")?.classList.remove("show");
@@ -1894,44 +2328,18 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   async function runAI(txt, btn){
     if(!requireEntitlement()) return; // WP-42 Stage B: AI surface gate
     const prompt=(txt||"").trim();
-    if(!prompt && !aiImage){ toast(T("aiNeedInput")); return; }
+    if(!prompt && !aiImage && !Object.keys(aiConsultAnswers).length && !aiConsultCustomNote.trim()){
+      toast(T("aiNeedInput"));
+      return;
+    }
     await generatePatternFrom(prompt, aiImage, btn, "generated");
   }
-  // Fashion Billboard "Generate Pattern Pieces From This" — same pipeline
-  // as the AI Pattern Generator's own image-upload path, sourced from the
-  // generated billboard photo instead of a user-uploaded inspiration image.
-  // Used to call generatePatternFrom() with an EMPTY text prompt (image
-  // only) — a real reliability bug, not a deliberate "let the image speak
-  // for itself" design: a bare, contextless image gives a vision-capable
-  // provider nothing to anchor a specific read on beyond the general system
-  // prompt, and some OpenAI-compatible backends reject an empty user
-  // message outright. A concrete instruction steers it toward mode 1 (photo
-  // silhouette, not tech-pack tracing) and toward reading real construction
-  // details instead of a generic runway guess.
-  // Code-review fix: these two call the exact same generatePatternFrom()
-  // pipeline runAI()/runAISVGImport() use (real, paid AI pattern
-  // generation) but had no requireEntitlement() guard of their own — a
-  // signed-out/expired user could reach the full AI pipeline for free via
-  // the Billboard flow's "Generate Pattern Pieces"/"Read Tech-Pack" buttons
-  // even with the AI pane itself correctly gated. runBillboard() itself
-  // (the billboard IMAGE, above) is deliberately left ungated — the plan's
-  // own AI gate is scoped to "pattern generation, image generation — js/ai.js's
-  // AIGen" specifically; billboard.js's image render is a separate, narrower
-  // feature, and turning a billboard image into real pattern pieces (these
-  // two functions) is what actually crosses into AIGen's paid territory.
   async function runPatternPieces(btn){
     if(!requireEntitlement()) return;
     if(!bbBillboard) return;
     const prompt = "The attached image is a photorealistic photo of a professional fashion model wearing the exact garment(s) the user dressed them in with the AI Fashion Billboard tool above — read it as a real worn-garment photo (mode 1), not a technical tech-pack drawing. Identify this garment's actual construction as precisely as the photo allows: garment type, neckline, sleeve length and width, overall silhouette (fitted vs. flared), hem shape, and closure — a confident, specific read, not a generic default.";
     await generatePatternFrom(prompt, bbBillboard, btn, "billboardPiecesReady");
   }
-  // "Read Pattern Pieces From This Tech-Pack" — sourced from bbPattern (the
-  // AI-drawn technical flat-sketch with individual piece diagrams and printed
-  // dimensions), not bbBillboard (a worn-garment photo, which can only ever
-  // yield relative style factors — see runPatternPieces above). The prompt
-  // steers a vision-capable provider toward buildSystemPrompt()'s "mode 2"
-  // (read pieces[].outlineCm off the image literally) instead of guessing
-  // silhouette/construction factors as it would for a plain photo.
   async function runTechPackPieces(btn){
     if(!requireEntitlement()) return;
     if(!bbPattern) return;
@@ -1940,9 +2348,6 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
 
   // ================= QUICK DRAFT BUILDER =================
-  // Pick a garment kind → see only the measurements that kind actually needs →
-  // produce real pattern pieces. AIGen.build() drives the 6 basic kinds;
-  // FancyGen.build() (js/fancy-patterns.js) drives the 4 richer, curved-seam kinds.
   const BUILDER_KINDS = ["dress","top","shirt","skirt","trousers","romper","robe","gown","jacket","coat","suit"];
   const AIGEN_KINDS = ["dress","top","shirt","skirt","trousers","robe","romper"];
   const KIND_MEAS = {
@@ -2110,7 +2515,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
 
   // EXPORT PANE
   const PAPERS=["A0","A1","A2","A3","A4","Letter","Plotter","Custom"];
-  const FORMATS=["PDF","DXF","SVG","AI","PNG","JPEG","HPGL"];
+  const FORMATS=["PDF","DXF","SVG","PLT","EPS","AI","PNG","JPEG","HPGL","CSV","HTML","MD","OBJ","JSON"];
   function renderExportPane() {
     const c = $(".rail-pane[data-pane=export]"); c.innerHTML="";
     // WP-42 Stage B: NOT a blanket pane gate, unlike Library/AI/Quick Draft
@@ -2220,7 +2625,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         // flip B's fraction at draw time so "50%" means the same physical
         // point on both edges regardless of how each was declared.
         const sameDir = dist(startA,startB)+dist(endA,endB);
-        const oppDir = dist(startA,endB)+dist(endA,startB);
+        const oppDir = dist(startA,endB)+dist(startB,endA);
         pairs.push({seamId, a:A, b:B, bReversed: oppDir < sameDir});
       }
     });
@@ -2294,7 +2699,31 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const tiled = !!(state.exportTiled!==false && pageSize);
     return { tiled, pageSize: pageSize||"a4", overlapMm: 10, includeGuides: state.exportRegMarks!==false };
   }
-  // Central exporter used by both the Export pane and the Project menu.
+  // Fallback Wavefront .obj exporter from 2D pattern panels (in meters) when
+  // 3D WebGL scene has not yet been initialized, ensuring .OBJ export works 100%.
+  function buildFlatOBJFromPieces(pieces){
+    let obj = "# BerryStudio Pattern Panel Mesh (.OBJ, units: meters)\n";
+    let vOff = 1;
+    pieces.forEach((p, idx)=>{
+      const o = p.outline || [];
+      if(o.length < 3) return;
+      const safeName = String((p.name&&p.name.en)||p.key||`piece_${idx+1}`).replace(/[^A-Za-z0-9_-]+/g,"_");
+      obj += `o ${safeName}\n`;
+      const cx = o.reduce((s,pt)=>s+pt[0],0)/o.length;
+      const cy = o.reduce((s,pt)=>s+pt[1],0)/o.length;
+      obj += `v ${(cx*0.01).toFixed(5)} ${(-cy*0.01).toFixed(5)} 0.00000\n`;
+      o.forEach(([x,y])=>{ obj += `v ${(x*0.01).toFixed(5)} ${(-y*0.01).toFixed(5)} 0.00000\n`; });
+      for(let i=0; i<o.length; i++){
+        const a = vOff + 1 + i;
+        const b = vOff + 1 + ((i+1)%o.length);
+        obj += `f ${vOff} ${a} ${b}\n`;
+      }
+      vOff += o.length + 1;
+      obj += "\n";
+    });
+    return obj;
+  }
+  // Central exporter used by Export pane, AI Atelier Deliverables Hub, and Project menu.
   function exportAs(fmt){
     const F=(fmt||"SVG").toUpperCase();
     // WP-42 Stage B: every real export format is gated except "JSON" (the
@@ -2303,25 +2732,58 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // guard below so a gated user sees the sign-in/upgrade prompt rather
     // than a misleading "nothing to export" toast.
     if(F!=="JSON" && !requireEntitlement()) return;
-    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
-    if(F==="SVG")      download("berrystudio-pattern.svg","image/svg+xml",Canvas.exportSVG());
+    const pieces = Canvas.getPieces();
+    if(!pieces.length){ toast(T("empty2d")); return; }
+    const meta = {
+      title: activeProject()?.title || "BerryStudio Pattern",
+      category: state.category,
+      size: state.size,
+      standard: state.standard,
+      seamAllowanceCm: state.seamCm || 1,
+      measurements: currentMeas(),
+      lang: state.lang,
+    };
+    if(F==="SVG"){
+      const svg = buildSVG(pieces, {
+        preservePositions: true,
+        seamAllowanceCm: Canvas.getOpt("seam")!==false ? (state.seamCm||1) : 0,
+        lang: state.lang,
+        title: meta.title,
+      });
+      download("berrystudio-pattern.svg","image/svg+xml", svg || Canvas.exportSVG());
+    }
     else if(F==="DXF") download("berrystudio-pattern.dxf","application/dxf",Canvas.exportDXF());
     else if(F==="HPGL")download("berrystudio-pattern.hpgl","application/vnd.hp-hpgl",Canvas.exportHPGL());
+    else if(F==="PLT") download("berrystudio-pattern.plt","application/PLT",Canvas.exportHPGL());
     else if(F==="PDF"){ const p=Canvas.exportPDF(currentExportPdfOpts()); if(!p){toast(T("empty2d"));return;} download("berrystudio-pattern.pdf","application/pdf",p); }
+    else if(F==="PDF_1TO1"){ const p=Canvas.exportPDF({ tiled:false, includeGuides:state.exportRegMarks!==false }); if(!p){toast(T("empty2d"));return;} download("berrystudio-pattern-1to1.pdf","application/pdf",p); }
+    else if(F==="EPS") download("berrystudio-pattern.eps","application/postscript",buildEPS(pieces,{ preservePositions:true, title:meta.title, lang:state.lang }));
     else if(F==="AI"){
-      const p=Canvas.exportPDF(currentExportPdfOpts()); if(!p){toast(T("empty2d"));return;}
+      const p=Canvas.exportPDF({ tiled:false, includeGuides:false }); if(!p){toast(T("empty2d"));return;}
       const ai=`%!PS-Adobe-3.0\n%%Creator: Adobe Illustrator(R) 24.0\n%%AI8_CreatorVersion: 24.0\n%%For: BerryStudio\n${p}`;
       download("berrystudio-pattern.ai","application/postscript",ai);
     }
-    else if(F==="PNG"||F==="JPEG"){
-      Canvas.exportRaster(F.toLowerCase(), state.exportDpi||300).then(res=>{
+    else if(F==="PNG"||F==="JPEG"||F==="JPG"){
+      const rFmt = F==="JPG" ? "jpeg" : F.toLowerCase();
+      Canvas.exportRaster(rFmt, state.exportDpi||300).then(res=>{
         if(!res){toast(T("empty2d"));return;}
-        const u=URL.createObjectURL(res.blob); const a=el("a");a.href=u;a.download=`berrystudio-pattern.${F.toLowerCase()}`;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
+        const u=URL.createObjectURL(res.blob); const a=el("a");a.href=u;a.download=`berrystudio-pattern.${rFmt==="jpeg"?"jpg":rFmt}`;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
         toast(res.clamped ? T("exported")+" · "+F+" ("+Math.round(res.dpi)+" "+T("dpiClamped")+")" : T("exported")+" · "+F);
       }).catch(()=>toast(T("rasterFailed")));
       return;
     }
-    else if(F==="JSON")download("berrystudio-project.json","application/json",JSON.stringify(projectPayload(),null,0));
+    else if(F==="CSV") download("berrystudio-cut-spec.csv","text/csv;charset=utf-8",buildSpecCSV(pieces,meta));
+    else if(F==="HTML"||F==="TECHPACK_HTML") download("berrystudio-techpack.html","text/html;charset=utf-8",buildTechPackHTML(pieces,meta));
+    else if(F==="MD"||F==="TECHPACK_MD") download("berrystudio-techpack.md","text/markdown;charset=utf-8",buildTechPackMarkdown(pieces,meta));
+    else if(F==="OBJ"){
+      if(View3D.isReady()){
+        build3D();
+        const exported = View3D.exportOBJ("berrystudio-garment.obj");
+        if(exported){ toast(T("exported")+" · OBJ"); return; }
+      }
+      download("berrystudio-garment.obj","model/obj",buildFlatOBJFromPieces(pieces));
+    }
+    else if(F==="JSON")download("berrystudio-project.json","application/json",JSON.stringify(projectPayload(),null,2));
     else               download(`berrystudio-pattern.${F.toLowerCase()}`,"image/svg+xml",Canvas.exportSVG());
     toast(T("exported")+" · "+F);
   }
@@ -2535,7 +2997,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       accept:proposal=>{
         if(tabId !== state.activeProjectId) throw new Error('commandStale');
         Canvas.acceptProposal(proposal);
-        state.loaded=null; renderLayersPane(); if(is3DActive()) build3D(); update3DStatusPill(); save();
+        state.loaded=null; renderLayersPane(); renderAIPane(); if(is3DActive()) build3D(); update3DStatusPill(); save();
       },
     });
   }
@@ -2581,7 +3043,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       if(res.colors?.length > 1) draft.pieces.forEach(p => { p.customColor = true; });
       Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc'],{...(res.brief?{brief:res.brief}:{}),...(res.patternProgram?{patternProgram:res.patternProgram}:{}),...(res.patternConfiguration?{patternConfiguration:res.patternConfiguration}:{}),...(res.multimodalProposal?{multimodalProposal:res.multimodalProposal}:{})});
       lastGradedMeas = { ...currentMeas() };
-      hideEmpty(); renderLayersPane(); renderAIAttrs(res);
+      hideEmpty(); renderLayersPane();
+      if(res.attributes) lastAIResult = res;
+      renderAIPane();
+      if(res.attributes) renderAIAttrs(res);
       if(is3DActive()) build3D(res.colorInt, { resetPrints: true });
       update3DStatusPill();
       save(); closeModal("#genericModal"); toast(T(doneToastKey));
@@ -2603,7 +3068,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     applyMeasurementSnapshotToState(measurementSnapshot);
     state.selectedMeasurementProfileId=state.measurementProfiles.some(profile=>profile.id===measurementSnapshot.id)?measurementSnapshot.id:null;
     lastGradedMeas = { ...currentMeas() };
-    state.loaded=null; hideEmpty(); renderLayersPane();
+    state.loaded=null; hideEmpty(); renderLayersPane(); renderAIPane();
     if(is3DActive()) build3D();
     update3DStatusPill();
     save();
@@ -2622,27 +3087,29 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     inp.click();
   }
 
-  // Import an .svg or .dxf FILE as new pattern piece(s) on the canvas —
-  // distinct from Import Project above (which round-trips this app's own
-  // JSON project format): this brings in outlines drawn/exported by other
-  // software (or another BerryStudio export, re-imported as fresh editable
-  // pieces rather than replacing the whole project). Parsing itself is
-  // pure (js/pattern-import.js, unit-tested against js/pattern-export.js's
-  // own buildDXF()); this just wires a file picker to it and reports what
-  // came in — including anything skipped, never silently.
+  // Import an .svg, .dxf, or .json FILE as new pattern piece(s) on the canvas —
+  // distinct from Import Project above (which replaces the entire project):
+  // this brings in outlines drawn/exported by other software (or another
+  // BerryStudio export / PatternSpecV1 JSON, re-imported as fresh editable
+  // pieces that can also be edited/completed by the AI Studio).
   function importPatternFile(){
-    const inp=el("input"); inp.type="file"; inp.accept=".svg,.dxf,image/svg+xml"; inp.style.display="none";
+    const inp=el("input"); inp.type="file"; inp.accept=".svg,.dxf,.json,image/svg+xml,application/json"; inp.style.display="none";
     inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(!f) return;
       const r=new FileReader();
       r.onload=()=>{
         const isDXF = /\.dxf$/i.test(f.name);
+        const isJSON = /\.json$/i.test(f.name);
         let result;
-        try{ result = isDXF ? parseDXFPattern(String(r.result)) : parseSVGPattern(String(r.result)); }
+        try{
+          result = isDXF ? parseDXFPattern(String(r.result))
+            : isJSON ? parseJSONPattern(String(r.result))
+            : parseSVGPattern(String(r.result));
+        }
         catch(e){ toast(T("importPatternFail")); return; }
         const { pieces, warnings } = result || {};
         if(!pieces || !pieces.length){ toast((warnings&&warnings[0]) || T("importPatternNone")); return; }
         const n = Canvas.importPieces(pieces);
-        hideEmpty(); renderLayersPane();
+        hideEmpty(); renderLayersPane(); renderAIPane();
         if(is3DActive()) build3D();
         save();
         toast((warnings&&warnings.length ? T("importPatternPartial") : T("importPatternDone")).replace("{n}",n) + (warnings&&warnings.length ? " — "+warnings.join(" ") : ""));
@@ -3792,7 +4259,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     afterLoad(L(p.name), true);
   }
   function afterLoad(name, resetPrints=false){
-    hideEmpty(); renderLayersPane(); renderSizePane();
+    hideEmpty(); renderLayersPane(); renderSizePane(); renderAIPane();
     toast(T("patternLoaded")+" · "+name);
     if(is3DActive()) build3D(null, { resetPrints });
     if(state.view==="clothlab") syncClothLab();

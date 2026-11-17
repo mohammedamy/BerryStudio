@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSVGPattern, parseDXFPattern, bulgeArcPoints, svgArcToCubics, parseSVGTransform, parsePathD } from '../js/pattern-import.js';
-import { buildDXF } from '../js/pattern-export.js';
+import { parseSVGPattern, parseDXFPattern, parseJSONPattern, bulgeArcPoints, svgArcToCubics, parseSVGTransform, parsePathD } from '../js/pattern-import.js';
+import { buildDXF, buildSVG, buildPatternJSON } from '../js/pattern-export.js';
 
 function closeTo(a, b, eps=0.05) { return Math.abs(a-b) < eps; }
 function ptsClose(a, b, eps=0.05) { return a.length===b.length && a.every((p,i)=>closeTo(p[0],b[i][0],eps)&&closeTo(p[1],b[i][1],eps)); }
@@ -154,4 +154,47 @@ test('parseDXFPattern skips an open LWPOLYLINE and reports it', () => {
   const { pieces, warnings } = parseDXFPattern(dxf);
   assert.equal(pieces.length, 0);
   assert.ok(warnings.some(w => /open/i.test(w)));
+});
+
+// ---- buildSVG() -> parseSVGPattern() round-trip & JSON Pattern Import ----
+test('parseSVGPattern round-trips buildSVG() output (skipping seam-allowance, darts, notches, and calibration scale)', () => {
+  const orig = [
+    { key: 'bodice_front', name: { en: 'Front Bodice', ar: 'صدر أمامي' }, role: 'bodice', outline: [[0,0],[24,0],[24,42],[0,42]], darts: [[[10,28],[8,42],[12,42]]], notches: [[24,18]], grain: [[12,6],[12,36]] },
+    { key: 'sleeve', name: { en: 'Sleeve', ar: 'كم' }, role: 'sleeve', outline: [[0,0],[32,0],[26,56],[6,56]], darts: [], notches: [[16,0]], grain: [[16,8],[16,48]] },
+  ];
+  const svg = buildSVG(orig, { seamAllowanceCm: 1.0, includeScaleBar: true, lang: 'en' });
+  const { pieces, warnings } = parseSVGPattern(svg);
+  assert.equal(pieces.length, 2, 'must import only the 2 cut-line pieces, ignoring SA/darts/notches/calibration');
+  assert.equal(pieces[0].name, 'Front Bodice');
+  assert.equal(pieces[1].name, 'Sleeve');
+  assert.equal(warnings.length, 0);
+});
+
+test('parseJSONPattern imports BerryStudio buildPatternJSON() output with full metadata', () => {
+  const orig = [
+    { key: 'skirt_front', name: { en: 'Front Skirt', ar: 'تنورة أمامية' }, role: 'skirt', cutOnFold: true, outline: [[0,0],[26,0],[32,65],[0,65]], darts: [[[10,12],[9,0],[11,0]]], notches: [[29,32]], grain: [[4,8],[4,58]] },
+  ];
+  const json = buildPatternJSON(orig, { title: 'Skirt JSON' });
+  const { pieces, warnings } = parseJSONPattern(json);
+  assert.equal(warnings.length, 0);
+  assert.equal(pieces.length, 1);
+  assert.equal(pieces[0].key, 'skirt_front');
+  assert.equal(pieces[0].role, 'skirt');
+  assert.equal(pieces[0].cutOnFold, true);
+  assert.equal(pieces[0].darts.length, 1);
+});
+
+test('parseJSONPattern imports PatternSpecV1 JSON (pieces[].outlineCm)', () => {
+  const specV1 = JSON.stringify({
+    specVersion: '1.0',
+    garmentType: 'top',
+    pieces: [
+      { id: 'front', name: 'Front Top', role: 'bodice', cutCount: 1, cutOnFold: true, outlineCm: [[0,0],[25,0],[25,52],[0,52]] },
+    ],
+  });
+  const { pieces, warnings } = parseJSONPattern(specV1);
+  assert.equal(warnings.length, 0);
+  assert.equal(pieces.length, 1);
+  assert.equal(pieces[0].outline.length, 4);
+  assert.equal(pieces[0].cutOnFold, true);
 });

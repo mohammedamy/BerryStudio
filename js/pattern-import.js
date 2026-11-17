@@ -347,19 +347,25 @@ function pointsListSubpath(a, closed) {
 // shape element, composing ancestor transforms as it goes; SKIP_TAGS are
 // definitions (never rendered directly) rather than visible content.
 const SKIP_TAGS = new Set(["defs","symbol","clipPath","mask","pattern","metadata","title","desc","style"]);
-function shapeLabel(node) { return node.attrs.id || node.attrs["inkscape:label"] || null; }
-function collectShapes(node, matrix, out, warnings) {
+const SKIP_CLASSES = new Set(["seam-allowance","dart","notch","grainline","calibration-scale"]);
+function shapeLabel(node, fallback = null) {
+  return node.attrs["data-name"] || node.attrs["inkscape:label"] || node.attrs.id || fallback;
+}
+function collectShapes(node, matrix, out, warnings, inheritedLabel = null) {
   const tag = localName(node.tag);
   if (SKIP_TAGS.has(tag)) return;
+  if (node.attrs && (node.attrs.id === "calibration-scale" || (node.attrs.class && node.attrs.class.split(/\s+/).some(c => SKIP_CLASSES.has(c))))) return;
   const m = node.attrs && node.attrs.transform ? matMul(matrix, parseSVGTransform(node.attrs.transform)) : matrix;
-  if (tag === "path" && node.attrs.d) out.push({ type:"path", d:node.attrs.d, matrix:m, label:shapeLabel(node) });
-  else if (tag === "rect") out.push({ type:"rect", attrs:node.attrs, matrix:m, label:shapeLabel(node) });
-  else if (tag === "circle") out.push({ type:"circle", attrs:node.attrs, matrix:m, label:shapeLabel(node) });
-  else if (tag === "ellipse") out.push({ type:"ellipse", attrs:node.attrs, matrix:m, label:shapeLabel(node) });
-  else if (tag === "polygon") out.push({ type:"points", attrs:node.attrs, closed:true, matrix:m, label:shapeLabel(node) });
-  else if (tag === "polyline") out.push({ type:"points", attrs:node.attrs, closed:false, matrix:m, label:shapeLabel(node) });
+  const groupLabel = tag === "g" ? (node.attrs["data-name"] || node.attrs["inkscape:label"] || inheritedLabel) : inheritedLabel;
+  const lbl = shapeLabel(node, groupLabel);
+  if (tag === "path" && node.attrs.d) out.push({ type:"path", d:node.attrs.d, matrix:m, label:lbl });
+  else if (tag === "rect") out.push({ type:"rect", attrs:node.attrs, matrix:m, label:lbl });
+  else if (tag === "circle") out.push({ type:"circle", attrs:node.attrs, matrix:m, label:lbl });
+  else if (tag === "ellipse") out.push({ type:"ellipse", attrs:node.attrs, matrix:m, label:lbl });
+  else if (tag === "polygon") out.push({ type:"points", attrs:node.attrs, closed:true, matrix:m, label:lbl });
+  else if (tag === "polyline") out.push({ type:"points", attrs:node.attrs, closed:false, matrix:m, label:lbl });
   else if (tag === "use") warnings.push("A <use> element was skipped — referenced shapes aren't followed.");
-  (node.children||[]).forEach(c => collectShapes(c, m, out, warnings));
+  (node.children||[]).forEach(c => collectShapes(c, m, out, warnings, groupLabel));
 }
 
 function parseLength(str) {
@@ -613,3 +619,49 @@ function customLayerName(layer) {
   if (!layer || /^\d+$/.test(layer) || layer==="0") return null;
   return layer;
 }
+
+// Import BerryStudio project/pattern JSON or PatternSpecV1 JSON (`outline` or `outlineCm`)
+export function parseJSONPattern(jsonText) {
+  const warnings = [];
+  let data;
+  try {
+    data = JSON.parse(jsonText);
+  } catch {
+    return { pieces: [], warnings: ['Invalid JSON file.'] };
+  }
+  const rawPieces = Array.isArray(data) ? data : (Array.isArray(data?.pieces) ? data.pieces : []);
+  const pieces = [];
+  for (const p of rawPieces) {
+    const pts = Array.isArray(p?.outline) ? p.outline : (Array.isArray(p?.outlineCm) ? p.outlineCm : null);
+    if (!pts || pts.length < 3) {
+      warnings.push('Skipped a piece without a valid closed outline (>= 3 points).');
+      continue;
+    }
+    const validPts = pts
+      .filter((pt) => Array.isArray(pt) && pt.length >= 2 && Number.isFinite(+pt[0]) && Number.isFinite(+pt[1]))
+      .map((pt) => [+pt[0], +pt[1]]);
+    if (validPts.length < 3) {
+      warnings.push('Skipped a piece with non-numeric coordinates.');
+      continue;
+    }
+    const nameStr = typeof p.name === 'string'
+      ? p.name
+      : (p.name?.en || p.label?.en || p.key || p.id || null);
+    pieces.push({
+      key: p.key || p.id || undefined,
+      outline: validPts,
+      curves: Array.isArray(p.curves) ? p.curves : [],
+      darts: Array.isArray(p.darts) ? p.darts : [],
+      notches: Array.isArray(p.notches) ? p.notches : [],
+      grain: Array.isArray(p.grain) ? p.grain : undefined,
+      role: p.role || 'other',
+      cutOnFold: !!p.cutOnFold,
+      bilateral: !!p.bilateral,
+      name: nameStr,
+      nameBilingual: (p.name && typeof p.name === 'object') ? p.name : (p.label && typeof p.label === 'object' ? p.label : null),
+    });
+  }
+  if (!pieces.length && !warnings.length) warnings.push('No pattern pieces found in JSON file.');
+  return { pieces, warnings };
+}
+

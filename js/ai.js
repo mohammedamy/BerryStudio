@@ -41,7 +41,8 @@
    own honesty notes for what the real model behind it can and can't do).
    ============================================================ */
 import { computePleats, computeGatherWidth, computeTucks } from './pleats.js';
-import { cosineSleeveOutline, qBezToCubic } from './pattern-builders.js';
+import { cosineSleeveOutline, qBezToCubic, raglanBodyPanel, raglanSleevePc, yokeCurvePc, bandPc, pocketPatch } from './pattern-builders.js';
+import { FancyGen } from './fancy-patterns.js';
 export const AIGen = (() => {
   const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
   const q = v => v / 4;
@@ -62,8 +63,18 @@ export const AIGen = (() => {
   // curated fashion palette used to add colour variety when no image colour is available
   const SEED_COLORS = ["#b5495b","#2f6d6d","#c98a3e","#5b5ea6","#7a8450","#8a4f7d","#3d6b8a","#a65b3c","#4f7d5c","#8a3d5c"];
 
-  const AR_TYPE = { dress:"الفستان", robe:"العباية", top:"التوب", shirt:"القميص", trousers:"البنطلون", skirt:"التنورة", romper:"الأفرول", leotard:"الليوتارد" };
-  const EN_TYPE = { dress:"Dress", robe:"Robe", top:"Top", shirt:"Shirt", trousers:"Trousers", skirt:"Skirt", romper:"Romper", leotard:"Leotard" };
+  const AR_TYPE = {
+    dress:"الفستان", gown:"فستان السهرة", robe:"العباية", top:"التوب", shirt:"القميص",
+    jacket:"الجاكيت", coat:"المعطف", suit:"البدلة", vest:"الصدرية", hoodie:"الهودي",
+    jumpsuit:"الجمبسوت", trousers:"البنطلون", shorts:"الشورت", skirt:"التنورة",
+    romper:"الأفرول", bodice:"الصدرية الأساسية", leotard:"الليوتارد",
+  };
+  const EN_TYPE = {
+    dress:"Dress", gown:"Evening Gown", robe:"Robe", top:"Top", shirt:"Shirt",
+    jacket:"Jacket", coat:"Coat", suit:"Suit", vest:"Vest", hoodie:"Hoodie",
+    jumpsuit:"Jumpsuit", trousers:"Trousers", shorts:"Shorts", skirt:"Skirt",
+    romper:"Romper", bodice:"Bodice Block", leotard:"Leotard",
+  };
 
   // deterministic string hash → used to pick "unspecified" attributes so
   // the SAME input always reproduces the SAME result, but different
@@ -188,11 +199,23 @@ export const AIGen = (() => {
 
           const chestW = Math.max(1, atF(0.26));
           const waistW = Math.min(atF(0.44), atF(0.50), atF(0.56)) || maxW;
+          const hipW = Math.max(1, atF(0.66), atF(0.72));
           const hemW = Math.max(atF(0.90), atF(0.96), atF(0.99));
 
+          // Detect bifurcated legs in the lower 22% of the silhouette (trousers / shorts / jumpsuits)
+          let splitRows = 0;
+          for (const lf of [0.78, 0.84, 0.90, 0.95]) {
+            const y = clamp(Math.round(minY + gh * lf), 0, H - 1);
+            const legs = scanRuns(y).filter((r) => r.w > maxW * 0.12);
+            if (legs.length >= 2 && (legs[1].l - legs[0].r) > maxW * 0.04) splitRows++;
+          }
+          const hasLegSplit = splitRows >= 2;
+
+          // Detect hood dome at top 8% (narrow centered head-width dome widening steeply into shoulders)
+          const topDomeW = atF(0.04);
+          const hasHoodDome = topDomeW > shoulderW * 0.26 && topDomeW < shoulderW * 0.56 && firstGapFrac == null;
+
           // colour: sample small patches at the torso centre and near the hem
-          // (patch sampling, not a global average) — far less "muddy" than
-          // averaging every foreground pixel including shadow/highlight noise.
           const patch=(fy)=>{ const row=runAtF(fy); if(!row) return null;
             const cx=Math.round(row.cx), cy=clamp(Math.round(minY+gh*fy),0,H-1);
             let r=0,g=0,b=0,n=0;
@@ -211,10 +234,13 @@ export const AIGen = (() => {
             aspect: +(gh/maxW).toFixed(2),
             flare: +(hemW/chestW).toFixed(2),
             waistRatio: +(waistW/Math.max(1,shoulderW)).toFixed(2),
+            hipRatio: +(hipW/Math.max(1,waistW)).toFixed(2),
             sleeveFactor: +(Math.max(0,(shoulderW-chestW)/chestW).toFixed(2)),
+            hasLegSplit,
+            hasHoodDome,
             neckline, hemShape, color, colorHem,
             twoTone: !!(color && colorHem && colorDist(color,colorHem) > 60),
-            segmented, // WP-39: true when a real matte (not the colour-threshold heuristic) was used
+            segmented,
           });
         } catch(e){ resolve({ ok:false }); }
       };
@@ -226,122 +252,173 @@ export const AIGen = (() => {
     if(!pa||!pb) return 0; return Math.hypot(pa[1]-pb[1],pa[2]-pb[2],pa[3]-pb[3]); }
 
   // ---------- prompt + metrics → style parameters ----------
-  function deriveStyle({ metrics, prompt, category, imageDataURL }){
+  function deriveStyle(input, legacyCategory){
+    const opts = typeof input === "string"
+      ? { metrics: null, prompt: input, category: (legacyCategory && legacyCategory !== "en" && legacyCategory !== "ar") ? legacyCategory : "women", imageDataURL: null }
+      : (input || {});
+    const { metrics, prompt, category = "women", imageDataURL } = opts;
     const t = (prompt||"").toLowerCase();
     // "long sleeve" / "كم طويل" should never register as a GARMENT-length
-    // signal — mask sleeve-adjacent long/short mentions before reading length,
-    // so "short dress with long sleeves" doesn't get read as a long dress.
+    // signal — mask sleeve-adjacent long/short mentions before reading length.
     const tLen = t
-      .replace(/\b(long|short)([- ]?sleeve)/g, "$2")
+      .replace(/\b(long|short)([- ]?sleeves?)/g, "$2")
       .replace(/(كم|أكمام)\s*(طويل[ةه]?|قصير[ةه]?)/g, "$1")
       .replace(/(طويل[ةه]?|قصير[ةه]?)\s*(كم|أكمام)/g, "$2");
     const seed = `${prompt||""}|${category}|${imageDataURL?imageDataURL.length:0}`;
-    const s = { type:null, lengthF:1, flareF:1, fitF:1, sleeveLenF:1, sleeveWideF:1, neckline:null, hemShape:null, wrap:false, zip:false, color:null };
-    const hasImg = metrics && metrics.ok;
+    const s = {
+      type:null, lengthF:1, flareF:1, fitF:1, sleeveLenF:1, sleeveWideF:1,
+      neckline:null, hemShape:null, wrap:false, zip:false, button:false,
+      pockets:false, lining:false, belt:false, cuffs:false, yoke:false, hood:false,
+      raglan:false, princessSeams:false, mermaid:false, cargo:false, jogger:false,
+      pleatCount:0, gatherRatio:1, tuckCount:0,
+      sleeveGatherRatio:1, sleevePleatCount:0, sleeveTuckCount:0,
+      color:null,
+    };
+    const hasImg = !!(metrics && metrics.ok);
+    const hasPrompt = t.trim().length > 0;
 
-    // romper/jumpsuit must be checked BEFORE dress/top — a one-piece
-    // bodice+shorts garment would otherwise be misclassified as a plain
-    // dress by the generic /dress|gown|frock/ pattern below.
-    if(/romper|jumpsuit|playsuit|أفرول/.test(t)) s.type="romper";
-    else if(/shirt|بلوز|قميص/.test(t)) s.type="shirt";
-    else if(/abaya|kaftan|caftan|robe|عباية|قفطان/.test(t)) s.type="robe";
-    else if(/thobe|ثوب/.test(t)) s.type="robe";
-    else if(/trouser|pant|jean|بنطلون|سروال/.test(t)) s.type="trousers";
+    // Couture & specialized garment types checked from most-specific to general
+    if(/\bsuit\b|tuxedo|3[- ]?piece|2[- ]?piece suit|sherwani|بدلة|طقم رسمي|توكسيدو|شيرواني/.test(t)) s.type="suit";
+    else if(/\btrench\b|overcoat|duffle|parka|pea[- ]?coat|\bcoat\b|معطف|ترنش|بالطو|مانطو/.test(t)) s.type="coat";
+    else if(/\bblazer\b|\bjacket\b|sport[- ]?coat|bomber|cardigan|بليزر|جاكيت|سترة/.test(t)) s.type="jacket";
+    else if(/\bwaistcoat\b|\bvest\b|\bgilet\b|صدرية رسمية|جيليه/.test(t)) s.type="vest";
+    else if(/\bhoodie\b|sweatshirt|هودي|سويتشيرت/.test(t)) s.type="hoodie";
+    else if(/\bgown\b|ball[- ]?gown|evening dress|bridal|wedding dress|mermaid dress|couture dress|فستان سهرة|فستان زفاف|فستان ملكي|فستان عروس/.test(t)) s.type="gown";
+    else if(/\bjumpsuit\b|boiler[- ]?suit|overalls|جمبسوت|جامبسوت/.test(t)) s.type="jumpsuit";
+    else if(/romper|playsuit|أفرول|سالوبيت/.test(t)) s.type="romper";
+    else if(/leotard|bodysuit|swimsuit|مايوه|ليوتارد|بودي سوت/.test(t)) s.type="leotard";
+    else if(/\bbodice\b|صدّار|صدارة/.test(t)) s.type="bodice";
+    else if(/abaya|kaftan|caftan|thobe|kandura|dishdasha|jalabiya|kimono|robe|عباية|عباءة|قفطان|ثوب|كندورة|جلابية|روب/.test(t)) s.type="robe";
+    else if(/\bshorts\b|bermuda|culotte shorts|شورت|برمودا/.test(t)) s.type="shorts";
+    else if(/trouser|pant|jean|slack|chino|palazzo|culotte|cargo|jogger|sweatpant|بنطلون|سروال|جينز|كارجو|جوغر/.test(t)) s.type="trousers";
     else if(/skirt|تنورة|جيبة/.test(t)) s.type="skirt";
-    else if(/dress|gown|frock|فستان/.test(t)) s.type="dress";
-    else if(/top|blouse|tee|توب/.test(t)) s.type="top";
+    else if(/shirtdress|shirt[- ]?dress|فستان قميص/.test(t)) { s.type="dress"; s.button=true; s.neckline="collar"; s.belt=true; }
+    else if(/shirt|button[- ]?down|oxford|polo|tunic|قميص|تونيك/.test(t)) s.type="shirt";
+    else if(/dress|sundress|frock|pinafore|فستان/.test(t)) s.type="dress";
+    else if(/top|blouse|tee|t-shirt|camisole|tank|crop[- ]?top|peplum|بلوز|توب|تيشيرت/.test(t)) s.type="top";
+
     if(!s.type && hasImg){
       const hf = metrics.heightFrac;
-      s.type = hf<0.5 ? "top" : hf>0.82 ? "robe" : "dress";
+      if (metrics.hasLegSplit) {
+        s.type = hf > 0.72 ? "jumpsuit" : hf < 0.45 ? "shorts" : "trousers";
+      } else if (metrics.hasHoodDome) {
+        s.type = "hoodie";
+      } else {
+        s.type = hf < 0.5 ? "top" : hf > 0.82 ? "robe" : "dress";
+      }
     }
     if(!s.type){
-      // no prompt keyword, no usable image: vary by category + seed instead
-      // of always the same default, so blank/vague requests aren't identical.
       const byCat = { women:["dress","top","skirt"], men:["shirt","trousers","robe"], girls:["dress","skirt","top"], boys:["shirt","trousers"] };
       s.type = pick(seed, byCat[category] || ["dress"]);
     }
 
-    // length — prompt wins (sleeve-adjacent long/short already masked out of tLen);
-    // otherwise image fill-fraction; otherwise seeded variety
-    if(/maxi|floor|full[- ]?length|ankle|long|طويل/.test(tLen)) s.lengthF=1.35;
-    else if(/midi/.test(tLen)) s.lengthF=1.1;
-    else if(/mini|crop|cropped|short|قصير/.test(tLen)) s.lengthF=0.7;
-    // "regular/medium/knee length" — an explicit request for the category's
-    // own standard length, not "unspecified". Previously fell through to the
-    // hasImg/seeded-pick branches below like a blank prompt would, so typing
-    // this literal, common phrase couldn't actually pin the length; the
-    // Guided Prompt Builder's "Medium" length option relies on this too.
+    // length — prompt wins; otherwise image fill-fraction; otherwise sensible default
+    if(/maxi|floor|full[- ]?length|ankle|cathedral|train|\blong\b|طويل/.test(tLen)) s.lengthF=1.35;
+    else if(/midi|tea[- ]?length|calf|ميدي/.test(tLen)) s.lengthF=1.1;
+    else if(/mini|crop|cropped|\bshort\b|above[- ]?knee|قصير/.test(tLen)) s.lengthF=0.7;
     else if(/\b(?:regular|medium|knee)[- ]length\b|طول عادي|طول متوسط/.test(tLen)) s.lengthF=1;
     else if(hasImg && metrics.heightFrac!=null){
       const hf=metrics.heightFrac;
       s.lengthF *= hf>0.85 ? 1.3 : hf>0.65 ? 1.05 : hf<0.42 ? 0.62 : hf<0.55 ? 0.8 : 1;
-    } else {
+    } else if(!hasPrompt){
       s.lengthF = pick(seed+"len",[0.85,1.0,1.1,1.25]);
+    } else {
+      s.lengthF = 1.0;
     }
 
     // flare
-    if(/a[- ]?line|flare|flared|circle|skater|swing|كلوش|واسع/.test(t)) s.flareF=1.5;
-    else if(/pencil|straight|bodycon|column|قلم|مستقيم/.test(t)) s.flareF=0.9;
-    // "regular silhouette" — explicit neutral, distinct from the pencil/
-    // a-line bucket regexes above and from "unspecified" below. Gives the
-    // Guided Prompt Builder's "Full" middle option a deterministic result
-    // instead of falling to seeded pick like an unspecified prompt would.
+    if(/ball[- ]?gown|cathedral|full[- ]?circle|كلوش كامل|ملكي/.test(t)) s.flareF=1.75;
+    else if(/a[- ]?line|flare|flared|circle|skater|swing|palazzo|wide[- ]?leg|culotte|fit[- ]?and[- ]?flare|كلوش|واسع/.test(t)) s.flareF=1.5;
+    else if(/pencil|straight|bodycon|column|slim[- ]?leg|cigarette|skinny|sheath|قلم|مستقيم/.test(t)) s.flareF=0.9;
     else if(/regular silhouette|قصة عادية/.test(t)) s.flareF=1;
     else if(hasImg) s.flareF *= metrics.flare>1.3 ? 1.4 : metrics.flare<0.95 ? 0.85 : 1;
-    else s.flareF = pick(seed+"flare",[0.9,1.0,1.25,1.5]);
+    else if(!hasPrompt) s.flareF = pick(seed+"flare",[0.9,1.0,1.25,1.5]);
+    else s.flareF = s.type === "gown" ? 1.55 : 1.0;
 
     // fit / waist suppression
-    if(/fitted|bodycon|slim|tailored|ضيق|مخصر/.test(t)) s.fitF=0.82;
-    else if(/loose|oversized|relaxed|boxy|فضفاض|واسع/.test(t)) s.fitF=1.16;
-    // "regular fit" — same idea as "regular silhouette" above: an explicit
-    // neutral choice, not a stand-in for "the prompt didn't say".
+    if(/fitted|bodycon|slim|tailored|corset|sculpted|structured|ضيق|مخصر|مفصل/.test(t)) s.fitF=0.82;
+    else if(/loose|oversized|relaxed|boxy|boyfriend|slouchy|فضفاض|واسع/.test(t)) s.fitF=1.16;
     else if(/regular fit|قصة معتادة/.test(t)) s.fitF=1;
     else if(hasImg && metrics.waistRatio < 0.85) s.fitF = 0.85;
-    else if(!hasImg) s.fitF = pick(seed+"fit",[0.88,1.0,1.12]);
+    else if(!hasImg && !hasPrompt) s.fitF = pick(seed+"fit",[0.88,1.0,1.12]);
+    else s.fitF = 1.0;
 
     // sleeves
-    if(/sleeveless|tank|strap|بدون\s*(كم|أكمام)|بلا\s*(كم|أكمام)/.test(t)) s.sleeveLenF=0;
-    else if(/long[- ]?sleeve|full[- ]?sleeve|(كم|أكمام)\s*طويل[ةه]?/.test(t)) s.sleeveLenF=1.3;
-    else if(/3\/4|three[- ]?quarter|٣\/٤|ثلاثة\s*أرباع/.test(t)) s.sleeveLenF=0.8;
-    else if(/short[- ]?sleeve|cap[- ]?sleeve|(كم|أكمام)\s*قصير[ةه]?/.test(t)) s.sleeveLenF=0.45;
+    if(/sleeveless|strapless|tank|camisole|strap\b|halter|\bvest\b|\bgilet\b|بدون\s*(كم|أكمام)|بلا\s*(كم|أكمام)|دون أكمام/.test(t)) s.sleeveLenF=0;
+    else if(/long[- ]?sleeves?|full[- ]?sleeves?|bishop|french[- ]?cuff|(كم|أكمام)\s*طويل[ةه]?/.test(t)) s.sleeveLenF=1.3;
+    else if(/3\/4|three[- ]?quarter|elbow[- ]?sleeve|٣\/٤|ثلاثة\s*أرباع/.test(t)) s.sleeveLenF=0.8;
+    else if(/short[- ]?sleeves?|cap[- ]?sleeves?|flutter|(كم|أكمام)\s*قصير[ةه]?|كاب/.test(t)) s.sleeveLenF=0.45;
     else if(hasImg){
       if(metrics.sleeveFactor > 0.28) s.sleeveLenF = Math.max(s.sleeveLenF, 1.0);
-      else if(metrics.sleeveFactor < 0.07) s.sleeveLenF = 0.55;
-    } else if(!/halter/.test(t)) {
+      else if(metrics.sleeveFactor < 0.04) s.sleeveLenF = 0;
+      else if(metrics.sleeveFactor < 0.09) s.sleeveLenF = 0.55;
+    } else if(["jacket","coat","suit","hoodie","shirt","robe"].includes(s.type)) {
+      s.sleeveLenF = 1.15;
+    } else if(s.type === "vest" || s.type === "skirt" || s.type === "trousers" || s.type === "shorts") {
+      s.sleeveLenF = 0;
+    } else if(!hasPrompt) {
       s.sleeveLenF = pick(seed+"slv",[0,0.45,0.8,1.0,1.3]);
+    } else {
+      s.sleeveLenF = s.type === "gown" ? 0 : 0.65;
     }
-    if(/puff|balloon|bishop|bell|wide sleeve|منفوش|واسع الكم/.test(t)) s.sleeveWideF=1.6;
-    else if(hasImg && metrics.sleeveFactor > 0.28) s.sleeveWideF = 1.4;
-    else if(!hasImg && s.sleeveLenF>0.05) s.sleeveWideF = pick(seed+"slvw",[1.0,1.0,1.15,1.5]);
 
-    // neckline — prompt > image > seeded variety (only for garments with a neckline)
-    if(/halter/.test(t)) s.neckline="halter";
-    else if(/off[- ]?shoulder/.test(t)) s.neckline="offshoulder";
-    else if(/v[- ]?neck|فتحة V/.test(t)) s.neckline="v";
-    else if(/boat neck|square neck/.test(t)) s.neckline="boat";
-    else if(/round neck|crew neck/.test(t)) s.neckline="round";
-    else if(/mock[- ]?neck|stand[- ]?collar|turtleneck|ياقة قائمة|ياقة عالية/.test(t)) s.neckline="mock";
-    else if(/collar|ياقة/.test(t)) s.neckline="collar";
+    if(/puff|balloon|bishop|bell|lantern|juliet|butterfly|kimono sleeve|wide sleeve|منفوش|واسع الكم|جرس/.test(t)) {
+      s.sleeveWideF = 1.6;
+      if (/puff|balloon|juliet|منفوش/.test(t)) s.sleeveGatherRatio = 1.55;
+    } else if(hasImg && metrics.sleeveFactor > 0.28) {
+      s.sleeveWideF = 1.4;
+    } else if(!hasImg && !hasPrompt && s.sleeveLenF>0.05) {
+      s.sleeveWideF = pick(seed+"slvw",[1.0,1.0,1.15,1.5]);
+    }
+
+    // neckline
+    if(/sweetheart|قلب/.test(t)) s.neckline="sweetheart";
+    else if(/square[- ]?neck|مربع/.test(t)) s.neckline="square";
+    else if(/halter|رسن|رقبة معلقة/.test(t)) s.neckline="halter";
+    else if(/off[- ]?shoulder|bardot|strapless|كتف مكشوف|بدون حمالات/.test(t)) s.neckline="offshoulder";
+    else if(/v[- ]?neck|surplice|plunging|فتحة v|رقبة v/i.test(t)) s.neckline="v";
+    else if(/boat[- ]?neck|bateau|sabrina|قارب/.test(t)) s.neckline="boat";
+    else if(/mock[- ]?neck|stand[- ]?collar|mandarin|nehru|turtleneck|funnel|thobe|kandura|ياقة قائمة|ياقة صينية|ياقة عالية/.test(t)) s.neckline="mock";
+    else if(/collar|lapel|notch|shawl|peter[- ]?pan|button[- ]?down|oxford|ياقة/.test(t)) s.neckline="collar";
+    else if(/round[- ]?neck|crew[- ]?neck|scoop|jewel|دائري|مدور/.test(t)) s.neckline="round";
     else if(hasImg && metrics.neckline) s.neckline = metrics.neckline;
-    else {
+    else if(s.type==="shirt" || s.type==="jacket" || s.type==="coat" || s.type==="suit") s.neckline = "collar";
+    else if(s.type==="gown") s.neckline = "sweetheart";
+    else if(!hasPrompt) {
       const opts = (s.type==="shirt") ? ["collar","round","v"] : ["v","round","boat","offshoulder","halter"];
       s.neckline = pick(seed+"neck", opts);
+    } else {
+      s.neckline = "round";
     }
 
-    // hem shape — prompt > image > seeded variety
-    if(/high[- ]?low|asymmetric hem/.test(t)) s.hemShape="highlow";
-    else if(/curved hem|round(ed)? hem/.test(t)) s.hemShape="curved";
-    else if(/straight hem/.test(t)) s.hemShape="straight";
+    // hem shape
+    if(/high[- ]?low|mullet|train|ذيل|متدرج/.test(t)) s.hemShape="highlow";
+    else if(/asymmetric hem|غير متماثل/.test(t)) s.hemShape="asymmetric";
+    else if(/curved hem|round(ed)? hem|shirt[- ]?tail|حاشية منحنية|مدورة/.test(t)) s.hemShape="curved";
+    else if(/straight hem|حاشية مستقيمة/.test(t)) s.hemShape="straight";
     else if(hasImg && metrics.hemShape) s.hemShape = metrics.hemShape;
-    else s.hemShape = pick(seed+"hem", ["straight","straight","curved","highlow"]);
+    else if(!hasPrompt) s.hemShape = pick(seed+"hem", ["straight","straight","curved","highlow"]);
+    else s.hemShape = "straight";
 
-    // wrap closure — prompt > seeded variety (dresses/tops/robes/skirts only)
-    if(/wrap/.test(t)) s.wrap = true;
-    else if(!/button|zip|collar/.test(t) && ["dress","top","robe","skirt"].includes(s.type)) s.wrap = pick(seed+"wrap",[false,false,false,true]);
+    // Closures & Couture Sub-details — NEVER randomly inject wrap=true when prompt/image didn't ask for it!
+    s.wrap = /\bwrap\b|surplice|crossover|ملفوف|لف\b/.test(t);
+    s.zip = /\bzip(per|ped)?\b|سحاب|سوستة/.test(t);
+    s.button = s.button || /\bbutton(ed|s)?\b|placket|double[- ]?breasted|single[- ]?breasted|أزرار|بأزرار|مرد/.test(t);
+    s.pockets = /pocket|cargo|kangaroo|جيب|جيوب/.test(t);
+    s.lining = /\blined\b|\blining\b|مبطن|بطانة/.test(t);
+    s.belt = s.belt || /\bbelt(ed)?\b|\bsash\b|tie[- ]?waist|حزام/.test(t);
+    s.cuffs = /\bcuff(ed|s)?\b|french[- ]?cuff|rib[- ]?cuff|أسورة|أساور/.test(t) || s.type === "shirt" || s.type === "hoodie";
+    s.yoke = /\byoke\b|western shirt|oxford|كوة|سفرة/.test(t) || s.type === "shirt";
+    s.hood = /\bhood(ed|ie)?\b|parka|duffle|قبعة|كابيشون|هودي/.test(t) || (hasImg && metrics.hasHoodDome);
+    s.raglan = /\braglan\b|baseball[- ]?tee|رجلان/.test(t);
+    s.princessSeams = /princess[- ]?seam|corset|bustier|قصات أميرة|كورسيه/.test(t) || s.type === "gown";
+    s.mermaid = /mermaid|trumpet|fishtail|godet|حورية|بوق/.test(t);
+    s.cargo = /\bcargo\b|bellows|كارجو/.test(t);
+    s.jogger = /\bjogger\b|sweatpant|track[- ]?pant|جوغر/.test(t);
 
-    // zip closure — prompt only; a real construction detail (front zip
-    // facing), not something worth guessing at when unspecified.
-    s.zip = /\bzip(per)?\b|سحاب|سوستة/.test(t);
+    if (/pleat(ed|s)?|knife[- ]?pleat|box[- ]?pleat|كسرات|طيات|بليسيه/.test(t)) s.pleatCount = 4;
+    else if (/gather(ed|s)?|tiered|ruched|shirred|كشكشة|مكشكش/.test(t)) s.gatherRatio = 1.45;
+    else if (/pintuck|tuck(ed|s)?|تكسير/.test(t)) s.tuckCount = 4;
 
     s.color = (hasImg && metrics.color) || null;
     if(!s.color) s.color = pick(seed+"color", SEED_COLORS);
@@ -354,22 +431,19 @@ export const AIGen = (() => {
   }
 
   // ---------- geometry helpers for construction variety ----------
-  // Neckline points replacing the fixed corner at the garment's top-centre.
-  // `half` = half chest width at the neckline row; returns an array of
-  // [x,y] points to splice in place of a single flat corner.
   function necklinePts(style, half, y0){
     switch(style.neckline){
       case "v": return [[0,y0+half*0.9],[half*0.55,y0]];
+      case "sweetheart": return [[0,y0+half*0.82],[half*0.32,y0+half*0.42],[half*0.64,y0]];
+      case "square": return [[0,y0+half*0.62],[half*0.60,y0+half*0.62],[half*0.62,y0]];
       case "boat": return [[0,y0+2],[half*0.85,y0]];
       case "offshoulder": return [[0,y0+half*0.6],[half*1.05,y0+half*0.35]];
       case "halter": return [[0,y0+half*1.1],[half*0.3,y0-2]];
       case "collar": return [[0,y0+3],[half*0.65,y0]];
-      case "mock": return [[0,y0+2],[half*0.45,y0-1]]; // short, close, slightly raised stand neckline
-      default: return [[0,y0+half*0.55],[half*0.7,y0]]; // round
+      case "mock": return [[0,y0+2],[half*0.45,y0-1]];
+      default: return [[0,y0+half*0.55],[half*0.7,y0]];
     }
   }
-  // Hem edge between the two outer hem corners (front/back share the call
-  // with a `side` flip so front+back stay mirrored/coherent).
   function hemPts(style, xL, xR, y, gh, side){
     const dip = gh*0.05;
     switch(style.hemShape){
@@ -378,6 +452,93 @@ export const AIGen = (() => {
       case "asymmetric": return [[xR,y-gh*0.09],[xL,y+gh*0.03]];
       default: return [[xR,y],[xL,y]];
     }
+  }
+
+  function lenBucket(lengthF) {
+    if (lengthF <= 0.85) return "short";
+    if (lengthF >= 1.2) return "long";
+    return "medium";
+  }
+  function flareBucket(flareF) {
+    if (flareF <= 0.95) return "slim";
+    if (flareF >= 1.35) return "full";
+    return "regular";
+  }
+
+  function buildHoodHalfPiece(neckCirc, sideLabelEn, sideLabelAr) {
+    const w = Math.max(22, neckCirc * 0.62);
+    const h = 32;
+    return {
+      name: { en: `Hood (${sideLabelEn})`, ar: `القبعة (${sideLabelAr})` },
+      desc: { en: "Contoured two-piece hood panel.", ar: "لوحة قبعة مجسمة من قطعتين." },
+      outline: [[0, 0], [w * 0.85, 0], [w, h * 0.35], [w * 0.92, h], [0, h * 0.94]],
+      curves: [{ fromIdx: 1, toIdx: 3, ...threePtCubic([w * 0.85, 0], [w, h * 0.35], [w * 0.92, h]) }],
+      darts: [],
+      notches: [[0, h * 0.94]],
+      grain: [[w * 0.45, 5], [w * 0.45, h - 5]],
+      role: "hood",
+    };
+  }
+
+  function buildHoodie(style, m) {
+    const fit = Math.max(1.04, style.fitF);
+    const len = clamp((m.backLen + 24) * style.lengthF, m.backLen + 14, m.backLen + 44);
+    const chestW = (q(m.chest) + 3.5) * fit;
+    const hemW = (q(m.hips) + 2.5) * fit;
+    const pieces = [];
+    if (style.raglan) {
+      const neckX = Math.max(6.5, m.neck / 6);
+      const frontOut = raglanBodyPanel(neckX, 3.2, chestW, 21, chestW - 0.5, m.backLen, hemW, len - 6, hemW, len);
+      const backOut = raglanBodyPanel(neckX, 1.5, chestW, 21, chestW - 0.5, m.backLen, hemW, len - 6, hemW, len);
+      const slvOut = raglanSleevePc(neckX, chestW, 21, clamp(m.sleeve * Math.max(0.9, style.sleeveLenF), 24, m.sleeve + 8));
+      pieces.push(
+        { name: { en: "Hoodie Raglan Front", ar: "مقدمة الهودي الرجلان" }, desc: { en: "Relaxed raglan front torso.", ar: "مقدمة هودي رجلان مريحة." }, outline: frontOut, curves: frontOut.curves || [], darts: [], notches: [frontOut[2]], grain: [[chestW * 0.45, 8], [chestW * 0.45, len - 6]], role: style.zip ? "front-panel" : "bodice-front-center", cutOnFold: !style.zip },
+        { name: { en: "Hoodie Raglan Back", ar: "ظهر الهودي الرجلان" }, desc: { en: "Relaxed raglan back torso.", ar: "ظهر هودي رجلان مريح." }, outline: backOut, curves: backOut.curves || [], darts: [], notches: [backOut[2]], grain: [[chestW * 0.45, 8], [chestW * 0.45, len - 6]], role: "bodice-back-center", cutOnFold: true },
+        { name: { en: "Raglan Sleeve", ar: "كم رجلان" }, desc: { en: "Full raglan hoodie sleeve.", ar: "كم رجلان كامل للهودي." }, outline: slvOut, curves: slvOut.curves || [], darts: [], notches: [slvOut[0]], grain: [[0, 10], [0, 38]], role: "sleeve", bilateral: true },
+      );
+    } else {
+      const topPieces = buildTop({ ...style, type: "top", neckline: "round", sleeveLenF: Math.max(1.0, style.sleeveLenF || 1.1), fitF: fit, wrap: false }, m);
+      topPieces[0].name = { en: "Hoodie Front", ar: "مقدمة الهودي" };
+      if (style.zip) { topPieces[0].cutOnFold = false; topPieces[0].role = "front-panel"; delete topPieces[0].chestEdgeIndices; }
+      topPieces[1].name = { en: "Hoodie Back", ar: "ظهر الهودي" };
+      pieces.push(...topPieces);
+    }
+    pieces.push(
+      buildHoodHalfPiece(m.neck, "Left", "يسار"),
+      buildHoodHalfPiece(m.neck, "Right", "يمين"),
+      { name: { en: "Kangaroo Pocket", ar: "جيب كانغرو أمامي" }, desc: { en: "Angled front hoodie pocket.", ar: "جيب هودي أمامي مائل." }, outline: [[0, 6], [4, 0], [26, 0], [30, 6], [30, 19], [0, 19]], darts: [], notches: [[4, 0], [26, 0]], grain: [[15, 3], [15, 16]], role: "pocket" },
+      { name: { en: "Rib Wrist Cuff", ar: "أسورة معصم ريب" }, desc: { en: "Stretch rib knit cuff.", ar: "أسورة ريب مطاطية للمعصم." }, outline: bandPc(Math.max(18, m.bicep * 0.68), 7), darts: [], notches: [[0, 0]], grain: [[4, 3.5], [14, 3.5]], role: "rib-cuff", bilateral: true },
+      { name: { en: "Rib Hem Band", ar: "كمر حاشية ريب" }, desc: { en: "Stretch rib knit hem band.", ar: "كمر سفلي من الريب المرن." }, outline: bandPc(Math.max(36, m.hips * 0.44), 8), darts: [], notches: [[0, 0]], grain: [[6, 4], [30, 4]], role: "hem-band", cutOnFold: true },
+    );
+    return pieces;
+  }
+
+  function buildVest(style, m) {
+    const len = clamp(m.backLen * 1.08 * style.lengthF, m.backLen * 0.85, m.backLen * 1.45);
+    const jb = FancyGen._wp43Internals.jacketFrontBack(m, len, { hemFlareF: 0.92, closureX: q(m.chest) * 0.08 });
+    const neckArc = jb.frontNeckLen + jb.backNeckLen;
+    return [
+      { name: { en: "Waistcoat Front", ar: "مقدمة الصدرية" }, desc: { en: "Tailored V-front waistcoat panel.", ar: "مقدمة صدرية رسمية مفصلة." }, outline: jb.front, curves: jb.front.curves || [], notches: jb.front.notches || [jb.front[0]], edges: jb.front.edges, darts: [], grain: [[4, 7], [4, len * 0.75]], role: "front-panel", bilateral: true },
+      { name: { en: "Waistcoat Back", ar: "ظهر الصدرية" }, desc: { en: "Fitted waistcoat back cut on fold.", ar: "ظهر الصدرية الرسمية مقصوص على الثنية." }, outline: jb.back, curves: jb.back.curves || [], notches: jb.back.notches || [jb.back[0]], edges: jb.back.edges, chestEdgeIndices: jb.back.chestEdgeIndices, darts: [], grain: [[4, 7], [4, len * 0.75]], role: "back-panel", cutOnFold: true },
+      { name: { en: "Front Facing", ar: "سجاف الصدرية الأمامي" }, desc: { en: "Clean interior front facing.", ar: "سجاف داخلي لتنظيف حافة الأزرار." }, outline: FancyGen._wp43Internals.lapelFacing(neckArc, len * 0.55), curves: FancyGen._wp43Internals.lapelFacing(neckArc, len * 0.55).curves || [], darts: [], notches: [[0, 0]], grain: [[3, 4], [3, len * 0.4]], role: "lapel-facing", bilateral: true },
+      { name: { en: "Welt Pocket", ar: "جيب شق" }, desc: { en: "Lower waistcoat welt pocket.", ar: "جيب شق سفلي للصدرية." }, outline: pocketPatch(11, 3.5), darts: [], notches: [[0, 0]], grain: [[2, 1.7], [9, 1.7]], role: "pocket", bilateral: true },
+      { name: { en: "Back Lining", ar: "بطانة الظهر" }, desc: { en: "Smooth satin back lining.", ar: "بطانة ظهر ناعمة من الساتان." }, outline: jb.back, curves: jb.back.curves || [], darts: [], notches: [jb.back[0]], grain: [[4, 7], [4, len * 0.75]], role: "lining", cutOnFold: true },
+    ];
+  }
+
+  function buildJumpsuit(style, m) {
+    const romperPieces = buildRomper({ ...style, lengthF: 1 }, m).filter((p) => !/Shorts/.test(p.name.en));
+    romperPieces.forEach((p) => {
+      if (p.name.en.startsWith("Romper ")) {
+        p.name.en = p.name.en.replace("Romper ", "Jumpsuit ");
+        p.name.ar = p.name.ar.replace("الأفرول", "الجمبسوت");
+      }
+    });
+    const trouserPieces = buildTrousers(style, m);
+    const frontLeg = { ...trouserPieces[0], name: { en: "Jumpsuit Front Leg", ar: "ساق الجمبسوت الأمامية" }, role: "trouser-front", bilateral: true };
+    const backLeg = { ...trouserPieces[1], name: { en: "Jumpsuit Back Leg", ar: "ساق الجمبسوت الخلفية" }, role: "trouser-back", bilateral: true };
+    const belt = { ...trouserPieces[2], name: { en: "Jumpsuit Waist Sash", ar: "حزام خصر الجمبسوت" } };
+    return [...romperPieces, frontLeg, backLeg, belt];
   }
 
   // ---------- parametric builders ----------
@@ -394,11 +555,87 @@ export const AIGen = (() => {
       ...rawStyle,
     };
     let pieces;
-    if(style.type==="trousers") pieces = buildTrousers(style,m);
-    else if(style.type==="skirt") pieces = buildSkirt(style,m);
-    else if(style.type==="romper") pieces = buildRomper(style,m);
-    else if(style.type==="leotard") pieces = buildLeotard(style,m);
-    else pieces = buildTop(style,m);
+    if (["gown", "jacket", "coat", "suit"].includes(style.type)) {
+      const fOpts = {
+        length: lenBucket(style.lengthF),
+        flare: flareBucket(style.flareF),
+        neckline: ["sweetheart", "v", "square", "halter", "offshoulder", "boat", "round"].includes(style.neckline) ? style.neckline : undefined,
+      };
+      pieces = FancyGen.build(style.type, m, fOpts).map((p) => ({ ...p }));
+      if (style.type === "gown" && style.sleeveLenF > 0.05 && !pieces.some((p) => isSleevePiece(p))) {
+        pieces.push(sleevePiece(style, m));
+      }
+      if ((style.type === "jacket" || style.type === "coat") && style.hood && !pieces.some((p) => p.role === "hood")) {
+        pieces.push(buildHoodHalfPiece(m.neck, "Left", "يسار"), buildHoodHalfPiece(m.neck, "Right", "يمين"));
+      }
+      if (style.belt && !pieces.some((p) => p.role === "belt" || p.role === "waistband" || p.role === "wrap-tie")) {
+        pieces.push({
+          name: { en: "Tailored Waist Belt", ar: "حزام خصر مفصل" },
+          desc: { en: "Matching belt with buckle/tie allowance.", ar: "حزام خصر مطابق للتصميم." },
+          outline: bandPc(Math.max(60, m.waist + 32), 5),
+          darts: [], notches: [[0, 0]], grain: [[8, 2.5], [52, 2.5]], role: "belt",
+        });
+      }
+    } else if (style.type === "vest") {
+      pieces = buildVest(style, m);
+    } else if (style.type === "hoodie") {
+      pieces = buildHoodie(style, m);
+    } else if (style.type === "jumpsuit") {
+      pieces = buildJumpsuit(style, m);
+    } else if (style.type === "shorts") {
+      const tr = buildTrousers({ ...style, lengthF: 0.35 }, m);
+      tr[0].name = { en: "Front Shorts Panel", ar: "لوحة الشورت الأمامية" };
+      tr[1].name = { en: "Back Shorts Panel", ar: "لوحة الشورت الخلفية" };
+      if (style.cargo) {
+        tr.push({ name: { en: "Cargo Bellows Pocket", ar: "جيب كارجو جانبي" }, desc: { en: "Expandable side thigh pocket.", ar: "جيب كارجو جانبي بغطاء." }, outline: pocketPatch(16, 18), darts: [], notches: [[0, 0]], grain: [[8, 3], [8, 15]], role: "pocket", bilateral: true });
+      }
+      pieces = tr;
+    } else if (style.type === "trousers") {
+      pieces = buildTrousers(style, m);
+      if (style.cargo) {
+        pieces.push({ name: { en: "Cargo Bellows Pocket", ar: "جيب كارجو جانبي" }, desc: { en: "Expandable side thigh pocket.", ar: "جيب كارجو جانبي بغطاء." }, outline: pocketPatch(17, 20), darts: [], notches: [[0, 0]], grain: [[8.5, 3], [8.5, 17]], role: "pocket", bilateral: true });
+      }
+      if (style.jogger) {
+        pieces.push({ name: { en: "Ankle Rib Cuff", ar: "أسورة كاحل ريب" }, desc: { en: "Elasticated jogger ankle cuff.", ar: "أسورة كاحل مطاطية للجوغر." }, outline: bandPc(24, 6), darts: [], notches: [[0, 0]], grain: [[4, 3], [20, 3]], role: "rib-cuff", bilateral: true });
+      }
+      if (style.pockets && !style.cargo) {
+        pieces.push({ name: { en: "Slanted Pocket Bag", ar: "كيس جيب جانبي مائل" }, desc: { en: "Front trouser slash pocket bag.", ar: "كيس جيب أمامي مائل للبنطلون." }, outline: pocketPatch(15, 22), darts: [], notches: [[0, 0]], grain: [[7.5, 3], [7.5, 19]], role: "pocket", bilateral: true });
+      }
+    } else if (style.type === "skirt") {
+      pieces = buildSkirt(style, m);
+      if (style.pockets) {
+        pieces.push({ name: { en: "In-Seam Pocket Bag", ar: "كيس جيب جانبي مخفي" }, desc: { en: "Side-seam skirt pocket bag.", ar: "كيس جيب مخفي في خياطة الجنب." }, outline: pocketPatch(15, 22), darts: [], notches: [[0, 4], [0, 17]], grain: [[7.5, 3], [7.5, 19]], role: "pocket", bilateral: true });
+      }
+    } else if (style.type === "romper") {
+      pieces = buildRomper(style, m);
+    } else if (style.type === "leotard") {
+      pieces = buildLeotard(style, m);
+    } else if (style.type === "bodice") {
+      pieces = buildTop({ ...style, type: "top", lengthF: 0.55, sleeveLenF: style.sleeveLenF ?? 0 }, m);
+      pieces[0].name = { en: "Bodice Front", ar: "مقدمة الصدرية" };
+      pieces[1].name = { en: "Bodice Back", ar: "ظهر الصدرية" };
+    } else {
+      pieces = buildTop(style, m);
+      if (style.type === "shirt") {
+        if (style.yoke !== false) {
+          const yk = yokeCurvePc(q(m.shoulder || 40) * 1.95, 9);
+          pieces.push({ name: { en: "Back Shoulder Yoke", ar: "كوة الكتف الخلفية" }, desc: { en: "Double-layer contoured shirt shoulder yoke.", ar: "كوة كتف خلفية مقوسة ومزدوجة للقميص." }, outline: yk, curves: yk.curves || [], darts: [], notches: [yk[0]], grain: [[4, 2], [4, 7]], role: "yoke", cutOnFold: true });
+        }
+        if (style.button !== false) {
+          const bLen = clamp((m.backLen + 34) * style.lengthF, m.backLen + 16, m.height);
+          pieces.push({ name: { en: "Button Placket", ar: "مرد الأزرار الأمامي" }, desc: { en: "Interfaced center-front button placket.", ar: "مرد أزرار أمامي مقوى بالحشوة." }, outline: bandPc(4.5, Math.max(30, bLen - 4)), darts: [], notches: [[0, 0]], grain: [[2.2, 4], [2.2, Math.max(20, bLen - 8)]], role: "placket-facing", bilateral: true });
+        }
+        if (style.sleeveLenF > 0.7 && style.cuffs !== false) {
+          pieces.push({ name: { en: "Wrist Cuff", ar: "أسورة المعصم" }, desc: { en: "Buttoned shirt cuff band.", ar: "أسورة معصم القميص بالأزرار." }, outline: bandPc(Math.max(21, m.bicep * 0.78), 6.5), darts: [], notches: [[0, 0]], grain: [[4, 3.2], [17, 3.2]], role: "cuff", bilateral: true });
+        }
+      }
+      if (style.pockets && !pieces.some((p) => p.role === "pocket")) {
+        pieces.push({ name: { en: style.type === "shirt" ? "Chest Patch Pocket" : "Side Seam Pocket", ar: style.type === "shirt" ? "جيب صدر خارجي" : "جيب جانبي مخفي" }, desc: { en: "Proportioned garment pocket.", ar: "جيب متناسق مع قياس القطعة." }, outline: pocketPatch(style.type === "shirt" ? 12 : 15, style.type === "shirt" ? 14 : 22), darts: [], notches: [[0, 0]], grain: [[6, 3], [6, 11]], role: "pocket", bilateral: style.type !== "shirt" });
+      }
+      if (style.belt && !pieces.some((p) => p.role === "belt" || p.role === "wrap-tie" || p.role === "waistband")) {
+        pieces.push({ name: { en: "Waist Sash Belt", ar: "حزام خصر" }, desc: { en: "Self-fabric waist tie belt.", ar: "حزام خصر من نفس القماش." }, outline: bandPc(Math.max(80, m.waist + 55), 6), darts: [], notches: [[0, 0]], grain: [[10, 3], [70, 3]], role: "belt" });
+      }
+    }
     const colors = paletteFor(style.color, style.colorHem);
     return { pieces, colors, colorInt: style.color ? rgbToInt(style.color) : null };
   }
@@ -461,7 +698,7 @@ export const AIGen = (() => {
     const wrapCut = style.wrap ? hemW*0.32 : 0;   // front overlap skew for wrap styles
 
     const neckFront = necklinePts(style, chestW*0.42, 1);
-    const neckBack  = necklinePts({ ...style, neckline: style.neckline==="v"?"round":style.neckline }, chestW*0.3, 1.5);
+    const neckBack  = necklinePts({ ...style, neckline: style.neckline==="v"?"round":style.neckline }, chestW*0.3, 1);
     const hemFront  = hemPts(style, 0-wrapCut, hemW, gh, gh, "front");
     const hemBack   = hemPts(style, 0, hemW, gh, gh, "back");
 
@@ -485,7 +722,7 @@ export const AIGen = (() => {
       // neckline. Only meaningful for the cut-on-fold (non-wrap) case —
       // Ease's fold-doubling assumption doesn't hold for wrap's un-folded
       // asymmetric front, so it deliberately gets no hint.
-      ...(style.wrap ? {} : { chestEdgeIndices:[2] }),
+      ...(style.wrap ? {} : { chestEdgeIndices:[neckFront.length] }),
       ...(hasMatchedSideSeam ? { edges: [{ fromIdx: neckFront.length, toIdx: neckFront.length + 4, seamId: "top-side" }] } : {}),
     };
     const back = {
@@ -497,7 +734,7 @@ export const AIGen = (() => {
       curves:[...neckCurveEntry(neckBack), { fromIdx: neckBack.length, toIdx: neckBack.length + 2, ...threePtCubic([chestW,3],[chestW+1,bod*0.5],[waistW+0.5,bod]) }],
       darts:waistDart, notches:[[chestW,3],[waistW+0.5,bod]],
       grain:[[2,9],[2,gh-6]],
-      role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[2],
+      role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[neckBack.length],
       ...(hasMatchedSideSeam ? { edges: [{ fromIdx: neckBack.length, toIdx: neckBack.length + 4, seamId: "top-side" }] } : {}),
     };
     const pieces=[front, back];
@@ -661,7 +898,7 @@ export const AIGen = (() => {
       curves:[...neckCurveEntry(neckFront), { fromIdx: neckFront.length, toIdx: neckFront.length + 2, ...threePtCubic([chestW,3],[chestW+1,bodiceLen*0.55],[waistW+1,bodiceLen]) }],
       darts:waistDart, notches:[[chestW,3],[waistW+1,bodiceLen]],
       grain:[[chestW*0.5,6],[chestW*0.5,bodiceLen-6]],
-      role:"bodice-front-center", cutOnFold:true, chestEdgeIndices:[2], // WP-24
+      role:"bodice-front-center", cutOnFold:true, chestEdgeIndices:[neckFront.length], // WP-24
       edges:[{ fromIdx: neckFront.length, toIdx: neckFront.length + 2, seamId: "romper-bodice-side" }],
     };
     const back = {
@@ -671,7 +908,7 @@ export const AIGen = (() => {
       curves:[...neckCurveEntry(neckBack), { fromIdx: neckBack.length, toIdx: neckBack.length + 2, ...threePtCubic([chestW,3],[chestW+1,bodiceLen*0.55],[waistW+0.5,bodiceLen]) }],
       darts:waistDart, notches:[[chestW,3],[waistW+0.5,bodiceLen]],
       grain:[[2,6],[2,bodiceLen-6]],
-      role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[2],
+      role:"bodice-back-center", cutOnFold:true, chestEdgeIndices:[neckBack.length],
       edges:[{ fromIdx: neckBack.length, toIdx: neckBack.length + 2, seamId: "romper-bodice-side" }],
     };
     const pieces=[front, back];
@@ -716,9 +953,19 @@ export const AIGen = (() => {
     }
 
     const shortW = hipW, shortHem = clamp(shortW*0.85*style.flareF, shortW*0.7, shortW*1.3);
-    const shortLen = clamp(m.inseam*0.16*style.lengthF, 8, 30);
+    const shortLen = clamp(Math.max(15, m.inseam*0.28*style.lengthF), 15, 34);
     pieces.push(shortsPanel("Romper Front Shorts","شورت الأفرول الأمامي", shortW, shortLen, shortHem, 9));
     pieces.push(shortsPanel("Romper Back Shorts","شورت الأفرول الخلفي", shortW+2, shortLen, shortHem+2, 10));
+    if(style.pockets){
+      pieces.push({
+        name:{en:"Patch Pocket", ar:"جيب خارجي"},
+        desc:{en:"Hip patch pocket for the romper shorts.", ar:"جيب خارجي لشورت الأفرول."},
+        outline:pocketPatch(13, 15),
+        darts:[], notches:[[0,0]],
+        grain:[[6.5,2.5],[6.5,12.5]],
+        role:"pocket", bilateral:true,
+      });
+    }
     return pieces;
   }
 
@@ -1478,11 +1725,15 @@ export const AIGen = (() => {
   }
 
   // ---------- thinking-stage summary text ----------
-  const NECK_LABEL = { v:{en:"V-neck",ar:"فتحة V"}, round:{en:"round neck",ar:"فتحة دائرية"}, boat:{en:"boat neck",ar:"فتحة قارب"},
-    offshoulder:{en:"off-shoulder",ar:"كتف مكشوف"}, halter:{en:"halter",ar:"حمالة رقبة"}, collar:{en:"collared",ar:"بياقة"},
-    mock:{en:"mock neck",ar:"ياقة قائمة"} };
+  const NECK_LABEL = {
+    v:{en:"V-neck",ar:"فتحة V"}, round:{en:"round neck",ar:"فتحة دائرية"}, boat:{en:"boat neck",ar:"فتحة قارب"},
+    sweetheart:{en:"sweetheart",ar:"خط قلب"}, square:{en:"square neck",ar:"رقبة مربعة"},
+    offshoulder:{en:"off-shoulder",ar:"كتف مكشوف"}, halter:{en:"halter",ar:"حمالة رقبة"},
+    collar:{en:"collared",ar:"بياقة"}, mock:{en:"mock neck",ar:"ياقة قائمة"},
+  };
   const HEM_LABEL = { straight:{en:"straight hem",ar:"حاشية مستقيمة"}, curved:{en:"curved hem",ar:"حاشية منحنية"},
     highlow:{en:"high-low hem",ar:"حاشية متدرجة"}, asymmetric:{en:"asymmetric hem",ar:"حاشية غير متماثلة"} };
+  const UPPER_GARMENTS = ["dress","top","bodice","shirt","robe","romper","jumpsuit","leotard","gown","jacket","coat","suit","vest","hoodie"];
 
   function summary(style, lang){
     const en = {
@@ -1499,38 +1750,33 @@ export const AIGen = (() => {
            style.sleeveLenF>=1.2?"بأكمام طويلة":style.sleeveLenF<=0.5?"بأكمام قصيرة":"بأكمام",
       type: AR_TYPE[style.type]||"قطعة",
     };
-    const hasNeck = ["dress","top","shirt","robe","romper","leotard"].includes(style.type) && NECK_LABEL[style.neckline];
+    const hasNeck = UPPER_GARMENTS.includes(style.type) && NECK_LABEL[style.neckline];
     const neck = hasNeck ? NECK_LABEL[style.neckline][lang==="ar"?"ar":"en"] : null;
     const hem = HEM_LABEL[style.hemShape] ? HEM_LABEL[style.hemShape][lang==="ar"?"ar":"en"] : null;
     const wrapTxt = style.wrap ? (lang==="ar"?"ملفوف":"wrap") : null;
     const zipTxt = style.zip ? (lang==="ar"?"بسحاب":"zip-front") : null;
+    const btnTxt = style.button ? (lang==="ar"?"بأزرار":"buttoned") : null;
     if(lang==="ar"){
-      const bits=[ar.type, ar.len, ar.flare, wrapTxt, zipTxt, neck, hem, ar.slv].filter(Boolean);
+      const bits=[ar.type, ar.len, ar.flare, wrapTxt, zipTxt, btnTxt, neck, hem, UPPER_GARMENTS.includes(style.type)?ar.slv:null].filter(Boolean);
       return bits.join(" · ");
     }
-    const bits=[en.len, wrapTxt, zipTxt, en.flare, en.type, neck, hem, en.slv].filter(Boolean);
+    const bits=[en.len, wrapTxt, zipTxt, btnTxt, en.flare, en.type, neck, hem, UPPER_GARMENTS.includes(style.type)?en.slv:null].filter(Boolean);
     return bits.join(" · ");
   }
-  // structured attribute chips for the "detected" panel in the UI.
-  // `provenance` (WP-3/WP-4, optional) is either an array of
-  // {field,source,confidence} (a PatternSpecV1 provenance list) or a plain
-  // {field:{source,confidence}} map — when a chip's `k` matches a `field`,
-  // the chip gets tagged with where that value actually came from. Callers
-  // that don't pass it (today's local/remote path) get exactly today's
-  // shape back — this is additive, not a breaking change.
   function attributes(style, lang, provenance){
     const ar = lang==="ar";
     const out = [];
     out.push({ k:"type", label: ar?"النوع":"Type", value: ar?(AR_TYPE[style.type]||"—"):(EN_TYPE[style.type]||"—") });
     out.push({ k:"length", label: ar?"الطول":"Length", value: style.lengthF>=1.2?(ar?"طويل":"Long"):style.lengthF<=0.82?(ar?"قصير":"Short"):(ar?"متوسط":"Regular") });
     out.push({ k:"flare", label: ar?"الاتساع":"Flare", value: style.flareF>=1.25?(ar?"واسع":"Flared"):style.flareF<=0.92?(ar?"ضيق":"Fitted"):(ar?"مستقيم":"Straight") });
-    if(["dress","top","shirt","robe","romper","leotard"].includes(style.type)){
+    if(UPPER_GARMENTS.includes(style.type)){
       out.push({ k:"sleeve", label: ar?"الكم":"Sleeve", value: style.sleeveLenF<=0.05?(ar?"بدون كم":"Sleeveless"):style.sleeveWideF>=1.4?(ar?"واسع":"Wide"):style.sleeveLenF>=1.2?(ar?"طويل":"Long"):style.sleeveLenF<=0.5?(ar?"قصير":"Short"):(ar?"عادي":"Regular") });
       if(NECK_LABEL[style.neckline]) out.push({ k:"neckline", label: ar?"فتحة الرقبة":"Neckline", value: NECK_LABEL[style.neckline][ar?"ar":"en"] });
     }
     if(HEM_LABEL[style.hemShape]) out.push({ k:"hem", label: ar?"الحاشية":"Hem", value: HEM_LABEL[style.hemShape][ar?"ar":"en"] });
     if(style.wrap) out.push({ k:"closure", label: ar?"الإغلاق":"Closure", value: ar?"ملفوف":"Wrap" });
     else if(style.zip) out.push({ k:"closure", label: ar?"الإغلاق":"Closure", value: ar?"سحاب":"Zip" });
+    else if(style.button) out.push({ k:"closure", label: ar?"الإغلاق":"Closure", value: ar?"أزرار":"Button" });
     out.push({ k:"color", label: ar?"اللون":"Colour", value: style.color, swatch:true });
     if(provenance){
       const byField = Array.isArray(provenance) ? Object.fromEntries(provenance.map(p=>[p.field,p])) : provenance;

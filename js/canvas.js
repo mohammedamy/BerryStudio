@@ -183,6 +183,11 @@ export const Canvas = (() => {
       const piece = {
         ...p,
         outline: p.outline.map(place),
+        curves: (p.curves || []).map(c => ({
+          ...c,
+          c1: c.c1 ? place(c.c1) : c.c1,
+          c2: c.c2 ? place(c.c2) : c.c2,
+        })),
         darts: (p.darts || []).map(d => d.map(place)),
         notches: (p.notches || []).map(place),
         grain: (p.grain || []).map(place),
@@ -202,7 +207,9 @@ export const Canvas = (() => {
     projectMeta = { ...projectMeta, revision: projectMeta.revision + 1, status: 'draft', approval: null };
     pieces = layoutPieces(rawPieces);
     pieces.forEach((p, i) => p.color = p.color || colors[i % colors.length]);
-    selected = -1; multiSelected=[]; sketch = []; texts = []; hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null;
+    selected = -1; multiSelected=[];
+    if (!context?.preserveAnnotations) { sketch = []; texts = []; }
+    hlPoint=null; hlCons=null; selText=null; selNotch=null; selVertex=null; selSketch=null;
     fit();
   }
   function getPieces(){ return pieces; }
@@ -1920,12 +1927,19 @@ export const Canvas = (() => {
       const xs=outline.map(p=>p[0]), ys=outline.map(p=>p[1]);
       const gx=(Math.min(...xs)+Math.max(...xs))/2, gTop=Math.min(...ys), gBot=Math.max(...ys);
       pieces.push({
-        name: np.name ? { en:np.name, ar:np.name } : { en:`Imported ${startIdx+i+1}`, ar:`مستورد ${startIdx+i+1}` },
-        desc:{ en:"", ar:"" }, outline, curves, darts:[], notches:[],
-        grain: gBot-gTop>4 ? [[gx,gTop+2],[gx,gBot-2]] : [[gx,gTop],[gx,gBot]],
+        name: np.nameBilingual ? np.nameBilingual : (np.name ? (typeof np.name === "object" ? np.name : { en:np.name, ar:np.name }) : { en:`Imported ${startIdx+i+1}`, ar:`مستورد ${startIdx+i+1}` }),
+        desc: np.desc || { en:"", ar:"" },
+        outline,
+        curves,
+        darts: (np.darts||[]).map(d=>d.map(mv)),
+        notches: (np.notches||[]).map(mv),
+        grain: np.grain?.length===2 ? np.grain.map(mv) : (gBot-gTop>4 ? [[gx,gTop+2],[gx,gBot-2]] : [[gx,gTop],[gx,gBot]]),
+        ...(np.role ? { role: np.role } : {}),
+        ...(np.cutOnFold ? { cutOnFold: true } : {}),
+        ...(np.bilateral ? { bilateral: true } : {}),
         visible:true, locked:false,
         ...(sourceProvenance ? {sourceProvenance:JSON.parse(JSON.stringify(sourceProvenance))} : {}),
-        color:["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][(startIdx+i)%6],
+        color: np.color || ["#6d5efc","#00c2a8","#ff5d8f","#e2a52b","#4c8dff","#c1492e"][(startIdx+i)%6],
       });
     });
     multiSelected = newPieces.map((_,i)=>startIdx+i);
