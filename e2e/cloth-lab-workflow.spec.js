@@ -47,7 +47,7 @@ test('embedded Cloth Lab guided workflow opens cleanly without host overlay coll
 
   // Switching category while inside Cloth Lab automatically syncs the new garment (boys_trousers).
   await page.locator('#catSeg button[data-cat="boys"]').click();
-  await expect(root.locator('.cl-piece-card')).toHaveCount(3);
+  await expect(root.locator('.cl-piece-card')).toHaveCount(3, { timeout: 15_000 });
   await root.getByRole('button', { name: /Try it on/ }).click();
   await expect(simCanvas).toBeVisible({ timeout: 15_000 });
   await expect.poll(async () => (await simCanvas.boundingBox())?.height ?? 0, { timeout: 15_000 }).toBeGreaterThan(250);

@@ -2250,11 +2250,6 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
             measurements, endpoint: "", lang,
             onStage: setStage, segment: getSegmentFn(),
           });
-          if(res?.pieces?.length){
-            const healed = ensureValidPieces(res.pieces, measurements, seamAllowanceCm);
-            res.pieces = healed.pieces;
-            res.validation = healed.validation;
-          }
         } else {
           setStage("analyzing");
           let metrics = null;
