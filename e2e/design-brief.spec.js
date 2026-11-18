@@ -45,13 +45,26 @@ for(const lang of ['en','ar']) {
   });
 }
 
-for(const family of ['skirt','dress']) test(`${family}: brief-generated geometry that fails validation cannot be accepted`,async({page})=>{
+for(const family of ['skirt','dress']) test(`${family}: brief-generated geometry passes validation when clean and cannot be accepted when invalid`,async({page})=>{
   await start(page);
   const before=await page.evaluate(()=>window.Canvas.snapshotState().pieces);
   await page.locator('#railTabs button[data-pane="ai"]').click();
   const panel=page.locator('.design-brief');
   await panel.locator('textarea').fill(`regular-length woven ${family}, waist 74 cm, hips 98 cm`);
   await panel.getByRole('button',{name:'Update brief',exact:true}).click();
+  await panel.getByRole('button',{name:'Review draft from saved choices',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Accept as new project',exact:true})).toBeVisible();
+  await page.locator('#genericModal [data-close="#genericModal"]').click();
+
+  // Now verify that if AIGen.generate returns self-intersecting geometry, acceptance is blocked
+  await page.evaluate(()=>{
+    const generate=window.AIGen.generate;
+    window.AIGen.generate=async args=>{
+      const result=await generate(args);
+      const badPieces=result.pieces.map((p,i)=>i===0?{...p,outline:[[0,0],[20,20],[20,0],[0,20]]}:p);
+      return {...result,pieces:badPieces};
+    };
+  });
   await panel.getByRole('button',{name:'Review draft from saved choices',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Draft needs construction review',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Accept as new project',exact:true})).toHaveCount(0);
