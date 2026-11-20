@@ -89,6 +89,8 @@ export const FABRIC_PRESETS = {
   jersey: { label: 'Cotton Jersey', massDensity: 180, structStiff: 0.90, bendStiff: 0.22, maxStrain: 1.18, damping: 0.965, friction: 0.88, rough: 0.7, metal: 0.0, sheen: 0.18, clear: 0.0, om: 1 },
   scuba: { label: 'Scuba Knit', massDensity: 260, structStiff: 0.91, bendStiff: 0.45, maxStrain: 1.14, damping: 0.955, friction: 0.85, rough: 0.35, metal: 0.0, sheen: 0.35, clear: 0.05, om: 1 },
   tulle: { label: 'Tulle', massDensity: 18, structStiff: 0.80, bendStiff: 0.06, maxStrain: 1.12, damping: 0.988, friction: 0.55, rough: 0.55, metal: 0.0, sheen: 0.3, clear: 0.0, om: 0.35, transmission: 0.12 },
+  velvet: { label: 'Velvet', massDensity: 320, structStiff: 0.96, bendStiff: 0.44, maxStrain: 1.05, damping: 0.955, friction: 0.94, rough: 0.72, metal: 0.0, sheen: 1.0, clear: 0.0, om: 1 },
+  lace: { label: 'Lace', massDensity: 75, structStiff: 0.91, bendStiff: 0.16, maxStrain: 1.09, damping: 0.980, friction: 0.80, rough: 0.58, metal: 0.0, sheen: 0.38, clear: 0.0, om: 0.78, transmission: 0.08 },
 }
 
 export const FABRIC_IDS = Object.keys(FABRIC_PRESETS)

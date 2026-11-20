@@ -18,6 +18,7 @@
 // human review before simulating; nothing here ever calls setGarment
 // directly.
 import { resolveSchemaRole } from './roles.js'
+import { FABRIC_IDS } from '../cloth/fabricPresets.js'
 
 // ---------- CLASSIFY_LEGACY: role classification (mirrors js/app.js's classifyPart) ----------
 
@@ -326,14 +327,25 @@ function prepareRightSleeve(rawOutline) {
 // Subdivides a 4-point cut-on-fold bodice half (e.g. girls_dress or a user-drawn
 // rectangle/trapezoid [[0,0],[w,1],[w,len],[0,len]]) with an exact collinear
 // underarm vertex on its outer edge so armhole and side-seam can split cleanly.
+// Also handles 5-point cut-on-fold robes (e.g. thobe) whose outer point sits at
+// full waist/backLen depth so the armhole stops ~22cm below the shoulder.
 function subdivideFoldBodiceArmhole(local) {
-  if (local.length !== 4) return local
-  const shoulder = local[1], hem = local[2]
-  const segH = hem[1] - shoulder[1]
-  if (segH <= 4) return local
-  const t = Math.min(0.48, Math.max(0.18, 18 / segH))
-  const underarm = [shoulder[0] + (hem[0] - shoulder[0]) * t, shoulder[1] + segH * t]
-  return [local[0], shoulder, underarm, hem, local[3]]
+  if (local.length === 4) {
+    const shoulder = local[1], hem = local[2]
+    const segH = hem[1] - shoulder[1]
+    if (segH <= 4) return local
+    const t = Math.min(0.48, Math.max(0.18, 18 / segH))
+    const underarm = [shoulder[0] + (hem[0] - shoulder[0]) * t, shoulder[1] + segH * t]
+    return [local[0], shoulder, underarm, hem, local[3]]
+  }
+  if (local.length === 5 && local[1][1] <= 4 && local[2][1] - local[1][1] > 28 && local[1][0] >= 10) {
+    const p1 = local[1], p2 = local[2]
+    const dy = p2[1] - p1[1]
+    const t = Math.min(0.48, 22 / dy)
+    const underarm = [p1[0] + (p2[0] - p1[0]) * t, p1[1] + dy * t]
+    return [local[0], p1, underarm, p2, local[3], local[4]]
+  }
+  return local
 }
 
 // When a cut-on-fold upper-body panel goes straight from center-neck local[0]
@@ -512,7 +524,11 @@ function deriveSleevedTorsoEdges(outline, { includeTop, necklineEndIdx, sideEndI
           underarmIdx = shoulderIdx + 1
         } else {
           const peak = cands.find((i) => outline[i + 1][0] <= outline[i][0] + 0.5)
-          underarmIdx = peak != null ? peak : cands[cands.length - 1]
+          const subdividedRobeUnderarm = peak == null && cands.length >= 2 &&
+            outline[cands[0]][1] - outline[shoulderIdx][1] >= 12 &&
+            outline[cands[0]][1] - outline[shoulderIdx][1] <= 26 &&
+            outline[cands[1]][1] - outline[shoulderIdx][1] > 32
+          underarmIdx = peak != null ? peak : (subdividedRobeUnderarm ? cands[0] : cands[cands.length - 1])
         }
       }
     }
@@ -597,7 +613,98 @@ function derivePrincessSideExtraEdges(local, edges, curves) {
   return out
 }
 
-const FABRIC_NAME_TO_ID = new Set(['chiffon', 'silk', 'satin', 'cotton', 'linen', 'wool', 'denim', 'leather'])
+function deriveGoreSideEdges(outline) {
+  const n = outline.length
+  if (n < 4) return null
+  const { minY, maxY } = bbox(outline)
+  const h = Math.max(1e-4, maxY - minY)
+  const topTol = minY + h * 0.10
+  const botTol = maxY - h * 0.10
+  let rTop = -1, rTopX = -Infinity
+  let rBot = -1, rBotX = -Infinity
+  let lBot = -1, lBotX = Infinity
+  let lTop = -1, lTopX = Infinity
+  for (let i = 0; i < n; i++) {
+    const [x, y] = outline[i]
+    if (y <= topTol) {
+      if (x > rTopX) { rTopX = x; rTop = i }
+      if (x < lTopX) { lTopX = x; lTop = i }
+    }
+    if (y >= botTol) {
+      if (x > rBotX) { rBotX = x; rBot = i }
+      if (x < lBotX) { lBotX = x; lBot = i }
+    }
+  }
+  if (rTop < 0 || rBot < 0 || lBot < 0 || lTop < 0) return null
+  if (new Set([rTop, rBot, lBot, lTop]).size !== 4) return null
+  const stepsR = (rBot - rTop + n) % n
+  const stepsL = (lTop - lBot + n) % n
+  const maxSteps = Math.ceil(n / 2)
+  if (stepsR < 1 || stepsR > maxSteps || stepsL < 1 || stepsL > maxSteps) return null
+  return [
+    { name: 'goreRight', from: rTop, to: rBot },
+    { name: 'goreLeft', from: lBot, to: lTop },
+  ]
+}
+
+function edgeArcLen(outline, fromIdx, toIdx) {
+  const n = outline.length
+  let i = fromIdx, len = 0, guard = 0
+  while (i !== toIdx) {
+    const nxt = (i + 1) % n
+    len += Math.hypot(outline[nxt][0] - outline[i][0], outline[nxt][1] - outline[i][1])
+    i = nxt
+    if (++guard > n) break
+  }
+  return len
+}
+
+function deriveSportBraSideEdges(outline) {
+  const n = outline.length
+  const half = Math.floor(n / 2)
+  if (n < 6) return []
+  let rightHemIdx = 1, rightHemY = -Infinity
+  for (let i = 1; i <= half; i++) if (outline[i][1] > rightHemY) { rightHemY = outline[i][1]; rightHemIdx = i }
+  let leftHemIdx = half + 1, leftHemY = -Infinity
+  for (let i = half + 1; i < n; i++) if (outline[i][1] > leftHemY) { leftHemY = outline[i][1]; leftHemIdx = i }
+  let underarmIdx = -1, bestX = -Infinity
+  for (let i = 1; i < rightHemIdx; i++) {
+    if (outline[i][0] > bestX) { bestX = outline[i][0]; underarmIdx = i }
+  }
+  if (underarmIdx <= 0 || underarmIdx >= rightHemIdx) return []
+  const leftUnderarmIdx = n - underarmIdx
+  if (leftUnderarmIdx <= leftHemIdx) return []
+  return [
+    { name: 'rightSide', from: underarmIdx, to: rightHemIdx },
+    { name: 'leftSide', from: leftHemIdx, to: leftUnderarmIdx },
+  ]
+}
+
+const ZONE_FLIP = { frontPanel: 'hipPanelFront', backPanel: 'hipPanelBack', hipPanelFront: 'frontPanel', hipPanelBack: 'backPanel' }
+
+function resolveEffectivePlacement(p, resolved, pairGoresAsHipPanels) {
+  const label = (p.label && p.label.en) || p.id || ''
+  const schemaRole = resolved.role
+  let declared = pairGoresAsHipPanels && schemaRole === 'skirt-front-gore'
+    ? 'hipPanelFront'
+    : pairGoresAsHipPanels && schemaRole === 'skirt-back-gore'
+      ? 'hipPanelBack'
+      : resolved.placement
+  const cutOnFold = p.cutOnFold ?? resolved.cutOnFold
+  if (schemaRole === 'elastic-band' && /waist|خصر|كمر|waistelastic/i.test(`${label} ${p.id || ''}`)) {
+    declared = 'attachWaist'
+  } else if (schemaRole === 'lining' && /gusset|crotch|دكة/i.test(`${label} ${p.id || ''}`)) {
+    declared = 'attachCrotch'
+  } else if (schemaRole === 'band' && cutOnFold) {
+    if (/front|أمام/i.test(`${label} ${p.id || ''}`)) declared = 'frontPanel'
+    else if (/back|خلف/i.test(`${label} ${p.id || ''}`)) declared = 'backPanel'
+  }
+  return (p.bodyZone && p.bodyZone !== resolved.zone && ZONE_FLIP[declared])
+    ? ZONE_FLIP[declared]
+    : declared
+}
+
+const FABRIC_NAME_TO_ID = new Set(FABRIC_IDS)
 
 const SLEEVE_ROLES = new Set(['sleeve', 'cap-sleeve', 'puff-sleeve', 'butterfly-sleeve'])
 // Roles that get bilateral duplication but NOT auto-seamed (drape from
@@ -618,8 +725,9 @@ export function convertAppPattern(payload) {
 
   const bySlot = { frontPanel: [], backPanel: [], hipPanelFront: [], hipPanelBack: [] }
   const princessSides = { front: [], back: [] }
+  const goreByRole = { goreFront: [], goreSideRight: [], goreBack: [], goreSideLeft: [] }
   const sleeves = []
-  const seamIdEdges = {} // seamId -> [{pieceId, fromIdx, toIdx}] — resolved into seams after the main loop
+  const seamIdEdges = {} // seamId -> [{pieceId, fromIdx, toIdx, reverse, cutOnFold}] — resolved into seams after the main loop
 
   const claimedIndices = {} // pieceId -> Set<pointIdx>
   function edgeIndexSet(outlineLen, fromIdx, toIdx) {
@@ -642,7 +750,7 @@ export function convertAppPattern(payload) {
     for (const i of edgeIndexSet(outlineLen, from, to)) set.add(i)
   }
 
-  function pushSeamIdEdges(pieceId, edgesArr, outlineLen) {
+  function pushSeamIdEdges(pieceId, edgesArr, outlineLen, meta = {}) {
     if (!edgesArr) return
     const claimed = claimedIndices[pieceId]
     for (const e of edgesArr) {
@@ -655,7 +763,7 @@ export function convertAppPattern(payload) {
       }
       pushEdge(pieceId, `seamId_${e.seamId}`, e.fromIdx, e.toIdx)
       if (outlineLen != null) { const set = (claimedIndices[pieceId] ||= new Set()); for (const i of edgeIndexSet(outlineLen, e.fromIdx, e.toIdx)) set.add(i) }
-      ;(seamIdEdges[e.seamId] ||= []).push({ pieceId, fromIdx: e.fromIdx, toIdx: e.toIdx, reverse: e.reverse })
+      ;(seamIdEdges[e.seamId] ||= []).push({ pieceId, fromIdx: e.fromIdx, toIdx: e.toIdx, reverse: e.reverse, cutOnFold: Boolean(meta.cutOnFold) })
     }
   }
 
@@ -679,6 +787,14 @@ export function convertAppPattern(payload) {
     frontGores.length === 1 && backGores.length === 1 &&
     Boolean(frontGores[0].cutOnFold) && Boolean(backGores[0].cutOnFold) &&
     !frontGores[0].edges?.length && !backGores[0].edges?.length
+
+  const seamIdCounts = {}
+  for (const ap of activePieces) {
+    if (!Array.isArray(ap.edges)) continue
+    for (const e of ap.edges) {
+      if (e?.seamId) seamIdCounts[e.seamId] = (seamIdCounts[e.seamId] || 0) + 1
+    }
+  }
 
   for (const p of allInputPieces) {
     const label = (p.label && p.label.en) || p.id
@@ -717,11 +833,6 @@ export function convertAppPattern(payload) {
 
     // ---------- WP-6 metadata path: thin structural validation, trust the declared role ----------
     const { role: schemaRole } = resolved
-    const declaredPlacement = pairGoresAsHipPanels && schemaRole === 'skirt-front-gore'
-      ? 'hipPanelFront'
-      : pairGoresAsHipPanels && schemaRole === 'skirt-back-gore'
-        ? 'hipPanelBack'
-        : resolved.placement
     const cutOnFold = p.cutOnFold ?? resolved.cutOnFold
     const bilateral = p.bilateral ?? resolved.bilateral
     const edges = p.edges
@@ -731,10 +842,7 @@ export function convertAppPattern(payload) {
     const princessSeamId = p.princessSeamId
     const local = relocalize(p.outline)
 
-    const ZONE_FLIP = { frontPanel: 'hipPanelFront', backPanel: 'hipPanelBack', hipPanelFront: 'frontPanel', hipPanelBack: 'backPanel' }
-    const placement = (p.bodyZone && p.bodyZone !== resolved.zone && ZONE_FLIP[declaredPlacement])
-      ? ZONE_FLIP[declaredPlacement]
-      : declaredPlacement
+    const placement = resolveEffectivePlacement(p, resolved, pairGoresAsHipPanels)
 
     if (SLEEVE_ROLES.has(schemaRole)) {
       sleeves.push({ id: p.id, label: p.label || label, labelEn: label, outline: cutOnFold ? unfoldPiece(local) : local, color: p.color, bilateral: bilateral !== false && !cutOnFold, darts: p.darts })
@@ -752,7 +860,8 @@ export function convertAppPattern(payload) {
         roles[copy.id] = internalRole
         const copyEdges = copy.id.endsWith('_l') && bilateral && !cutOnFold && edges ? mirrorEdgeIndices(edges, local.length) : edges
         const tagged = bilateral && !cutOnFold ? copyEdges?.map(e => ({ ...e, seamId: e.seamId ? e.seamId + (copy.id.endsWith('_r') ? '_R' : '_L') : e.seamId })) : copyEdges
-        pushSeamIdEdges(copy.id, tagged, copy.outline.length)
+        pushSeamIdEdges(copy.id, tagged, copy.outline.length, { cutOnFold })
+        goreByRole[internalRole].push({ id: copy.id, outline: copy.outline, hasAuthoredEdges: Boolean(tagged?.length) })
         recognized.push({ id: copy.id, label })
       }
       continue
@@ -760,9 +869,10 @@ export function convertAppPattern(payload) {
 
     if (cutOnFold) {
       const isUpperPanel = placement === 'frontPanel' || placement === 'backPanel'
-      const canSubdivideArmhole = isUpperPanel && !princessSeamId && !edges?.length && necklineEndIdx == null && sideEndIdx == null
+      const isSportBraPanel = schemaRole === 'band' && isUpperPanel
+      const canSubdivideArmhole = isUpperPanel && !isSportBraPanel && !princessSeamId && !edges?.length && necklineEndIdx == null && sideEndIdx == null
       const armholeLocal = canSubdivideArmhole && hasSleeves ? subdivideFoldBodiceArmhole(local) : local
-      const canSubdivideNeck = isUpperPanel && !princessSeamId && necklineEndIdx == null && sideEndIdx == null &&
+      const canSubdivideNeck = isUpperPanel && !isSportBraPanel && !princessSeamId && necklineEndIdx == null && sideEndIdx == null &&
         (!edges?.length || edges.every((e) => e && e.fromIdx >= 1 && e.toIdx >= 1))
       const baseLocal = canSubdivideNeck ? subdivideFoldBodiceNeckOpening(armholeLocal) : armholeLocal
       const neckAdded = baseLocal.length - armholeLocal.length
@@ -778,20 +888,39 @@ export function convertAppPattern(payload) {
         pushClaimedEdge(p.id, left.name, left.from, left.to, outline.length)
         ;(seamIdEdges[princessSeamId + '_R'] ||= []).push({ pieceId: p.id, fromIdx: right.from, toIdx: right.to })
         ;(seamIdEdges[princessSeamId + '_L'] ||= []).push({ pieceId: p.id, fromIdx: left.from, toIdx: left.to })
-        pushSeamIdEdges(p.id, adjEdges, outline.length)
+        pushSeamIdEdges(p.id, adjEdges, outline.length, { cutOnFold: true })
       } else {
-        if (autoTorsoSeams && (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack')) {
-          const authoredTop = necklineEndIdx != null && adjEdges?.some(e => e.seamId && e.fromIdx === 0 && e.toIdx === necklineEndIdx)
-          const authoredSides = adjEdges?.filter(e => e.seamId && /Side_[RL]$/.test(e.seamId)).length >= 2
-          const geo = hasSleeves && isUpperPanel
-            ? deriveSleevedTorsoEdges(outline, { includeTop: !authoredTop, necklineEndIdx, sideEndIdx, edges: adjEdges, curves: p.curves || p.outline?.curves })
-            : deriveTorsoEdgeInstructions(outline, { includeTop: !authoredTop && isUpperPanel, necklineEndIdx, sideEndIdx })
-          if (!authoredSides && geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
-            bySlot[placement].push({ id: p.id, label })
-            for (const e of geo) pushClaimedEdge(p.id, e.name, e.from, e.to, outline.length)
+        const isBriefPanel = schemaRole === 'brief-front' || schemaRole === 'brief-back'
+        const isMultiWrapPiece = Boolean(adjEdges?.some((e) => e && e.seamId && seamIdCounts[e.seamId] === 3))
+        if (isBriefPanel && adjEdges?.length === 1 && adjEdges[0]?.seamId === 'briefSide') {
+          const be = adjEdges[0]
+          const N = outline.length
+          pushClaimedEdge(p.id, 'rightSide', be.fromIdx, be.toIdx, N)
+          pushClaimedEdge(p.id, 'leftSide', N - be.toIdx, N - be.fromIdx, N)
+          bySlot[placement].push({ id: p.id, label })
+          recognized.push({ id: p.id, label })
+          continue
+        }
+        if (autoTorsoSeams && !isMultiWrapPiece && (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack')) {
+          if (isSportBraPanel) {
+            const geo = deriveSportBraSideEdges(outline)
+            if (geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
+              bySlot[placement].push({ id: p.id, label })
+              for (const e of geo) pushClaimedEdge(p.id, e.name, e.from, e.to, outline.length)
+            }
+          } else {
+            const authoredTop = necklineEndIdx != null && adjEdges?.some(e => e.seamId && e.fromIdx === 0 && e.toIdx === necklineEndIdx)
+            const authoredSides = adjEdges?.filter(e => e.seamId && /Side_[RL]$/.test(e.seamId)).length >= 2
+            const geo = hasSleeves && isUpperPanel
+              ? deriveSleevedTorsoEdges(outline, { includeTop: !authoredTop, necklineEndIdx, sideEndIdx, edges: adjEdges, curves: p.curves || p.outline?.curves })
+              : deriveTorsoEdgeInstructions(outline, { includeTop: !authoredTop && isUpperPanel, necklineEndIdx, sideEndIdx })
+            if (!authoredSides && geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
+              bySlot[placement].push({ id: p.id, label })
+              for (const e of geo) pushClaimedEdge(p.id, e.name, e.from, e.to, outline.length)
+            }
           }
         }
-        pushSeamIdEdges(p.id, adjEdges, outline.length)
+        pushSeamIdEdges(p.id, adjEdges, outline.length, { cutOnFold: true })
       }
       recognized.push({ id: p.id, label })
       continue
@@ -847,16 +976,21 @@ export function convertAppPattern(payload) {
       : local
     rawPieces.push({ id: p.id, label: p.label, outline: singleOutline, color: p.color, darts: p.darts })
     roles[p.id] = placement
+    const isMultiWrapPiece = Boolean(edges?.some((e) => e && e.seamId && seamIdCounts[e.seamId] === 3))
     if (autoTorsoSeams && (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack')) {
-      const geo = hasSleeves && isUpperSingle
-        ? deriveSleevedTorsoEdges(singleOutline, { includeTop: true, edges, curves: p.curves || p.outline?.curves })
-        : deriveTorsoEdgeInstructions(singleOutline, { includeTop: isUpperSingle })
-      if (geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
+      if (isMultiWrapPiece) {
         bySlot[placement].push({ id: p.id, label })
-        for (const e of geo) pushClaimedEdge(p.id, e.name, e.from, e.to, singleOutline.length)
+      } else {
+        const geo = hasSleeves && isUpperSingle
+          ? deriveSleevedTorsoEdges(singleOutline, { includeTop: true, edges, curves: p.curves || p.outline?.curves })
+          : deriveTorsoEdgeInstructions(singleOutline, { includeTop: isUpperSingle })
+        if (geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
+          bySlot[placement].push({ id: p.id, label })
+          for (const e of geo) pushClaimedEdge(p.id, e.name, e.from, e.to, singleOutline.length)
+        }
       }
     }
-    pushSeamIdEdges(p.id, edges, singleOutline.length)
+    pushSeamIdEdges(p.id, edges, singleOutline.length, { cutOnFold: false })
     recognized.push({ id: p.id, label })
   }
 
@@ -976,18 +1110,96 @@ export function convertAppPattern(payload) {
     }
   }
 
-  // WP-6 seamId-tagged edges (princess seams, and any future declared-edge role)
+  // 4-Gore skirt ring seams (front -> sideRight -> back -> sideLeft -> front)
+  if (!pairGoresAsHipPanels &&
+    goreByRole.goreFront.length === 1 && goreByRole.goreSideRight.length === 1 &&
+    goreByRole.goreBack.length === 1 && goreByRole.goreSideLeft.length === 1 &&
+    !Object.values(goreByRole).some(([g]) => g.hasAuthoredEdges)
+  ) {
+    const gf = goreByRole.goreFront[0], gsr = goreByRole.goreSideRight[0]
+    const gb = goreByRole.goreBack[0], gsl = goreByRole.goreSideLeft[0]
+    const ring = [gf, gsr, gb, gsl]
+    const derived = ring.map((g) => deriveGoreSideEdges(g.outline))
+    if (derived.every(Boolean)) {
+      const pairs = [
+        [0, 1, 'front_to_sideRight'],
+        [1, 2, 'sideRight_to_back'],
+        [2, 3, 'back_to_sideLeft'],
+        [3, 0, 'sideLeft_to_front'],
+      ]
+      const validPairs = pairs.every(([ai, bi]) => {
+        const aLen = edgeArcLen(ring[ai].outline, derived[ai][0].from, derived[ai][0].to)
+        const bLen = edgeArcLen(ring[bi].outline, derived[bi][1].from, derived[bi][1].to)
+        return Math.min(aLen, bLen) > 1e-3 && Math.max(aLen, bLen) / Math.min(aLen, bLen) <= 1.45
+      })
+      if (validPairs) {
+        ring.forEach((g, idx) => {
+          for (const e of derived[idx]) pushClaimedEdge(g.id, e.name, e.from, e.to, g.outline.length)
+        })
+        for (const [ai, bi, tag] of pairs) {
+          seamInstructions.push({
+            id: `goreRing_${tag}`,
+            a: { piece: ring[ai].id, edge: 'goreRight' },
+            b: { piece: ring[bi].id, edge: 'goreLeft' },
+            reverse: true,
+          })
+        }
+      }
+    }
+  }
+
+  // WP-6 seamId-tagged edges (princess seams, wrap coats, and any future declared-edge role)
   let seamIdCounter = 0
   for (const [seamId, contributors] of Object.entries(seamIdEdges)) {
-    if (contributors.length !== 2) continue
-    const [a, b] = contributors
-    const aEdgeName = edgeInstructions.find((e) => e.pieceId === a.pieceId && e.fromIdx === a.fromIdx && e.toIdx === a.toIdx)?.edgeName
-    const bEdgeName = edgeInstructions.find((e) => e.pieceId === b.pieceId && e.fromIdx === b.fromIdx && e.toIdx === b.toIdx)?.edgeName
-    if (!aEdgeName || !bEdgeName) continue
-    const aReverse = typeof a.reverse === 'boolean' ? a.reverse : undefined
-    const bReverse = typeof b.reverse === 'boolean' ? b.reverse : undefined
-    if (aReverse !== undefined && bReverse !== undefined && aReverse !== bReverse) continue
-    seamInstructions.push({ id: `seamId_${seamIdCounter++}_${seamId}`, a: { piece: a.pieceId, edge: aEdgeName }, b: { piece: b.pieceId, edge: bEdgeName }, reverse: aReverse ?? bReverse ?? true })
+    if (contributors.length === 2) {
+      const [a, b] = contributors
+      const aEdgeName = edgeInstructions.find((e) => e.pieceId === a.pieceId && e.fromIdx === a.fromIdx && e.toIdx === a.toIdx)?.edgeName
+      const bEdgeName = edgeInstructions.find((e) => e.pieceId === b.pieceId && e.fromIdx === b.fromIdx && e.toIdx === b.toIdx)?.edgeName
+      if (!aEdgeName || !bEdgeName) continue
+      const aReverse = typeof a.reverse === 'boolean' ? a.reverse : undefined
+      const bReverse = typeof b.reverse === 'boolean' ? b.reverse : undefined
+      if (aReverse !== undefined && bReverse !== undefined && aReverse !== bReverse) continue
+      seamInstructions.push({ id: `seamId_${seamIdCounter++}_${seamId}`, a: { piece: a.pieceId, edge: aEdgeName }, b: { piece: b.pieceId, edge: bEdgeName }, reverse: aReverse ?? bReverse ?? true })
+    } else if (contributors.length === 3) {
+      // 3-contributor symmetric wrap coat/bodice (e.g. wrapCoatSide: 1 cut-on-fold back + L/R front panels)
+      const foldCs = contributors.filter((c) => c.cutOnFold)
+      const sideCs = contributors.filter((c) => !c.cutOnFold)
+      if (foldCs.length !== 1 || sideCs.length !== 2) continue
+      const foldC = foldCs[0]
+      const foldPiece = rawPieces.find((p) => p.id === foldC.pieceId)
+      const foldEdgeName = edgeInstructions.find((e) => e.pieceId === foldC.pieceId && e.fromIdx === foldC.fromIdx && e.toIdx === foldC.toIdx)?.edgeName
+      if (!foldPiece?.outline?.length || !foldEdgeName) continue
+      const N = foldPiece.outline.length
+      const mirFrom = N - foldC.toIdx
+      const mirTo = N - foldC.fromIdx
+      const mirEdgeName = `seamId_${seamId}_mirror`
+      let posC = null, negC = null
+      for (const sc of sideCs) {
+        const scPiece = rawPieces.find((p) => p.id === sc.pieceId)
+        const scEdgeName = edgeInstructions.find((e) => e.pieceId === sc.pieceId && e.fromIdx === sc.fromIdx && e.toIdx === sc.toIdx)?.edgeName
+        if (!scPiece?.outline?.length || !scEdgeName) continue
+        const { minX, maxX } = bbox(scPiece.outline)
+        const cx = 0.5 * (minX + maxX)
+        const dxStart = scPiece.outline[sc.fromIdx][0] - cx
+        if (dxStart >= 0 && !posC) posC = { ...sc, outline: scPiece.outline, edgeName: scEdgeName }
+        else if (dxStart < 0 && !negC) negC = { ...sc, outline: scPiece.outline, edgeName: scEdgeName }
+      }
+      if (!posC || !negC) continue
+      pushEdge(foldC.pieceId, mirEdgeName, mirFrom, mirTo)
+      for (const [sc, fFrom, fTo, fEdgeName, tag] of [
+        [posC, foldC.fromIdx, foldC.toIdx, foldEdgeName, 'R'],
+        [negC, mirFrom, mirTo, mirEdgeName, 'L'],
+      ]) {
+        const dySide = sc.outline[sc.toIdx][1] - sc.outline[sc.fromIdx][1]
+        const dyFold = foldPiece.outline[fTo][1] - foldPiece.outline[fFrom][1]
+        seamInstructions.push({
+          id: `seamId_${seamIdCounter++}_${seamId}_${tag}`,
+          a: { piece: sc.pieceId, edge: sc.edgeName },
+          b: { piece: foldC.pieceId, edge: fEdgeName },
+          reverse: dySide * dyFold < 0,
+        })
+      }
+    }
   }
 
   const fabricId = FABRIC_NAME_TO_ID.has(payload.fabricId) ? payload.fabricId : null

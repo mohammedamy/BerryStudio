@@ -240,6 +240,7 @@ export const I18N = {
     fabricTextureD: "Uploads a real photo of your fabric — tiled as a real fill on the piece (2D canvas) and mapped onto the material (3D Preview / Cloth Lab), not just a flat colour swatch. Applies to the selected piece, or every piece if none is selected.",
     fab_cotton:"Cotton", fab_denim:"Denim", fab_silk:"Silk", fab_linen:"Linen",
     fab_wool:"Wool", fab_satin:"Satin", fab_leather:"Leather", fab_chiffon:"Chiffon",
+    fab_jersey:"Cotton Jersey", fab_scuba:"Scuba Knit", fab_tulle:"Tulle", fab_velvet:"Velvet", fab_lace:"Lace",
     // library
     libraryTitle: "Pattern Library", searchLib: "Search patterns…",
     allCat: "All", saveMine: "Save current to My Patterns", noResults: "No patterns match your search.",
@@ -968,6 +969,7 @@ export const I18N = {
     fabricTextureD: "ارفعي صورة حقيقية لقماشك — تُعرض كتعبئة حقيقية متكررة على القطعة (اللوحة ثنائية الأبعاد) وتُطبَّق على الخامة (المعاينة ثلاثية الأبعاد / معمل القماش)، وليست مجرد لون مسطّح. تُطبَّق على القطعة المحددة، أو على كل القطع إن لم تُحدَّد أي قطعة.",
     fab_cotton:"قطن", fab_denim:"جينز", fab_silk:"حرير", fab_linen:"كتان",
     fab_wool:"صوف", fab_satin:"ساتان", fab_leather:"جلد", fab_chiffon:"شيفون",
+    fab_jersey:"قطن جيرسيه", fab_scuba:"سكوبا", fab_tulle:"تول", fab_velvet:"مخمل", fab_lace:"دانتيل",
     libraryTitle: "مكتبة الباترونات", searchLib: "ابحث عن باترون…",
     allCat: "الكل", saveMine: "حفظ الحالي في باتروناتي", noResults: "لا توجد باترونات مطابقة لبحثك.",
     aiTitle: "مولّد الباترون بالذكاء الاصطناعي",

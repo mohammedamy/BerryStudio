@@ -522,8 +522,16 @@ export function deriveWaistbandPinMask(simRestPositions, simParticleCount, dims)
 }
 
 const WAIST_OR_HEM_ATTACH_ROLES = new Set([
-  'attachWaist', 'attachWaistBack', 'attachHem',
+  'attachWaist', 'attachWaistBack', 'attachHem', 'attachHemBand',
   'goreFront', 'goreBack', 'goreSideLeft', 'goreSideRight',
+])
+
+const BODY_OR_BUST_ATTACH_ROLES = new Set([
+  'attachBody', 'attachBodyBack', 'attachBust', 'attachUnderbust', 'attachWrist',
+])
+
+const NECK_OR_STRAP_ATTACH_ROLES = new Set([
+  'attachNeck', 'attachStrap',
 ])
 
 const LOWER_BODY_WAIST_PIN_ROLES = new Set([
@@ -572,9 +580,8 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
       if (offset == null || !pts || pts.length === 0) continue
       const { role } = tp
       if (
-        role !== 'attachNeck' &&
-        role !== 'attachBody' &&
-        role !== 'attachBodyBack' &&
+        !NECK_OR_STRAP_ATTACH_ROLES.has(role) &&
+        !BODY_OR_BUST_ATTACH_ROLES.has(role) &&
         !WAIST_OR_HEM_ATTACH_ROLES.has(role)
       ) continue
 
@@ -591,7 +598,7 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
       for (let localIdx = 0; localIdx < pts.length; localIdx++) {
         const [xCm, yCm] = pts[localIdx]
         const sp = renderVertexToSimParticle[offset + localIdx]
-        if (role === 'attachNeck') {
+        if (NECK_OR_STRAP_ATTACH_ROLES.has(role)) {
           const topBand = yCm <= minY + Math.max(2.0, heightCm * 0.25)
           const isPlacketOrFacing = widthCm <= 16 || heightCm / widthCm >= 2.2
           const compactStitch = (heightCm <= 18 || isPlacketOrFacing) && (
@@ -600,7 +607,7 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
             xCm >= maxX - Math.max(1.6, widthCm * 0.18)
           )
           if (topBand || compactStitch) mask[sp] = 1
-        } else if (role === 'attachBody' || role === 'attachBodyBack') {
+        } else if (BODY_OR_BUST_ATTACH_ROLES.has(role)) {
           const topBand = yCm <= minY + Math.max(2.0, heightCm * 0.22)
           const compactStitch = heightCm <= 28 && (
             yCm >= maxY - Math.max(1.8, heightCm * 0.20) ||

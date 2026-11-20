@@ -104,7 +104,7 @@ import {
           role: 'bodice-front-side', bilateral: true,
           edges: [
             { fromIdx: b.frontSide.princessFromIdx, toIdx: b.frontSide.princessToIdx, seamId: 'blousePrincessFront' },
-            { fromIdx: b.frontSide.length - 1, toIdx: b.frontSide.armholeFromIdx, seamId: 'blouseSide' },
+            { fromIdx: b.frontSide.armholeToIdx, toIdx: b.frontSide.length - 1, seamId: 'blouseSide' },
           ],
         },
         {
@@ -123,7 +123,7 @@ import {
           role: 'bodice-back-side', bilateral: true,
           edges: [
             { fromIdx: b.backSide.princessFromIdx, toIdx: b.backSide.princessToIdx, seamId: 'blousePrincessBack' },
-            { fromIdx: b.backSide.length - 1, toIdx: b.backSide.armholeFromIdx, seamId: 'blouseSide' },
+            { fromIdx: b.backSide.armholeToIdx, toIdx: b.backSide.length - 1, seamId: 'blouseSide' },
           ],
         },
         {
@@ -685,7 +685,7 @@ import {
           role: 'bodice-front-side', bilateral: true,
           edges: [
             { fromIdx: b.frontSide.princessFromIdx, toIdx: b.frontSide.princessToIdx, seamId: 'topPrincessFront' },
-            { fromIdx: b.frontSide.length - 1, toIdx: b.frontSide.armholeFromIdx, seamId: 'topSide' },
+            { fromIdx: b.frontSide.armholeToIdx, toIdx: b.frontSide.length - 1, seamId: 'topSide' },
           ],
         },
         {
@@ -704,7 +704,7 @@ import {
           role: 'bodice-back-side', bilateral: true,
           edges: [
             { fromIdx: b.backSide.princessFromIdx, toIdx: b.backSide.princessToIdx, seamId: 'topPrincessBack' },
-            { fromIdx: b.backSide.length - 1, toIdx: b.backSide.armholeFromIdx, seamId: 'topSide' },
+            { fromIdx: b.backSide.armholeToIdx, toIdx: b.backSide.length - 1, seamId: 'topSide' },
           ],
         },
         {

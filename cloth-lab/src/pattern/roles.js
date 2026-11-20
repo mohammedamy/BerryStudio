@@ -111,35 +111,20 @@ export const SCHEMA_ROLE_INFO = {
   godet: { placement: 'attachHem', bilateral: true },
   tier: { placement: 'attachHem' },
 
-  // small body accessories
+  // small body accessories & anatomical placements
   pocket: { placement: 'attachBody' },
   facing: { placement: 'attachBody' },
   lining: { placement: 'attachBodyBack' },
-  cuff: { placement: 'attachBody' },
-  'rib-cuff': { placement: 'attachBody' },
-  'hem-band': { placement: 'attachBody' },
+  cuff: { placement: 'attachWrist', bilateral: true },
+  'rib-cuff': { placement: 'attachWrist', bilateral: true },
+  'hem-band': { placement: 'attachHemBand' },
 
-  // docs/plan 4.md Phase 4 (WP-53): js/underwear-library.js declared these
-  // 5 roles from day one (a bra's cup/band/strap, and the elastic-band/
-  // gusset construction every brief and most bras use) but they were never
-  // added here — resolveSchemaRole() returned null for all 5, so
-  // convertAppPattern() silently fell back to classifyLegacy's name-based
-  // guess for every one of them (a real gap: this collection's roles were
-  // outside the 46-value vocabulary docs/plan 4.md §4.2 requires, the
-  // exact "invented role" problem that role vocabulary exists to prevent).
-  // Placements below follow the closest existing precedent rather than a
-  // new placement algorithm — same "reasonable attachment, not seam-
-  // perfect" bar this file's own header already sets for the accessory
-  // roles above: cup/band sit at chest height (attachBody, matching
-  // facing/cuff/pocket's own "near chest height" placement); strap runs
-  // near the shoulder (attachNeck, matching collar/epaulette); elastic-
-  // band is most commonly a leg-opening finish here (attachHem); gusset
-  // is a small body accessory like the rest of this group (attachBody).
-  cup: { placement: 'attachBody' },
-  band: { placement: 'attachBody' },
-  strap: { placement: 'attachNeck' },
+  // Intimate & swimwear roles (un-zoned so body-zone remains null):
+  cup: { placement: 'attachBust', bilateral: true },
+  band: { placement: 'attachUnderbust' },
+  strap: { placement: 'attachStrap', bilateral: true },
   'elastic-band': { placement: 'attachHem' },
-  gusset: { placement: 'attachBody' },
+  gusset: { placement: 'attachCrotch' },
 
   // WP-59 (docs/plan 4.md Phase 5, user-directed "make everything
   // cloth-lab compatible" pass): js/fancy-patterns.js's `trouserPanel()`

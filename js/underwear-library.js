@@ -351,7 +351,7 @@ import { q, PATTERNS, LIBRARY } from './data.js';
         desc: { en: opts.strap === "racerback" ? "Racerback strap, angled in toward the center back." : "Adjustable shoulder strap.",
                 ar: opts.strap === "racerback" ? "حمالة رياضية بظهر متقاطع، مائلة نحو وسط الظهر." : "حمالة كتف قابلة للتعديل." },
         outline: strapPc(opts.longline ? 14 : 18, sW), notches: [[sW, 0]], role: "strap", bilateral: true,
-        grain: [[0.8, 3], [0.8, (opts.longline ? 14 : 18) - 3]] });
+        grain: [[sW / 2, 3], [sW / 2, (opts.longline ? 14 : 18) - 3]] });
     }
     return pieces;
   }
@@ -487,127 +487,291 @@ import { q, PATTERNS, LIBRARY } from './data.js';
     }));
 
   // ================= MEN'S BRIEFS/TRUNKS (6) =================
-  def("mu01", "men", "Classic Brief", "سروال داخلي كلاسيكي", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Mid-rise brief with full coverage and a curved leg opening.", "سروال داخلي متوسط الارتفاع بتغطية كاملة وفتحة ساق منحنية.",
-    (m) => briefPieces(m, { rise: "mid", legCut: "full", coverage: 1.0 }));
-  def("mu02", "men", "Low-Rise Brief", "سروال داخلي منخفض الخصر", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Low-rise brief, full coverage through the seat.", "سروال داخلي منخفض الخصر بتغطية كاملة للمقعد.",
-    (m) => briefPieces(m, { rise: "low", legCut: "full", coverage: 1.0 }));
-  def("mu03", "men", "Boxer Brief", "بوكسر داخلي", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Mid-rise brief with the leg panel extended down the thigh to a hemmed edge.", "سروال داخلي متوسط الارتفاع بامتداد الساق حتى الفخذ بحافة مطوية.",
-    (m) => briefPieces(m, { rise: "mid", legCut: "full", coverage: 1.0, legLength: 9 }));
-  def("mu04", "men", "Trunk", "ترنك داخلي", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Low-rise, squared boyshort-style leg with a short hemmed extension.", "سروال داخلي منخفض بخط ساق مربّع وامتداد قصير مطوي.",
-    (m) => briefPieces(m, { rise: "low", legCut: "boyshort", coverage: 1.0, legLength: 5 }));
-  def("mu05", "men", "Athletic Brief", "سروال داخلي رياضي", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Mid-rise brief with a higher-cut leg opening for freer movement.", "سروال داخلي متوسط الارتفاع بفتحة ساق أعلى لحرية حركة أكبر.",
-    (m) => briefPieces(m, { rise: "mid", legCut: "bikini", coverage: 1.0 }));
-  def("mu06", "men", "Full-Rise Brief", "سروال داخلي عالي الخصر", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "High-rise brief with maximum coverage.", "سروال داخلي عالي الخصر بأقصى تغطية.",
-    (m) => briefPieces(m, { rise: "high", legCut: "full", coverage: 1.15 }));
+  def("mu01", "men", "Navy Classic Jacquard-Waist Brief", "سروال داخلي كحلي كلاسيكي بحزام منسوج", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Classic mid-rise brief in combed navy cotton jersey, featuring a contrast woven jacquard waistband, contoured dual-layer front pouch, and full seat coverage.",
+    "سروال داخلي كلاسيكي متوسط الارتفاع من قطن الجيرسيه الكحلي الممشط، بحزام خصر منسوج متباين، وجيب أمامي مزدوج مجسّم وتغطية كاملة للمقعد.",
+    (m) => briefPieces(m, {
+      rise: "mid", legCut: "full", coverage: 1.0,
+      frontDesc: { en: "Navy cotton jersey contoured pouch front panel for breathable anatomical support.", ar: "لوحة أمامية من القطن الكحلي بجيب مجسم لدعم مسامي ومريح." },
+      backDesc: { en: "Seamless-back full seat panel providing natural motion support.", ar: "لوحة خلفية كاملة للمقعد تمنح دعماً طبيعياً أثناء الحركة." },
+      gussetDesc: { en: "Soft double-layer navy cotton crotch gusset.", ar: "دكة قطنية كحلية مزدوجة الطبقة عالية النعومة." },
+      waistElasticDesc: { en: "Signature navy & slate woven jacquard plush waistband.", ar: "حزام خصر مطاطي منسوج بنقش جاكار كحلي ورمادي فخم." },
+      legElasticDesc: { en: "Bound navy stretch leg trim preventing ride-up.", ar: "كنار ساق مطاطي كحلي مغلف يمنع الالتفاف." },
+    }));
+  def("mu02", "men", "Charcoal Heather Low-Rise Brief", "سروال داخلي رمادي فحمي منخفض الخصر", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Modern low-rise brief in heathered charcoal cotton-elastane jersey trimmed with a crisp navy elastic waistband and contrast bound leg openings.",
+    "سروال داخلي عصري منخفض الخصر من جيرسيه القطن والإيلاستين الرمادي الفحمي، بحزام خصر كحلي متباين وحواف ساق مقفلة بكنار نظيف.",
+    (m) => briefPieces(m, {
+      rise: "low", legCut: "hipster", coverage: 1.0,
+      frontDesc: { en: "Charcoal heather low-rise contoured front panel.", ar: "لوحة أمامية منخفضة الخصر من الجيرسيه الرمادي الفحمي." },
+      backDesc: { en: "Tailored low-rise charcoal heather seat panel.", ar: "لوحة خلفية مفصلة منخفضة الخصر للمقعد باللون الرمادي الفحمي." },
+      gussetDesc: { en: "Cotton-modal lined gusset for softness.", ar: "دكة مبطنة بمزيج القطن والمودال للنعومة." },
+      waistElasticDesc: { en: "Deep navy striped low-profile elastic waistband.", ar: "حزام خصر مطاطي رفيع بخطوط كحلية أنيقة." },
+      legElasticDesc: { en: "Contrast navy bound stretch leg binding.", ar: "شريط ساق مطاطي بلون كحلي متباين." },
+    }));
+  def("mu03", "men", "Navy Performance Boxer Brief", "بوكسر داخلي كحلي رياضي متوسط الطول", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Mid-thigh navy modal performance boxer brief with a brushed metallic-silver waistband, ergonomic front pouch, and flatlock no-chafe thigh hems.",
+    "بوكسر داخلي كحلي بطول منتصف الفخذ من قماش المودال الرياضي، بحزام فضي مصقول وجيب أمامي مريح وحواف فخذ بدرزات مسطحة مانعة للاحتكاك.",
+    (m) => briefPieces(m, {
+      rise: "mid", legCut: "full", coverage: 1.0, legLength: 9,
+      frontDesc: { en: "Navy modal performance front panel extended into contoured upper-thigh panels.", ar: "لوحة أمامية من المودال الكحلي تمتد بانتظام نحو أعلى الفخذ." },
+      backDesc: { en: "No-center-seam navy modal seat panel preventing bunching.", ar: "لوحة مقعد بدون درزة وسطى تمنع التكتل." },
+      gussetDesc: { en: "Breathable contoured crotch panel joining front and thigh lines.", ar: "دكة مسامية تصل بين المقدمة وامتداد الفخذ بسلاسة." },
+      waistElasticDesc: { en: "Brushed silver-slate embossed elastic waistband.", ar: "حزام خصر مطاطي بلون فضي مصقول بنقش بارز." },
+      legElasticDesc: { en: "Flatlock hemmed thigh cuffs preventing ride-up.", ar: "أساور فخذ بدرزة مسطحة تمنع ارتفاع البوكسر." },
+    }));
+  def("mu04", "men", "Burgundy Modal Stretch Trunk", "ترنك داخلي عنابي من المودال المرن", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Short square-leg trunk in rich burgundy micromodal jersey with a matte charcoal waistband and clean hemmed short thigh line.",
+    "ترنك داخلي بقصة ساق مربعة قصيرة من المايكرومودال العنابي الغني، بحزام فحمي مطفي وامتداد فخذ قصير نظيف التشطيب.",
+    (m) => briefPieces(m, {
+      rise: "low", legCut: "boyshort", coverage: 1.0, legLength: 5,
+      frontDesc: { en: "Burgundy micromodal low-rise trunk front panel.", ar: "لوحة أمامية من المودال العنابي منخفضة الخصر." },
+      backDesc: { en: "Sculpted square-hem trunk seat panel.", ar: "لوحة خلفية مجسّمة بحافة مربعة للترنك." },
+      gussetDesc: { en: "Flat-stitched modal crotch gusset.", ar: "دكة مودال مخيطة بدرزة مسطحة ناعمة." },
+      waistElasticDesc: { en: "Matte charcoal & pinstripe waistband.", ar: "حزام خصر مطاطي فحمي بخط رفيع." },
+      legElasticDesc: { en: "Twin-needle hemmed short trunk leg trim.", ar: "تشطيب ساق الترنك القصير بدرزة إبرتين." },
+    }));
+  def("mu05", "men", "Charcoal Contrast-Seam Athletic Brief", "سروال داخلي رياضي فحمي بدرزات متباينة", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "High-cut athletic sport brief in cool-touch charcoal microfiber highlighted with neon lime contrast flatlock seams and an active support pouch.",
+    "سروال داخلي رياضي بفتحة ساق عالية من المايكروفايبر الفحمي سريع الجفاف، مزين بدرزات مسطحة متباينة بلون أخضر ليموني وجيب دعم رياضي.",
+    (m) => briefPieces(m, {
+      rise: "mid", legCut: "bikini", coverage: 1.0,
+      frontDesc: { en: "Charcoal microfiber athletic front with neon-lime contrast pouch framing.", ar: "لوحة أمامية رياضية فحمية بتأطير درزات ليمونية متباينة." },
+      backDesc: { en: "Active high-mobility seat panel with flatlock seam curves.", ar: "لوحة مقعد رياضية لحرية حركة قصوى مع درزات مسطحة." },
+      gussetDesc: { en: "Ventilated stretch microfiber crotch gusset.", ar: "دكة مايكروفايبر مرنة عالية التهوية." },
+      waistElasticDesc: { en: "High-recovery matte charcoal performance waistband.", ar: "حزام خصر رياضي فحمي عالي الثبات." },
+      legElasticDesc: { en: "Smooth high-cut elastic binding with contrast stitching.", ar: "كنار ساق رياضي مرتفع بدرزات متباينة." },
+    }));
+  def("mu06", "men", "Crisp White Ribbed Full-Rise Brief", "سروال داخلي أبيض مضلع عالي الخصر", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Traditional full-rise brief in crisp white combed rib cotton, designed with generous seat depth and an encased plush cotton-covered waistband.",
+    "سروال داخلي كلاسيكي عالي الخصر من القطن الممشط المضلع الأبيض الناصع، بعمق مقعد سخي وحزام خصر مبطن ومغلف بالقطن.",
+    (m) => briefPieces(m, {
+      rise: "high", legCut: "full", coverage: 1.15,
+      frontDesc: { en: "Full-rise crisp white ribbed cotton front panel with traditional vertical fly overlap.", ar: "لوحة أمامية عالية من القطن المضلع الأبيض." },
+      backDesc: { en: "Full-coverage white rib-knit seat panel.", ar: "لوحة مقعد كاملة التغطية من القطن المضلع الأبيض." },
+      gussetDesc: { en: "Soft double-layer combed white cotton gusset.", ar: "دكة قطنية بيضاء ناعمة مزدوجة الطبقة." },
+      waistElasticDesc: { en: "Crisp white rib-trimmed tonal elastic waistband.", ar: "حزام خصر مطاطي أبيض ناعم ومتناسق." },
+      legElasticDesc: { en: "Reinforced white rib-bound leg openings.", ar: "فتحات ساق مغلفة بشريط مضلع أبيض متين." },
+    }));
 
   // ================= GIRLS' BRIEFS (6) =================
-  def("gu01", "girls", "Classic Brief", "سروال داخلي كلاسيكي", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Mid-rise brief with full coverage and a curved leg opening.", "سروال داخلي متوسط الارتفاع بتغطية كاملة وفتحة ساق منحنية.",
-    (m) => briefPieces(m, { rise: "mid", legCut: "full", coverage: 1.0 }));
-  def("gu02", "girls", "High-Waist Brief", "سروال داخلي عالي الخصر", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "High-rise brief that sits above the natural waist, full coverage.", "سروال داخلي عالي يجلس فوق الخصر الطبيعي بتغطية كاملة.",
-    (m) => briefPieces(m, { rise: "high", legCut: "full", coverage: 1.0 }));
-  def("gu03", "girls", "Bikini-Cut Brief", "سروال داخلي قصة بيكيني", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Low-rise brief with a bikini-cut leg opening.", "سروال داخلي منخفض بفتحة ساق بقصة بيكيني.",
-    (m) => briefPieces(m, { rise: "low", legCut: "bikini", coverage: 0.95 }));
-  def("gu04", "girls", "Hipster Brief", "سروال داخلي هيبستر", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Low-rise brief that sits on the hips with a moderate leg cut.", "سروال داخلي منخفض يجلس على الورك بفتحة ساق معتدلة.",
-    (m) => briefPieces(m, { rise: "low", legCut: "hipster", coverage: 1.0 }));
-  def("gu05", "girls", "Boyshort Brief", "سروال داخلي بويشورت", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Mid-rise brief with a squared, longer leg line for extra coverage.", "سروال داخلي متوسط الارتفاع بخط ساق مربّع وأطول لتغطية إضافية.",
-    (m) => briefPieces(m, { rise: "mid", legCut: "boyshort", coverage: 1.1 }));
-  def("gu06", "girls", "Full-Coverage Brief", "سروال داخلي بتغطية كاملة", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "High-rise brief with maximum coverage.", "سروال داخلي عالي الخصر بأقصى تغطية.",
-    (m) => briefPieces(m, { rise: "high", legCut: "full", coverage: 1.15 }));
+  def("gu01", "girls", "Blush Cotton Picot-Trim Brief", "سروال داخلي قطني وردي ناعم بحافة بيكو", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Soft everyday mid-rise girls' brief in breathable blush cotton knit edged with delicate picot lace at the waist and curved leg openings.",
+    "سروال داخلي يومي ناعم للبنات متوسط الارتفاع من قطن التريكو الوردي الفاتح، مزين بحافة دانتيل بيكو رقيقة على الخصر وفتحات الساق.",
+    (m) => briefPieces(m, {
+      rise: "mid", legCut: "full", coverage: 1.0,
+      frontDesc: { en: "Soft blush combed cotton front panel with gentle waist scoop.", ar: "لوحة أمامية من القطن الوردي الناعم بانحناء مريح للخصر." },
+      backDesc: { en: "Full-coverage blush jersey seat panel for comfortable movement.", ar: "لوحة خلفية كاملة من الجيرسيه الوردي لحركة مريحة." },
+      gussetDesc: { en: "100% pure soft cotton inner crotch gusset.", ar: "دكة قطنية نقية 100% فائقة النعومة." },
+      waistElasticDesc: { en: "Delicate blush picot-edged soft elastic waistband.", ar: "حزام خصر مطاطي ناعم بحافة بيكو رقيقة." },
+      legElasticDesc: { en: "Scalloped picot trim elastic edging each leg opening.", ar: "شريط مطاطي مقوس بالبيكو يشطب فتحة الساق بلطف." },
+    }));
+  def("gu02", "girls", "Butter-Yellow High-Waist Bow Brief", "سروال داخلي أصفر ناعم عالي الخصر بفيونكة", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "High-rise girls' brief in pastel butter-yellow cotton interlock with a sweet center-front satin ribbon bow and soft bound edges.",
+    "سروال داخلي بناتي عالي الخصر من قطن الإنترلوك الأصفر الباستيلي، مزين بفيونكة ساتان رقيقة في الأمام وحواف مغلفة ناعمة.",
+    (m) => briefPieces(m, {
+      rise: "high", legCut: "full", coverage: 1.0,
+      frontDesc: { en: "Pastel yellow high-rise cotton interlock front panel.", ar: "لوحة أمامية عالية الخصر من القطن الأصفر الناعم." },
+      backDesc: { en: "Full high-rise back seat panel staying securely in place.", ar: "لوحة مقعد عالية التغطية تثبت براحة دون انزلاق." },
+      gussetDesc: { en: "Soft ivory-yellow combed cotton crotch gusset.", ar: "دكة قطنية ممشطة فائقة النعومة." },
+      waistElasticDesc: { en: "Wide butter-yellow comfort encased waistband.", ar: "حزام خصر عريض مغلف بالقطن الأصفر المريح." },
+      legElasticDesc: { en: "Self-bound tonal stretch cotton leg openings.", ar: "فتحات ساق مغلفة بشريط قطني مرن متناغم." },
+    }));
+  def("gu03", "girls", "Sky-Blue Dot Cotton Bikini Brief", "سروال داخلي بيكيني أزرق سماوي منقّط", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Playful low-rise girls' bikini brief in sky-blue polka-dot cotton knit trimmed with crisp white elastic bands at the waist and legs.",
+    "سروال داخلي بيكيني للبنات منخفض الخصر من قطن أزرق سماوي منقّط بأبيض ناعم، مع أشرطة مطاطية بيضاء نظيفة على الخصر والساق.",
+    (m) => briefPieces(m, {
+      rise: "low", legCut: "bikini", coverage: 0.95,
+      frontDesc: { en: "Sky-blue polka-dot cotton bikini front panel.", ar: "لوحة أمامية بيكيني من القطن الأزرق السماوي المنقط." },
+      backDesc: { en: "Contoured cotton bikini back panel.", ar: "لوحة خلفية بيكيني مفصلة من القطن المنقط." },
+      gussetDesc: { en: "White combed cotton interior crotch gusset.", ar: "دكة داخلية من القطن الأبيض الممشط." },
+      waistElasticDesc: { en: "Crisp white soft encased elastic waistband.", ar: "حزام خصر مطاطي أبيض ناعم التشطيب." },
+      legElasticDesc: { en: "White stretch binding along the bikini leg curve.", ar: "شريط مطاطي أبيض رفيع يحدّد فتحة ساق البيكيني." },
+    }));
+  def("gu04", "girls", "Pastel Striped Cotton Hipster Brief", "سروال داخلي هيبستر قطني مقلم بألوان باستيل", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Low-rise hipster brief in yarn-dyed lavender and mint striped cotton jersey with a smooth pastel heather waistband and comfortable leg cut.",
+    "سروال داخلي هيبستر منخفض الخصر من قطن الجيرسيه المقلم بدرجات اللافندر والنعناع، بحزام خصر ناعم وقصة ساق مريحة.",
+    (m) => briefPieces(m, {
+      rise: "low", legCut: "hipster", coverage: 1.0,
+      frontDesc: { en: "Lavender and mint striped cotton hipster front panel.", ar: "لوحة أمامية هيبستر مقلمة بدرجات اللافندر والنعناع." },
+      backDesc: { en: "Matching pastel striped hipster seat panel.", ar: "لوحة خلفية مقلمة متناسقة للورك والمقعد." },
+      gussetDesc: { en: "Breathable plain-knit cotton crotch gusset.", ar: "دكة قطنية سادة عالية التهوية." },
+      waistElasticDesc: { en: "Soft lavender heather covered elastic waistband.", ar: "حزام خصر مغلف بلون لافندر باهت مريح." },
+      legElasticDesc: { en: "Flatlocked stretch leg trim aligned to the hip curve.", ar: "حافة ساق مطاطية مسطحة تتبع منحنى الورك." },
+    }));
+  def("gu05", "girls", "Heather Gray Contrast-Stitch Boyshort", "سروال داخلي بويشورت رمادي بدرزات مرجانية", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Active girls' boyshort brief in soft heather gray modal-cotton with playful coral-pink coverstitch seams and squared upper-thigh coverage.",
+    "سروال داخلي بويشورت مريح للبنات من المودال والقطن الرمادي الميلانج، بدرزات تغطية مرجانية ناعمة وقصة مربعة لأعلى الفخذ.",
+    (m) => briefPieces(m, {
+      rise: "mid", legCut: "boyshort", coverage: 1.1,
+      frontDesc: { en: "Heather gray modal-cotton boyshort front with squared thigh edges.", ar: "لوحة أمامية بويشورت رمادية بحواف فخذ مربعة مريحة." },
+      backDesc: { en: "Full anti-chafe gray boyshort back panel.", ar: "لوحة خلفية كاملة تمنع الاحتكاك طوال اليوم." },
+      gussetDesc: { en: "Smooth brushed cotton modal interior gusset.", ar: "دكة داخلية ناعمة من القطن والمودال." },
+      waistElasticDesc: { en: "Coral-trimmed heather gray comfort waistband.", ar: "حزام خصر رمادي مريح بخط درزة مرجاني." },
+      legElasticDesc: { en: "Twin-needle coral coverstitched lower thigh hems.", ar: "حواف فخذ سفلية بدرزات تغطية مرجانية مرنة." },
+    }));
+  def("gu06", "girls", "Dusty-Blush Full-Coverage Brief", "سروال داخلي وردي مغبر بتغطية كاملة", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Maximum-coverage high-rise brief in smooth dusty blush combed cotton jersey, finished with a dainty rosette bow and enclosed plush waistband.",
+    "سروال داخلي عالي الخصر بتغطية كاملة من قطن الجيرسيه الوردي المغبر الممشط، مزين بفيونكة رقيقة وحزام خصر مبطن.",
+    (m) => briefPieces(m, {
+      rise: "high", legCut: "full", coverage: 1.15,
+      frontDesc: { en: "Full high-rise dusty blush front panel with center-front bow detail.", ar: "لوحة أمامية عالية التغطية باللون الوردي المغبر." },
+      backDesc: { en: "Generous full-seat panel offering soft all-day hold.", ar: "لوحة مقعد سخية توفر ثباتاً ناعماً طوال اليوم." },
+      gussetDesc: { en: "Double-layer dusty blush cotton gusset.", ar: "دكة قطنية مزدوجة الطبقة متناسقة اللون." },
+      waistElasticDesc: { en: "Enclosed soft dusty-blush elastic waistband.", ar: "حزام خصر مطاطي مبطن ومغلف بلطف." },
+      legElasticDesc: { en: "Softly bound stretch leg trims preventing pinching.", ar: "أشرطة ساق ناعمة مرنة تمنع الضغط على الجلد." },
+    }));
 
   // ================= BOYS' BRIEFS/TRUNKS (6) =================
-  def("bu01", "boys", "Classic Brief", "سروال داخلي كلاسيكي", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Mid-rise brief with full coverage and a curved leg opening.", "سروال داخلي متوسط الارتفاع بتغطية كاملة وفتحة ساق منحنية.",
-    (m) => briefPieces(m, { rise: "mid", legCut: "full", coverage: 1.0 }));
-  def("bu02", "boys", "Low-Rise Brief", "سروال داخلي منخفض الخصر", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Low-rise brief, full coverage through the seat.", "سروال داخلي منخفض الخصر بتغطية كاملة للمقعد.",
-    (m) => briefPieces(m, { rise: "low", legCut: "full", coverage: 1.0 }));
-  def("bu03", "boys", "Boxer Brief", "بوكسر داخلي", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Mid-rise brief with the leg panel extended down the thigh to a hemmed edge.", "سروال داخلي متوسط الارتفاع بامتداد الساق حتى الفخذ بحافة مطوية.",
-    (m) => briefPieces(m, { rise: "mid", legCut: "full", coverage: 1.0, legLength: 9 }));
-  def("bu04", "boys", "Trunk", "ترنك داخلي", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Low-rise, squared boyshort-style leg with a short hemmed extension.", "سروال داخلي منخفض بخط ساق مربّع وامتداد قصير مطوي.",
-    (m) => briefPieces(m, { rise: "low", legCut: "boyshort", coverage: 1.0, legLength: 5 }));
-  def("bu05", "boys", "Athletic Brief", "سروال داخلي رياضي", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "Mid-rise brief with a higher-cut leg opening for freer movement.", "سروال داخلي متوسط الارتفاع بفتحة ساق أعلى لحرية حركة أكبر.",
-    (m) => briefPieces(m, { rise: "mid", legCut: "bikini", coverage: 1.0 }));
-  def("bu06", "boys", "Full-Rise Brief", "سروال داخلي عالي الخصر", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
-    "High-rise brief with maximum coverage.", "سروال داخلي عالي الخصر بأقصى تغطية.",
-    (m) => briefPieces(m, { rise: "high", legCut: "full", coverage: 1.15 }));
+  def("bu01", "boys", "Heather Gray Striped-Waist Boxer Brief", "بوكسر داخلي رمادي بحزام مخطط", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Everyday boys' mid-thigh boxer brief in soft heather gray cotton-stretch jersey with a bold navy-white striped elastic waistband and comfortable pouch.",
+    "بوكسر داخلي يومي للأولاد بطول منتصف الفخذ من جيرسيه القطن المرن الرمادي الميلانج، بحزام خصر مطاطي مخطط بالكحلي والأبيض وقصة مريحة.",
+    (m) => briefPieces(m, {
+      rise: "mid", legCut: "full", coverage: 1.0, legLength: 8,
+      frontDesc: { en: "Heather gray stretch cotton boxer-brief front panel extending down the upper thigh.", ar: "لوحة أمامية من القطن الرمادي الميلانج تمتد بنعومة لأعلى الفخذ." },
+      backDesc: { en: "Contoured heather gray back seat panel without a rubbing center seam.", ar: "لوحة مقعد رمادية مفصلة بدون درزة وسطى مزعجة." },
+      gussetDesc: { en: "Double-lined soft cotton-jersey crotch panel.", ar: "دكة قطنية مزدوجة التبطين عالية النعومة." },
+      waistElasticDesc: { en: "Navy, white & charcoal striped jacquard waistband.", ar: "حزام خصر مطاطي مخطط بالكحلي والأبيض والفحمي." },
+      legElasticDesc: { en: "Coverstitched heather gray thigh hems holding smoothly in place.", ar: "حاشية فخذ رمادية بدرزات مسطحة تثبت دون التفاف." },
+    }));
+  def("bu02", "boys", "Sky-Blue Heather Low-Rise Brief", "سروال داخلي أزرق سماوي منخفض الخصر", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Soft low-rise boys' brief in sky-blue cotton jersey topped with a crisp white and navy striped waistband and smooth navy leg bindings.",
+    "سروال داخلي للأولاد منخفض الخصر من قطن الجيرسيه الأزرق السماوي، بحزام خصر أبيض مخطط بالكحلي وحواف ساق كحلية مريحة.",
+    (m) => briefPieces(m, {
+      rise: "low", legCut: "full", coverage: 1.0,
+      frontDesc: { en: "Sky-blue cotton low-rise front pouch panel.", ar: "لوحة أمامية منخفضة الخصر من القطن الأزرق السماوي." },
+      backDesc: { en: "Smooth full-coverage sky-blue seat panel.", ar: "لوحة مقعد ناعمة كاملة التغطية باللون الأزرق السماوي." },
+      gussetDesc: { en: "Breathable cotton-rich crotch gusset.", ar: "دكة قطنية عالية التهوية." },
+      waistElasticDesc: { en: "White plush elastic waistband with navy stripe accent.", ar: "حزام خصر أبيض ناعم بخطوط كحلية متباينة." },
+      legElasticDesc: { en: "Navy stretch-bound classic brief leg openings.", ar: "فتحات ساق كلاسيكية مغلفة بشريط كحلي مرن." },
+    }));
+  def("bu03", "boys", "Charcoal Embossed-Waist Boxer Brief", "بوكسر داخلي فحمي بحزام بارز", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Active boys' mid-thigh boxer brief in deep charcoal combed cotton stretch with a black tonal embossed waistband and stay-put leg hems.",
+    "بوكسر داخلي للأولاد بطول منتصف الفخذ من القطن الممشط الفحمي الداكن، بحزام خصر أسود بنقش بارز وحواف فخذ ثابتة.",
+    (m) => briefPieces(m, {
+      rise: "mid", legCut: "full", coverage: 1.0, legLength: 9,
+      frontDesc: { en: "Charcoal cotton-stretch mid-thigh boxer front with contoured pouch.", ar: "لوحة أمامية للبوكسر الفحمي بجيب مريح وامتداد للفخذ." },
+      backDesc: { en: "Durable full seat panel engineered for school and sports.", ar: "لوحة مقعد متينة مصممة للنشاط والحركة اليومية." },
+      gussetDesc: { en: "No-chafe charcoal cotton interior gusset.", ar: "دكة داخلية فحمية مانعة للاحتكاك." },
+      waistElasticDesc: { en: "Tonal jet-black embossed stretch waistband.", ar: "حزام خصر أسود مطاطي بنقش متناغم." },
+      legElasticDesc: { en: "Flat-hemmed mid-thigh openings with high recovery.", ar: "حواف فخذ مسطحة باسترجاع مرن ممتاز." },
+    }));
+  def("bu04", "boys", "Cobalt Blue Contrast-Waist Trunk", "ترنك داخلي أزرق كوبالت بحزام متباين", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Compact low-rise trunk in vibrant cobalt blue jersey with a light heather-gray elastic waistband and matching gray leg-hem bindings.",
+    "ترنك داخلي قصير للأولاد من الجيرسيه الأزرق الكوبالت الحيوي، بحزام خصر رمادي فاتح متباين وحواف فخذ متناسقة.",
+    (m) => briefPieces(m, {
+      rise: "low", legCut: "boyshort", coverage: 1.0, legLength: 5,
+      frontDesc: { en: "Cobalt blue compact low-rise trunk front panel.", ar: "لوحة أمامية قصيرة من الجيرسيه الأزرق الكوبالت." },
+      backDesc: { en: "Square-cut blue trunk seat panel.", ar: "لوحة خلفية مربعة القصة للترنك الأزرق." },
+      gussetDesc: { en: "Reinforced cobalt cotton crotch gusset.", ar: "دكة قطنية مقواة متناسقة اللون." },
+      waistElasticDesc: { en: "Light heather-gray soft woven elastic waistband.", ar: "حزام خصر رمادي فاتح منسوج بنعومة." },
+      legElasticDesc: { en: "Contrast heather-gray bound short-trunk hems.", ar: "حواف الترنك القصير محددة بشريط رمادي متباين." },
+    }));
+  def("bu05", "boys", "Crimson & Carbon Mesh Athletic Brief", "سروال داخلي رياضي قرمزي وأسود بشبك جانبي", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Sport-cut boys' brief combining a crimson microfiber contoured body with carbon-black side mesh contrast and high-cut athletic leg freedom.",
+    "سروال داخلي رياضي للأولاد يجمع بين المايكروفايبر القرمزي وجوانب شبكية فحمية سوداء بفتحة ساق رياضية حرة الحركة.",
+    (m) => briefPieces(m, {
+      rise: "mid", legCut: "bikini", coverage: 1.0,
+      frontDesc: { en: "Crimson moisture-wicking microfiber athletic front panel.", ar: "لوحة أمامية رياضية قرمزية ماصة للرطوبة." },
+      backDesc: { en: "Crimson & carbon mesh panel offering cooling ventilation.", ar: "لوحة خلفية تجمع القرمزي والأسود الشبكي لتهوية إضافية." },
+      gussetDesc: { en: "Soft athletic cotton-lined interior gusset.", ar: "دكة داخلية رياضية مبطنة بالقطن الناعم." },
+      waistElasticDesc: { en: "Carbon-black striped performance elastic waistband.", ar: "حزام خصر رياضي أسود فحمي متين." },
+      legElasticDesc: { en: "High-cut black elastic leg binding for agile movement.", ar: "كنار ساق رياضي أسود مرتفع لحركة رشيقة." },
+    }));
+  def("bu06", "boys", "Crisp White Ribbed Full-Rise Brief", "سروال داخلي أبيض مضلع عالي الخصر", UNDERWEAR_TAG.en, UNDERWEAR_TAG.ar, "underwear",
+    "Classic boys' full-rise brief in breathable white ribbed cotton with a soft fabric-covered waistband and durable ribbed leg bindings.",
+    "سروال داخلي كلاسيكي عالي الخصر للأولاد من القطن الأبيض المضلع، بحزام خصر مغلف ناعم وحواف ساق متينة.",
+    (m) => briefPieces(m, {
+      rise: "high", legCut: "full", coverage: 1.15,
+      frontDesc: { en: "Crisp white ribbed cotton high-rise front panel.", ar: "لوحة أمامية عالية الخصر من القطن الأبيض المضلع." },
+      backDesc: { en: "Full-rise white rib-knit seat coverage.", ar: "تغطية كاملة للمقعد من التريكو الأبيض المضلع." },
+      gussetDesc: { en: "Pure white double-layer combed cotton gusset.", ar: "دكة قطنية بيضاء نقية مزدوجة الطبقة." },
+      waistElasticDesc: { en: "Encased soft white cotton elastic waistband.", ar: "حزام خصر أبيض مغلف بالقطن لا يضغط." },
+      legElasticDesc: { en: "White rib-trimmed curved leg openings.", ar: "فتحات ساق منحنية مشطبة بشريط مضلع أبيض." },
+    }));
 
   // ================= WOMEN'S BRAS (10) =================
-  def("wb01", "women", "Classic Soft-Cup Bra", "حمالة صدر كلاسيكية بكأس ناعم", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Everyday soft-cup bra with a round cup and standard straps.", "حمالة صدر يومية بكأس دائري ناعم وحمالات كتف عادية.",
+  def("wb01", "women", "Rose-Gold Satin & Lace Soft-Cup Bra", "حمالة صدر وردية ذهبية من الساتان والدانتيل", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Romantic soft-cup wireless bra in rose-gold silk satin layered with floral eyelash lace, finished with delicate scalloped edges and satin straps.",
+    "حمالة صدر رومانسية بدون سلك من الساتان الوردي الذهبي المغطى بدانتيل زهري ناعم، بحواف مقوسة رقيقة وحمالات ساتان قابلة للتعديل.",
     (m) => braPieces(m, { cupDepthF: 1.0, strap: "standard" }));
-  def("wb02", "women", "Balconette Bra", "حمالة صدر بالكونيت", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Wide-set straps and a shallow, horizontal-top cup for a lifted, uplifted line under fitted necklines.", "حمالات كتف واسعة وكأس ضحل بأعلى أفقي يمنح خطاً مرفوعاً تحت الفتحات الضيقة.",
+  def("wb02", "women", "Champagne Lace Balconette Bra", "حمالة صدر بالكونيت شمبانيا بالدانتيل", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Uplifting wide-set champagne satin and sheer floral lace balconette bra with horizontal cup décolleté and delicate scalloped lace cradle.",
+    "حمالة صدر بالكونيت بلون شمبانيا من الساتان والدانتيل الزهري الشفاف، بحمالات متباعدة وقصة أفقية تمنح رفعاً أنيقاً تحت الفتحات الواسعة.",
     (m) => braPieces(m, { cupDepthF: 0.85, wide: true, strap: "standard" }));
-  def("wb03", "women", "Plunge Bra", "حمالة صدر بلانج", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Deep V bridge and cup for low necklines.", "جسر وكأس بعمق V للفتحات المنخفضة.",
+  def("wb03", "women", "Burgundy Satin Plunge Bra", "حمالة صدر بلانج عنابية من الساتان والدانتيل", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Alluring deep burgundy satin and geometric lace plunge bra with an ultra-low narrow center bridge engineered for deep-V necklines.",
+    "حمالة صدر بلانج أنيقة بلون عنابي عميق من الساتان والدانتيل الهندسي، بجسر أوسط منخفض للغاية يناسب فتحات الرقبة العميقة على شكل V.",
     (m) => braPieces(m, { cupDepthF: 1.0, plunge: true, strap: "standard" }));
-  def("wb04", "women", "Full-Coverage Bra", "حمالة صدر بتغطية كاملة", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Deeper cup and a wider band for maximum coverage and support.", "كأس أعمق وحزام أعرض لأقصى تغطية ودعم.",
-    (m) => braPieces(m, { cupDepthF: 1.25, bandWidthF: 1.25, strap: "standard" }));
-  def("wb05", "women", "Racerback Bralette", "بروليت بظهر رياضي", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Soft bralette with straps angled in toward the center back.", "بروليت ناعمة بحمالات مائلة نحو وسط الظهر.",
+  def("wb04", "women", "Slate Blue Wide-Strap Full-Coverage Bra", "حمالة صدر زرقاء رمادية بتغطية كاملة وحمالات عريضة", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Supportive full-coverage slate blue microfiber bra featuring deep contoured cups, an extra-wide smoothing wing band, and cushioned wide shoulder straps.",
+    "حمالة صدر داعمة بتغطية كاملة من المايكروفايبر الأزرق الرمادي، بكؤوس عميقة مجسّمة وحزام جانبي عريض للتنعيم وحمالات كتف عريضة مريحة.",
+    (m) => braPieces(m, { cupDepthF: 1.25, bandWidthF: 1.25, strap: "standard", wideStrap: true }));
+  def("wb05", "women", "Dusty Mauve Ribbed Racerback Bralette", "بروليت مضلعة بلون موف بظهر رياضي", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Soft pull-on dusty mauve ribbed modal bralette with gentle bust shaping and center-angled racerback straps for sleeveless layering.",
+    "بروليت ناعمة بلون موف مغبر من تريكو المودال المضلع، بتشكيل لطيف للصدر وحمالات ظهر متقاطعة مثالية تحت البلوزات بلا أكمام.",
     (m) => braPieces(m, { cupDepthF: 0.9, strap: "racerback" }));
-  def("wb06", "women", "Triangle Bralette", "بروليت مثلثة", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Simple triangle-shaped cup with minimal structure.", "كأس بشكل مثلث بسيط وحد أدنى من التجهيز.",
+  def("wb06", "women", "Ivory Cotton Triangle Bralette", "بروليت مثلثة عاجية من القطن", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Minimalist ivory organic combed cotton triangle bralette with dartless natural darts, slim plush underband, and delicate adjustable straps.",
+    "بروليت مثلثة بسيطة من القطن العضوي الممشط العاجي، بقصة طبيعية خفيفة وشريط أسفل الصدر ناعم وحمالات رفيعة قابلة للتعديل.",
     (m) => braPieces(m, { cupDepthF: 0.75, triangle: true, strap: "standard" }));
-  def("wb07", "women", "Longline Bralette", "بروليت ممتدة", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Band extends down over the ribs for extra coverage and smoothing.", "الحزام يمتد لأسفل فوق الأضلاع لتغطية وتنعيم إضافيين.",
+  def("wb07", "women", "Emerald Satin & Lace Longline Bralette", "بروليت زمردية ممتدة من الساتان والدانتيل", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Luxurious deep emerald satin and scalloped eyelash lace longline bralette extending smoothly across the ribcage for graceful support.",
+    "بروليت فاخرة ممتدة الخصر بلون زمردي عميق من الساتان والدانتيل المقوس، تمتد بأناقة فوق الأضلاع لتمنح دعماً ومظهراً راقياً.",
     (m) => braPieces(m, { cupDepthF: 0.9, longline: true, strap: "standard" }));
-  def("wb08", "women", "Bandeau Bra", "حمالة صدر باندو", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Straight band with a shallow cup, no straps.", "حزام مستقيم بكأس ضحل، بلا حمالات.",
+  def("wb08", "women", "Jet Black Ribbed Bandeau Bra", "حمالة صدر باندو سوداء مضلعة", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Sleek strapless jet-black ribbed cotton-stretch bandeau bra with a shallow seamless silhouette tailored cleanly beneath bare-shoulder tops.",
+    "حمالة صدر باندو سوداء أنيقة بدون حمالات من التريكو القطني المضلع، بقصة أفقية نظيفة تختفي بسلاسة تحت التوبات مكشوفة الكتفين.",
     (m) => braPieces(m, { cupDepthF: 0.4, strap: "none" }));
-  def("wb09", "women", "Sport Bra", "حمالة صدر رياضية", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Compression-fit front and racerback panel construction, no separate cups — a real sport-bra draft, not a cup-based design.", "قطعة أمامية ضاغطة وظهر رياضي متقاطع بدون كؤوس منفصلة — تفصيل رياضي حقيقي وليس تصميماً قائماً على الكأس.",
+  def("wb09", "women", "Cobalt Mesh Racerback Sport Bra", "حمالة صدر رياضية زرقاء كوبالت بشبك متقاطع", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "High-support cobalt blue performance interlock sport bra accented with breathable black power-mesh racerback panels and a firm elastic bottom band.",
+    "حمالة صدر رياضية عالية الدعم باللون الأزرق الكوبالت، مزودة بألواح شبك سوداء عالية التهوية في الظهر الرياضي وشريط سفلي مطاطي متين.",
     (m) => sportBraPieces(m, { racer: true }));
-  def("wb10", "women", "Strapless Bra", "حمالة صدر بدون حمالات", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Structured cup and a wider band for support without straps.", "كأس مجهّز وحزام أعرض للدعم بدون حمالات.",
+  def("wb10", "women", "Warm Nude Molded Strapless Bra", "حمالة صدر نيود بدون حمالات", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Smooth warm-nude brushed microfiber strapless bra featuring structured cup projection and an extra-wide gripper underband that stays securely in place.",
+    "حمالة صدر ناعمة بدون حمالات بلون نيود دافئ من المايكروفايبر، بكؤوس مجسّمة وحزام عريض عالي الثبات يبقى ثابتاً دون انزلاق.",
     (m) => braPieces(m, { cupDepthF: 1.05, bandWidthF: 1.3, strap: "none" }));
 
   // ================= GIRLS' BRAS (10) — soft training styles =================
-  def("gb01", "girls", "Classic Training Bralette", "بروليت تدريب كلاسيكية", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Simple triangle-cup training bralette, soft and unstructured.", "بروليت تدريب بكأس مثلث بسيط وناعم وبدون تجهيز.",
+  def("gb01", "girls", "White Cotton Triangle Training Bralette", "بروليت تدريب بيضاء مثلثة من القطن", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Pure white breathable cotton-jersey triangle training bralette with a soft encased underband and delicate center satin bow.",
+    "بروليت تدريب بيضاء نقية من قطن الجيرسيه بقصة مثلثة ناعمة، وشريط أسفل الصدر مغلف بالقطن وفيونكة وسطى رقيقة.",
     (m) => braPieces(m, { cupDepthF: 0.7, triangle: true, strap: "standard" }));
-  def("gb02", "girls", "Racerback Training Bralette", "بروليت تدريب بظهر رياضي", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Triangle-cup training bralette with racerback straps.", "بروليت تدريب بكأس مثلث وحمالات ظهر رياضي.",
-    (m) => braPieces(m, { cupDepthF: 0.7, triangle: true, strap: "racerback" }));
-  def("gb03", "girls", "Seamed Soft-Cup Bralette", "بروليت بكأس ناعم مخيط", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "A little more shaping than a triangle cut, still fully soft/wireless.", "تشكيل أكبر قليلاً من القصة المثلثة، وتبقى ناعمة بالكامل بدون سلك.",
+  def("gb02", "girls", "Heather Gray Pink-Trim Racerback Bralette", "بروليت رمادية بحافة وردية وظهر رياضي", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Soft heather-gray stretch cotton racerback training bralette edged with pastel rose pink binding and wide stay-put straps.",
+    "بروليت تدريب ناعمة باللون الرمادي الميلانج مع حواف وردية رقيقة وظهر رياضي متقاطع بحمالات عريضة ثابتة.",
+    (m) => braPieces(m, { cupDepthF: 0.7, triangle: true, strap: "racerback", wideStrap: true }));
+  def("gb03", "girls", "Mint Seamed Soft-Cup Bralette", "بروليت خضراء نعناعية بكأس ناعم مخيط", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Gentle mint-green combed cotton soft-cup bralette featuring soft shaping seams without rigid wires for developing comfort.",
+    "بروليت ناعمة بلون أخضر نعناعي من القطن الممشط، بقصات تشكيل رقيقة بدون أي أسلاك صلبة لراحة ونمو مريح.",
     (m) => braPieces(m, { cupDepthF: 0.8, strap: "standard" }));
-  def("gb04", "girls", "Crop-Style Longline Bralette", "بروليت كروب ممتدة", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Band extends down like a fitted crop top.", "الحزام يمتد لأسفل كأنه توب كروب ضيق.",
-    (m) => braPieces(m, { cupDepthF: 0.75, longline: true, strap: "standard" }));
-  def("gb05", "girls", "Bandeau Training Bra", "حمالة صدر باندو تدريب", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Simple straight band, no straps.", "حزام مستقيم بسيط بلا حمالات.",
+  def("gb04", "girls", "Dusty Rose Ribbed Crop Longline Bralette", "بروليت كروب مضلعة وردية ممتدة", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Comfortable dusty-rose ribbed modal longline crop bralette with a wide ribcage band and soft supportive tank-style straps.",
+    "بروليت كروب ممتدة بلون وردي مغبر من المودال المضلع، بحزام مضلع عريض وحمالات مريحة على شكل تانك توب.",
+    (m) => braPieces(m, { cupDepthF: 0.75, longline: true, strap: "standard", wideStrap: true }));
+  def("gb05", "girls", "Lavender Ruched Bandeau Training Bra", "حمالة صدر باندو لافندر مزمومة للتدريب", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Feather-light lavender cotton-modal bandeau training bra with gentle center ruching and a soft wire-free strapless silhouette.",
+    "حمالة صدر باندو خفيفة باللون اللافندر من القطن والمودال، بكشكشة رقيقة في الوسط وتصميم بدون حمالات مريح.",
     (m) => braPieces(m, { cupDepthF: 0.35, strap: "none" }));
-  def("gb06", "girls", "Cotton Everyday Bralette", "بروليت قطنية يومية", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Everyday triangle-cup bralette in a comfortable cotton weight.", "بروليت مثلثة للاستخدام اليومي بوزن قطني مريح.",
+  def("gb06", "girls", "Peach White-Trim Cotton Bralette", "بروليت خوخية قطنية بحافة بيضاء", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Soft pastel peach cotton training bralette detailed with crisp white elastic edge binding and twin center buttons.",
+    "بروليت تدريب ناعمة بلون خوخي باستيلي من القطن، محددة بشريط أبيض نظيف وأزرار أمامية صغيرة أنيقة.",
     (m) => braPieces(m, { cupDepthF: 0.7, triangle: true, strap: "standard" }));
-  def("gb07", "girls", "Sport Bralette", "بروليت رياضية", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Compression-fit front and racerback panel construction, sized down from the women's Sport Bra.", "قطعة أمامية ضاغطة وظهر رياضي متقاطع، بمقاس أصغر من الحمالة الرياضية الحريمي.",
+  def("gb07", "girls", "Turquoise Stripe-Band Sport Bralette", "بروليت رياضية تركواز بشريط أبيض", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Active turquoise stretch performance sport bralette featuring a breathable racerback cutout and crisp white athletic logo underband.",
+    "بروليت رياضية نشطة باللون التركواز من قماش رياضي مرن، بظهر رياضي متقاطع وشريط أسفل الصدر أبيض متين.",
     (m) => sportBraPieces(m, { racer: true }));
-  def("gb08", "girls", "Scoop-Neck Bralette", "بروليت برقبة سكوب", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Wide, shallow scoop-shaped cup top.", "أعلى كأس واسع وضحل بشكل سكوب.",
-    (m) => braPieces(m, { cupDepthF: 0.72, wide: true, strap: "standard" }));
-  def("gb09", "girls", "Wide-Strap Bralette", "بروليت بحمالات عريضة", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "Triangle cup with extra-wide, comfortable straps.", "كأس مثلث بحمالات عريضة ومريحة.",
+  def("gb08", "girls", "Pastel Yellow Wide-Strap Scoop Bralette", "بروليت صفراء باستيل برقبة سكوب وحمالات عريضة", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Sunny butter-yellow cotton knit scoop-neck training bralette with comfy wide shoulder straps and a soft covered bottom band.",
+    "بروليت تدريب بلون أصفر باستيلي من التريكو القطني برقبة سكوب مريحة وحمالات كتف عريضة وشريط سفلي مغلف.",
+    (m) => braPieces(m, { cupDepthF: 0.72, wide: true, strap: "standard", wideStrap: true }));
+  def("gb09", "girls", "Sky-Blue Heather Wide-Strap Bralette", "بروليت زرقاء سماوية بحمالات عريضة", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Breathable sky-blue heathered cotton bralette cut with extra-wide cushioned shoulder straps to prevent slipping during active days.",
+    "بروليت من القطن السماوي الميلانج عالية التهوية، مفصلة بحمالات كتف عريضة مبطنة تمنع الانزلاق طوال اليوم.",
     (m) => braPieces(m, { cupDepthF: 0.72, triangle: true, strap: "standard", wideStrap: true }));
-  def("gb10", "girls", "Seamless-Style Soft Bralette", "بروليت ناعمة بلا خياطة ظاهرة", BRA_TAG.en, BRA_TAG.ar, "bra",
-    "The simplest, softest cut in the collection — minimal shaping, minimal seams.", "أبسط وأنعم قصة في المجموعة — بأقل تشكيل وأقل عدد من الخياطات.",
+  def("gb10", "girls", "Oatmeal Seamless Soft Crop Bralette", "بروليت كروب ناعمة بلون شوفان بلا درزات ظاهرة", BRA_TAG.en, BRA_TAG.ar, "bra",
+    "Ultra-soft oatmeal modal-blend training crop bralette with minimal seams, zero hardware, and gentle second-skin stretch.",
+    "بروليت كروب للتدريب بلون الشوفان من مزيج المودال فائق النعومة، بأقل درزات وبدون مشابك معدنية لتنعمي بإحساس البشرة الثانية.",
     (m) => braPieces(m, { cupDepthF: 0.65, triangle: true, strap: "standard" }));
 
   if (typeof window !== 'undefined') window.UnderwearLibrary = true;

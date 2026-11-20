@@ -61,6 +61,7 @@ import {
 } from './ai-atelier.js';
 import { inferBodyZone, SLEEVE_ROLES } from './body-zone.js';
 import { classifyPiecePart, resolvePartsFabric3D, computePatternMetrics3D } from './pattern-3d-metrics.js';
+import { getPatternLookbookStyle, applyLookbookPieceColors } from './pattern-lookbook-styles.js';
 import { Auth, isAuthConfigured } from './auth.js';
 import { computeEntitlement, isAllowed } from './entitlement.js';
 
@@ -834,6 +835,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     { key:"silk",    color:"#e6a8bd" }, { key:"linen",   color:"#cbbb98" },
     { key:"wool",    color:"#8a7a63" }, { key:"satin",   color:"#a878d6" },
     { key:"leather", color:"#6f4526" }, { key:"chiffon", color:"#bfe0da" },
+    { key:"jersey",  color:"#64748b" }, { key:"scuba",   color:"#475569" },
+    { key:"tulle",   color:"#e2c6df" }, { key:"velvet",  color:"#5b2149" },
+    { key:"lace",    color:"#efe7da" },
   ];
   const rgbToHex = (c) => {
     if(!c) return "#6d5efc";
@@ -4237,7 +4241,49 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
 
   // ================= PATTERNS =================
   let lastGradedMeas = null;
+  let pendingLookbookEffects = null;
   function currentMeas(){ return computeMeasurements({category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom}); }
+  function syncLookbookControlsUI(lbStyle) {
+    const acc = lbStyle?.accessories || {};
+    const bCfg = acc.buttons || { enabled: false };
+    const zCfg = acc.zipper || { enabled: false };
+    const beltCfg = acc.belt || { enabled: false };
+
+    const btnToggle = $("#v3dBtnToggle"), btnControls = $("#v3dBtnControls");
+    const btnStyle = $("#v3dBtnStyle"), btnPlacement = $("#v3dBtnPlacement"), btnCount = $("#v3dBtnCount"), btnCountVal = $("#v3dBtnCountVal");
+    if (btnToggle) btnToggle.checked = !!bCfg.enabled;
+    if (btnControls) btnControls.classList.toggle("disabled", !bCfg.enabled);
+    if (bCfg.enabled) {
+      const uiBtnStyle = (bCfg.style === "tortoise" || bCfg.style === "wood") ? "horn" : (bCfg.style || "gold");
+      if (btnStyle && [...btnStyle.options].some(o => o.value === uiBtnStyle)) btnStyle.value = uiBtnStyle;
+      if (btnPlacement && bCfg.placement && [...btnPlacement.options].some(o => o.value === bCfg.placement)) btnPlacement.value = bCfg.placement;
+      if (btnCount && bCfg.count != null) { btnCount.value = String(bCfg.count); if (btnCountVal) btnCountVal.textContent = String(bCfg.count); }
+    }
+
+    const zipToggle = $("#v3dZipToggle"), zipControls = $("#v3dZipControls");
+    const zipStyle = $("#v3dZipStyle"), zipPlacement = $("#v3dZipPlacement"), zipOpen = $("#v3dZipOpen"), zipOpenVal = $("#v3dZipOpenVal");
+    if (zipToggle) zipToggle.checked = !!zCfg.enabled;
+    if (zipControls) zipControls.classList.toggle("disabled", !zCfg.enabled);
+    if (zCfg.enabled) {
+      const uiZipStyle = zCfg.style === "matte_black" ? "gunmetal" : (zCfg.style || "silver");
+      if (zipStyle && [...zipStyle.options].some(o => o.value === uiZipStyle)) zipStyle.value = uiZipStyle;
+      if (zipPlacement && zCfg.placement && [...zipPlacement.options].some(o => o.value === zCfg.placement)) zipPlacement.value = zCfg.placement;
+      if (zipOpen && zCfg.openPct != null) { zipOpen.value = String(zCfg.openPct); if (zipOpenVal) zipOpenVal.textContent = Math.round(zCfg.openPct * 100) + "%"; }
+    }
+
+    const beltToggle = $("#v3dBeltToggle"), beltControls = $("#v3dBeltControls");
+    const beltStyle = $("#v3dBeltStyle"), beltWidth = $("#v3dBeltWidth");
+    if (beltToggle) beltToggle.checked = !!beltCfg.enabled;
+    if (beltControls) beltControls.classList.toggle("disabled", !beltCfg.enabled);
+    if (beltCfg.enabled) {
+      const uiBeltStyle = beltCfg.style === "fabric_sash" ? "matching" : (beltCfg.style || "leather_gold");
+      if (beltStyle && [...beltStyle.options].some(o => o.value === uiBeltStyle)) beltStyle.value = uiBeltStyle;
+      if (beltWidth && beltCfg.width) beltWidth.value = beltCfg.width;
+    }
+
+    const activePreset = lbStyle?.print?.preset || "none";
+    $$(".v3d-preset-chip").forEach(c => c.classList.toggle("active", c.dataset.preset === activePreset));
+  }
   function loadPattern(id){
     state.loaded=id; const p=PATTERNS[id];
     // switch category to match
@@ -4248,9 +4294,16 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       if (sel) sel.value = state.avatarCategory;
     }
     const opts={category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom};
-    Canvas.setPattern(resolveGradedPieces(p, opts, computeMeasurements, state.gradeRules[id]), PALETTE);
+    const gradedPieces = resolveGradedPieces(p, opts, computeMeasurements, state.gradeRules[id]);
+    const styledPieces = applyLookbookPieceColors(gradedPieces, id, p);
+    const lbStyle = getPatternLookbookStyle(id, p, styledPieces);
+    state.fabric3d = lbStyle.fabric || "cotton";
+    const fabricSelect = $("#v3dFabricSelect");
+    if (fabricSelect) fabricSelect.value = state.fabric3d;
+    pendingLookbookEffects = id;
+    Canvas.setPattern(styledPieces, PALETTE);
     lastGradedMeas = { ...currentMeas() };
-    $$(".v3d-preset-chip").forEach(c=>c.classList.toggle("active", c.dataset.preset==="none"));
+    syncLookbookControlsUI(lbStyle);
     afterLoad(L(p.name), true);
   }
   function afterLoad(name, resetPrints=false){
@@ -4269,6 +4322,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         prevByKey.set(oldP.key || `__idx_${idx}`, {
           color: oldP.color,
           customColor: Boolean(oldP.customColor),
+          lookbookColor: Boolean(oldP.lookbookColor),
           material: oldP.material || null,
           textureDataURL: oldP.textureDataURL || null,
           bodyZone: oldP.bodyZone || null,
@@ -4287,6 +4341,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
           ...np,
           color: saved.color || np.color,
           customColor: saved.customColor,
+          lookbookColor: saved.lookbookColor,
           material: saved.material,
           textureDataURL: saved.textureDataURL,
           bodyZone: saved.bodyZone,
@@ -4354,11 +4409,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     }));
   }
   function partsFabric(){
-    return resolvePartsFabric3D(Canvas.getPieces(), {
+    const pieces = Canvas.getPieces();
+    const patternMeta = state.loaded ? PATTERNS[state.loaded] : null;
+    const lookbookStyle = state.loaded ? getPatternLookbookStyle(state.loaded, patternMeta, pieces) : null;
+    return resolvePartsFabric3D(pieces, {
       category: state.category,
       defaultColor: cssHex("--brand"),
       defaultMaterial: state.fabric3d || "cotton",
       defaultTexture: state.fabricTexture3d || null,
+      lookbookStyle,
       colorToInt,
     });
   }
@@ -4497,7 +4556,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       fabricSelect.value = state.fabric3d || "cotton";
     }
     const patternMeta = state.loaded ? PATTERNS[state.loaded] : null;
-    const patternMetrics = computePatternMetrics3D(pieces, m, avatarCat, patternMeta);
+    const lbStyle = state.loaded ? getPatternLookbookStyle(state.loaded, patternMeta, pieces) : null;
+    const patternMetrics = computePatternMetrics3D(pieces, m, avatarCat, patternMeta, lbStyle);
+    const shouldApplyLookbook = Boolean((extraOpts && extraOpts.resetPrints) || (pendingLookbookEffects && pendingLookbookEffects === state.loaded));
+    if (shouldApplyLookbook) pendingLookbookEffects = null;
     View3D.build(avatarCat, m, {
       color: col,
       material: state.fabric3d || "cotton",
@@ -4505,10 +4567,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       pieces: pieceVisMap(),
       parts,
       patternMetrics,
+      lookbookStyle: shouldApplyLookbook ? lbStyle : null,
       forceMannequin: true,
-      resetPrints: Boolean(extraOpts && extraOpts.resetPrints),
+      resetPrints: shouldApplyLookbook,
       resetCamera: Boolean(extraOpts && extraOpts.resetCamera),
     });
+    if (shouldApplyLookbook && lbStyle) syncLookbookControlsUI(lbStyle);
     sync3DColorUI(col);
     updateMismatchWarning();
     update3DStatusPill();
@@ -4719,7 +4783,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     Canvas.getPieces().forEach(p=>{ if(p.material) counts[p.material]=(counts[p.material]||0)+1; });
     let best=null, bestN=0;
     for(const k in counts) if(counts[k]>bestN){ best=k; bestN=counts[k]; }
-    return best; // null → cloth-lab keeps its own current/default fabric
+    return best || state.fabric3d || null; // fallback to active 3D fabric preset for Cloth Lab
   }
   // What actually crosses the iframe boundary — see cloth-lab/src/App.jsx's
   // message listener (Phase 2) for how this gets turned into a simulated
@@ -6339,6 +6403,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       fabricSelect.value = state.fabric3d || "cotton";
       fabricSelect.onchange = e => {
         state.fabric3d = e.target.value;
+        const pieces = Canvas.getPieces();
+        if (pieces && pieces.length) pieces.forEach(p => { p.material = state.fabric3d; });
         View3D.setFabricPreset(state.fabric3d);
         if (state.view === "clothlab") syncClothLab();
         update3DStatusPill();

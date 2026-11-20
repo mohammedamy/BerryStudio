@@ -1801,7 +1801,7 @@ export const Canvas = (() => {
   function getZoom(){ return Math.round(view.scale/3.2*100); }
   function toggleVisible(i){ pieces[i].visible=!pieces[i].visible; render(); }
   function toggleLock(i){ pieces[i].locked=!pieces[i].locked; if(pieces[i].locked && selected===i) selected=-1; render(); }
-  function setColor(i,color,isCustom=true){ if(pieces[i]){ pieces[i].color=color; pieces[i].customColor=Boolean(isCustom); render(); } }
+  function setColor(i,color,isCustom=true){ if(pieces[i]){ pieces[i].color=color; pieces[i].customColor=Boolean(isCustom); pieces[i].lookbookColor=false; render(); } }
   function setMaterial(i,matKey){ if(pieces[i]){ pieces[i].material=matKey||null; render(); } }
   function setTexture(i,dataURL){ if(pieces[i]){ pieces[i].textureDataURL=dataURL||null; render(); } }
   function scalePieces(sx, sy){

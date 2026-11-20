@@ -266,7 +266,7 @@ export function placeLegPanel(positions2D, dims, { side, zSign, easeFactor = 1.1
     const hipAbsX = Math.abs(cLeg[0] - joints.pelvisPos[0])
     const rxLateral = lerp(Math.max(rLeg, rxPelvis - hipAbsX), rLeg * 1.06, thighTaper)
     const inseamForkBlend = smoothstep(0.0, 0.16, uLeg)
-    const rxMedial = lerp(hipAbsX, Math.max(0.015, hipAbsX - 0.007), inseamForkBlend)
+    const rxMedial = lerp(hipAbsX, Math.min(rxLateral * 0.94, Math.max(0.015, hipAbsX - 0.007)), thighTaper * inseamForkBlend)
 
     // Map only the medial 22% (between body centerline X=0 and thigh center cLeg[0])
     // to the inner-thigh inseam [-PI/2, 0], keeping the outer 78% [uPivot, 1] aligned
@@ -536,6 +536,123 @@ export function placeAttachBody(positions2D, dims, zSign = 1) {
   })
 }
 
+export function placeAttachCrotch(positions2D, dims) {
+  const cx = bboxCenterX(positions2D)
+  let minY = Infinity, maxY = -Infinity
+  for (const [, y] of positions2D) { if (y < minY) minY = y; if (y > maxY) maxY = y }
+  const h = Math.max(1e-4, maxY - minY)
+  const saddleY = dims.hipY - dims.span * 0.132
+  const zScale = dims.female ? 0.72 : 0.78
+  const maxZ = dims.hipR * zScale * 0.44
+  return positions2D.map(([xCm, yCm]) => {
+    const u = (yCm - minY) / h // 0 front -> 0.5 saddle bottom -> 1 back
+    const arch = Math.sin(Math.PI * u)
+    const y = saddleY + (1 - arch) * dims.span * 0.036
+    const z = lerp(maxZ, -maxZ, u)
+    const x = clamp(cm(xCm - cx), -dims.hipR * 0.45, dims.hipR * 0.45)
+    return [x, y, z]
+  })
+}
+
+export function placeAttachWrist(positions2D, dims, side = 1, pose = 'standing') {
+  const s = side === 0 ? 1 : side
+  const cx = bboxCenterX(positions2D)
+  let minY = Infinity, maxY = -Infinity
+  for (const [, y] of positions2D) { if (y < minY) minY = y; if (y > maxY) maxY = y }
+  const bandH = cm(maxY - minY)
+  const joints = computeMannequinPoseJoints(dims, pose)
+  const arm = joints.arms[s]
+  const dx = arm.wrist[0] - arm.elbow[0], dy = arm.wrist[1] - arm.elbow[1], dz = arm.wrist[2] - arm.elbow[2]
+  const len = Math.hypot(dx, dy, dz) || 1
+  const dir = [dx / len, dy / len, dz / len]
+  let fx = -dir[0] * dir[2], fy = -dir[1] * dir[2], fz = 1 - dir[2] * dir[2]
+  const fl = Math.hypot(fx, fy, fz) || 1
+  fx /= fl; fy /= fl; fz /= fl
+  let ox = s * (fy * dir[2] - fz * dir[1]), oy = s * (fz * dir[0] - fx * dir[2]), oz = s * (fx * dir[1] - fy * dir[0])
+  const ol = Math.hypot(ox, oy, oz) || 1
+  ox /= ol; oy /= ol; oz /= ol
+  const cuffR = dims.upperR * 0.64 + 0.008
+  return positions2D.map(([xCm, yCm]) => {
+    const uFromBot = bandH - cm(yCm - minY)
+    const cxPt = arm.wrist[0] - dir[0] * uFromBot
+    const cyPt = arm.wrist[1] - dir[1] * uFromBot
+    const czPt = arm.wrist[2] - dir[2] * uFromBot
+    const alpha = clamp(cm(xCm - cx) / Math.max(0.02, cuffR), -Math.PI, Math.PI)
+    const cOut = cuffR * Math.cos(alpha)
+    const cFront = -s * cuffR * Math.sin(alpha)
+    return [cxPt + cOut * ox + cFront * fx, cyPt + cOut * oy + cFront * fy, czPt + cOut * oz + cFront * fz]
+  })
+}
+
+export function placeAttachHemBand(positions2D, dims, pose = 'standing') {
+  const topWorldY = dims.hipY + dims.span * 0.10
+  const zScale = dims.female ? 0.72 : 0.78
+  const cx = bboxCenterX(positions2D)
+  return positions2D.map(([xCm, yCm]) => {
+    const worldY = topWorldY - cm(yCm)
+    const rOut = Math.max(dims.waistR * 1.02, radiusAtHeight(dims, worldY)) * 1.16
+    const rEff = rOut * (1 + zScale) * 0.5
+    const phi = cm(xCm - cx) / Math.max(0.05, rEff)
+    const x = rOut * Math.sin(phi)
+    const z = rOut * zScale * Math.cos(phi)
+    return applySeatedSkirtDrape(x, worldY, z, dims, Math.cos(phi) >= 0 ? 1 : -1, pose)
+  })
+}
+
+export function placeAttachBust(positions2D, dims, side = 1) {
+  const topWorldY = dims.hipY + dims.span * 0.79
+  const zScale = dims.female ? 0.80 : 0.82
+  const cx = bboxCenterX(positions2D)
+  const s = side === 0 ? 1 : side
+  const thetaCenter = s * 0.42
+  return positions2D.map(([xCm, yCm]) => {
+    const worldY = topWorldY - cm(yCm)
+    const baseR = Math.max(dims.chestR * 0.98, radiusAtHeight(dims, worldY)) * 1.18 + (dims.female ? 0.020 : 0.006)
+    const rEff = baseR * (1 + zScale) * 0.5
+    const phi = thetaCenter + cm(xCm - cx) / Math.max(0.05, rEff)
+    return [baseR * Math.sin(phi), worldY, baseR * zScale * Math.cos(phi)]
+  })
+}
+
+export function placeAttachUnderbust(positions2D, dims, side = 0) {
+  const topWorldY = dims.hipY + dims.span * 0.665
+  const zScale = dims.female ? 0.76 : 0.80
+  const cx = bboxCenterX(positions2D)
+  const thetaCenter = side === 0 ? 0 : side * Math.PI * 0.48
+  return positions2D.map(([xCm, yCm]) => {
+    const worldY = topWorldY - cm(yCm)
+    const baseR = Math.max(dims.waistR * 1.02, radiusAtHeight(dims, worldY)) * 1.155
+    const rEff = baseR * (1 + zScale) * 0.5
+    const phi = thetaCenter + cm(xCm - cx) / Math.max(0.05, rEff)
+    return [baseR * Math.sin(phi), worldY, baseR * zScale * Math.cos(phi)]
+  })
+}
+
+export function placeAttachStrap(positions2D, dims, side = 1) {
+  const s = side === 0 ? 1 : side
+  const cx = bboxCenterX(positions2D)
+  let minY = Infinity, maxY = -Infinity
+  for (const [, y] of positions2D) { if (y < minY) minY = y; if (y > maxY) maxY = y }
+  const h = Math.max(1e-4, maxY - minY)
+  const frontY = dims.hipY + dims.span * 0.74
+  const topY = dims.shoulderY + dims.span * 0.055
+  const strapXBase = s * clamp(dims.neckR * 1.55, dims.neckR * 1.35, dims.chestR * 0.52)
+  return positions2D.map(([xCm, yCm]) => {
+    const u = (yCm - minY) / h // 0 = front cup apex -> 0.5 = shoulder crest -> 1 = back band
+    let y, z
+    if (u <= 0.5) {
+      const f = u / 0.5
+      y = lerp(frontY, topY, f)
+      z = lerp(dims.chestR * 0.78, 0.005, f)
+    } else {
+      const f = (u - 0.5) / 0.5
+      y = lerp(topY, frontY - dims.span * 0.06, f)
+      z = lerp(0.005, -dims.chestR * 0.72, f)
+    }
+    return [strapXBase + cm(xCm - cx), y, z]
+  })
+}
+
 export function placePiece(triangulated, dims, pose = 'standing') {
   const { pieceId, role, positions2D, placementHint } = triangulated
   const side = (pieceId.endsWith('L') || pieceId.endsWith('_l')) ? -1 : 1
@@ -557,6 +674,12 @@ export function placePiece(triangulated, dims, pose = 'standing') {
   if (role === 'attachWaist') return placeAttachWaist(positions2D, dims, 1, pose)
   if (role === 'attachWaistBack') return placeAttachWaist(positions2D, dims, -1, pose)
   if (role === 'attachHem') return placeAttachHem(positions2D, dims, attachSide, pose)
+  if (role === 'attachHemBand') return placeAttachHemBand(positions2D, dims, pose)
+  if (role === 'attachCrotch') return placeAttachCrotch(positions2D, dims)
+  if (role === 'attachWrist') return placeAttachWrist(positions2D, dims, attachSide || 1, pose)
+  if (role === 'attachBust') return placeAttachBust(positions2D, dims, attachSide || 1)
+  if (role === 'attachUnderbust') return placeAttachUnderbust(positions2D, dims, attachSide)
+  if (role === 'attachStrap') return placeAttachStrap(positions2D, dims, attachSide || 1)
   if (role === 'attachBody') return placeAttachBody(positions2D, dims, 1)
   if (role === 'attachBodyBack') return placeAttachBody(positions2D, dims, -1)
   throw new Error(`placePiece: no placement heuristic for role "${role}"`)
