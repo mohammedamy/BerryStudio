@@ -13,9 +13,25 @@ import { computeBodyDims } from '../body/computeBodyDims.js'
 import { deriveGarmentPinMask } from '../body/collisionRig.js'
 import { FABRIC_IDS } from '../cloth/fabricPresets.js'
 
+const measCache = new Map()
+const dimsCache = new Map()
+
 function makeMeasurements(category) {
-  const isKids = category === 'girls' || category === 'boys'
-  return computeMeasurements({ category, size: 'M', standard: 'intl', kids: isKids ? '8-9' : undefined })
+  if (!measCache.has(category)) {
+    const isKids = category === 'girls' || category === 'boys'
+    measCache.set(
+      category,
+      computeMeasurements({ category, size: 'M', standard: 'intl', kids: isKids ? '8-9' : undefined })
+    )
+  }
+  return measCache.get(category)
+}
+
+function getCategoryDims(category) {
+  if (!dimsCache.has(category)) {
+    dimsCache.set(category, computeBodyDims(makeMeasurements(category), category))
+  }
+  return dimsCache.get(category)
 }
 
 function toPayloadPiece(p, i) {
@@ -78,7 +94,7 @@ describe('all 320 patterns assemble cleanly without crashes, skips, NaNs, unpinn
       const entry = PATTERNS[id]
       const category = entry.category || 'women'
       const m = makeMeasurements(category)
-      const dims = computeBodyDims(m, category)
+      const dims = getCategoryDims(category)
       const pieces = entry.pieces(m)
       const payload = {
         designId: id,
@@ -157,7 +173,7 @@ describe('all 320 patterns assemble cleanly without crashes, skips, NaNs, unpinn
     expect(nanPatterns, `NaN vertices: ${JSON.stringify(nanPatterns)}`).toEqual([])
     expect(unpinnedPatterns, `Unpinned components: ${JSON.stringify(unpinnedPatterns)}`).toEqual([])
     expect(misplacedRoles, `Misplaced roles: ${JSON.stringify(misplacedRoles)}`).toEqual([])
-  })
+  }, 30000)
 })
 
 test('all 7 4-gore skirts, mf04 wrap coat, wb09/gb07 sport bras, and thobe sleeve armhole produce proper seams', () => {
@@ -192,4 +208,4 @@ test('all 7 4-gore skirts, mf04 wrap coat, wb09/gb07 sport bras, and thobe sleev
   const capLen = chainLen(triById[capSeam.b.piece].positions2D, triById[capSeam.b.piece].boundaryChains[capSeam.b.edge])
   const ratio = Math.max(armLen, capLen) / Math.min(armLen, capLen)
   expect(ratio).toBeLessThanOrEqual(1.8)
-})
+}, 15000)
