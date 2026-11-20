@@ -27,7 +27,7 @@ export default function PostFX() {
     c.addPass(new RenderPass(scene, camera))
     // Deliberately subtle — this is meant to read as "clean studio render",
     // not "video game glow." Tune strength first if it ever looks off.
-    c.addPass(new UnrealBloomPass(new THREE.Vector2(size.width, size.height), 0.08, 0.4, 0.92))
+    c.addPass(new UnrealBloomPass(new THREE.Vector2(size.width, size.height), 0.015, 0.25, 2.5))
     c.addPass(new OutputPass())
     return c
     // eslint-disable-next-line react-hooks/exhaustive-deps

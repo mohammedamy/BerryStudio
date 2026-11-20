@@ -1,5 +1,13 @@
 # Changelog
 
+## 320-pattern classification, seam topology, and color parity hardening
+
+Resolves piece-classification, seam-direction, panel-assembly, and rendering discrepancies across 3D Preview and Cloth Lab:
+
+- **Sleeveless & sleeve-named 3D classification (`js/pattern-3d-metrics.js`, `cloth-lab/src/pattern/importFromApp.js`, `cloth-lab/src/workflow/autoSetup.js`)**: Replaces naive `/sleeve|كم/` substring checks with context-aware helpers (`isSleevePieceName` and `isSleeveLabel`) prioritizing explicit `bodyZone`, structural garment nouns, and bilingual exclusions (`sleeveless`, `بدون أكمام`, `كمثر`, `كمر`) so sleeveless dresses/tops and sleeved bodices render full garments in 3D instead of isolated sleeves.
+- **320-pattern Cloth Lab piece roles, placement & seam topology (`cloth-lab/src/pattern/importFromApp.js`, `placement.js`, `triangulate.js`, `PiecesStep.jsx`, `SewStep.jsx`, `js/library.js`, `js/reference-patterns.js`, `js/ai.js`)**: Routes `wb09`/`gb07` underbust elastic to `attachUnderbust`, leotard crotch gussets/bindings/straps/mesh panels & bra bridges cleanly, bilateral side inserts per torso side; connects 2-piece sleeves (`sleeve-upper` + `sleeve-under`), open-front `jacketSide` / `abaya` panels, `girls_dress` full-width skirt tubes, and 2-/4-gore skirts (including trained back gores); resolves multi-layer suit jackets/vests, skips self-stacking neck/lining seam overrides, fixes `library.js`/`reference-patterns.js`/`ai.js` same-direction edge flags, and untwists structural seams via memoized 3D endpoints. Adds `adaptiveSpacingCm` and heavy-mesh `preRelax` capping to keep large robes (`abaya`) smooth and free of WebGL context loss.
+- **Lookbook swatch, texture & bloom parity (`js/pattern-lookbook-styles.js`, `cloth-lab/src/cloth/ClothMesh.jsx`, `Scene.jsx`, `PostFX.jsx`, `sw.js`)**: Calibrates `w05, m02, g02, g19, wf09, mf15, gf04, gf09, gf14, wb01, wb10` swatches and secondary leotard/pinafore layer colors; normalizes `diffuse.jpg` brightness via `normalizeDiffuseTexture`; clamps satin clearcoat/roughness and tunes HDR studio lighting + `UnrealBloomPass` threshold (`2.5`) to eliminate bloom glare; and bumps service worker cache to `berrystudio-v82`.
+
 ## 320-pattern lookbook styling, 3D mannequin garment fidelity, and Cloth Lab parity
 
 Elevates all 320 pre-designed library patterns across 2D construction, the real-time 3D mannequin preview, and 3D Cloth Lab simulation to match their lookbook photography and drape cleanly without manual setup:

@@ -23,6 +23,21 @@ import { resolveSchemaRole } from '../pattern/roles'
 
 const has = (re, s) => re.test(s)
 const PANEL_NOUN_RE = /\b(bodice|shirt|t-shirt|tee|blouse|dress|gown|top|jacket|coat|vest|tunic|abaya|thobe|leotard|skirt|trouser|pant|shorts|panel|body)\b|\bleg\b|صدرية|قميص|بلوزة|فستان|جاكيت|معطف|عباية|ثوب|تنور|بنطال|بنطلون|ساق|لوحة/
+const SLEEVE_EXCLUDE_RE = /sleeveless|بدون\s*أكمام|بلا\s*أكمام|كمر|محكم|كمثر|مكتمل/i
+const NON_SLEEVE_PART_RE = /\b(front|back|bodice|dress|blouse|shirt|t-shirt|tee|top|tunic|vest|jacket|coat|skirt|trouser|pant|shorts|hem\s*band|binding|cuff|placket|facing|collar|yoke|pocket|lining)\b|مقدمة|خلفية|صدرية|فستان|بلوزة|قميص|توب|صديري|فانلة|تنورة|تحبيك|شريط|بطانة|ياقة/i
+const EXPLICIT_SLEEVE_TAIL_RE = /\bsleeve(?:\s+(?:upper|under|front|back|panel|cap|top))?s?\s*$/i
+const AR_SLEEVE_LEAD_RE = /^[\s\-_/]*(?:كم|الكم)(?=$|[\s\-_/])/
+
+export function isSleeveLabel(en = '', ar = '') {
+  const combined = `${en} ${ar}`.trim()
+  if (!combined || SLEEVE_EXCLUDE_RE.test(combined)) return false
+  if (/\b(?:hem\s*band|binding|cuff|placket|facing)\b|تحبيك|شريط|أسورة/i.test(combined)) return false
+  const enTrim = String(en || '').trim()
+  const arTrim = String(ar || '').trim()
+  if (EXPLICIT_SLEEVE_TAIL_RE.test(enTrim) || AR_SLEEVE_LEAD_RE.test(arTrim) || AR_SLEEVE_LEAD_RE.test(enTrim)) return true
+  if (NON_SLEEVE_PART_RE.test(combined)) return false
+  return /\bsleeves?\b/i.test(combined) || /(?:^|[\s\-_/])(?:كم|الكم)(?=$|[\s\-_/])/.test(combined)
+}
 
 // Placement guess from the piece's name (English and Arabic), body-zone
 // override and declared schema role. Always returns one of PLACEMENTS'
@@ -47,7 +62,7 @@ export function guessPlacement(piece) {
   if (has(/\b(collar|undercollar|lapel|strap|hood|epaulet\w*|yoke)\b|ياقة|حمالة/, name)) return 'collar'
   if (has(/\b(waistband|belt|sash|peplum)\b|wrap[-\s]?tie|حزام/, name)) return 'waistband'
   if (has(/\b(binding|gusset|insert|bridge|pocket|cuff|facing|placket|trim|lining|cup)\b|\bband\b|جيب|كفة|أساور|بطانة|دكة/, name)) return 'pocket'
-  if (has(/sleeve|كم/, name)) return 'sleeve'
+  if (isSleeveLabel(en, ar)) return 'sleeve'
   if (!isPanel && has(/collar|neck|shoulder|cape|ياقة|رقبة|كتف|كاب/, name)) return 'collar'
   if (!isPanel && has(/waist|\btie\b|خصر|رباط/, name)) return 'waistband'
   if (has(/trouser|pant|shorts|\bleg\b|بنطال|بنطلون|شورت|ساق/, name)) return back ? 'trouser-back' : 'trouser-front'
@@ -66,7 +81,7 @@ export function guessCopies(piece, role) {
   const info = resolveSchemaRole(role)
   if (info?.cutOnFold) return 'fold'
   if (info?.bilateral || info?.placement === 'sleeve') return 'pair'
-  if (/sleeve|كم/i.test(labelOf(piece, 'en') + labelOf(piece, 'ar'))) return 'pair'
+  if (isSleeveLabel(labelOf(piece, 'en'), labelOf(piece, 'ar'))) return 'pair'
   return 'single'
 }
 

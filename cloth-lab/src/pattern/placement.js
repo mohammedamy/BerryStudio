@@ -85,7 +85,7 @@ function applySeatedSkirtDrape(x, worldY, z, dims, zSign, pose) {
   return [x, underHipY - shinDrop, z + fwd]
 }
 
-export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, angleSpan = Math.PI * 0.85, pose = 'standing' } = {}) {
+export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, angleSpan = Math.PI * 0.85, pose = 'standing', splitSide = 0 } = {}) {
   const topWorldY = dims.shoulderY - dims.span * 0.03
   const zScale = dims.female ? 0.78 : 0.82
   let minX = Infinity, maxX = -Infinity
@@ -93,9 +93,13 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
     if (x < minX) minX = x
     if (x > maxX) maxX = x
   }
-  const cx = (minX < -1e-2 && maxX > 1e-2 && Math.abs(minX + maxX) < (maxX - minX) * 0.25)
-    ? 0
-    : (Number.isFinite(minX) && Number.isFinite(maxX) ? (minX + maxX) / 2 : 0)
+  const cx = splitSide > 0
+    ? (Number.isFinite(minX) ? minX : 0)
+    : splitSide < 0
+      ? (Number.isFinite(maxX) ? maxX : 0)
+      : (minX < -1e-2 && maxX > 1e-2 && Math.abs(minX + maxX) < (maxX - minX) * 0.25)
+        ? 0
+        : (Number.isFinite(minX) && Number.isFinite(maxX) ? (minX + maxX) / 2 : 0)
   return positions2D.map(([xCm, yCm]) => {
     const worldY = topWorldY - cm(yCm)
     const r = radiusAtHeight(dims, worldY) * easeFactor
@@ -290,7 +294,7 @@ export function placeLegPanel(positions2D, dims, { side, zSign, easeFactor = 1.1
   })
 }
 
-export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */, easeFactor = 1.15, pose = 'standing') {
+export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */, easeFactor = 1.15, pose = 'standing', tubeHalf = null) {
   if (!positions2D.length) return []
   let minX = Infinity, maxX = -Infinity, minY = Infinity
   for (const [x, y] of positions2D) {
@@ -407,7 +411,14 @@ export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */,
     }
 
     const s = clamp((xCm - cx) / halfW, -1, 1)
-    const alpha = s * Math.PI * 0.96
+    let alpha = s * Math.PI * 0.96
+    if (tubeHalf === 'upper') {
+      alpha = s * Math.PI * 0.54
+    } else if (tubeHalf === 'under') {
+      alpha = s < 0
+        ? lerp(-Math.PI, -Math.PI * 0.54, -s)
+        : lerp(Math.PI, Math.PI * 0.54, s)
+    }
     // At s=0 (capTop): cos(0)=1 -> outer shoulder (`Z = 0` at capRoot);
     // front cap wraps across +front (+Z); back cap wraps across -front (-Z).
     const cOut = radius * Math.cos(alpha)
@@ -521,15 +532,16 @@ export function placeAttachHem(positions2D, dims, side = 0, pose = 'standing') {
   })
 }
 
-export function placeAttachBody(positions2D, dims, zSign = 1) {
+export function placeAttachBody(positions2D, dims, zSign = 1, side = 0) {
   const topWorldY = dims.hipY + dims.span * 0.58
   const zScale = dims.female ? 0.80 : 0.84
   const cx = bboxCenterX(positions2D)
+  const thetaCenter = side * Math.PI * 0.42
   return positions2D.map(([xCm, yCm]) => {
     const worldY = topWorldY - cm(yCm)
     const baseR = Math.max(dims.chestR * 0.94, radiusAtHeight(dims, worldY)) * 1.15
     const rEff = baseR * (1 + zScale) * 0.5
-    const phi = cm(xCm - cx) / rEff
+    const phi = thetaCenter + cm(xCm - cx) / rEff
     const minR = (dims.neckR * 1.24) / zScale
     const rOut = Math.max(minR, baseR + 0.004 * (Math.abs(phi) / Math.PI))
     return [rOut * Math.sin(phi), worldY, zSign * rOut * zScale * Math.cos(phi)]
@@ -599,12 +611,11 @@ export function placeAttachHemBand(positions2D, dims, pose = 'standing') {
   })
 }
 
-export function placeAttachBust(positions2D, dims, side = 1) {
+export function placeAttachBust(positions2D, dims, side = 0) {
   const topWorldY = dims.hipY + dims.span * 0.79
   const zScale = dims.female ? 0.80 : 0.82
   const cx = bboxCenterX(positions2D)
-  const s = side === 0 ? 1 : side
-  const thetaCenter = s * 0.42
+  const thetaCenter = side === 0 ? 0 : side * 0.42
   return positions2D.map(([xCm, yCm]) => {
     const worldY = topWorldY - cm(yCm)
     const baseR = Math.max(dims.chestR * 0.98, radiusAtHeight(dims, worldY)) * 1.18 + (dims.female ? 0.020 : 0.006)
@@ -658,10 +669,11 @@ export function placePiece(triangulated, dims, pose = 'standing') {
   const side = (pieceId.endsWith('L') || pieceId.endsWith('_l')) ? -1 : 1
   const attachSide = (pieceId.endsWith('L') || pieceId.endsWith('_l')) ? -1
     : (pieceId.endsWith('R') || pieceId.endsWith('_r')) ? 1 : 0
-  const siblingEase = placementHint ? placementHint.index * 0.08 : 0
-  if (role === 'frontPanel') return placeTorsoPanel(positions2D, dims, { zSign: 1, easeFactor: 1.13 + siblingEase, pose })
-  if (role === 'backPanel') return placeTorsoPanel(positions2D, dims, { zSign: -1, easeFactor: 1.13 + siblingEase, pose })
-  if (role === 'sleeve') return placeSleeve(positions2D, dims, side, 1.15, pose)
+  const siblingEase = (placementHint && typeof placementHint.index === 'number') ? placementHint.index * 0.08 : 0
+  const splitSide = placementHint?.splitSide || 0
+  if (role === 'frontPanel') return placeTorsoPanel(positions2D, dims, { zSign: 1, easeFactor: 1.13 + siblingEase, pose, splitSide })
+  if (role === 'backPanel') return placeTorsoPanel(positions2D, dims, { zSign: -1, easeFactor: 1.13 + siblingEase, pose, splitSide })
+  if (role === 'sleeve') return placeSleeve(positions2D, dims, side, 1.15, pose, placementHint?.tubeHalf || null)
   if (role === 'hipPanelFront') return placeHipPanel(positions2D, dims, { zSign: 1, easeFactor: 1.16 + siblingEase, pose })
   if (role === 'hipPanelBack') return placeHipPanel(positions2D, dims, { zSign: -1, easeFactor: 1.16 + siblingEase, pose })
   if (role === 'legFront') return placeLegPanel(positions2D, dims, { side, zSign: 1, easeFactor: 1.16, pose })
@@ -677,10 +689,10 @@ export function placePiece(triangulated, dims, pose = 'standing') {
   if (role === 'attachHemBand') return placeAttachHemBand(positions2D, dims, pose)
   if (role === 'attachCrotch') return placeAttachCrotch(positions2D, dims)
   if (role === 'attachWrist') return placeAttachWrist(positions2D, dims, attachSide || 1, pose)
-  if (role === 'attachBust') return placeAttachBust(positions2D, dims, attachSide || 1)
+  if (role === 'attachBust') return placeAttachBust(positions2D, dims, attachSide)
   if (role === 'attachUnderbust') return placeAttachUnderbust(positions2D, dims, attachSide)
   if (role === 'attachStrap') return placeAttachStrap(positions2D, dims, attachSide || 1)
-  if (role === 'attachBody') return placeAttachBody(positions2D, dims, 1)
-  if (role === 'attachBodyBack') return placeAttachBody(positions2D, dims, -1)
+  if (role === 'attachBody') return placeAttachBody(positions2D, dims, 1, attachSide)
+  if (role === 'attachBodyBack') return placeAttachBody(positions2D, dims, -1, attachSide)
   throw new Error(`placePiece: no placement heuristic for role "${role}"`)
 }

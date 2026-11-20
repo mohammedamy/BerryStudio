@@ -281,15 +281,15 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         // duplication auto-suffixes it — no foldMirrorEdge needed here,
         // that's only for a cutOnFold piece like Waistband itself.
         edges: [
-          { fromIdx: 0, toIdx: front.hemOutIdx, seamId: `${opts.id}Outseam` },
+          { fromIdx: 0, toIdx: front.hemOutIdx, seamId: `${opts.id}Outseam`, reverse: false },
           { fromIdx: front.hemInIdx, toIdx: front.length - 1, mirrorSelf: true },
-          { fromIdx: front.length - 1, toIdx: 0, seamId: `${opts.id}WaistFront` },
+          { fromIdx: front.length - 1, toIdx: 0, seamId: `${opts.id}WaistFront`, reverse: false },
         ] },
       { key: 'back', name: { en: `${opts.nameEn} Back`, ar: `خلفية ${opts.nameAr}` }, desc: { en: 'Back leg panel with a deeper curved crotch seam, per real block convention.', ar: 'لوحة الساق الخلفية بخط تفصيل منحنٍ أعمق، حسب القاعدة الحقيقية.' },
         outline: back, darts: [], notches: [[back[back.crotchIdx][0], back[back.crotchIdx][1]], [back[back.hemOutIdx][0], back[back.hemOutIdx][1]]],
         grain: [[qt * 0.6, riseLen + legLen * 0.2], [qt * 0.6, riseLen + legLen * 0.8]], role: 'trouser-back', bilateral: true,
         edges: [
-          { fromIdx: 0, toIdx: back.hemOutIdx, seamId: `${opts.id}Outseam` },
+          { fromIdx: 0, toIdx: back.hemOutIdx, seamId: `${opts.id}Outseam`, reverse: false },
           { fromIdx: back.hemInIdx, toIdx: back.length - 1, mirrorSelf: true },
           { fromIdx: back.length - 1, toIdx: 0, seamId: `${opts.id}WaistBack` },
         ] },

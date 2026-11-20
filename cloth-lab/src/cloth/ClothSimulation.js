@@ -1235,9 +1235,11 @@ export class ClothSimulation {
   preRelax(steps = 40) {
     const u = this.posVar.material.uniforms
     const savedGravityRamp = u.uGravityRamp.value
+    const heavyMesh = this.simParticleCount > 2200
+    const totalSteps = heavyMesh ? Math.min(steps, 20) : steps
     u.uGravityRamp.value = 0
-    for (let i = 0; i < steps; i++) {
-      const isSelfCollisionStep = i === steps - 1
+    for (let i = 0; i < totalSteps; i++) {
+      const isSelfCollisionStep = !heavyMesh && i === totalSteps - 1
       u.uApplySelfCollision.value = isSelfCollisionStep ? 1 : 0
       // WP-35b: same requirement as step() — the sorted buffer must be
       // (re)built right before the one iteration that reads it, or the

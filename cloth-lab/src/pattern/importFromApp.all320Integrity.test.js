@@ -7,9 +7,10 @@ import '../../../js/reference-patterns.js'
 import { PATTERNS, computeMeasurements } from '../../../js/data.js'
 import { convertAppPattern } from './importFromApp.js'
 import { createDraftPiece, addEdge, finalizeDraftPiece } from './seamAuthoring.js'
-import { triangulateAll } from './triangulate.js'
+import { triangulateAll, adaptiveSpacingCm } from './triangulate.js'
 import { assembleCloth } from '../cloth/assemble.js'
 import { computeBodyDims } from '../body/computeBodyDims.js'
+import { placePiece } from './placement.js'
 import { deriveGarmentPinMask } from '../body/collisionRig.js'
 import { FABRIC_IDS } from '../cloth/fabricPresets.js'
 
@@ -109,12 +110,12 @@ describe('all 320 patterns assemble cleanly without crashes, skips, NaNs, unpinn
         const res = convertAppPattern(payload)
         if (res.skipped.length > 0) skips.push({ id, skipped: res.skipped })
 
-        const drafts = res.rawPieces.map((rp) => createDraftPiece(rp, res.roles[rp.id]))
+        const drafts = res.rawPieces.map((rp) => createDraftPiece(rp, res.roles[rp.id], res.placementHints?.[rp.id]))
         const byId = Object.fromEntries(drafts.map((d) => [d.id, d]))
         for (const { pieceId, edgeName, fromIdx, toIdx } of res.edgeInstructions) {
           if (byId[pieceId]) addEdge(byId[pieceId], edgeName, fromIdx, toIdx)
         }
-        const finalPieces = drafts.map((d) => finalizeDraftPiece({ id: d.id, role: d.role, outline: d.outline, edges: { ...d.edges } }))
+        const finalPieces = drafts.map((d) => finalizeDraftPiece({ id: d.id, role: d.role, outline: d.outline, edges: { ...d.edges }, placementHint: d.placementHint }))
         const triangulated = triangulateAll(finalPieces, res.seamInstructions, 2)
         const cloth = assembleCloth(triangulated, dims, res.seamInstructions, 'standing')
         const pinMask = deriveGarmentPinMask(cloth, triangulated, dims)
@@ -209,3 +210,71 @@ test('all 7 4-gore skirts, mf04 wrap coat, wb09/gb07 sport bras, and thobe sleev
   const ratio = Math.max(armLen, capLen) / Math.min(armLen, capLen)
   expect(ratio).toBeLessThanOrEqual(1.8)
 }, 15000)
+
+test('all 320 patterns have zero twisted structural seams, zero unsewn target panels, and accurate underbust routing', () => {
+  const TWIST_ROLES = new Set(['frontPanel', 'backPanel', 'hipPanelFront', 'hipPanelBack', 'legFront', 'legBack', 'goreFront', 'goreBack', 'goreSideLeft', 'goreSideRight', 'sleeve'])
+  const STRUCTURAL_ROLES = new Set([...TWIST_ROLES])
+  const TARGET_SEWN_IDS = ['abaya', 'girls_dress', 'wf01', 'wf02', 'mf05', 'mf15', 'bf07', 'bf10', 'bf13', 'gf15', 'ref_m_shirt', 'm04']
+  const twisted = []
+  const unsewn = []
+
+  for (const id of ALL_IDS) {
+    const entry = PATTERNS[id]
+    const category = entry.category || 'women'
+    const m = makeMeasurements(category)
+    const dims = getCategoryDims(category)
+    const res = convertAppPattern({ designId: id, pieces: entry.pieces(m).map(toPayloadPiece), measurements: m, category })
+
+    if (TARGET_SEWN_IDS.includes(id)) {
+      const sewn = new Set()
+      for (const s of res.seamInstructions) { sewn.add(s.a.piece); sewn.add(s.b.piece) }
+      for (const rp of res.rawPieces) {
+        if (STRUCTURAL_ROLES.has(res.roles[rp.id]) && !sewn.has(rp.id)) unsewn.push(`${id}:${rp.id}`)
+      }
+    }
+
+    if (id === 'wb09' || id === 'gb07') {
+      const bandRole = Object.entries(res.roles).find(([k]) => /bandElastic/i.test(k))?.[1]
+      expect(bandRole, `${id} bandElastic role`).toBe('attachUnderbust')
+    }
+
+    const byId = Object.fromEntries(res.rawPieces.map((rp) => [rp.id, rp]))
+    const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2])
+    for (const s of res.seamInstructions) {
+      const ra = res.roles[s.a.piece], rb = res.roles[s.b.piece]
+      if (!TWIST_ROLES.has(ra) || !TWIST_ROLES.has(rb)) continue
+      const pa = byId[s.a.piece], pb = byId[s.b.piece]
+      const ea = res.edgeInstructions.find((e) => e.pieceId === s.a.piece && e.edgeName === s.a.edge)
+      const eb = res.edgeInstructions.find((e) => e.pieceId === s.b.piece && e.edgeName === s.b.edge)
+      if (!pa || !pb || !ea || !eb) continue
+      const p3A = placePiece({ pieceId: s.a.piece, role: ra, positions2D: pa.outline, placementHint: res.placementHints[s.a.piece] }, dims, 'standing')
+      const p3B = placePiece({ pieceId: s.b.piece, role: rb, positions2D: pb.outline, placementHint: res.placementHints[s.b.piece] }, dims, 'standing')
+      const a0 = p3A[ea.fromIdx], a1 = p3A[ea.toIdx]
+      const b0 = s.reverse ? p3B[eb.toIdx] : p3B[eb.fromIdx]
+      const b1 = s.reverse ? p3B[eb.fromIdx] : p3B[eb.toIdx]
+      const dUsed = dist(a0, b0) + dist(a1, b1)
+      const dOpp = dist(a0, b1) + dist(a1, b0)
+      if (dUsed > dOpp + 0.12 && dUsed > 0.35) twisted.push(`${id}:${s.id}`)
+    }
+  }
+
+  expect(unsewn, `Unsewn panels: ${JSON.stringify(unsewn)}`).toEqual([])
+  expect(twisted, `Twisted seams: ${JSON.stringify(twisted)}`).toEqual([])
+
+  // adaptiveSpacingCm keeps normal shirts at 2cm while keeping long full-length abaya within safe WebGL particle budget
+  const shirtRes = convertAppPattern({ designId: 'mens_shirt', pieces: PATTERNS.mens_shirt.pieces(makeMeasurements('men')).map(toPayloadPiece), measurements: makeMeasurements('men'), category: 'men' })
+  const shirtDrafts = shirtRes.rawPieces.map((rp) => createDraftPiece(rp, shirtRes.roles[rp.id], shirtRes.placementHints?.[rp.id]))
+  const shirtById = Object.fromEntries(shirtDrafts.map((d) => [d.id, d]))
+  for (const { pieceId, edgeName, fromIdx, toIdx } of shirtRes.edgeInstructions) if (shirtById[pieceId]) addEdge(shirtById[pieceId], edgeName, fromIdx, toIdx)
+  const shirtFinal = shirtDrafts.map((d) => finalizeDraftPiece({ id: d.id, role: d.role, outline: d.outline, edges: { ...d.edges }, placementHint: d.placementHint }))
+  expect(adaptiveSpacingCm(shirtFinal)).toBe(2)
+
+  const abayaMeas = makeMeasurements('women')
+  const abayaRes = convertAppPattern({ designId: 'abaya', pieces: PATTERNS.abaya.pieces(abayaMeas).map(toPayloadPiece), measurements: abayaMeas, category: 'women' })
+  const abayaDrafts = abayaRes.rawPieces.map((rp) => createDraftPiece(rp, abayaRes.roles[rp.id], abayaRes.placementHints?.[rp.id]))
+  const abayaById = Object.fromEntries(abayaDrafts.map((d) => [d.id, d]))
+  for (const { pieceId, edgeName, fromIdx, toIdx } of abayaRes.edgeInstructions) if (abayaById[pieceId]) addEdge(abayaById[pieceId], edgeName, fromIdx, toIdx)
+  const abayaFinal = abayaDrafts.map((d) => finalizeDraftPiece({ id: d.id, role: d.role, outline: d.outline, edges: { ...d.edges }, placementHint: d.placementHint }))
+  const abayaCloth = assembleCloth(triangulateAll(abayaFinal, abayaRes.seamInstructions, adaptiveSpacingCm(abayaFinal)), getCategoryDims('women'), abayaRes.seamInstructions, 'standing')
+  expect(abayaCloth.simParticleCount).toBeLessThanOrEqual(3800)
+}, 25000)

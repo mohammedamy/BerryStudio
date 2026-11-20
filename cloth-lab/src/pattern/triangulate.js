@@ -204,6 +204,20 @@ export function triangulatePiece(piece, subdivForPiece, targetSpacingCm) {
   }
 }
 
+export function adaptiveSpacingCm(pieces, minSpacingCm = 2, maxParticles = 3000) {
+  let totalArea = 0
+  for (const p of pieces) {
+    const pts = p?.outline
+    if (!Array.isArray(pts) || pts.length < 3) continue
+    let area2 = 0
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      area2 += pts[j][0] * pts[i][1] - pts[i][0] * pts[j][1]
+    }
+    totalArea += Math.abs(area2) * 0.5
+  }
+  return Math.max(minSpacingCm, Math.min(4.5, Math.sqrt(Math.max(1, totalArea) / maxParticles)))
+}
+
 export function triangulateAll(pieces, seams, targetSpacingCm = 2) {
   const subdivMap = computeSubdivisions(pieces, seams, targetSpacingCm)
   return pieces.map((p) => triangulatePiece(p, subdivMap[p.id], targetSpacingCm))

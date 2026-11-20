@@ -16,12 +16,20 @@ import { labelOf } from './patternPlan'
 //    in the list;
 //  - pieces the importer couldn't sew are already "placed on the body"
 //    (non-blocking); the panel offers to sew them, never forces it.
-const WORDS_AR = { right: 'يمين', left: 'يسار', side: 'جانب', top: 'أعلى', bottom: 'أسفل', shoulder: 'كتف', neckline: 'خط الرقبة', neck: 'رقبة', armhole: 'فتحة الإبط', waist: 'خصر', hem: 'ذيل', front: 'أمام', back: 'خلف', seam: 'وصلة', cap: 'رأس', dart: 'بنسة', sleeve: 'كم', center: 'منتصف', inseam: 'خياطة داخلية', outseam: 'خياطة خارجية', princess: 'برنسيس', mirror: 'مرآة', cuff: 'أسورة', outer: 'خارجي', a: 'أ', b: 'ب' }
+const WORDS_AR = { right: 'يمين', left: 'يسار', side: 'جانب', top: 'أعلى', bottom: 'أسفل', shoulder: 'كتف', neckline: 'خط الرقبة', neck: 'رقبة', armhole: 'فتحة الإبط', waist: 'خصر', hem: 'ذيل', front: 'أمام', back: 'خلف', seam: 'وصلة', cap: 'رأس', dart: 'بنسة', sleeve: 'كم', center: 'منتصف', inseam: 'خياطة داخلية', outseam: 'خياطة خارجية', princess: 'برنسيس', mirror: 'مرآة', cuff: 'أسورة', outer: 'خارجي', gore: 'قصة تنورة', waistband: 'حزام الخصر', gusset: 'دكة', bridge: 'الجسر', yoke: 'نير', lining: 'بطانة', placket: 'مرد', lapel: 'طية صدر', epaulette: 'كتافة', upper: 'علوي', under: 'سفلي', a: 'أ', b: 'ب' }
 const ANATOMICAL_LABELS = {
   capFront: ['front sleeve cap', 'نصف رأس الكم الأمامي'],
   capBack: ['back sleeve cap', 'نصف رأس الكم الخلفي'],
   frontSeam: ['front sleeve seam', 'جانب الكم الطويل (أمام)'],
   backSeam: ['back sleeve seam', 'جانب الكم الطويل (خلف)'],
+  upperFrontSeam: ['upper sleeve front seam', 'الحافة الأمامية للكم العلوي'],
+  upperBackSeam: ['upper sleeve back seam', 'الحافة الخلفية للكم العلوي'],
+  underFrontSeam: ['under sleeve front seam', 'الحافة الأمامية للكم السفلي'],
+  underBackSeam: ['under sleeve back seam', 'الحافة الخلفية للكم السفلي'],
+  goreRight: ['right gore side seam', 'الجانب الأيمن لقصة التنورة'],
+  goreLeft: ['left gore side seam', 'الجانب الأيسر لقصة التنورة'],
+  outseam: ['outer leg seam', 'الخياطة الخارجية للساق'],
+  inseam: ['inner leg seam', 'الخياطة الداخلية للساق'],
   rightArmhole: ['right armhole', 'حردة الإبط اليمنى'],
   leftArmhole: ['left armhole', 'حردة الإبط اليسرى'],
   armhole: ['armhole', 'حردة الإبط'],

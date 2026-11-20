@@ -9,7 +9,20 @@
 
 import { inferBodyZone, SLEEVE_ROLES } from "./body-zone.js";
 
-const SLEEVE_NAME_RE = /sleeve|كم|أكمام/i;
+const SLEEVE_EXCLUDE_RE = /sleeveless|بدون\s*أكمام|بلا\s*أكمام|كمر|محكم|كمثر|مكتمل/i;
+const NON_SLEEVE_PART_RE = /\b(front|back|bodice|dress|blouse|shirt|t-shirt|tee|top|tunic|vest|jacket|coat|skirt|trouser|pant|shorts|hem\s*band|binding|cuff|placket|facing|collar|yoke|pocket|lining)\b|مقدمة|خلفية|صدرية|فستان|بلوزة|قميص|توب|صديري|فانلة|تنورة|تحبيك|شريط|بطانة|ياقة/i;
+const EXPLICIT_SLEEVE_TAIL_RE = /\bsleeve(?:\s+(?:upper|under|front|back|panel|cap|top))?s?\s*$/i;
+const AR_SLEEVE_LEAD_RE = /^[\s\-_/]*(?:كم|الكم)(?=$|[\s\-_/])/;
+
+export function isSleevePieceName(name) {
+  const s = String(name || "").trim();
+  if (!s || SLEEVE_EXCLUDE_RE.test(s)) return false;
+  if (/\b(?:hem\s*band|binding|cuff|placket|facing)\b|تحبيك|شريط|أسورة/i.test(s)) return false;
+  if (EXPLICIT_SLEEVE_TAIL_RE.test(s) || AR_SLEEVE_LEAD_RE.test(s)) return true;
+  if (NON_SLEEVE_PART_RE.test(s)) return false;
+  return /\bsleeves?\b/i.test(s) || /(?:^|[\s\-_/])(كم|الكم)(?=$|[\s\-_/])/.test(s);
+}
+
 const SKIRT_NAME_RE = /skirt|peplum|flounce|tier|godet|تنور|كشكش/i;
 const TROUSERS_NAME_RE = /trouser|بنطل|pant|\bleg\s*(?:panel|front|back|seam)|\bleg\b(?!\s*opening)|\blegging\b|brief|panties|boxer|trunk|short|culotte|palazzo|jean|jogger|سروال|شورت|كيلوت/i;
 const CUFF_NAME_RE = /\bcuff\b|أساور|اسورة|إسورة/i;
@@ -59,22 +72,21 @@ function classifyDirectOrTrim(p, category = "women") {
   const role = p && p.role;
   const isMenOrBoys = category === "men" || category === "boys";
 
-  // 1. Explicit user-set bodyZone always wins
+  // 1. Explicit user-set bodyZone always wins (keeping sleeve role distinct inside upper zone)
   if (p && (p.bodyZone === "upper" || p.bodyZone === "lower")) {
     if (p.bodyZone === "lower") {
       if (SKIRT_NAME_RE.test(name)) return "skirt";
       if (isMenOrBoys) return "trousers";
       return (TROUSERS_NAME_RE.test(name) || role === "brief-front" || role === "brief-back") ? "trousers" : "skirt";
     }
-    return "bodice";
+    return (role && SLEEVE_ROLES.has(role)) ? "sleeve" : "bodice";
   }
 
-  // 2. Sleeve roles & names
+  // 2. Declared sleeve roles & cuffs (authoritative schema roles before name heuristics)
   if (p && SLEEVE_ROLES.has(role)) return "sleeve";
-  if (SLEEVE_NAME_RE.test(name)) return "sleeve";
-  if (role === "cuff" || CUFF_NAME_RE.test(name)) return "trim:sleeve";
+  if (role === "cuff" || role === "rib-cuff" || CUFF_NAME_RE.test(name)) return "trim:sleeve";
 
-  // 3. Role-derived zone from body-zone.js
+  // 3. Role-derived zone from body-zone.js (guarantees bodice-* / front-panel / back-panel stay bodice even if pattern title says "Long-Sleeve" or "Sleeveless")
   const zone = inferBodyZone(p);
   if (zone === "lower") {
     if (SKIRT_NAME_RE.test(name)) return "skirt";
@@ -83,16 +95,19 @@ function classifyDirectOrTrim(p, category = "women") {
   }
   if (zone === "upper") return "bodice";
 
-  // 4. Context-dependent trims (waistband, pocket, gusset, fly) — must NOT
-  // spawn a phantom bodice tube top when attached to trousers or skirts!
+  // 4. Context-dependent trims (waistband, pocket, gusset, fly, hem-band, facing, lining)
   if ((role && LOWER_TRIM_ROLES.has(role)) || CONTEXT_TRIM_NAME_RE.test(name) || CONTEXT_TRIM_NAME_RE.test(p?.key || "")) {
     if (/underarm|إبط/i.test(fullTxt)) return "bodice";
     if (/trouser|pant|fly|بنطل|سروال/i.test(fullTxt)) return "trim:trousers";
     if (/skirt|تنور/i.test(fullTxt)) return "trim:skirt";
+    if (/sleeve|كم|أكمام/i.test(fullTxt) && !/sleeveless|بدون\s*أكمام|بلا\s*أكمام/i.test(fullTxt)) return "trim:sleeve";
     return "trim:context";
   }
 
-  // 5. Explicit lower-body names/roles
+  // 5. Legacy fallback for un-roled pieces: safe sleeve-name classifier
+  if (isSleevePieceName(name)) return "sleeve";
+
+  // 6. Explicit lower-body names/roles
   if (TROUSERS_NAME_RE.test(name) || TROUSERS_NAME_RE.test(p?.key || "") || role === "brief-front" || role === "brief-back") {
     return "trousers";
   }
@@ -180,8 +195,10 @@ export function resolvePartsFabric3D(pieces = [], opts = {}) {
   for (const p of visiblePieces) {
     const part = classifyPiecePart(p, pieces, category);
     const back = isBackPieceName(p);
-    // Prioritize main structural panels ahead of small trims (collar/cuff/waistband/pocket)
-    const isTrim = classifyDirectOrTrim(p, category).startsWith("trim:") || COLLAR_NAME_RE.test(getPieceDisplayName(p));
+    // Prioritize main structural panels ahead of small trims (collar/cuff/waistband/pocket/yoke/binding)
+    const isTrim = classifyDirectOrTrim(p, category).startsWith("trim:")
+      || p.role === "yoke" || p.role === "other" || p.role === "strap"
+      || COLLAR_NAME_RE.test(getPieceDisplayName(p));
     const slotArr = ((buckets[part] ||= { front: [], back: [] })[back ? "back" : "front"]);
     if (isTrim) slotArr.push(p);
     else slotArr.unshift(p);

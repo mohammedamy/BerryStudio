@@ -104,7 +104,7 @@ import {
           role: 'bodice-front-side', bilateral: true,
           edges: [
             { fromIdx: b.frontSide.princessFromIdx, toIdx: b.frontSide.princessToIdx, seamId: 'blousePrincessFront' },
-            { fromIdx: b.frontSide.armholeToIdx, toIdx: b.frontSide.length - 1, seamId: 'blouseSide' },
+            { fromIdx: b.frontSide.armholeToIdx, toIdx: b.frontSide.length - 1, seamId: 'blouseSide', reverse: false },
           ],
         },
         {
@@ -123,7 +123,7 @@ import {
           role: 'bodice-back-side', bilateral: true,
           edges: [
             { fromIdx: b.backSide.princessFromIdx, toIdx: b.backSide.princessToIdx, seamId: 'blousePrincessBack' },
-            { fromIdx: b.backSide.armholeToIdx, toIdx: b.backSide.length - 1, seamId: 'blouseSide' },
+            { fromIdx: b.backSide.armholeToIdx, toIdx: b.backSide.length - 1, seamId: 'blouseSide', reverse: false },
           ],
         },
         {
@@ -452,9 +452,9 @@ import {
           grain: [[qt * 0.6, riseLen + 10], [qt * 0.6, riseLen + legLen - 10]],
           role: 'trouser-front', bilateral: true,
           edges: [
-            { fromIdx: 0, toIdx: front.hemOutIdx, seamId: 'trouserOutseam' },
+            { fromIdx: 0, toIdx: front.hemOutIdx, seamId: 'trouserOutseam', reverse: false },
             { fromIdx: front.hemInIdx, toIdx: front.length - 1, mirrorSelf: true },
-            { fromIdx: front.length - 1, toIdx: 0, seamId: 'trouserWaistFront' },
+            { fromIdx: front.length - 1, toIdx: 0, seamId: 'trouserWaistFront', reverse: false },
           ],
         },
         {
@@ -464,7 +464,7 @@ import {
           grain: [[qt * 0.6, riseLen + 10], [qt * 0.6, riseLen + legLen - 10]],
           role: 'trouser-back', bilateral: true,
           edges: [
-            { fromIdx: 0, toIdx: back.hemOutIdx, seamId: 'trouserOutseam' },
+            { fromIdx: 0, toIdx: back.hemOutIdx, seamId: 'trouserOutseam', reverse: false },
             { fromIdx: back.hemInIdx, toIdx: back.length - 1, mirrorSelf: true },
             { fromIdx: back.length - 1, toIdx: 0, seamId: 'trouserWaistBack' },
           ],
@@ -685,7 +685,7 @@ import {
           role: 'bodice-front-side', bilateral: true,
           edges: [
             { fromIdx: b.frontSide.princessFromIdx, toIdx: b.frontSide.princessToIdx, seamId: 'topPrincessFront' },
-            { fromIdx: b.frontSide.armholeToIdx, toIdx: b.frontSide.length - 1, seamId: 'topSide' },
+            { fromIdx: b.frontSide.armholeToIdx, toIdx: b.frontSide.length - 1, seamId: 'topSide', reverse: false },
           ],
         },
         {
@@ -704,7 +704,7 @@ import {
           role: 'bodice-back-side', bilateral: true,
           edges: [
             { fromIdx: b.backSide.princessFromIdx, toIdx: b.backSide.princessToIdx, seamId: 'topPrincessBack' },
-            { fromIdx: b.backSide.armholeToIdx, toIdx: b.backSide.length - 1, seamId: 'topSide' },
+            { fromIdx: b.backSide.armholeToIdx, toIdx: b.backSide.length - 1, seamId: 'topSide', reverse: false },
           ],
         },
         {
@@ -1010,9 +1010,9 @@ import {
           grain: [[qt * 0.6, riseLen + legLen * 0.2], [qt * 0.6, riseLen + legLen * 0.8]],
           role: 'trouser-front', bilateral: true,
           edges: [
-            { fromIdx: 0, toIdx: front.hemOutIdx, seamId: 'shortsOutseam' },
+            { fromIdx: 0, toIdx: front.hemOutIdx, seamId: 'shortsOutseam', reverse: false },
             { fromIdx: front.hemInIdx, toIdx: front.length - 1, mirrorSelf: true },
-            { fromIdx: front.length - 1, toIdx: 0, seamId: 'shortsWaistFront' },
+            { fromIdx: front.length - 1, toIdx: 0, seamId: 'shortsWaistFront', reverse: false },
           ],
         },
         {
@@ -1022,7 +1022,7 @@ import {
           grain: [[qt * 0.6, riseLen + legLen * 0.2], [qt * 0.6, riseLen + legLen * 0.8]],
           role: 'trouser-back', bilateral: true,
           edges: [
-            { fromIdx: 0, toIdx: back.hemOutIdx, seamId: 'shortsOutseam' },
+            { fromIdx: 0, toIdx: back.hemOutIdx, seamId: 'shortsOutseam', reverse: false },
             { fromIdx: back.hemInIdx, toIdx: back.length - 1, mirrorSelf: true },
             { fromIdx: back.length - 1, toIdx: 0, seamId: 'shortsWaistBack' },
           ],

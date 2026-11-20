@@ -74,6 +74,7 @@ function statusOf(row, questions, ar) {
 }
 
 const SLEEVE_ROLES = new Set(['sleeve', 'cap-sleeve', 'puff-sleeve', 'butterfly-sleeve'])
+const TWO_PC_SLEEVE_ROLES = new Set(['sleeve-upper', 'sleeve-under'])
 
 function PieceCard({ row, questions, lang, onAnswer }) {
   const ar = lang === 'ar', text = (en, arabic) => ar ? arabic : en
@@ -91,6 +92,7 @@ function PieceCard({ row, questions, lang, onAnswer }) {
   }
   const hasDarts = (piece.darts || []).length > 0
   const isSleeve = SLEEVE_ROLES.has(role)
+  const isTwoPcSleeve = TWO_PC_SLEEVE_ROLES.has(role)
   const editing = open || tone === 'attention'
   return <article className={`cl-piece-card tone-${tone}${editing ? ' is-open' : ''}`}>
     <div className="cl-card-top">
@@ -103,6 +105,7 @@ function PieceCard({ row, questions, lang, onAnswer }) {
           <li>{pick(COPIES, copies, ar)}</li>
           {hasDarts && <li>{answer.darts === 'close' ? text('Darts sewn', 'بنسات مخيطة') : text('Darts marked', 'بنسات كعلامة')}</li>}
           {isSleeve && <li>{text('Auto-sewn: front/back cap + side tube · cuff open', 'خياطة تلقائية: نصف الرأس للأمام · النصف للخلف · الجانبان معاً · الأسفل حر')}</li>}
+          {isTwoPcSleeve && <li>{text('Auto-sewn: upper + under tube · cuff open', 'خياطة تلقائية: وصل النصف العلوي والسفلي للكم · الأسفل حر')}</li>}
         </ul>}
         {!valid && <p className="cl-card-note">{text('This outline is incomplete. Fix it in the pattern editor to include it.', 'حدود هذه القطعة غير مكتملة. أصلحها في محرر الباترون لتضمينها.')}</p>}
         {valid && excluded && <p className="cl-card-note">{piece.visible === false ? text('Hidden in your pattern, so it is left out.', 'مخفية في الباترون، لذلك استُبعدت.') : text('Not part of this try-on.', 'ليست جزءاً من هذه التجربة.')}</p>}

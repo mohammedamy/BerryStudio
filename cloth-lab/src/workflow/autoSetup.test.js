@@ -60,6 +60,9 @@ describe('novice auto setup', () => {
     expect(guessPlacement({ label: { en: 'V-Neck Bodice Front' } })).toBe('front-panel')
     expect(guessPlacement({ label: { en: 'High-Waist Skirt Back' } })).toBe('hip-panel-back')
     expect(guessPlacement({ label: { en: 'One-Shoulder Dress Front' } })).toBe('front-panel')
+    expect(guessPlacement({ label: { en: 'Sleeveless Shift Dress Front', ar: 'فستان بدون أكمام أمام' } })).toBe('front-panel')
+    expect(guessPlacement({ label: { en: 'Long-Sleeve Dress Front', ar: 'فستان بأكمام طويلة أمام' } })).toBe('front-panel')
+    expect(guessPlacement({ label: { en: 'Waistband', ar: 'كمر' } })).toBe('waistband')
   })
   it('defaults bilateral and cut-on-fold schema roles to pair and fold copies', () => {
     const pCenter = piece({ id: 'center', label: { en: 'Center' }, role: 'bodice-front-center' })

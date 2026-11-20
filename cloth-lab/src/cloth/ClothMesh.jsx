@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { TSHIRT_PIECES, TSHIRT_SEAMS } from '../pattern/tshirt'
-import { triangulateAll } from '../pattern/triangulate'
+import { triangulateAll, adaptiveSpacingCm } from '../pattern/triangulate'
 import { assembleCloth, deriveNeighbors, deriveNormalRing } from './assemble'
 import { ClothSimulation, textureDimFor, QUALITY_TIER_DEFAULT } from './ClothSimulation'
 import { FABRIC_PRESETS, DEFAULT_FABRIC } from './fabricPresets'
@@ -29,6 +29,53 @@ import { SAFE_CLOTH_NORMAL_GLSL } from './surfaceShader'
 // cached via fabricTexturesPromise below, so this costs nothing extra),
 // guarantees setAssetBase() has already run by the time it matters.
 let fabricTexturesPromise = null
+function normalizeDiffuseTexture(tex) {
+  if (!tex?.image || typeof document === 'undefined') {
+    tex?.dispose?.()
+    return null
+  }
+  try {
+    const img = tex.image
+    const w = Math.min(256, img.naturalWidth || img.videoWidth || img.width || 256)
+    const h = Math.min(256, img.naturalHeight || img.videoHeight || img.height || 256)
+    if (!(w > 0 && h > 0)) {
+      tex.dispose?.()
+      return null
+    }
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext?.('2d')
+    if (!ctx) {
+      tex.dispose?.()
+      return null
+    }
+    ctx.drawImage(img, 0, 0, w, h)
+    const imgData = ctx.getImageData(0, 0, w, h)
+    const d = imgData.data
+    let sum = 0
+    const n = d.length / 4
+    for (let i = 0; i < d.length; i += 4) {
+      sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+    }
+    const mean = sum / Math.max(1, n)
+    for (let i = 0; i < d.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        d[i + c] = Math.max(195, Math.min(250, Math.round(232 + (d[i + c] - mean) * 0.42)))
+      }
+    }
+    ctx.putImageData(imgData, 0, 0)
+    const normTex = new THREE.CanvasTexture(canvas)
+    normTex.wrapS = normTex.wrapT = THREE.RepeatWrapping
+    normTex.colorSpace = THREE.SRGBColorSpace
+    tex.dispose?.()
+    return normTex
+  } catch {
+    tex.dispose?.()
+    return null
+  }
+}
+
 function loadFabricTextures() {
   if (fabricTexturesPromise) return fabricTexturesPromise
   const texBase = `${getAssetBase()}textures/fabric-weave/`
@@ -36,7 +83,11 @@ function loadFabricTextures() {
   const load = (file, isColor) => new Promise((resolve) => {
     loader.load(texBase + file, (tex) => {
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-      if (isColor) tex.colorSpace = THREE.SRGBColorSpace // normal/roughness maps must stay linear
+      if (isColor) {
+        tex.colorSpace = THREE.SRGBColorSpace
+        resolve(normalizeDiffuseTexture(tex))
+        return
+      }
       resolve(tex)
     }, undefined, () => resolve(null)) // missing/broken texture -> fall back to flat color, not a crash
   })
@@ -63,7 +114,7 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
   const positionUniform = useRef({ value: null })
 
   const assembled = useMemo(() => {
-    const triangulated = triangulateAll(pieces, seams, 2)
+    const triangulated = triangulateAll(pieces, seams, adaptiveSpacingCm(pieces))
     const cloth = assembleCloth(triangulated, dims, seams, pose)
     const neighbors = deriveNeighbors(cloth, 8)
     const normalRing = deriveNormalRing(cloth, neighbors, 4)
@@ -160,8 +211,9 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
       // color. See assemble.js's DEFAULT_PIECE_COLOR for the fallback when a
       // piece arrives with no color at all.
       color: '#ffffff', vertexColors: true,
-      roughness: fabric.rough, metalness: fabric.metal,
-      sheen: fabric.sheen, sheenRoughness: 0.5, clearcoat: fabric.clear, clearcoatRoughness: 0.4,
+      roughness: Math.max(0.38, fabric.rough), metalness: Math.min(0.06, fabric.metal),
+      sheen: fabric.sheen, sheenRoughness: 0.55, clearcoat: Math.min(0.1, fabric.clear), clearcoatRoughness: 0.58,
+      envMapIntensity: 0.55,
       transparent: fabric.om < 1, opacity: fabric.om,
       side: THREE.DoubleSide,
       // WP-9.2: only chiffon/tulle declare transmission, only silk/satin

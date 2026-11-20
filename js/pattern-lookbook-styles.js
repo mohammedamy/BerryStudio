@@ -116,8 +116,8 @@ export const PATTERN_LOOKBOOK_STYLES = {
   },
   w04: { primaryColor: "#0e49a8", fabric: "scuba", silhouette: { neckline: "round" } },
   w05: {
-    primaryColor: "#caa77d", trimColor: "#b59068",
-    partColors: { skirt: "#caa77d", trim: "#b59068" },
+    primaryColor: "#c19668", trimColor: "#a87d52",
+    partColors: { skirt: "#c19668", trim: "#a87d52" },
     fabric: "satin",
     silhouette: { pleats: 18 },
   },
@@ -156,7 +156,7 @@ export const PATTERN_LOOKBOOK_STYLES = {
 
   // ==================== MEN (m01–m23) ====================
   m01: { primaryColor: "#141f35", fabric: "wool" },
-  m02: { primaryColor: "#6d492c", fabric: "cotton" },
+  m02: { primaryColor: "#b59369", fabric: "cotton" },
   m03: {
     primaryColor: "#7b8064", fabric: "linen", silhouette: { collarStyle: "pointed", neckline: "collar" },
     accessories: { buttons: { enabled: true, style: "tortoise", placement: "front_placket", count: 5 } },
@@ -232,7 +232,7 @@ export const PATTERN_LOOKBOOK_STYLES = {
   },
   g02: {
     primaryColor: "#1b2640", secondaryColor: "#f8fafc",
-    partColors: { bodice: "#f8fafc", sleeve: "#f8fafc", skirt: "#1b2640", outer: "#1b2640" },
+    partColors: { bodice: "#1b2640", sleeve: "#f8fafc", skirt: "#1b2640", outer: "#1b2640" },
     fabric: "wool",
     silhouette: {
       outerLayer: { enabled: true, style: "pinafore", openFront: false, color: "#1b2640", fabric: "wool", innerColor: "#f8fafc", innerNeckline: "collar", lengthStyle: "dress" },
@@ -287,7 +287,7 @@ export const PATTERN_LOOKBOOK_STYLES = {
   g18: { primaryColor: "#b4dbdd", fabric: "cotton", silhouette: { neckline: "round" } },
   g19: {
     primaryColor: "#294637", secondaryColor: "#ede8de",
-    partColors: { bodice: "#ede8de", sleeve: "#ede8de", skirt: "#294637", outer: "#294637" },
+    partColors: { bodice: "#294637", sleeve: "#ede8de", skirt: "#294637", outer: "#294637" },
     fabric: "cotton",
     silhouette: {
       outerLayer: { enabled: true, style: "pinafore", openFront: false, color: "#294637", fabric: "cotton", innerColor: "#ede8de", innerNeckline: "high", lengthStyle: "dress" },
@@ -409,7 +409,7 @@ export const PATTERN_LOOKBOOK_STYLES = {
     accessories: { buttons: { enabled: true, style: "matte_black", placement: "front_placket", count: 2 } },
   },
   wf09: {
-    primaryColor: "#b59d84", trimColor: "#5c3b24",
+    primaryColor: "#a98159", trimColor: "#5c3b24",
     fabric: "wool",
     silhouette: { lapelStyle: "notched", isOpenFront: false },
     accessories: {
@@ -585,7 +585,7 @@ export const PATTERN_LOOKBOOK_STYLES = {
   },
   mf15: {
     primaryColor: "#75787d", secondaryColor: "#f6f7f9", trimColor: "#383a3e",
-    partColors: { bodice: "#f6f7f9", sleeve: "#75787d", trousers: "#2b2c30", outer: "#75787d" },
+    partColors: { bodice: "#f6f7f9", sleeve: "#75787d", trousers: "#2b2c30", vest: "#383a3e", outer: "#75787d" },
     fabric: "wool",
     silhouette: {
       outerLayer: { enabled: true, style: "blazer", openFront: true, lapelStyle: "notched", color: "#75787d", fabric: "wool", innerColor: "#f6f7f9", innerNeckline: "collar", lengthStyle: "hip" },
@@ -621,7 +621,7 @@ export const PATTERN_LOOKBOOK_STYLES = {
     silhouette: { neckline: "round", hasCape: true },
   },
   gf04: {
-    primaryColor: "#e66a55", trimColor: "#cc4e3a",
+    primaryColor: "#f26f55", trimColor: "#cc4e3a",
     fabric: "satin",
     silhouette: { neckline: "round", tiers: 3 },
   },
@@ -651,7 +651,7 @@ export const PATTERN_LOOKBOOK_STYLES = {
     silhouette: { neckline: "off-shoulder", tiers: 3 },
   },
   gf09: {
-    primaryColor: "#b3997d", trimColor: "#24201c",
+    primaryColor: "#a97e52", trimColor: "#24201c",
     fabric: "wool",
     silhouette: { hasHood: true, isOpenFront: false },
     accessories: { buttons: { enabled: true, style: "horn", placement: "front_placket", count: 4 } },
@@ -676,7 +676,7 @@ export const PATTERN_LOOKBOOK_STYLES = {
     accessories: { belt: { enabled: true, style: "fabric_sash", width: "narrow", color: "#efede6" } },
   },
   gf14: {
-    primaryColor: "#65817c", trimColor: "#465e59",
+    primaryColor: "#54706a", trimColor: "#3c544f",
     fabric: "wool",
     silhouette: { collarStyle: "sailor", hasPeplum: true },
     accessories: { buttons: { enabled: true, style: "matte_black", placement: "double_breasted", count: 6 } },
@@ -1059,8 +1059,8 @@ export const PATTERN_LOOKBOOK_STYLES = {
 
   // ==================== BRAS: WOMEN (wb01–wb10) ====================
   wb01: {
-    primaryColor: "#d9b0a3", trimColor: "#b88b7f", fabric: "satin",
-    print: { preset: "lace", target: "bodice", palette: ["#d9b0a3", "#f0dad2", "#b88b7f"], repeat: 7 },
+    primaryColor: "#be8c7d", trimColor: "#9c6d5f", fabric: "satin",
+    print: { preset: "lace", target: "bodice", palette: ["#be8c7d", "#e3c5bb", "#9c6d5f"], repeat: 7 },
     silhouette: { style: "bra", bra: { style: "soft-cup", cupDepthF: 1.0, longline: false, strapStyle: "standard", wideStrap: false, bow: true } },
     accessories: { bow: { enabled: true, color: "#e8cbbf", placement: "center_chest" } },
   },
@@ -1103,7 +1103,7 @@ export const PATTERN_LOOKBOOK_STYLES = {
     silhouette: { style: "bra", bra: { style: "sport", cupDepthF: 0.95, longline: false, strapStyle: "racerback", wideStrap: true, bow: false } },
   },
   wb10: {
-    primaryColor: "#dab89e", trimColor: "#c59e82", fabric: "scuba",
+    primaryColor: "#c7a07e", trimColor: "#b08968", fabric: "scuba",
     silhouette: { style: "bra", bra: { style: "strapless", cupDepthF: 1.05, longline: false, strapStyle: "none", wideStrap: false, bow: false } },
   },
 
@@ -1231,9 +1231,12 @@ export function getPatternLookbookStyle(id, patternMeta = null, pieces = []) {
   };
 }
 
-function resolvePieceTargetKey(piece, pieces) {
+function resolvePieceTargetKey(piece, pieces, style = null) {
   const role = piece?.role || "";
   const txt = `${piece?.key || ""} ${piece?.name?.en || ""}`.toLowerCase();
+  if (style?.silhouette?.style === "leotard" && (role === "yoke" || /mesh|side\s*insert|cross[-\s]?back|\bstrap\b|yoke/.test(txt))) {
+    return "secondary";
+  }
   if (TRIM_ROLE_SET.has(role)) return "trim";
   if (role === "sleeve" || role === "sleeve-upper" || role === "sleeve-under" || role === "cap-sleeve" || role === "puff-sleeve" || role === "butterfly-sleeve") {
     return "sleeve";
@@ -1245,6 +1248,7 @@ function resolvePieceTargetKey(piece, pieces) {
     return "trousers";
   }
   if (/vest|jacket|blazer|coat|pinafore|outer|over/.test(txt) && pieces.length > 2) {
+    if (/\bvest\b/.test(txt) && style?.partColors?.vest) return "vest";
     return "outer";
   }
   return "bodice";
@@ -1256,8 +1260,9 @@ export function applyLookbookPieceColors(pieces = [], id, patternMeta = null) {
   return (pieces || []).map((piece) => {
     if (!piece) return piece;
     if (piece.customColor) return piece;
-    const part = resolvePieceTargetKey(piece, pieces);
+    const part = resolvePieceTargetKey(piece, pieces, style);
     const chosenColor = pc[part]
+      || (part === "secondary" ? style.secondaryColor || pc.trim || style.primaryColor : null)
       || (part === "outer" ? pc.outer || style.primaryColor : null)
       || (part === "trim" ? style.trimColor || pc.trim || pc.bodice || style.primaryColor : null)
       || style.primaryColor;

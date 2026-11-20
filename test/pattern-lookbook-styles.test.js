@@ -12,6 +12,7 @@ import {
   applyLookbookPieceColors,
 } from '../js/pattern-lookbook-styles.js';
 import {
+  classifyPiecePart,
   resolvePartsFabric3D,
   computePatternMetrics3D,
 } from '../js/pattern-3d-metrics.js';
@@ -185,5 +186,47 @@ test('computePatternMetrics3D emits specialized lookbook descriptors for leotard
     const pieces = applyLookbookPieceColors(pat.pieces(m).map((p) => ({ ...p, visible: true })), id, pat);
     const metrics = computePatternMetrics3D(pieces, m, pat.category, pat, lb);
     verify(metrics);
+  }
+});
+
+test('all 320 patterns avoid sleeve-only 3D classification, keep sleeveless/sleeve-named bodices valid, and preserve g02/g19 inner shirt colors', () => {
+  const sleeveOnly = [];
+  for (const [id, pat] of Object.entries(PATTERNS)) {
+    const m = makeMeasurements(pat.category);
+    const lb = getPatternLookbookStyle(id, pat);
+    const pieces = applyLookbookPieceColors(pat.pieces(m).map((p) => ({ ...p, visible: true })), id, pat);
+    const metrics = computePatternMetrics3D(pieces, m, pat.category, pat, lb);
+    if (metrics.present.sleeves && !metrics.present.bodice && !metrics.present.skirt && !metrics.present.trousers) {
+      sleeveOnly.push(id);
+    }
+  }
+  assert.deepEqual(sleeveOnly, [], `Sleeve-only 3D classifications: ${sleeveOnly.join(', ')}`);
+
+  for (const id of ['w04', 'm09', 'g03', 'b05', 'b17', 'w03', 'w11', 'g01']) {
+    const pat = PATTERNS[id];
+    const m = makeMeasurements(pat.category);
+    const lb = getPatternLookbookStyle(id, pat);
+    const pieces = applyLookbookPieceColors(pat.pieces(m).map((p) => ({ ...p, visible: true })), id, pat);
+    const metrics = computePatternMetrics3D(pieces, m, pat.category, pat, lb);
+    assert.equal(metrics.present.bodice, true, `${id} must have bodice present`);
+  }
+
+  // Sleeve-named bodice panels must classify as bodice, not sleeve
+  assert.equal(classifyPiecePart({ key: 'front', name: { en: 'Long-Sleeve Bodycon Dress Front', ar: 'فستان بأكمام طويلة - أمام' } }), 'bodice');
+  assert.equal(classifyPiecePart({ key: 'back', name: { en: 'Sleeveless Tank Dress Back', ar: 'فستان بدون أكمام - خلف' } }), 'bodice');
+
+  // g02 and g19 keep crisp inner shirt colors alongside dark pinafore bodice colors
+  for (const id of ['g02', 'g19']) {
+    const pat = PATTERNS[id];
+    const m = makeMeasurements(pat.category);
+    const lb = getPatternLookbookStyle(id, pat);
+    const pieces = applyLookbookPieceColors(pat.pieces(m).map((p) => ({ ...p, visible: true })), id, pat);
+    const parts = resolvePartsFabric3D(pieces, {
+      defaultColor: lb.primaryColor,
+      defaultMaterial: lb.fabric,
+      lookbookStyle: lb,
+      colorToInt: parseHex,
+    });
+    assert.notEqual(parts.bodice.front.color, lb.silhouette.outerLayer.innerColor, `${id} outer pinafore and inner shirt keep distinct colors`);
   }
 });

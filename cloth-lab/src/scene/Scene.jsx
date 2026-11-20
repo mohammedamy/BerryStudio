@@ -31,17 +31,17 @@ export default function Scene({ paused = false, dims, lang = 'en', debugView, fa
   return (
     <>
       <color attach="background" args={['#1b1d24']} />
-      <hemisphereLight args={['#dce6f7', '#4a3b34', 0.68]} />
-      <directionalLight position={[2.2, 3.8, 3.2]} intensity={1.32} color="#fff8f0" castShadow shadow-mapSize={[1024, 1024]} />
-      <directionalLight position={[-2.8, 2.2, 1.8]} intensity={0.48} color="#d8e4ff" />
-      <directionalLight position={[0, 3.2, -3.0]} intensity={0.45} color="#ffeadd" />
+      <hemisphereLight args={['#dce6f7', '#4a3b34', 0.52]} />
+      <directionalLight position={[2.2, 3.8, 3.2]} intensity={1.0} color="#fff8f0" castShadow shadow-mapSize={[1024, 1024]} />
+      <directionalLight position={[-2.8, 2.2, 1.8]} intensity={0.36} color="#d8e4ff" />
+      <directionalLight position={[0, 3.2, -3.0]} intensity={0.35} color="#ffeadd" />
       {/* Real CC0 studio-softbox HDRI (bundled locally, see public/env/README.md)
           for ambient reflection/sheen quality on fabric and skin — deliberately
           a local file rather than drei's preset= (which fetches from a
           third-party GitHub-raw proxy with no SLA) so this has zero live
           network dependency during a demo. Doesn't touch the scene background
           (set above) — reflections/lighting only. */}
-      <Environment files={`${getAssetBase()}env/studio_small_08_1k.hdr`} background={false} />
+      <Environment files={`${getAssetBase()}env/studio_small_08_1k.hdr`} background={false} environmentIntensity={0.62} />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[6, 6]} />

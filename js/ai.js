@@ -1186,7 +1186,7 @@ export const AIGen = (() => {
         // at all — no necklineEndIdx needed here, its neckline range was
         // already free.
         edges: [
-          { fromIdx: p.neck.length, toIdx: p.neck.length + 1, seamId: "leotardYokeSide" },
+          { fromIdx: p.neck.length, toIdx: p.neck.length + 1, seamId: "leotardYokeSide", reverse: false },
           ...leotardNeckEdge("leotardNeckFront", p.neck.length),
         ] },
       { name: { en: "Front Body", ar: "مقدمة الجسم" },
@@ -1319,7 +1319,7 @@ export const AIGen = (() => {
           notches: [armhole],
           // matches leotardFrontPieces' own 'leotardYokeSide' declaration
           edges: [
-            { fromIdx: top.length, toIdx: top.length + 1, seamId: "leotardYokeSide" },
+            { fromIdx: top.length, toIdx: top.length + 1, seamId: "leotardYokeSide", reverse: false },
             ...leotardNeckEdge("leotardNeckBack", top.length),
           ] },
         { name: { en: "Back Body", ar: "خلفية الجسم" },
