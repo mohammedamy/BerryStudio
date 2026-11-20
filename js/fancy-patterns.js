@@ -1396,19 +1396,19 @@ export let FancyGen;
     "A tailored double-breasted blazer dress with peaked lapels, structured long sleeves, flap pockets, and a flared peplum flounce hem.",
     "فستان بليزر مفصّل بصفين من الأزرار وياقة مدببة وأكمام طويلة مهيكلة وجيوب بغطاء وحاشية بيبلوم متموجة متسعة.",
     (m) => {
-      const jb = jacketFrontBack(m, m.backLen*0.55, { hemFlareF:1.0 });
+      const jb = jacketFrontBack(m, m.backLen*1.02, { hemFlareF:1.0 });
       const neckArc = jb.frontNeckLen + jb.backNeckLen;
       const waistW = q(m.waist);
       const sl = sleeve2pc(m.bicep, m.sleeve);
       return [
-        { key:"front", name:{en:"Bodice Front",ar:"مقدمة الصدرية"}, desc:{en:"Structured front with a tailored closure.",ar:"مقدمة مهيكلة بإغلاق مفصّل."}, role:"front-panel", outline:jb.front, grain:[[4,8],[4,m.backLen*0.4]] },
-        { key:"back", name:{en:"Bodice Back",ar:"خلفية الصدرية"}, desc:{en:"Tailored back panel.",ar:"لوحة خلفية مفصّلة."}, role:"back-panel", cutOnFold:true, outline:jb.back, grain:[[4,8],[4,m.backLen*0.4]] },
+        { key:"front", name:{en:"Bodice Front",ar:"مقدمة الصدرية"}, desc:{en:"Structured front with a tailored closure.",ar:"مقدمة مهيكلة بإغلاق مفصّل."}, role:"front-panel", outline:jb.front, grain:[[4,8],[4,m.backLen*0.75]] },
+        { key:"back", name:{en:"Bodice Back",ar:"خلفية الصدرية"}, desc:{en:"Tailored back panel.",ar:"لوحة خلفية مفصّلة."}, role:"back-panel", cutOnFold:true, outline:jb.back, grain:[[4,8],[4,m.backLen*0.75]] },
         { key:"collar", name:{en:"Peaked Lapel Collar",ar:"ياقة مدببة"}, desc:{en:"Tailored peaked lapel collar.",ar:"ياقة بليزر مدببة مفصّلة."}, role:"collar", outline:shawlCollar(neckArc, 16), grain:[[4,4],[4,12]] },
-        { key:"facing", name:{en:"Front Facing",ar:"بطانة المقدمة"}, desc:{en:"Curved lapel facing.",ar:"بطانة صدر منحنية."}, role:"lapel-facing", outline:lapelFacing(neckArc, m.backLen*0.5), grain:[[4,4],[4,m.backLen*0.3]] },
+        { key:"facing", name:{en:"Front Facing",ar:"بطانة المقدمة"}, desc:{en:"Curved lapel facing.",ar:"بطانة صدر منحنية."}, role:"lapel-facing", outline:lapelFacing(neckArc, m.backLen*0.75), grain:[[4,4],[4,m.backLen*0.5]] },
         { key:"sleeveU", name:{en:"Sleeve Upper",ar:"الكم العلوي"}, desc:{en:"Outer sleeve panel.",ar:"اللوحة الخارجية للكم."}, role:"sleeve-upper", bilateral:true, outline:sl.upper, grain:[[q(m.bicep)*0.5,4],[q(m.bicep)*0.5,m.sleeve*0.5]] },
         { key:"sleeveD", name:{en:"Sleeve Under",ar:"الكم السفلي"}, desc:{en:"Inner sleeve panel.",ar:"اللوحة الداخلية للكم."}, role:"sleeve-under", bilateral:true, outline:sl.under, grain:[[q(m.bicep)*0.3,4],[q(m.bicep)*0.3,m.sleeve*0.5]] },
-        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum flounce at the front waist.",ar:"كشكش بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", cutOnFold:true, outline:peplumPc(waistW*0.55, 22), grain:[[6,4],[6,16]] },
-        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum flounce at the back waist.",ar:"كشكش بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", cutOnFold:true, outline:peplumPc(waistW*0.55, 22), grain:[[6,4],[6,16]] },
+        { key:"peplumF", name:{en:"Peplum Front",ar:"بيبلوم أمامي"}, desc:{en:"Flared peplum flounce at the front waist.",ar:"كشكش بيبلوم متسع عند الخصر الأمامي."}, role:"peplum-front", cutOnFold:true, outline:peplumPc(waistW*0.55, 34), grain:[[6,4],[6,24]] },
+        { key:"peplumB", name:{en:"Peplum Back",ar:"بيبلوم خلفي"}, desc:{en:"Flared peplum flounce at the back waist.",ar:"كشكش بيبلوم متسع عند الخصر الخلفي."}, role:"peplum-back", cutOnFold:true, outline:peplumPc(waistW*0.55, 34), grain:[[6,4],[6,24]] },
         { key:"pocket", name:{en:"Flap Pocket",ar:"جيب بغطاء"}, desc:{en:"Tailored hip flap pocket.",ar:"جيب ورك بغطاء مفصّل."}, role:"pocket", outline:pocketPc(11,4), grain:[[5,1],[5,3]] },
       ];
     });

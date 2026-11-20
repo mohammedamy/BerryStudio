@@ -425,6 +425,9 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     && visible.some((p) => p.role === "peplum-front" || p.role === "peplum-back")
   ));
 
+  const isHipTopShirt = /\b(shirt(?!\s*dress)|blouse|polo|t-shirt|tee|sweater|sweatshirt|hoodie|cardigan|jacket|blazer)\b|قميص|بلوزة|توب|بليزر|جاكيت/i.test(allText)
+    && !/\b(dress(?!\s*shirt)|shirtdress|tunic|kurta|thobe|kandura|abaya|kaftan|robe|gown|coat|overcoat|trench|sherwani|bisht|longline)\b|فستان|تونيك|ثوب|عباية|قفطان|معطف|بشت/i.test(allText);
+
   let bodiceStyle = "hip";
   if (isBra) bodiceStyle = "bra";
   else if (isLeotard) bodiceStyle = "leotard";
@@ -432,11 +435,15 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     bodiceStyle = "waist";
     bodiceLengthCm = m.backLen + 2;
     bodiceHemFlare = 1.02;
+  } else if (hasPeplum && bodiceLengthCm <= m.backLen * 1.18) {
+    bodiceStyle = "waist";
+    bodiceLengthCm = m.backLen + 2;
+    bodiceHemFlare = 1.02;
   } else if (lbSil.style && ["crop", "waist", "hip", "tunic", "robe"].includes(lbSil.style)) {
     bodiceStyle = lbSil.style;
   } else if (bodiceLengthCm < m.backLen * 0.80) bodiceStyle = "crop";
   else if (bodiceLengthCm <= m.backLen * 1.16) bodiceStyle = "waist";
-  else if (bodiceLengthCm <= m.backLen + 26) bodiceStyle = "hip";
+  else if (bodiceLengthCm <= m.backLen + 26 || isHipTopShirt) bodiceStyle = "hip";
   else if (bodiceLengthCm <= m.backLen + 48 && !hasSeparateSkirt) bodiceStyle = "tunic";
   else if (!hasSeparateSkirt && !hasSeparateTrousers) bodiceStyle = "robe";
 
@@ -555,7 +562,7 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     present: {
       bodice: byPart.bodice.length > 0,
       sleeve: byPart.sleeve.length > 0,
-      skirt: byPart.skirt.length > 0,
+      skirt: hasPeplum ? byPart.skirt.some((p) => p.role !== "peplum-front" && p.role !== "peplum-back") : (byPart.skirt.length > 0),
       trousers: byPart.trousers.length > 0,
     },
     bodice: {

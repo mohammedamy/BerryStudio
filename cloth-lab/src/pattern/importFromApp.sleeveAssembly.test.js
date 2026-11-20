@@ -2,11 +2,13 @@ import { describe, test, expect } from 'vitest'
 import { PATTERNS } from '../../../js/data.js'
 import '../../../js/library.js'
 import '../../../js/fancy-patterns.js'
+import '../../../js/reference-patterns.js'
 import { convertAppPattern } from './importFromApp.js'
 import { createDraftPiece, addEdge, finalizeDraftPiece } from './seamAuthoring.js'
 import { triangulateAll } from './triangulate.js'
 import { assembleCloth } from '../cloth/assemble.js'
 import { computeBodyDims } from '../body/computeBodyDims.js'
+import { deriveGarmentPinMask } from '../body/collisionRig.js'
 import { placeSleeve } from './placement.js'
 import { autoPlan } from '../workflow/autoSetup.js'
 
@@ -225,5 +227,96 @@ describe('universal automatic sleeve decomposition & bodice armhole assembly', (
       // Back sleeve cap faces -Z (toward Back Bodice armhole)
       expect(capBackMid3D[2]).toBeLessThan(-0.02)
     }
+  })
+
+  test('2-piece sleeves attach both sleeve-upper and sleeve-under cleanly onto outer jacket/shirt/princess armholes', () => {
+    for (const [id, category] of [
+      ['mf05', 'men'],
+      ['mf15', 'men'],
+      ['ref_m_shirt', 'men'],
+      ['wf06', 'women'],
+      ['bf01', 'men'],
+      ['gf15', 'girls'],
+    ]) {
+      const m = SAMPLE_M[category] || SAMPLE_M.men
+      const cat = id.startsWith('bf') ? 'boys' : category
+      const payload = {
+        pieces: PATTERNS[id].pieces(m).map(toPayloadPiece),
+        measurements: m,
+        category: cat,
+      }
+      const res = convertAppPattern(payload)
+      const { byId, finalPieces } = buildFinalPieces(res)
+      const sleeveIds = Object.keys(res.roles).filter((k) => res.roles[k] === 'sleeve')
+      expect(sleeveIds.length).toBe(4)
+
+      for (const sid of sleeveIds) {
+        const capSeams = res.seamInstructions.filter(
+          (s) => (s.a.piece === sid || s.b.piece === sid) && s.a.piece !== s.b.piece && !/twoPcSleeve/.test(s.id),
+        )
+        expect(capSeams.length, `${id}:${sid} must attach to outer armholes`).toBeGreaterThanOrEqual(2)
+        for (const s of capSeams) {
+          const dA = byId[s.a.piece], dB = byId[s.b.piece]
+          const [a0, a1] = edgeStartEnd(dA, s.a.edge)
+          const [b0, b1] = edgeStartEnd(dB, s.b.edge)
+          const [pb0, pb1] = s.reverse ? [b1, b0] : [b0, b1]
+          expect((a1[1] - a0[1]) * (pb1[1] - pb0[1])).toBeGreaterThanOrEqual(-1e-4)
+        }
+      }
+
+      const dims = computeBodyDims(m, cat)
+      const tri = triangulateAll(finalPieces, res.seamInstructions)
+      const cloth = assembleCloth(tri, dims, res.seamInstructions)
+      expect(cloth.simParticleCount).toBeGreaterThan(0)
+    }
+  })
+
+  test('w11 routes sleeves to front_side/back_side armholes (not front_center) and leaves interior sleeve caps unpinned', () => {
+    const m = SAMPLE_M.women
+    const res = convertAppPattern({
+      pieces: PATTERNS.w11.pieces(m).map(toPayloadPiece),
+      measurements: m,
+      category: 'women',
+    })
+    const { finalPieces } = buildFinalPieces(res)
+    const sleeveIds = Object.keys(res.roles).filter((k) => res.roles[k] === 'sleeve')
+    expect(sleeveIds).toHaveLength(2)
+
+    for (const sid of sleeveIds) {
+      const capSeams = res.seamInstructions.filter(
+        (s) => (s.a.piece === sid || s.b.piece === sid) && s.a.piece !== s.b.piece,
+      )
+      expect(capSeams).toHaveLength(2)
+      for (const s of capSeams) {
+        const partner = s.a.piece === sid ? s.b : s.a
+        expect(partner.piece).toMatch(/(front|back)_side/)
+        expect(partner.edge).toBe('armhole')
+      }
+    }
+
+    const dims = computeBodyDims(m, 'women')
+    const tri = triangulateAll(finalPieces, res.seamInstructions)
+    const cloth = assembleCloth(tri, dims, res.seamInstructions)
+    const pins = deriveGarmentPinMask(cloth, tri, dims)
+    const w03Res = convertAppPattern({
+      pieces: PATTERNS.w03.pieces(m).map(toPayloadPiece),
+      measurements: m,
+      category: 'women',
+    })
+    const w03Built = buildFinalPieces(w03Res)
+    const w03Tri = triangulateAll(w03Built.finalPieces, w03Res.seamInstructions)
+    const w03Cloth = assembleCloth(w03Tri, dims, w03Res.seamInstructions)
+    const w03Pins = deriveGarmentPinMask(w03Cloth, w03Tri, dims)
+
+    let pinnedSleeveVerts = 0
+    for (const tp of w03Tri) {
+      if (tp.role !== 'sleeve') continue
+      const off = w03Cloth.pieceOffset[tp.pieceId]
+      for (let i = 0; i < tp.positions2D.length; i++) {
+        if (w03Pins[w03Cloth.renderVertexToSimParticle[off + i]]) pinnedSleeveVerts++
+      }
+    }
+    expect(pinnedSleeveVerts).toBeLessThanOrEqual(12)
+    expect(pins.length).toBe(cloth.simParticleCount)
   })
 })

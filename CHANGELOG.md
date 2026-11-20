@@ -1,5 +1,13 @@
 # Changelog
 
+## Lifelike human mannequins, seamless 3D shoulder tailoring, and Cloth Lab sleeve/suit sewing
+
+Upgrades anatomical realism on all four mannequin categories, eliminates shoulder/armhole tearing in 3D Preview, and completes natural multi-piece garment & sleeve sewing in Cloth Lab:
+
+- **Lifelike 4-category human mannequins (`js/human-mannequin.js`, `test/human-mannequin.test.js`)**: Adds subsurface dermal and facial ambient-occlusion vertex shading (`vertexColors: true`), un-occluded layered eyes (sclera, striated iris, pupil cap, dual corneal catchlights), surface-conformed upper/lower eyelids, feathered eyebrows, Cupid's-bow lips, sculpted 4-finger hands, and strand-shaded hair (with clean behind-ear pigtails for `girls`) while preserving closed genus-0 `humanBody` topology (`euler === 2`).
+- **Seamless 3D Preview shoulder tailoring & length classification (`js/three-view.js`, `js/pattern-3d-metrics.js`, `js/fancy-patterns.js`, `js/pattern-lookbook-styles.js`)**: Aligns bodice, leotard, outerwear, and convex sleevehead geometry directly to `humanBody`'s acromion/deltoid ridge with upper-arm capsule fade at the welded armscye seam, keeps cylindrical torso skin clearance strictly below the armpit, repairs `mens_shirt`/`ref_m_shirt` hip-length classification (`dress shirt` exception), sets `wf06` peplum blazer proportions to meet at the waist without duplicate skirts, and keeps blazer undercollars, lapel facings, and pockets self-colored with the jacket unless contrasted.
+- **Cloth Lab 1-piece & 2-piece sleeve sewing & suit/peplum assembly (`cloth-lab/src/pattern/importFromApp.js`, `placement.js`, `collisionRig.js`, `importFromApp.sleeveAssembly.test.js`, `sw.js`)**: Splits 1-piece and 2-piece sleeve caps to match front/back armholes with `capOffsetCm` underarm alignment, places `w11` princess side panels laterally, buttons waistcoats (`mf05`, `mf15`) and double-breasted peplum blazers (`wf06`) cleanly at center front, wraps shawl/notched collars symmetrically around the back of the neck, aligns full-length back linings (`mf15`), wraps center-back folded trouser waistbands (`mf05`), untwists `abaya` side seams, and bumps service worker cache to `berrystudio-v83`.
+
 ## 320-pattern classification, seam topology, and color parity hardening
 
 Resolves piece-classification, seam-direction, panel-assembly, and rendering discrepancies across 3D Preview and Cloth Lab:

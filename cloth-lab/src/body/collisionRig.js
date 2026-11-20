@@ -469,7 +469,7 @@ export function projectPointOutsideCapsules(p, collisionRig) {
   return [px, py, pz]
 }
 
-const SHOULDER_PIN_RADIUS = 0.05
+const SHOULDER_PIN_RADIUS = 0.040
 
 export function deriveShoulderPinSegments(dims) {
   const { shoulderHalf, shoulderY, span } = dims
@@ -546,8 +546,25 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
   const shoulderMask = deriveShoulderPinMask(simRestPositions, simParticleCount, dims)
   const waistbandMask = deriveWaistbandPinMask(simRestPositions, simParticleCount, dims)
   const mask = new Uint8Array(simParticleCount)
-  for (let i = 0; i < simParticleCount; i++) {
-    if (shoulderMask[i]) mask[i] = 1
+
+  // Apply shoulder pins only to torso/bodice/strap pieces (never freezing interior
+  // vertices of `sleeve` caps in mid-air; sewn sleeves hang naturally from their
+  // welded armhole seams while unsewn sleeve components fall back to Stage 3).
+  if (Array.isArray(triangulatedPieces) && triangulatedPieces.length > 0 && pieceOffset && renderVertexToSimParticle) {
+    for (const tp of triangulatedPieces) {
+      if (tp.role === 'sleeve') continue
+      const offset = pieceOffset[tp.pieceId]
+      const pts = tp.positions2D
+      if (offset == null || !pts) continue
+      for (let localIdx = 0; localIdx < pts.length; localIdx++) {
+        const sp = renderVertexToSimParticle[offset + localIdx]
+        if (shoulderMask[sp]) mask[sp] = 1
+      }
+    }
+  } else {
+    for (let i = 0; i < simParticleCount; i++) {
+      if (shoulderMask[i]) mask[i] = 1
+    }
   }
 
   // Only apply waistband ring pins to lower-body/waist roles (skirts, trousers,

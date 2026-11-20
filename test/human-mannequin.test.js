@@ -104,13 +104,25 @@ test('Unified Human Mannequin: single watertight 2-manifold closed surface acros
       assert.ok(Math.abs(sum - 1.0) < 1e-4, `${cat}: vertex ${i} skin weights must sum to 1.0 (got ${sum})`);
     }
 
-    // Verify opaque dermal skin contract
+    // Verify opaque dermal skin contract & subsurface dermal vertex colors
+    const colAttr = res.bodyMesh.geometry.attributes.color;
+    assert.ok(colAttr, `${cat}: bodyMesh has anatomical subsurface vertex color attribute`);
+    let minCol = Infinity, maxCol = -Infinity;
+    for (let i = 0; i < colAttr.count * 3; i++) {
+      const cVal = colAttr.array[i];
+      assert.ok(Number.isFinite(cVal) && cVal > 0.5 && cVal <= 1.2, `${cat}: color value finite and normalized`);
+      if (cVal < minCol) minCol = cVal;
+      if (cVal > maxCol) maxCol = cVal;
+    }
+    assert.ok(maxCol - minCol > 0.04, `${cat}: vertex colors exhibit anatomical tonal variation (${minCol.toFixed(3)}..${maxCol.toFixed(3)})`);
+
     const mat = createHumanSkinMaterial(THREE, cat);
     assert.equal(mat.transparent, false);
     assert.equal(mat.opacity, 1.0);
     assert.equal(mat.depthWrite, true);
     assert.equal(mat.sheen, 0.0);
     assert.equal(mat.side, THREE.DoubleSide);
+    assert.equal(mat.vertexColors, true);
   }
 });
 
@@ -139,6 +151,7 @@ test('Unified Human Mannequin: responsive to size & measurement changes (XS vs X
     const topo = analyzeTopology(posed.bodyMesh.geometry);
     assert.equal(topo.boundaryEdges, 0, `${pose}: baked pose remains 100% watertight`);
     assert.ok(topo.signedVolume > 0.015, `${pose}: baked pose preserves positive volume`);
+    assert.ok(posed.bodyMesh.geometry.attributes.color, `${pose}: baked static bodyMesh preserves subsurface vertex colors`);
   }
 });
 

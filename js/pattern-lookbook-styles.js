@@ -1206,8 +1206,8 @@ export const PATTERN_LOOKBOOK_STYLES = {
 };
 
 const TRIM_ROLE_SET = new Set([
-  "collar", "undercollar", "collar-stand", "collar-band", "cuff", "rib-cuff",
-  "waistband", "elastic-band", "sash", "wrap-tie", "belt", "hem-band", "lapel-facing",
+  "collar-stand", "collar-band", "cuff", "rib-cuff",
+  "waistband", "elastic-band", "sash", "wrap-tie", "belt", "hem-band",
 ]);
 
 function inferFallbackColor(patternMeta, pieces) {
@@ -1237,7 +1237,16 @@ function resolvePieceTargetKey(piece, pieces, style = null) {
   if (style?.silhouette?.style === "leotard" && (role === "yoke" || /mesh|side\s*insert|cross[-\s]?back|\bstrap\b|yoke/.test(txt))) {
     return "secondary";
   }
+  if (role === "collar") {
+    if (style?.silhouette?.contrastCollar || style?.partColors?.trim || style?.silhouette?.outerLayer?.lapelColor) {
+      return "trim";
+    }
+    return style?.partColors?.outer ? "outer" : "bodice";
+  }
   if (TRIM_ROLE_SET.has(role)) return "trim";
+  if (role === "undercollar" || role === "lapel-facing" || role === "pocket" || role === "flap") {
+    return style?.partColors?.outer ? "outer" : "bodice";
+  }
   if (role === "sleeve" || role === "sleeve-upper" || role === "sleeve-under" || role === "cap-sleeve" || role === "puff-sleeve" || role === "butterfly-sleeve") {
     return "sleeve";
   }
