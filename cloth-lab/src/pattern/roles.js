@@ -124,7 +124,7 @@ export const SCHEMA_ROLE_INFO = {
   band: { placement: 'attachUnderbust' },
   strap: { placement: 'attachStrap', bilateral: true },
   'elastic-band': { placement: 'attachHem' },
-  gusset: { placement: 'attachCrotch' },
+  gusset: { placement: 'attachCrotch', cutOnFold: true },
 
   // WP-59 (docs/plan 4.md Phase 5, user-directed "make everything
   // cloth-lab compatible" pass): js/fancy-patterns.js's `trouserPanel()`

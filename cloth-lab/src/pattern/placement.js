@@ -128,7 +128,110 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
   })
 }
 
-export function placeHipPanel(positions2D, dims, { zSign, easeFactor = 1.16, angleSpan = Math.PI * 0.85, pose = 'standing' } = {}) {
+function placeBriefPanel(positions2D, dims, { zSign, easeFactor = 1.055, pose = 'standing', hint = {} } = {}) {
+  const zScale = dims.female ? 0.72 : 0.78
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const [x, y] of positions2D) {
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  const cx = (minX < -1e-2 && maxX > 1e-2 && Math.abs(minX + maxX) < (maxX - minX) * 0.25)
+    ? 0
+    : (Number.isFinite(minX) && Number.isFinite(maxX) ? 0.5 * (minX + maxX) : 0)
+
+  const riseT = clamp(((hint.riseCm ?? 12) - 7) / 11, 0, 1)
+  const hipHalfW = Math.max(1.0, maxX - cx)
+  const sideSeamY = clamp(hint.sideSeamYCm ?? (minY + 5), minY + 1.5, maxY - 1.5)
+  const crotchWorldY = dims.hipY - dims.span * 0.118
+  const pelvisEase = 1.032 + Math.max(0, easeFactor - 1.16)
+  const maxCrotchZ = dims.hipR * zScale * 0.28
+
+  let waistTopHW = 1, sideCornerHW = 1
+  for (const [x, y] of positions2D) {
+    const hw = Math.abs(x - cx)
+    if (y <= minY + 1.5 && hw > waistTopHW) waistTopHW = hw
+    if (y >= sideSeamY - 0.8 && y <= sideSeamY + 0.8 && hw > sideCornerHW) sideCornerHW = hw
+  }
+
+  if (hint.hasBriefLeg) {
+    const topWorldY = dims.hipY + dims.span * lerp(0.11, 0.28, riseT)
+    const legDrop = clamp(0.13 + (cm(hint.legExtCm || 5) / Math.max(0.20, dims.span)) * 0.40, 0.14, 0.24)
+    const hemWorldY = dims.hipY - dims.span * legDrop
+    const joints = computeMannequinPoseJoints(dims, pose)
+    return positions2D.map(([xCm, yCm]) => {
+      const vSide = clamp((yCm - minY) / Math.max(1e-4, sideSeamY - minY), 0, 1)
+      const uInseam = yCm > sideSeamY ? clamp((yCm - sideSeamY) / Math.max(1e-4, maxY - sideSeamY), 0, 1) : 0
+      const rowBoundHW = yCm <= sideSeamY ? Math.max(waistTopHW, lerp(waistTopHW, sideCornerHW, vSide)) : hipHalfW
+      const s = clamp((xCm - cx) / Math.max(0.5, rowBoundHW), -1, 1)
+      const legSide = s >= 0 ? 1 : -1
+      const uSide = Math.abs(s)
+
+      const pelvY = lerp(topWorldY, hemWorldY, vSide)
+      const rP = radiusAtHeight(dims, Math.max(dims.hipY - dims.span * 0.02, pelvY)) * pelvisEase
+      const thetaP = s * Math.PI * 0.50
+      const px = rP * Math.sin(thetaP)
+      const pz = zSign * rP * zScale * Math.cos(thetaP)
+
+      const leg = joints.legs[legSide]
+      const tLeg = clamp((leg.hip[1] - pelvY) / Math.max(0.15, leg.hip[1] - leg.knee[1]), 0, 0.45)
+      const legCenter = lerp3(leg.hip, leg.knee, tLeg)
+      const rxT = Math.min(dims.thighR * 0.94, Math.abs(leg.hip[0]) * 0.92) * 1.045 + 0.004
+      const rzT = dims.thighR * 0.96 * 1.045 + 0.004
+      const thetaT = (uSide - 0.5) * Math.PI
+      const tx = legCenter[0] + legSide * rxT * Math.sin(thetaT)
+      const tz = legCenter[2] + zSign * rzT * Math.cos(thetaT)
+
+      const bifurcate = smoothstep(0.45, 0.85, vSide) * smoothstep(0.06, 0.28, uSide)
+      const bx = lerp(px, tx, bifurcate)
+      const bz = lerp(pz, tz, bifurcate)
+      const crotchPull = uInseam * smoothstep(0.50, 1.0, uInseam)
+      const crotchX3D = clamp(cm(xCm - cx) * 0.95, -dims.hipR * 0.24, dims.hipR * 0.24)
+      const crotchZ3D = zSign * maxCrotchZ
+      return [
+        lerp(bx, crotchX3D, crotchPull),
+        lerp(pelvY, crotchWorldY, crotchPull),
+        lerp(bz, crotchZ3D, crotchPull),
+      ]
+    })
+  }
+
+  const topWorldY = dims.hipY + dims.span * lerp(0.11, 0.36, riseT)
+  const sideBotY = dims.hipY + dims.span * lerp(0.01, 0.13, riseT)
+  return positions2D.map(([xCm, yCm]) => {
+    if (yCm <= sideSeamY + 1e-4) {
+      const v = clamp((yCm - minY) / Math.max(1e-4, sideSeamY - minY), 0, 1)
+      const worldY = lerp(topWorldY, sideBotY, v)
+      const r = radiusAtHeight(dims, worldY) * pelvisEase
+      const rowBoundHW = Math.max(waistTopHW, lerp(waistTopHW, sideCornerHW, v))
+      const s = clamp((xCm - cx) / Math.max(0.5, rowBoundHW), -1, 1)
+      const theta = s * Math.PI * 0.50
+      return applySeatedSkirtDrape(r * Math.sin(theta), worldY, zSign * r * zScale * Math.cos(theta), dims, zSign, pose)
+    }
+
+    const u = clamp((yCm - sideSeamY) / Math.max(1e-4, maxY - sideSeamY), 0, 1)
+    const xFrac = clamp((xCm - cx) / hipHalfW, -1, 1)
+    const baseY = lerp(sideBotY, crotchWorldY, Math.pow(u, 0.90))
+    const pelvR = radiusAtHeight(dims, Math.max(dims.hipY - dims.span * 0.03, baseY)) * pelvisEase
+    const theta = xFrac * Math.PI * 0.50
+    const pelvX = pelvR * Math.sin(theta)
+    const pelvZ = zSign * pelvR * zScale * Math.cos(theta)
+    const saddleBlend = smoothstep(0.45, 1.0, u)
+    const crotchX3D = clamp(cm(xCm - cx) * 0.95, -dims.hipR * 0.24, dims.hipR * 0.24)
+    const crotchZ3D = zSign * maxCrotchZ
+    return [
+      lerp(pelvX, crotchX3D, saddleBlend),
+      baseY,
+      lerp(pelvZ, crotchZ3D, saddleBlend),
+    ]
+  })
+}
+
+export function placeHipPanel(positions2D, dims, { zSign, easeFactor = 1.16, angleSpan = Math.PI * 0.85, pose = 'standing', hint = null } = {}) {
+  if (hint?.isBrief) {
+    return placeBriefPanel(positions2D, dims, { zSign, easeFactor, pose, hint })
+  }
   const topWorldY = dims.hipY + dims.span * 0.44
   const zScale = dims.female ? 0.75 : 0.80
   let minX = Infinity, maxX = -Infinity
@@ -161,7 +264,7 @@ export function placeHipPanel(positions2D, dims, { zSign, easeFactor = 1.16, ang
 //   centered on its own posed leg (`hip -> knee -> ankle`) with radius always
 //   clearing the thigh, patella, and gastrocnemius calf belly, and medial inseam
 //   staying strictly on its own side of `X = 0` so left/right legs never overlap.
-export function placeLegPanel(positions2D, dims, { side, zSign, easeFactor = 1.15, pose = 'standing' } = {}) {
+export function placeLegPanel(positions2D, dims, { side, zSign, easeFactor = 1.15, pose = 'standing', hint = null } = {}) {
   if (!positions2D.length) return []
   const waistWorldY = dims.hipY + dims.span * 0.44
   const zScale = dims.female ? 0.72 : 0.78
@@ -175,20 +278,23 @@ export function placeLegPanel(positions2D, dims, { side, zSign, easeFactor = 1.1
   }
   const totalH = Math.max(1e-4, maxY - minY)
 
-  // Detect the 2D crotch fork height (`crotchY2D`): prefer the deepest point
-  // on the medial crotch cutout (`fracY ∈ [0.12, 0.50]` on the medial side of the panel)
-  // so `trouserPanel`'s curved crotch point maps onto the pelvic floor rather than
-  // getting pinned to the high center-front/back rise point.
-  const midPanelX = 0.5 * (minX + maxX)
+  // Detect the 2D crotch fork height (`crotchY2D`): prefer the importer-computed
+  // `hint.crotchYCm` (exact mirrorSelf crotch point or medial-most outline vertex),
+  // falling back to the maximum medial protrusion in `fracY ∈ [0.10, 0.48]` so
+  // subdivided vertices down the inseam never pull the fork halfway to the knee.
   let crotchY2D = minY + totalH * 0.20
-  let bestMedialY = -Infinity
-  for (const [x, y] of positions2D) {
-    const fracY = (y - minY) / totalH
-    if (fracY < 0.12 || fracY > 0.50) continue
-    const isMedialSide = side > 0 ? x <= midPanelX + 2.0 : x >= midPanelX - 2.0
-    if (isMedialSide && y > bestMedialY) {
-      bestMedialY = y
-      crotchY2D = y
+  if (Number.isFinite(hint?.crotchYCm)) {
+    crotchY2D = clamp(minY + hint.crotchYCm, minY + totalH * 0.08, minY + totalH * 0.58)
+  } else {
+    let bestMedialScore = -Infinity
+    for (const [x, y] of positions2D) {
+      const fracY = (y - minY) / totalH
+      if (fracY < 0.10 || fracY > 0.48) continue
+      const medialScore = side > 0 ? -x : x
+      if (medialScore > bestMedialScore) {
+        bestMedialScore = medialScore
+        crotchY2D = y
+      }
     }
   }
   const riseSpan2D = Math.max(1, crotchY2D - minY)
@@ -219,11 +325,12 @@ export function placeLegPanel(positions2D, dims, { side, zSign, easeFactor = 1.1
       }
     }
   }
-  // 3-bin morphological outer envelope (prevents interior-only rows from dipping inward)
+  // 3-bin morphological outer envelope (preserve exact row 0 waist bounds so CF/CB fly/seat meets X=0)
   const binMinX = new Float32Array(BINS)
   const binMaxX = new Float32Array(BINS)
   for (let b = 0; b < BINS; b++) {
-    const b0 = Math.max(0, b - 1), b1 = Math.min(BINS - 1, b + 1)
+    const b0 = b === 0 ? 0 : Math.max(0, b - 1)
+    const b1 = b === 0 ? 0 : Math.min(BINS - 1, b + 1)
     binMinX[b] = Math.min(rawMinX[b0], rawMinX[b], rawMinX[b1])
     binMaxX[b] = Math.max(rawMaxX[b0], rawMaxX[b], rawMaxX[b1])
   }
@@ -256,7 +363,7 @@ export function placeLegPanel(positions2D, dims, { side, zSign, easeFactor = 1.1
 
     // Map [minY, crotchY2D] -> [waistWorldY, crotchWorldY] (just below pelvis)
     // and [crotchY2D, maxY] -> [crotchWorldY, ankleWorldY]
-    const crotchWorldY = dims.hipY - dims.span * 0.095
+    const crotchWorldY = dims.hipY - dims.span * 0.124
     const ankleWorldY = Math.max(0.055, dims.H * 0.052)
     const isRise = yCm <= crotchY2D
     const riseFrac = clamp((yCm - minY) / riseSpan2D, 0, 1)
@@ -265,7 +372,7 @@ export function placeLegPanel(positions2D, dims, { side, zSign, easeFactor = 1.1
       ? lerp(waistWorldY, crotchWorldY, riseFrac)
       : lerp(crotchWorldY, ankleWorldY, uLeg)
 
-    const legBlend = smoothstep(crotchY2D - riseSpan2D * 0.12, crotchY2D + legSpan2D * 0.08, yCm)
+    const legBlend = smoothstep(crotchY2D - riseSpan2D * 0.30, crotchY2D, yCm)
 
     const waistTap = smoothstep(dims.hipY + dims.span * 0.08, waistWorldY, baseWorldY)
     const rAtY = lerp(Math.max(dims.hipR * 1.02, radiusAtHeight(dims, Math.max(dims.hipY, baseWorldY))), dims.waistR, waistTap)
@@ -287,7 +394,7 @@ export function placeLegPanel(positions2D, dims, { side, zSign, easeFactor = 1.1
     const hipAbsX = Math.abs(cLeg[0] - joints.pelvisPos[0])
     const rxLateral = lerp(Math.max(rLeg, rxPelvis - hipAbsX), rLeg * 1.06, thighTaper)
     const inseamForkBlend = smoothstep(0.0, 0.16, uLeg)
-    const rxMedial = lerp(hipAbsX, Math.min(rxLateral * 0.94, Math.max(0.015, hipAbsX - 0.007)), thighTaper * inseamForkBlend)
+    const rxMedial = lerp(Math.max(0.012, hipAbsX - 0.008), Math.min(rxLateral * 0.94, Math.max(0.015, hipAbsX - 0.007)), thighTaper * inseamForkBlend)
 
     // Map medial panel edge (`0..0.44`) to inner-thigh inseam `[-PI/2, 0]`, keeping
     // outer panel `[0.44, 1]` over anterior and lateral thigh `[0, +PI/2]`.
@@ -560,28 +667,48 @@ export function placeAttachNeck(positions2D, dims, side = 0, neckKind = null) {
   })
 }
 
-export function placeAttachWaist(positions2D, dims, zSign = 1, pose = 'standing', foldAtBack = false) {
-  const topWorldY = dims.hipY + dims.span * 0.44
+export function placeAttachWaist(positions2D, dims, zSign = 1, pose = 'standing', foldAtBack = false, hint = null) {
+  const isBriefWaist = hint?.briefRiseCm != null
+  const riseT = isBriefWaist ? clamp((hint.briefRiseCm - 7) / 11, 0, 1) : 1
+  const briefTopWorldY = dims.hipY + dims.span * lerp(0.11, hint?.hasBriefLeg ? 0.28 : 0.36, riseT)
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const [x, y] of positions2D) {
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  const topWorldY = isBriefWaist
+    ? (hint?.sewnBriefWaist ? briefTopWorldY + cm(Math.max(0, maxY - minY)) : (briefTopWorldY + 0.002))
+    : (dims.hipY + dims.span * 0.44)
   const zScale = dims.female ? 0.72 : 0.78
   const cx = bboxCenterX(positions2D)
-  let halfW = 0
-  if (foldAtBack) {
-    for (const [x] of positions2D) {
-      const d = Math.abs(x - cx)
-      if (d > halfW) halfW = d
-    }
-  }
+  const halfW = Math.max(0, 0.5 * (maxX - minX))
   return positions2D.map(([xCm, yCm]) => {
-    const worldY = topWorldY - cm(yCm)
+    const worldY = topWorldY - cm(yCm - minY)
     // Keep 1.21 * zScale at waist (satisfying elliptical waist ring pin/test), then blend
     // to 1.135 * 0.94 below hipY so long peplums/overskirts (`womens_dress` `skirt_front`)
     // drape flush against `frontPanel` (1.13 * 0.94) instead of ballooning out in front.
     const hipBlend = smoothstep(dims.hipY + dims.span * 0.12, dims.hipY - dims.span * 0.08, worldY)
-    const scaleFactor = lerp(1.21, 1.135, hipBlend)
-    const baseR = Math.max(dims.waistR * 0.96, radiusAtHeight(dims, worldY)) * scaleFactor
-    const effZScale = lerp(zScale, 0.94, hipBlend)
+    const scaleFactor = isBriefWaist ? (hint?.sewnBriefWaist ? 1.035 : 1.045) : lerp(1.21, 1.135, hipBlend)
+    const baseR = isBriefWaist
+      ? (radiusAtHeight(dims, worldY) * scaleFactor)
+      : (Math.max(dims.waistR * 0.96, radiusAtHeight(dims, worldY)) * scaleFactor)
+    const effZScale = isBriefWaist ? zScale : lerp(zScale, 0.94, hipBlend)
     let x, z
-    if (foldAtBack && halfW > 1e-4) {
+    if (isBriefWaist && hint?.sewnBriefWaist && halfW > 1e-4) {
+      // Unsewn-end-at-x=0 -> left hip (-PI/2), mid-front at u=0.25 (0), right hip at u=0.5 (+PI/2), mid-back at u=0.75 (PI)
+      const u = clamp((xCm - minX) / (2 * halfW), 0, 1)
+      const phi = (u - 0.25) * 2 * Math.PI
+      x = baseR * Math.sin(phi)
+      z = baseR * effZScale * Math.cos(phi)
+    } else if (isBriefWaist && halfW > 1e-4) {
+      const frac = clamp((xCm - cx) / halfW, -1, 1)
+      const phi = frac * Math.PI * 0.995
+      const rOut = baseR + 0.002
+      x = rOut * Math.sin(phi)
+      z = rOut * effZScale * Math.cos(phi)
+    } else if (foldAtBack && halfW > 1e-4) {
       const frac = clamp(Math.abs(xCm - cx) / halfW, 0, 1)
       const phi = (xCm >= cx ? 1 : -1) * Math.PI * (1 - frac)
       const rOut = baseR + 0.003 * frac
@@ -598,7 +725,72 @@ export function placeAttachWaist(positions2D, dims, zSign = 1, pose = 'standing'
   })
 }
 
-export function placeAttachHem(positions2D, dims, side = 0, pose = 'standing') {
+export function placeAttachHem(positions2D, dims, side = 0, pose = 'standing', hint = null) {
+  if (hint?.isLegOpeningElastic) {
+    const sSide = side === 0 ? 1 : side
+    let minX = Infinity, maxX = -Infinity, minY = Infinity
+    for (const [x, y] of positions2D) {
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+      if (y < minY) minY = y
+    }
+    const widthCm = Math.max(1e-4, maxX - minX)
+    const topY = minY
+    const zScale = dims.female ? 0.72 : 0.78
+    const riseT = clamp(((hint.briefRiseCm ?? 12) - 7) / 11, 0, 1)
+    const crotchWorldY = dims.hipY - dims.span * 0.118
+    const maxCrotchZ = dims.hipR * zScale * 0.28
+
+    if (hint.hasBriefLeg) {
+      const legDrop = clamp(0.13 + (cm(hint.legExtCm || 5) / Math.max(0.20, dims.span)) * 0.40, 0.14, 0.24)
+      const hemWorldY = dims.hipY - dims.span * legDrop
+      const joints = computeMannequinPoseJoints(dims, pose)
+      const leg = joints.legs[sSide]
+      const tLeg = clamp((leg.hip[1] - hemWorldY) / Math.max(0.15, leg.hip[1] - leg.knee[1]), 0, 0.45)
+      const legCenter = lerp3(leg.hip, leg.knee, tLeg)
+      const rxT = Math.min(dims.thighR * 0.94, Math.abs(leg.hip[0]) * 0.92) * 1.045 + 0.004
+      const rzT = dims.thighR * 0.96 * 1.045 + 0.004
+      return positions2D.map(([xCm, yCm]) => {
+        const uRaw = clamp((xCm - minX) / widthCm, 0, 1)
+        const uAlong = sSide > 0 ? uRaw : 1 - uRaw
+        const uMid = clamp((0.5 - Math.abs(uAlong - 0.5)) / 0.5, 0, 1) // 0 outer hip -> 1 crotch
+        const thetaT = (0.5 - uMid * 0.86) * Math.PI // +PI/2 lateral -> 0 thigh front/back -> -0.36*PI medial
+        const zSignHem = uAlong <= 0.5 ? 1 : -1
+        const tx = legCenter[0] + sSide * rxT * Math.sin(thetaT)
+        const tz = legCenter[2] + zSignHem * rzT * Math.cos(thetaT) * smoothstep(0, 0.14, uMid)
+        const crotchPull = uMid * smoothstep(0.50, 1.0, uMid)
+        const yOff = -cm(yCm - topY) * 0.75
+        return [
+          lerp(tx, sSide * dims.hipR * 0.135, crotchPull),
+          lerp(hemWorldY, crotchWorldY, crotchPull) + yOff,
+          lerp(tz, zSignHem * maxCrotchZ * 0.4, crotchPull),
+        ]
+      })
+    }
+
+    const sideBotY = dims.hipY + dims.span * lerp(0.01, 0.13, riseT)
+    return positions2D.map(([xCm, yCm]) => {
+      const uRaw = clamp((xCm - minX) / widthCm, 0, 1)
+      const uAlong = sSide > 0 ? uRaw : 1 - uRaw
+      const ang = uAlong * 2 * Math.PI
+      const tCurve = 0.5 * (1 - Math.cos(ang))
+      const yBase = lerp(sideBotY, crotchWorldY, Math.pow(tCurve, 0.90))
+      const y = yBase - cm(yCm - topY) * 0.75
+      const theta = (Math.pow(Math.max(0, 1 - tCurve), 1.35) * 0.86 + 0.14) * Math.PI * 0.5
+      const pelvR = radiusAtHeight(dims, Math.max(dims.hipY - dims.span * 0.03, yBase)) * 1.034
+      const zSignHem = Math.sin(ang) >= 0 ? 1 : -1
+      const zFade = smoothstep(0, 0.18, Math.abs(Math.sin(ang)))
+      const xPelv = sSide * pelvR * Math.sin(theta)
+      const zPelv = zSignHem * pelvR * zScale * Math.cos(theta) * zFade
+      const crotchBlend = smoothstep(0.45, 1.0, tCurve)
+      return [
+        lerp(xPelv, sSide * dims.hipR * 0.135, crotchBlend),
+        y,
+        lerp(zPelv, zSignHem * maxCrotchZ * zFade, crotchBlend),
+      ]
+    })
+  }
+
   const topWorldY = dims.hipY - dims.legLen * 0.1
   const zScale = dims.female ? 0.78 : 0.82
   const cx = bboxCenterX(positions2D)
@@ -635,20 +827,20 @@ export function placeAttachBody(positions2D, dims, zSign = 1, side = 0) {
   })
 }
 
-export function placeAttachCrotch(positions2D, dims) {
+export function placeAttachCrotch(positions2D, dims, hint = null) {
   const cx = bboxCenterX(positions2D)
   let minY = Infinity, maxY = -Infinity
   for (const [, y] of positions2D) { if (y < minY) minY = y; if (y > maxY) maxY = y }
   const h = Math.max(1e-4, maxY - minY)
-  const saddleY = dims.hipY - dims.span * 0.132
+  const saddleY = dims.hipY - dims.span * 0.118 + (hint?.layerOffset || 0)
   const zScale = dims.female ? 0.72 : 0.78
-  const maxZ = dims.hipR * zScale * 0.44
+  const maxZ = dims.hipR * zScale * 0.28
   return positions2D.map(([xCm, yCm]) => {
     const u = (yCm - minY) / h // 0 front -> 0.5 saddle bottom -> 1 back
     const arch = Math.sin(Math.PI * u)
-    const y = saddleY + (1 - arch) * dims.span * 0.036
+    const y = saddleY + (1 - arch) * dims.span * 0.016
     const z = lerp(maxZ, -maxZ, u)
-    const x = clamp(cm(xCm - cx), -dims.hipR * 0.45, dims.hipR * 0.45)
+    const x = clamp(cm(xCm - cx), -dims.hipR * 0.24, dims.hipR * 0.24)
     return [x, y, z]
   })
 }
@@ -699,13 +891,34 @@ export function placeAttachHemBand(positions2D, dims, pose = 'standing') {
 }
 
 export function placeAttachBust(positions2D, dims, side = 0) {
-  const topWorldY = dims.hipY + dims.span * 0.79
-  const zScale = dims.female ? 0.80 : 0.82
   const cx = bboxCenterX(positions2D)
-  const thetaCenter = side === 0 ? 0 : side * 0.42
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const [x, y] of positions2D) {
+    if (x < minX) minX = x; if (x > maxX) maxX = x
+    if (y < minY) minY = y; if (y > maxY) maxY = y
+  }
+  const halfW = Math.max(1, 0.5 * (maxX - minX))
+  const spanY = Math.max(1, maxY - minY)
+  if (side === 0) {
+    const topWorldY = dims.hipY + dims.span * 0.725
+    const zScale = dims.female ? 0.80 : 0.82
+    return positions2D.map(([xCm, yCm]) => {
+      const worldY = topWorldY - cm(yCm - minY)
+      const baseR = Math.max(dims.chestR * 0.98, radiusAtHeight(dims, worldY)) * 1.08
+      const rEff = baseR * (1 + zScale) * 0.5
+      const phi = cm(xCm - cx) / Math.max(0.05, rEff)
+      return [baseR * Math.sin(phi), worldY, baseR * zScale * Math.cos(phi)]
+    })
+  }
+  const topWorldY = dims.hipY + dims.span * 0.765
+  const zScale = dims.female ? 0.82 : 0.82
+  const thetaCenter = side * 0.39
   return positions2D.map(([xCm, yCm]) => {
-    const worldY = topWorldY - cm(yCm)
-    const baseR = Math.max(dims.chestR * 0.98, radiusAtHeight(dims, worldY)) * 1.18 + (dims.female ? 0.020 : 0.006)
+    const worldY = topWorldY - cm(yCm - minY)
+    const uY = clamp((yCm - minY) / spanY, 0, 1)
+    const uX = clamp((xCm - cx) / halfW, -1, 1)
+    const cupDome = Math.sin(uY * Math.PI) * Math.cos(uX * Math.PI * 0.5)
+    const baseR = Math.max(dims.chestR * 0.98, radiusAtHeight(dims, worldY)) * 1.085 + (dims.female ? 0.010 + 0.016 * cupDome : 0.005)
     const rEff = baseR * (1 + zScale) * 0.5
     const phi = thetaCenter + cm(xCm - cx) / Math.max(0.05, rEff)
     return [baseR * Math.sin(phi), worldY, baseR * zScale * Math.cos(phi)]
@@ -713,13 +926,13 @@ export function placeAttachBust(positions2D, dims, side = 0) {
 }
 
 export function placeAttachUnderbust(positions2D, dims, side = 0) {
-  const topWorldY = dims.hipY + dims.span * 0.665
+  const topWorldY = dims.hipY + dims.span * 0.655
   const zScale = dims.female ? 0.76 : 0.80
   const cx = bboxCenterX(positions2D)
-  const thetaCenter = side === 0 ? 0 : side * Math.PI * 0.48
+  const thetaCenter = side === 0 ? 0 : side * Math.PI * 0.54
   return positions2D.map(([xCm, yCm]) => {
     const worldY = topWorldY - cm(yCm)
-    const baseR = Math.max(dims.waistR * 1.02, radiusAtHeight(dims, worldY)) * 1.155
+    const baseR = Math.max(dims.waistR * 1.01, radiusAtHeight(dims, worldY)) * 1.078
     const rEff = baseR * (1 + zScale) * 0.5
     const phi = thetaCenter + cm(xCm - cx) / Math.max(0.05, rEff)
     return [baseR * Math.sin(phi), worldY, baseR * zScale * Math.cos(phi)]
@@ -762,20 +975,20 @@ export function placePiece(triangulated, dims, pose = 'standing') {
   if (role === 'frontPanel') return placeTorsoPanel(positions2D, dims, { zSign: 1, easeFactor: 1.13 + siblingEase, pose, splitSide, princessSide })
   if (role === 'backPanel') return placeTorsoPanel(positions2D, dims, { zSign: -1, easeFactor: 1.13 + siblingEase, pose, splitSide, princessSide })
   if (role === 'sleeve') return placeSleeve(positions2D, dims, side, 1.15, pose, placementHint?.tubeHalf || null, placementHint?.capOffsetCm || 0)
-  if (role === 'hipPanelFront') return placeHipPanel(positions2D, dims, { zSign: 1, easeFactor: 1.16 + siblingEase, pose })
-  if (role === 'hipPanelBack') return placeHipPanel(positions2D, dims, { zSign: -1, easeFactor: 1.16 + siblingEase, pose })
-  if (role === 'legFront') return placeLegPanel(positions2D, dims, { side, zSign: 1, easeFactor: 1.16, pose })
-  if (role === 'legBack') return placeLegPanel(positions2D, dims, { side, zSign: -1, easeFactor: 1.20, pose })
+  if (role === 'hipPanelFront') return placeHipPanel(positions2D, dims, { zSign: 1, easeFactor: 1.16 + siblingEase, pose, hint: placementHint })
+  if (role === 'hipPanelBack') return placeHipPanel(positions2D, dims, { zSign: -1, easeFactor: 1.16 + siblingEase, pose, hint: placementHint })
+  if (role === 'legFront') return placeLegPanel(positions2D, dims, { side, zSign: 1, easeFactor: 1.16, pose, hint: placementHint })
+  if (role === 'legBack') return placeLegPanel(positions2D, dims, { side, zSign: -1, easeFactor: 1.20, pose, hint: placementHint })
   if (role === 'goreFront') return placeGorePanel(positions2D, dims, 0, pose)
   if (role === 'goreBack') return placeGorePanel(positions2D, dims, Math.PI, pose)
   if (role === 'goreSideLeft') return placeGorePanel(positions2D, dims, -Math.PI / 2, pose)
   if (role === 'goreSideRight') return placeGorePanel(positions2D, dims, Math.PI / 2, pose)
   if (role === 'attachNeck') return placeAttachNeck(positions2D, dims, attachSide, placementHint?.neckKind || null)
-  if (role === 'attachWaist') return placeAttachWaist(positions2D, dims, 1, pose, Boolean(placementHint?.foldAtBack))
-  if (role === 'attachWaistBack') return placeAttachWaist(positions2D, dims, -1, pose, Boolean(placementHint?.foldAtBack))
-  if (role === 'attachHem') return placeAttachHem(positions2D, dims, attachSide, pose)
+  if (role === 'attachWaist') return placeAttachWaist(positions2D, dims, 1, pose, Boolean(placementHint?.foldAtBack), placementHint)
+  if (role === 'attachWaistBack') return placeAttachWaist(positions2D, dims, -1, pose, Boolean(placementHint?.foldAtBack), placementHint)
+  if (role === 'attachHem') return placeAttachHem(positions2D, dims, attachSide, pose, placementHint)
   if (role === 'attachHemBand') return placeAttachHemBand(positions2D, dims, pose)
-  if (role === 'attachCrotch') return placeAttachCrotch(positions2D, dims)
+  if (role === 'attachCrotch') return placeAttachCrotch(positions2D, dims, placementHint)
   if (role === 'attachWrist') return placeAttachWrist(positions2D, dims, attachSide || 1, pose)
   if (role === 'attachBust') return placeAttachBust(positions2D, dims, attachSide)
   if (role === 'attachUnderbust') return placeAttachUnderbust(positions2D, dims, attachSide)

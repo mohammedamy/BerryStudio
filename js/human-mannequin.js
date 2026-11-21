@@ -153,7 +153,7 @@ export function computeHumanBodyDims(category, measurementsOrDims, landmarks) {
   const shoulderCm = Number(m.shoulder) || (kid ? 31 : female ? 39 : 45);
   const neckCm = Number(m.neck) || (kid ? 29 : female ? 35 : 39);
   const bicepCm = Number(m.bicep) || (kid ? 21 : female ? 27 : 32);
-  const thighCm = Number(m.thigh) || (kid ? 41 : female ? 55 : 56);
+  const thighCm = Number(m.thigh) || (kid ? 38.5 : female ? 52 : 55);
 
   const H = cm(heightCm);
   const headH = H * (kid ? 0.142 : 0.130);
@@ -191,7 +191,7 @@ export function computeHumanBodyDims(category, measurementsOrDims, landmarks) {
   const armLen = m.sleeve ? cm(m.sleeve) : H * (kid ? 0.40 : 0.44);
   const upperR = radiusFromCirc(bicepCm) * (female ? 0.92 : 1.0);
   const legLen = hipY;
-  const thighR = radiusFromCirc(thighCm) * (female ? 1.0 : 0.98);
+  const thighR = radiusFromCirc(thighCm) * (female ? 0.86 : 0.85);
 
   return {
     female, kid, H, headH, neckTopY, shoulderY, hipY, span,
@@ -485,9 +485,9 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     // Monotonic anatomical foot-to-ankle cross-sections (seamless talocrural transition)
     const footSpecs = [
       // [yPlantar, yDorsal, zFront, zBack, rxMed, rxLat, sw, clampSole]
-      [0.000, 0.023, toeTipZ * 0.92,  toeTipZ * 0.72,  footW * 0.43, footW * 0.37, 0.22, true],
-      [0.000, 0.034, toeTipZ * 0.74,  toeTipZ * 0.42,  footW * 0.51, footW * 0.47, 0.25, true],
-      [0.000, 0.052, toeTipZ * 0.46, -footLen * 0.14,  footW * 0.45, footW * 0.41, 0.30, true],
+      [0.000, 0.023, toeTipZ * 0.92, toeTipZ * 0.72, footW * 0.43, footW * 0.37, 0.22, true],
+      [0.000, 0.034, toeTipZ * 0.74, toeTipZ * 0.42, footW * 0.51, footW * 0.47, 0.25, true],
+      [0.000, 0.052, toeTipZ * 0.46, -footLen * 0.14, footW * 0.45, footW * 0.41, 0.30, true],
       [0.002, ankleY * 0.78, toeTipZ * 0.20, heelBackZ * 0.94, footW * 0.37, footW * 0.36, 0.42, true],
       [ankleY * 0.56, ankleY * 0.96, thighR * 0.39, -thighR * 0.44, thighR * 0.36, thighR * 0.35, 0.58, false],
     ];
@@ -562,29 +562,30 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       let baseR;
       if (f <= 0.08) {
         const u = f / 0.08;
-        baseR = thighR * (0.378 * (1 - u) + 0.354 * u);
+        baseR = thighR * (0.455 * (1 - u) + 0.430 * u);
       } else if (f <= 0.33) {
         const u = smoothstep(0.08, 0.33, f);
-        const calfPeak = female ? 0.66 : (kid ? 0.63 : 0.69);
-        baseR = thighR * (0.354 * (1 - u) + calfPeak * u);
+        const calfPeak = female ? 0.77 : (kid ? 0.73 : 0.80);
+        baseR = thighR * (0.430 * (1 - u) + calfPeak * u);
       } else if (f <= kneeFrac) {
         const u = smoothstep(0.33, kneeFrac, f);
-        const calfPeak = female ? 0.66 : (kid ? 0.63 : 0.69);
-        baseR = thighR * (calfPeak * (1 - u) + 0.59 * u);
+        const calfPeak = female ? 0.77 : (kid ? 0.73 : 0.80);
+        baseR = thighR * (calfPeak * (1 - u) + 0.66 * u);
       } else {
         const u = smoothstep(kneeFrac, 1.0, f);
-        baseR = thighR * (0.59 * (1 - u) + 0.95 * u);
+        baseR = thighR * (0.66 * (1 - u) + 0.92 * u);
       }
 
       const topInward = smoothstep(0.68, 1.0, f);
       const stanceOffset = side * smoothstep(0.0, 0.26, f) * (1 - f) * (-hipR * 0.018);
-      const cx = legX * (1 - 0.18 * topInward) + stanceOffset;
+      const cx = legX * (1 - 0.08 * topInward) + stanceOffset;
       const cz = -thighR * 0.024 * (1 - smoothstep(0.0, 0.14, f)) - 0.005 * Math.sin(Math.PI * clamp(f / kneeFrac, 0, 1));
 
-      const outerReachAtTop = Math.max(thighR * 0.88, pelvicOuterAtMerge - Math.abs(cx));
-      const innerReachAtTop = Math.max(thighR * 0.56, Math.abs(cx) - 0.0028);
+      const outerReachAtTop = Math.max(thighR * 0.94, pelvicOuterAtMerge - Math.abs(cx));
+      const innerReachAtTop = Math.max(thighR * 0.56, Math.abs(cx) - 0.0038);
 
-      const topBlend = smoothstep(0.66, 1.0, f);
+      const topBlend = smoothstep(0.68, 1.0, f);
+      const upperThighBlend = smoothstep(kneeFrac, 1.0, f);
       const calfWindow = bumpWindow(f, 0.33, 0.16);
       const ankleWindow = bumpWindow(f, 0.01, 0.045);
       const kneeWindow = bumpWindow(f, kneeFrac, 0.065);
@@ -596,8 +597,8 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
         const cosP = Math.cos(phi);
         const isMedial = sinP * side < 0;
 
-        let rx = baseR * 0.96;
-        let rz = baseR * 1.02;
+        let rx = baseR * (0.96 - 0.05 * upperThighBlend);
+        let rz = baseR * (1.02 + 0.02 * upperThighBlend);
 
         const malYShift = ankleWindow * (isMedial ? 0.004 : -0.003) * Math.abs(sinP);
         rx += thighR * 0.036 * ankleWindow * Math.abs(sinP);
@@ -615,9 +616,9 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
         }
 
         if (cosP > 0) {
-          rz += thighR * 0.058 * quadWindow * cosP;
+          rz += thighR * 0.040 * quadWindow * cosP;
         } else {
-          rz += thighR * 0.048 * smoothstep(0.62, 1.0, f) * (-cosP);
+          rz += thighR * 0.034 * smoothstep(0.62, 1.0, f) * (-cosP);
         }
 
         const targetRx = isMedial ? innerReachAtTop : outerReachAtTop;
@@ -692,14 +693,14 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     [hipY - span * 0.014, hipR * 1.015, hipR * 0.99, 0.56],  // trochanter / gluteal fullness
     [hipY + span * 0.030, hipR * 1.005, hipR * 0.98, 0.38],  // upper glute / sacrum
     [hipY + span * 0.085, hipR * 0.985, hipR * 0.96, 0.28],  // iliac crest
-    [hipY + span * 0.19,  hipR * 0.91 + waistR * 0.09, hipR * 0.90 + waistR * 0.10, 0.24],
-    [hipY + span * 0.32,  hipR * 0.42 + waistR * 0.58, hipR * 0.44 + waistR * 0.56, 0.22],
-    [hipY + span * 0.44,  waistR * 1.00, waistR * 0.98, 0.20], // natural waist anchor
-    [hipY + span * 0.55,  waistR * 0.60 + chestR * 0.42, waistR * 0.63 + chestR * 0.39, 0.22], // lower ribcage
-    [hipY + span * 0.65,  chestR * (female ? 0.97 : 1.01), chestR * 0.96, 0.24], // underbust / lower pecs
-    [hipY + span * 0.73,  chestR * (female ? 1.01 : 1.06), chestR * (female ? 1.00 : 1.02), 0.28], // bust / chest apex
-    [hipY + span * 0.81,  chestR * (female ? 1.00 : 1.07), chestR * 0.95, 0.44], // upper chest / lat V-taper
-    [hipY + span * 0.88,  upperRibRx, chestR * 0.90, 0.68], // deltopectoral & teres flare
+    [hipY + span * 0.19, hipR * 0.91 + waistR * 0.09, hipR * 0.90 + waistR * 0.10, 0.24],
+    [hipY + span * 0.32, hipR * 0.42 + waistR * 0.58, hipR * 0.44 + waistR * 0.56, 0.22],
+    [hipY + span * 0.44, waistR * 1.00, waistR * 0.98, 0.20], // natural waist anchor
+    [hipY + span * 0.55, waistR * 0.60 + chestR * 0.42, waistR * 0.63 + chestR * 0.39, 0.22], // lower ribcage
+    [hipY + span * 0.65, chestR * (female ? 0.97 : 1.01), chestR * 0.96, 0.24], // underbust / lower pecs
+    [hipY + span * 0.73, chestR * (female ? 1.01 : 1.06), chestR * (female ? 1.00 : 1.02), 0.28], // bust / chest apex
+    [hipY + span * 0.81, chestR * (female ? 1.00 : 1.07), chestR * 0.95, 0.44], // upper chest / lat V-taper
+    [hipY + span * 0.88, upperRibRx, chestR * 0.90, 0.68], // deltopectoral & teres flare
     [shoulderY - span * 0.046, axillaRibRx, chestR * 0.84, 0.88], // smooth axillary & deltopectoral dome
   ];
 
@@ -914,11 +915,16 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     const upperLen = lm.upperArmLen;
     const foreLen = lm.forearmLen;
     const wristDist = upperLen + foreLen;
-    const wristR = upperR * (female ? 0.34 : 0.36);
-    const palmLen = wristR * 2.15;
-    const fingerLen = wristR * 2.65;
+    // True Vitruvian human hand proportions (~17.4cm women, ~19.0cm men, ~14.5cm kids)
+    const handLen = H * (kid ? 0.108 : (female ? 0.104 : 0.107));
+    const palmLen = handLen * 0.54;
+    const fingerLen = handLen * 0.46;
+    const palmHalfW = handLen * (female ? 0.212 : 0.224);
+    const palmHalfThick = handLen * (female ? 0.070 : 0.076);
+    const wristBroadR = Math.max(upperR * 0.44, palmHalfW * 0.70);
+    const wristThickR = Math.max(upperR * 0.34, palmHalfThick * 1.28);
 
-    // Strictly convex lateral deltoid contour expanding smoothly from sloped acromion -> deltoid belly -> 3 elbow loops
+    // Strictly convex lateral deltoid contour expanding smoothly from sloped acromion -> deltoid belly -> 3 elbow loops -> anatomical wrist & metacarpal palm
     const armStops = [
       // [dyDown, rMedLat, rAntPost, xShiftOut, zShift, sw, tiltScale]
       [0.016, upperR * 0.90, upperR * 1.00, side * upperR * 0.025, 0.001, 0.86, 0.30],         // proximal deltoid cap blend
@@ -927,14 +933,14 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       [upperLen * 0.50, upperR * 0.90, upperR * 0.96, side * upperR * 0.015, 0.002, 0.24, 0.0], // bicep / tricep belly
       [upperLen * 0.78, upperR * 0.80, upperR * 0.82, side * upperR * 0.01, 0.001, 0.22, 0.0], // distal brachium
       [upperLen * 0.93, upperR * 0.74, upperR * 0.73, 0.0, -0.001, 0.25, 0.0],             // supracondylar elbow loop
-      [upperLen,        upperR * 0.71, upperR * 0.70, 0.0, -0.002, 0.26, 0.0],             // elbow joint center
+      [upperLen, upperR * 0.71, upperR * 0.70, 0.0, -0.002, 0.26, 0.0],             // elbow joint center
       [upperLen + foreLen * 0.08, upperR * 0.73, upperR * 0.74, 0.0, 0.001, 0.25, 0.0],    // proximal forearm loop
       [upperLen + foreLen * 0.22, upperR * 0.75, upperR * 0.77, 0.0, 0.002, 0.22, 0.0],    // brachioradialis swell
-      [upperLen + foreLen * 0.50, upperR * 0.60, upperR * 0.64, 0.0, 0.002, 0.20, 0.0],    // mid forearm
-      [upperLen + foreLen * 0.80, upperR * 0.45, upperR * 0.50, 0.0, 0.001, 0.20, 0.0],    // distal forearm
-      [wristDist,                 wristR * 0.80, wristR * 1.14, 0.0, 0.0, 0.30, 0.0],      // oval carpal wrist
-      [wristDist + palmLen * 0.48, wristR * 0.64, wristR * 1.40, -side * wristR * 0.06, wristR * 0.12, 0.45, 0.0], // palm + thenar swell
-      [wristDist + palmLen * 0.92, wristR * 0.54, wristR * 1.36, -side * wristR * 0.12, wristR * 0.04, 0.65, 0.0], // metacarpal web split
+      [upperLen + foreLen * 0.50, upperR * 0.60, Math.max(upperR * 0.64, wristBroadR * 1.05), 0.0, 0.002, 0.20, 0.0], // mid forearm
+      [upperLen + foreLen * 0.80, upperR * 0.46, Math.max(upperR * 0.54, wristBroadR * 0.94), 0.0, 0.001, 0.20, 0.0], // distal forearm
+      [wristDist,                 wristThickR, wristBroadR, 0.0, 0.0, 0.30, 0.0],          // oval carpal wrist
+      [wristDist + palmLen * 0.48, palmHalfThick * 1.12, palmHalfW * 0.96, -side * palmHalfThick * 0.14, palmHalfW * 0.10, 0.45, 0.0], // palm + thenar swell
+      [wristDist + palmLen * 0.94, palmHalfThick * 0.94, palmHalfW * 1.00, -side * palmHalfThick * 0.28, palmHalfW * 0.04, 0.65, 0.0], // metacarpal web split
     ];
 
     let prev = baseRing;
@@ -958,8 +964,8 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
         if (sIdx === 3 && zDir > 0.3) rz *= (female ? 1.03 : 1.07);
         // Thenar eminence fullness on thumb side of palm
         if (sIdx >= 12 && zDir > 0.2 && xDir * side < 0) {
-          rx *= 1.14;
-          rz *= 1.08;
+          rx *= 1.16;
+          rz *= 1.07;
         }
 
         const latSign = xDir * side; // +1 at lateral deltoid, -1 at medial axilla
@@ -998,8 +1004,8 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       const arch = Math.sin(Math.PI * u);
       webVerts.push(addVertex(
         wsX * (1 - u) + weX * u,
-        (wsY * (1 - u) + weY * u) - wristR * 0.16 * arch,
-        (wsZ * (1 - u) + weZ * u) - wristR * 0.10 * arch,
+        (wsY * (1 - u) + weY * u) - palmHalfThick * 0.36 * arch,
+        (wsZ * (1 - u) + weZ * u) - palmHalfW * 0.08 * arch,
         0.80,
         handWeights,
         false
@@ -1037,12 +1043,12 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     }
     tcx /= 8; tcy /= 8; tcz /= 8;
 
-    const thumbLen = wristR * 1.52;
-    for (const [f, radScale] of [[0.48, 0.78], [0.88, 0.56]]) {
+    const thumbLen = handLen * 0.34;
+    for (const [f, radScale] of [[0.48, 0.78], [0.88, 0.54]]) {
       const tRing = [];
-      const cx = tcx - side * wristR * 0.15 * f;
+      const cx = tcx - side * palmHalfThick * 0.44 * f;
       const cy = tcy - thumbLen * f;
-      const cz = tcz + wristR * 0.56 * f;
+      const cz = tcz + palmHalfW * 0.48 * f;
       for (let k = 0; k < 8; k++) {
         const vx = positions[thumbBase[k] * 3] - tcx;
         const vz = positions[thumbBase[k] * 3 + 2] - tcz;
@@ -1059,9 +1065,9 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       tPrev = tRing;
     }
     const thumbTip = addVertex(
-      tcx - side * wristR * 0.19,
+      tcx - side * palmHalfThick * 0.56,
       tcy - thumbLen * 1.06,
-      tcz + wristR * 0.65,
+      tcz + palmHalfW * 0.56,
       0.28,
       handWeights,
       false
@@ -1078,19 +1084,19 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
 
     let fPrev = fingersBase;
     const fingerStops = [
-      [0.24, 0.94, 0.88, -side * wristR * 0.06],
-      [0.52, 0.88, 0.72, -side * wristR * 0.16],
-      [0.78, 0.78, 0.54, -side * wristR * 0.28],
-      [0.95, 0.56, 0.38, -side * wristR * 0.36],
+      [0.24, 0.96, 0.90, -side * palmHalfThick * 0.22],
+      [0.52, 0.91, 0.76, -side * palmHalfThick * 0.56],
+      [0.78, 0.82, 0.58, -side * palmHalfThick * 0.94],
+      [0.95, 0.62, 0.40, -side * palmHalfThick * 1.22],
     ];
     for (const [f, zScaleF, xScaleF, curlX] of fingerStops) {
       const fRing = [];
       const cx = fcx + curlX;
-      const cz = fcz - wristR * 0.07 * f;
+      const cz = fcz - palmHalfW * 0.05 * f;
       for (let k = 0; k < 28; k++) {
         const dx0 = positions[fingersBase[k] * 3] - fcx;
         const dz0 = positions[fingersBase[k] * 3 + 2] - fcz;
-        const uZ = clamp(dz0 / (wristR * 1.28 || 0.02), -1, 1); // -1 = pinky edge, +1 = index edge
+        const uZ = clamp(dz0 / (palmHalfW * 0.92 || 0.02), -1, 1); // -1 = pinky edge, +1 = index edge
         // 4 distinct anatomical finger ridges (pinky, ring, middle, index) with deep dorsal/palmar interdigital grooves
         const digitWave = Math.abs(Math.sin((uZ + 1.0) * Math.PI * 2.0));
         const interdigitalPinch = Math.pow(digitWave, 0.65);
@@ -1114,9 +1120,9 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       fPrev = fRing;
     }
     const fingerTip = addVertex(
-      fcx - side * wristR * 0.40,
+      fcx - side * palmHalfThick * 1.34,
       fcy - fingerLen * 1.06,
-      fcz - wristR * 0.04,
+      fcz - palmHalfW * 0.04,
       0.16,
       handWeights,
       false
@@ -1229,12 +1235,12 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     [-0.125, 0.409, 0.08], // pronasale rounded nasal tip & nostril alae
     [-0.075, 0.411, 0.08], // mid nasal dorsum & malar cheeks
     [-0.020, 0.412, 0.08], // upper nasal bridge & infraorbital rim
-    [0.036,  0.412, 0.08], // almond eyes & nasion root
-    [0.092,  0.413, 0.09], // supraorbital brow arch & glabella
-    [0.175,  0.410, 0.10], // frontal forehead
-    [0.280,  0.390, 0.11], // upper forehead / trichion
-    [0.380,  0.332, 0.12], // parietal cranial vault
-    [0.460,  0.212, 0.14], // crown arch
+    [0.036, 0.412, 0.08], // almond eyes & nasion root
+    [0.092, 0.413, 0.09], // supraorbital brow arch & glabella
+    [0.175, 0.410, 0.10], // frontal forehead
+    [0.280, 0.390, 0.11], // upper forehead / trichion
+    [0.380, 0.332, 0.12], // parietal cranial vault
+    [0.460, 0.212, 0.14], // crown arch
   ];
 
   const jawSlopeRise = category === "men" ? 0.138 : (kid ? 0.170 : 0.158);
@@ -1468,7 +1474,8 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     // 3. Hand palm & interdigital shadow depth
     const wristWorldY = lm.shoulderPivotY - lm.upperArmLen - lm.forearmLen;
     if (y < wristWorldY + 0.01 && Math.abs(x) > shoulderHalf * 0.65) {
-      const palmFlush = smoothstep(wristWorldY + 0.01, wristWorldY - 0.11, y);
+      const handSpanY = H * (kid ? 0.108 : (female ? 0.104 : 0.107));
+      const palmFlush = smoothstep(wristWorldY + 0.01, wristWorldY - handSpanY * 0.78, y);
       cr += 0.028 * palmFlush;
       cg -= 0.026 * palmFlush;
       cb -= 0.032 * palmFlush;
@@ -1538,13 +1545,13 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
   const lipMat = lowPower
     ? new THREE.MeshPhongMaterial({ color: lipColor, shininess: 32, specular: 0x332222, side: THREE.DoubleSide })
     : new THREE.MeshPhysicalMaterial({
-        color: lipColor,
-        roughness: 0.43,
-        clearcoat: 0.14,
-        clearcoatRoughness: 0.46,
-        sheen: 0.0,
-        side: THREE.DoubleSide,
-      });
+      color: lipColor,
+      roughness: 0.43,
+      clearcoat: 0.14,
+      clearcoatRoughness: 0.46,
+      sheen: 0.0,
+      side: THREE.DoubleSide,
+    });
 
   const browMat = lowPower
     ? new THREE.MeshPhongMaterial({ color: hairColor, shininess: 10 })
@@ -1560,14 +1567,14 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
   const hairMat = lowPower
     ? new THREE.MeshPhongMaterial({ color: hairColor, shininess: 22, specular: 0x2b1e16, side: THREE.DoubleSide })
     : new THREE.MeshPhysicalMaterial({
-        color: hairColor,
-        roughness: 0.66,
-        metalness: 0.02,
-        sheen: 0.28,
-        sheenRoughness: 0.56,
-        sheenColor: new THREE.Color(0x6b4b37),
-        side: THREE.DoubleSide,
-      });
+      color: hairColor,
+      roughness: 0.66,
+      metalness: 0.02,
+      sheen: 0.28,
+      sheenRoughness: 0.56,
+      sheenColor: new THREE.Color(0x6b4b37),
+      side: THREE.DoubleSide,
+    });
 
   // Extract head triangles & cranial vertices from `bodyGeo` in headBone-local coordinates
   const frontHeadTris = [];
@@ -1939,15 +1946,15 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
   const hairVertMat = lowPower
     ? new THREE.MeshPhongMaterial({ color: 0xffffff, vertexColors: true, shininess: 28, specular: 0x38281d, side: THREE.DoubleSide })
     : new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,
-        vertexColors: true,
-        roughness: 0.56,
-        metalness: 0.02,
-        sheen: 0.38,
-        sheenRoughness: 0.48,
-        sheenColor: new THREE.Color(0x7c5840),
-        side: THREE.DoubleSide,
-      });
+      color: 0xffffff,
+      vertexColors: true,
+      roughness: 0.56,
+      metalness: 0.02,
+      sheen: 0.38,
+      sheenRoughness: 0.48,
+      sheenColor: new THREE.Color(0x7c5840),
+      side: THREE.DoubleSide,
+    });
 
   function buildParametricHairShell({
     frontYFrac = 0.255,

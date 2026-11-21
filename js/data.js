@@ -31,15 +31,15 @@ export const KIDS_AGES = [
 
 /* Base body (size M / mid-age) per category. */
 export const BASE = {
-  women: { chest:88, waist:70, hips:96, shoulder:39, backLen:41, sleeve:58, neck:37, bicep:28, inseam:78, thigh:56, height:167 },
-  men:   { chest:100,waist:86, hips:100,shoulder:46, backLen:45, sleeve:64, neck:40, bicep:33, inseam:82, thigh:60, height:178 },
-  girls: { chest:68, waist:60, hips:72, shoulder:31, backLen:31, sleeve:44, neck:30, bicep:21, inseam:58, thigh:40, height:134 },
-  boys:  { chest:70, waist:63, hips:73, shoulder:32, backLen:33, sleeve:46, neck:31, bicep:22, inseam:60, thigh:41, height:138 },
+  women: { chest:88, waist:70, hips:96, shoulder:39, backLen:41, sleeve:58, neck:37, bicep:28, inseam:78, thigh:52, height:167 },
+  men:   { chest:100,waist:86, hips:100,shoulder:46, backLen:45, sleeve:64, neck:40, bicep:33, inseam:82, thigh:55, height:178 },
+  girls: { chest:68, waist:60, hips:72, shoulder:31, backLen:31, sleeve:44, neck:30, bicep:21, inseam:58, thigh:38, height:134 },
+  boys:  { chest:70, waist:63, hips:73, shoulder:32, backLen:33, sleeve:46, neck:31, bicep:22, inseam:60, thigh:39, height:138 },
 };
 
 /* Per-size-step grade increments (cm) — proportion-perfect. */
 export const GRADE = {
-  chest:4, waist:4, hips:4, shoulder:1, backLen:1, sleeve:1.5, neck:0.8, bicep:1.2, inseam:2, thigh:1.6, height:4
+  chest:4, waist:4, hips:4, shoulder:1, backLen:1, sleeve:1.5, neck:0.8, bicep:1.2, inseam:2, thigh:1.4, height:4
 };
 
 /* Standard offsets — Egyptian & Gulf blocks run slightly different

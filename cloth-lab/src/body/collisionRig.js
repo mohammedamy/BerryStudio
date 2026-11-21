@@ -17,9 +17,9 @@ import { femaleTorsoExtraRadius, maleTorsoExtraRadius } from './torsoSculpt.js'
 //   `standing`, `apose`, `tpose`, `contrapposto`, `seated`, and live `walk`.
 export const MAX_COLLISION_CAPSULES = 32
 
-// Outward cloth-thickness + triangle-chord sag clearance (6mm) so neither
-// cloth particles nor stretched triangle edges ever graze or clip skin.
-const SKIN_CLEARANCE = 0.006
+// Outward cloth-thickness + triangle-chord sag clearance (3.8mm) so
+// tight garments (underwear, leggings) hug the skin cleanly without floating.
+const SKIN_CLEARANCE = 0.0038
 
 function clamp(v, lo, hi) {
   return v < lo ? lo : v > hi ? hi : v
@@ -69,8 +69,8 @@ export function computeMannequinPoseJoints(dims, pose = 'standing') {
   const shoulderPivotX = shoulderHalf * 0.82
   const upperArmLen = armLen * 0.48
   const forearmLen = armLen * 0.46
-  const wristR = upperR * (female ? 0.34 : 0.36)
-  const handLen = wristR * 4.8
+  const handLen = H * (kid ? 0.108 : (female ? 0.104 : 0.107))
+  const wristR = Math.max(upperR * (female ? 0.50 : 0.53), handLen * 0.145)
 
   const hipPivotY = hipY - span * 0.04
   const hipPivotX = hipR * (female ? 0.45 : 0.47)
@@ -192,8 +192,8 @@ function worldPos(bone, ox = 0, oy = 0, oz = 0) {
 export function extractPoseJointsFromLimbs(dims, limbs) {
   if (!limbs || !limbs.pelvis) return computeMannequinPoseJoints(dims, 'standing')
   const { headH, upperR, H, hipR, shoulderHalf, shoulderY, span, female, kid } = dims
-  const wristR = upperR * (female ? 0.34 : 0.36)
-  const handLen = wristR * 4.8
+  const handLen = H * (kid ? 0.108 : (female ? 0.104 : 0.107))
+  const wristR = Math.max(upperR * (female ? 0.50 : 0.53), handLen * 0.145)
   const ankleY = Math.max(0.054, H * 0.047)
   const footLen = clamp(H * (kid ? 0.148 : (female ? 0.142 : 0.150)), 0.17, 0.29)
   const footW = footLen * (female ? 0.37 : 0.39)
@@ -264,18 +264,24 @@ export function deriveCollisionRig(dims, pose = 'standing', precomputedJoints = 
   const chestDZ = joints.chestPos[2]
 
   const extraRadiusAt = (y) => {
-    const sculpt = kid ? 0 : (female ? femaleTorsoExtraRadius(y, dims, zScale) : maleTorsoExtraRadius(y, dims, zScale))
-    // Account for male upper-chest latissimus V-taper (1.07x) and hip trochanter fullness (1.015x)
+    // Only apply sagittal extraRadius above the lower hip basin (`hipY + span * 0.14`)
+    // so posterior glute sculpt never bloats lateral `+-X` hip or `+Z` pubic radii
+    // (`caps 14 & 15` + `bodyEnvelope` already cover the glute prominence in `-Z`).
+    const sculpt = kid || y <= hipY + span * 0.14
+      ? 0
+      : (female ? femaleTorsoExtraRadius(y, dims, zScale) : maleTorsoExtraRadius(y, dims, zScale))
+    // Account for male upper-chest latissimus V-taper (1.05x)
     const latMargin = (!female && !kid && y > hipY + span * 0.62) ? chestR * 0.05 : 0
-    const hipMargin = (y < hipY + span * 0.08) ? hipR * 0.02 : 0
-    return sculpt + latMargin + hipMargin + SKIN_CLEARANCE
+    return sculpt + latMargin + SKIN_CLEARANCE
   }
 
   // 0..7 (8 primitives): Torso spine chain (kept at indices 0..7 for deriveMeshFitCollisionRig)
   const profile = torsoProfile(dims)
   for (let i = 0; i < profile.length - 1; i++) {
-    const [r0, y0] = profile[i]
+    const [rawR0, rawY0] = profile[i]
     const [r1, y1] = profile[i + 1]
+    const y0 = i === 0 ? Math.max(rawY0, hipY - span * 0.088) : rawY0
+    const r0 = i === 0 ? Math.min(rawR0, hipR * 0.50) : rawR0
     const f0 = clamp((y0 - hipY) / Math.max(span, 0.1), 0, 1)
     const f1 = clamp((y1 - hipY) / Math.max(span, 0.1), 0, 1)
     const x0 = pelvDX * (1 - f0) + chestDX * f0
@@ -342,21 +348,22 @@ export function deriveCollisionRig(dims, pose = 'standing', precomputedJoints = 
     primitives.push({ a: c, b: c, ra: bustR, rb: bustR, zScale: 1 })
   }
 
-  // 14, 15: Bilateral posterior gluteal / trochanteric lobes + 16: Pelvic groin saddle
-  const gluteY = hipY - span * 0.035 + pelvDY
-  const gluteX = hipR * 0.42
-  const gluteR = hipR * (female ? 0.54 : 0.51) + SKIN_CLEARANCE
-  const gluteZ = -hipR * zScale * (female ? 0.48 : 0.44) + pelvDZ
+  // 14, 15: Bilateral posterior gluteal lobes + 16: Compact pubic/perineal saddle
+  const gluteY = hipY - span * 0.025 + pelvDY
+  const gluteX = hipR * 0.38
+  const gluteR = hipR * (female ? 0.46 : 0.43) + SKIN_CLEARANCE
+  const gluteZ = -hipR * zScale * (female ? 0.40 : 0.37) + pelvDZ
   for (const side of [-1, 1]) {
     const g = [pelvDX + side * gluteX, gluteY, gluteZ]
     primitives.push({ a: g, b: g, ra: gluteR, rb: gluteR, zScale: 1 })
   }
-  const pelvicSaddleY = hipY - span * 0.035 + pelvDY
+  const pelvicSaddleY = hipY - span * 0.025 + pelvDY
+  const saddleR = Math.min(hipR * zScale * 0.48, span * 0.068) + SKIN_CLEARANCE
   primitives.push({
-    a: [pelvDX - joints.hipPivotX * 0.85, pelvicSaddleY, pelvDZ],
-    b: [pelvDX + joints.hipPivotX * 0.85, pelvicSaddleY, pelvDZ],
-    ra: hipR * zScale * 0.86 + SKIN_CLEARANCE,
-    rb: hipR * zScale * 0.86 + SKIN_CLEARANCE,
+    a: [pelvDX - joints.hipPivotX * 0.72, pelvicSaddleY, pelvDZ],
+    b: [pelvDX + joints.hipPivotX * 0.72, pelvicSaddleY, pelvDZ],
+    ra: saddleR,
+    rb: saddleR,
     zScale: 1,
   })
 
@@ -376,37 +383,38 @@ export function deriveCollisionRig(dims, pose = 'standing', precomputedJoints = 
       a: arm.elbow,
       b: arm.wrist,
       ra: upperR * 0.80 + SKIN_CLEARANCE,
-      rb: arm.wristR * 1.22 + SKIN_CLEARANCE,
+      rb: arm.wristR * 1.12 + SKIN_CLEARANCE,
       zScale: 1,
     })
     // Hand & fingers (wrist -> fingertips)
     primitives.push({
       a: arm.wrist,
       b: arm.handTip,
-      ra: arm.wristR * 1.42 + SKIN_CLEARANCE,
-      rb: arm.wristR * 1.12 + SKIN_CLEARANCE,
+      ra: arm.wristR * 0.96 + SKIN_CLEARANCE,
+      rb: arm.wristR * 0.96 + SKIN_CLEARANCE,
       zScale: 1,
     })
   }
 
   // 23..30: Pose-exact Bilateral Thighs, Upper Calves, Lower Shins & Feet
-  const calfPeakScale = female ? 0.70 : (kid ? 0.67 : 0.73)
+  const calfPeakScale = female ? 0.77 : (kid ? 0.73 : 0.80)
+  const thighTopR = Math.min(thighR * 0.94, joints.hipPivotX * 0.93) + SKIN_CLEARANCE
   for (const side of [-1, 1]) {
     const leg = joints.legs[side]
     const calfBelly = lerp3(leg.knee, leg.ankle, 0.36)
-    // Thigh (hip -> knee)
+    // Thigh (hip -> knee): keeps medial side inside its half-pelvis so X=0 doesn't overlap
     primitives.push({
       a: leg.hip,
       b: leg.knee,
-      ra: thighR * 1.05 + SKIN_CLEARANCE,
-      rb: thighR * 0.66 + SKIN_CLEARANCE,
+      ra: thighTopR,
+      rb: thighR * 0.70 + SKIN_CLEARANCE,
       zScale: 1,
     })
     // Upper calf (knee -> gastrocnemius belly)
     primitives.push({
       a: leg.knee,
       b: calfBelly,
-      ra: thighR * 0.70 + SKIN_CLEARANCE,
+      ra: thighR * 0.74 + SKIN_CLEARANCE,
       rb: thighR * (calfPeakScale + 0.05) + SKIN_CLEARANCE,
       zScale: 1,
     })
@@ -415,7 +423,7 @@ export function deriveCollisionRig(dims, pose = 'standing', precomputedJoints = 
       a: calfBelly,
       b: leg.ankle,
       ra: thighR * (calfPeakScale + 0.05) + SKIN_CLEARANCE,
-      rb: thighR * 0.48 + SKIN_CLEARANCE,
+      rb: thighR * 0.49 + SKIN_CLEARANCE,
       zScale: 1,
     })
     // Foot (heel -> toe)
@@ -447,19 +455,36 @@ export function projectPointOutsideCapsules(p, collisionRig) {
     const aby = cap.b[1] - cap.a[1]
     const abz = cap.b[2] - cap.a[2]
     const abLen2 = Math.max(abx * abx + aby * aby + abz * abz, 1e-8)
-    const t = clamp(((px - cap.a[0]) * abx + (py - cap.a[1]) * aby + (pz - cap.a[2]) * abz) / abLen2, 0, 1)
+    const rawT = ((px - cap.a[0]) * abx + (py - cap.a[1]) * aby + (pz - cap.a[2]) * abz) / abLen2
+    if ((i === 1 || i === 2) && rawT < -0.02) continue
+    if (i === 0 && rawT > 1.02) continue
+    const t = clamp(rawT, 0, 1)
     const cx = cap.a[0] + abx * t
     const cy = cap.a[1] + aby * t
     const cz = cap.a[2] + abz * t
     const ox = px - cx, oy = py - cy, oz = pz - cz
-    const yWeight = (i === 0 && oy < 0) ? 5.5 : 1.0
-    const dist = Math.hypot(ox, oy * yWeight, oz / cap.zScale)
     const r = cap.ra + (cap.rb - cap.ra) * t
+    if (i === 0 && oy < 0) {
+      const yTerm = Math.abs(oy) * 5.5
+      const rSlice = Math.sqrt(Math.max(0, r * r - yTerm * yTerm))
+      const xzDist = Math.hypot(ox, oz / cap.zScale)
+      if (xzDist < rSlice && rSlice > 1e-5) {
+        if (xzDist > 1e-6) {
+          const sc = rSlice / xzDist
+          px = cx + ox * sc
+          pz = cz + oz * sc
+        } else {
+          pz = cz + rSlice * cap.zScale
+        }
+      }
+      continue
+    }
+    const dist = Math.hypot(ox, oy, oz / cap.zScale)
     if (dist < r) {
       if (dist > 1e-6) {
         const scale = r / dist
         px = cx + ox * scale
-        if (!(i === 0 && oy < 0)) py = cy + oy * scale
+        py = cy + oy * scale
         pz = cz + oz * scale
       } else {
         pz = cz + r * cap.zScale
@@ -570,13 +595,31 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
   // Only apply waistband ring pins to lower-body/waist roles (skirts, trousers,
   // gores, waistbands) so full-length dresses, shirts, and sleeves hang freely
   // from the shoulders without being pinched at the waist or inner elbows.
+  // Restrict pins to each piece's 2D top waist edge so low-rise child trousers
+  // never pin mid-rise fly or crotch vertices open. Briefs/trunks sewn to a
+  // waist elastic defer their rim pin to that waist elastic band.
   if (Array.isArray(triangulatedPieces) && triangulatedPieces.length > 0 && pieceOffset && renderVertexToSimParticle) {
     for (const tp of triangulatedPieces) {
       if (!LOWER_BODY_WAIST_PIN_ROLES.has(tp.role)) continue
+      if (tp.placementHint?.isBrief && tp.placementHint?.sewnWaistElastic) continue
       const offset = pieceOffset[tp.pieceId]
       const pts = tp.positions2D
-      if (offset == null || !pts) continue
+      if (offset == null || !pts || pts.length === 0) continue
+      let minY = Infinity
+      for (const [, y] of pts) if (y < minY) minY = y
+      if (tp.placementHint?.isBrief) {
+        const pinCutY = minY + 1.8
+        for (let localIdx = 0; localIdx < pts.length; localIdx++) {
+          if (pts[localIdx][1] <= pinCutY) {
+            mask[renderVertexToSimParticle[offset + localIdx]] = 1
+          }
+        }
+        continue
+      }
+      const isTrouserOrSkirtPanel = tp.role === 'legFront' || tp.role === 'legBack' || tp.role === 'hipPanelFront' || tp.role === 'hipPanelBack' || tp.role.startsWith('gore')
+      const topCutY = minY + 2.8
       for (let localIdx = 0; localIdx < pts.length; localIdx++) {
+        if (isTrouserOrSkirtPanel && pts[localIdx][1] > topCutY) continue
         const sp = renderVertexToSimParticle[offset + localIdx]
         if (waistbandMask[sp]) mask[sp] = 1
       }
@@ -595,7 +638,30 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
       const offset = pieceOffset[tp.pieceId]
       const pts = tp.positions2D
       if (offset == null || !pts || pts.length === 0) continue
+      if (tp.placementHint?.sewnLegElastic) continue
       const { role } = tp
+      if (tp.placementHint?.sewnBriefWaist) {
+        let minY = Infinity
+        for (const [, y] of pts) if (y < minY) minY = y
+        for (let localIdx = 0; localIdx < pts.length; localIdx++) {
+          if (pts[localIdx][1] <= minY + 0.7) {
+            mask[renderVertexToSimParticle[offset + localIdx]] = 1
+          }
+        }
+        continue
+      }
+      if (role === 'attachCrotch') {
+        if (tp.placementHint?.sewnCrotchGusset) continue
+        let minY = Infinity, maxY = -Infinity
+        for (const [, y] of pts) { if (y < minY) minY = y; if (y > maxY) maxY = y }
+        for (let localIdx = 0; localIdx < pts.length; localIdx++) {
+          const yCm = pts[localIdx][1]
+          if (yCm <= minY + 1.8 || yCm >= maxY - 1.8) {
+            mask[renderVertexToSimParticle[offset + localIdx]] = 1
+          }
+        }
+        continue
+      }
       if (
         !NECK_OR_STRAP_ATTACH_ROLES.has(role) &&
         !BODY_OR_BUST_ATTACH_ROLES.has(role) &&
@@ -611,6 +677,13 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
       }
       const widthCm = Math.max(1e-6, maxX - minX)
       const heightCm = Math.max(1e-6, maxY - minY)
+
+      if ((role === 'attachBust' || role === 'attachUnderbust') && heightCm <= 18) {
+        for (let localIdx = 0; localIdx < pts.length; localIdx++) {
+          mask[renderVertexToSimParticle[offset + localIdx]] = 1
+        }
+        continue
+      }
 
       for (let localIdx = 0; localIdx < pts.length; localIdx++) {
         const [xCm, yCm] = pts[localIdx]

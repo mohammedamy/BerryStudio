@@ -64,18 +64,27 @@ describe.each(UNDERWEAR_IDS)('%s', (id) => {
     expect(result.skipped, `skipped: ${JSON.stringify(result.skipped)}`).toEqual([])
     expect(result.rawPieces.length).toBeGreaterThan(0)
 
-    const drafts = result.rawPieces.map((rp) => createDraftPiece(rp, result.roles[rp.id]))
+    const drafts = result.rawPieces.map((rp) => createDraftPiece(rp, result.roles[rp.id], result.placementHints[rp.id]))
     const byId = Object.fromEntries(drafts.map((d) => [d.id, d]))
     for (const { pieceId, edgeName, fromIdx, toIdx } of result.edgeInstructions) {
       const d = byId[pieceId]
       if (d) addEdge(d, edgeName, fromIdx, toIdx)
     }
-    const finalPieces = drafts.map((d) => finalizeDraftPiece({ id: d.id, role: d.role, outline: d.outline, edges: { ...d.edges } }))
+    const finalPieces = drafts.map((d) => finalizeDraftPiece({ id: d.id, role: d.role, outline: d.outline, edges: { ...d.edges }, placementHint: d.placementHint }))
 
     const dims = computeBodyDims(m, category)
     expect(() => {
       const triangulated = triangulateAll(finalPieces, result.seamInstructions)
-      assembleCloth(triangulated, dims, result.seamInstructions)
+      const cloth = assembleCloth(triangulated, dims, result.seamInstructions)
+      if (/^(wu|mu|gu|bu)\d+$/.test(id)) {
+        expect(result.seamInstructions.length, `${id} should sew sides, crotch gusset, waist elastic, & leg elastics`).toBeGreaterThanOrEqual(13)
+        let maxAbsX = 0
+        for (let i = 0; i < cloth.simRestPositions.length; i += 3) {
+          const ax = Math.abs(cloth.simRestPositions[i])
+          if (ax > maxAbsX) maxAbsX = ax
+        }
+        expect(maxAbsX, `${id} compact pelvic placement`).toBeLessThan(dims.hipR * 1.35)
+      }
     }).not.toThrow()
   })
 })

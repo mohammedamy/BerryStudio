@@ -76,25 +76,76 @@ function normalizeDiffuseTexture(tex) {
   }
 }
 
+function normalizeRoughnessTexture(tex) {
+  if (!tex?.image || typeof document === 'undefined') {
+    tex?.dispose?.()
+    return null
+  }
+  try {
+    const img = tex.image
+    const w = Math.min(256, img.naturalWidth || img.videoWidth || img.width || 256)
+    const h = Math.min(256, img.naturalHeight || img.videoHeight || img.height || 256)
+    if (!(w > 0 && h > 0)) {
+      tex.dispose?.()
+      return null
+    }
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext?.('2d')
+    if (!ctx) {
+      tex.dispose?.()
+      return null
+    }
+    ctx.drawImage(img, 0, 0, w, h)
+    const imgData = ctx.getImageData(0, 0, w, h)
+    const d = imgData.data
+    let sum = 0
+    const n = d.length / 4
+    for (let i = 0; i < d.length; i += 4) {
+      sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+    }
+    const mean = sum / Math.max(1, n)
+    for (let i = 0; i < d.length; i += 4) {
+      const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
+      const v = Math.max(216, Math.min(254, Math.round(238 + (lum - mean) * 0.35)))
+      d[i] = v; d[i + 1] = v; d[i + 2] = v
+    }
+    ctx.putImageData(imgData, 0, 0)
+    const normTex = new THREE.CanvasTexture(canvas)
+    normTex.wrapS = normTex.wrapT = THREE.RepeatWrapping
+    normTex.colorSpace = THREE.NoColorSpace
+    tex.dispose?.()
+    return normTex
+  } catch {
+    tex.dispose?.()
+    return null
+  }
+}
+
 function loadFabricTextures() {
   if (fabricTexturesPromise) return fabricTexturesPromise
   const texBase = `${getAssetBase()}textures/fabric-weave/`
   const loader = new THREE.TextureLoader()
-  const load = (file, isColor) => new Promise((resolve) => {
+  const load = (file, kind) => new Promise((resolve) => {
     loader.load(texBase + file, (tex) => {
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-      if (isColor) {
+      if (kind === 'color') {
         tex.colorSpace = THREE.SRGBColorSpace
         resolve(normalizeDiffuseTexture(tex))
+        return
+      }
+      if (kind === 'roughness') {
+        resolve(normalizeRoughnessTexture(tex))
         return
       }
       resolve(tex)
     }, undefined, () => resolve(null)) // missing/broken texture -> fall back to flat color, not a crash
   })
   fabricTexturesPromise = Promise.all([
-    load('diffuse.jpg', true),
-    load('normal.jpg', false),
-    load('roughness.jpg', false),
+    load('diffuse.jpg', 'color'),
+    load('normal.jpg', 'normal'),
+    load('roughness.jpg', 'roughness'),
   ]).then(([map, normalMap, roughnessMap]) => ({ map, normalMap, roughnessMap }))
   return fabricTexturesPromise
 }

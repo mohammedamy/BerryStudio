@@ -13,7 +13,7 @@ import { BONE_IDX } from '../../../js/human-mannequin.js'
 export const ENV_SEGMENT_COUNT = 9
 export const ENV_PHI_BINS = 64
 export const ENV_T_BINS = 32
-export const ENV_CLEARANCE = 0.0065 // 6.5mm skin + triangle-chord safety cushion
+export const ENV_CLEARANCE = 0.0040 // 4.0mm skin + triangle-chord safety cushion
 
 const TWO_PI = Math.PI * 2
 
@@ -23,8 +23,7 @@ function clamp(v, lo, hi) {
 
 function getBindSegments(dims, lm) {
   const crotchY = dims.hipY - dims.span * 0.088
-  const wristR = dims.upperR * (dims.female ? 0.34 : 0.36)
-  const handReach = wristR * 4.9
+  const handReach = dims.H * (dims.kid ? 0.108 : (dims.female ? 0.104 : 0.107)) * 1.05
 
   return [
     // 0: Trunk + pelvis + shoulders + neck + head (bottom -> crown)
@@ -219,21 +218,37 @@ export function buildBodyEnvelopeTexture(bindGeometry, dims, landmarks, clearanc
     }
   }
 
-  // Conservative 3x3 morphological max dilation + outward skin clearance
+  // Conservative 3x3 max dilation on trunk (`s === 0`), azimuthal dilation +
+  // gentle axial blend on tapered limbs (`s >= 1`) so thigh/forearm tapers
+  // stay snug without carrying proximal max radii down the limb.
   const dilated = new Float32Array(filled.length)
   for (let s = 0; s < ENV_SEGMENT_COUNT; s++) {
     const segBase = s * ENV_T_BINS * ENV_PHI_BINS
-    const segClearance = s >= 5 ? clearance + 0.0045 : clearance
+    const segClearance = s >= 5 ? clearance + 0.0012 : clearance
     for (let iv = 0; iv < ENV_T_BINS; iv++) {
       for (let iu = 0; iu < ENV_PHI_BINS; iu++) {
-        let best = 0
-        for (let dv = -1; dv <= 1; dv++) {
-          const nv = clamp(iv + dv, 0, ENV_T_BINS - 1)
-          const rOff = segBase + nv * ENV_PHI_BINS
-          for (let du = -1; du <= 1; du++) {
-            const nu = (iu + du + ENV_PHI_BINS) % ENV_PHI_BINS
-            const val = filled[rOff + nu]
-            if (val > best) best = val
+        let rowMax = 0
+        for (let du = -1; du <= 1; du++) {
+          const nu = (iu + du + ENV_PHI_BINS) % ENV_PHI_BINS
+          const val = filled[segBase + iv * ENV_PHI_BINS + nu]
+          if (val > rowMax) rowMax = val
+        }
+        let best = rowMax
+        if (s === 0) {
+          for (const dv of [-1, 1]) {
+            const nv = clamp(iv + dv, 0, ENV_T_BINS - 1)
+            const rOff = segBase + nv * ENV_PHI_BINS
+            for (let du = -1; du <= 1; du++) {
+              const nu = (iu + du + ENV_PHI_BINS) % ENV_PHI_BINS
+              const val = filled[rOff + nu]
+              if (val > best) best = val
+            }
+          }
+        } else {
+          for (const dv of [-1, 1]) {
+            const nv = clamp(iv + dv, 0, ENV_T_BINS - 1)
+            const val = filled[segBase + nv * ENV_PHI_BINS + iu]
+            if (val > 0) best = Math.max(best, 0.72 * rowMax + 0.28 * val)
           }
         }
         dilated[segBase + iv * ENV_PHI_BINS + iu] = best > 0 ? best + segClearance : 0
@@ -318,8 +333,7 @@ function boneOffsetWorld(bone, ox, oy, oz, target) {
 export function computeEnvelopeFramesFromLimbs(limbs, dims, landmarks) {
   const crotchOffsetFromPelvis = (dims.hipY - dims.span * 0.088) - dims.hipY
   const crownOffsetFromHead = dims.H - landmarks.headCenterY
-  const wristR = dims.upperR * (dims.female ? 0.34 : 0.36)
-  const handReach = wristR * 4.9
+  const handReach = dims.H * (dims.kid ? 0.108 : (dims.female ? 0.104 : 0.107)) * 1.05
 
   const pA = boneOffsetWorld(limbs.pelvis, 0, crotchOffsetFromPelvis, 0, _vA)
   const pB = boneOffsetWorld(limbs.head, 0, crownOffsetFromHead, 0, _vB)

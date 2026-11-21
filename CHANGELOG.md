@@ -1,5 +1,13 @@
 # Changelog
 
+## Anatomical thigh & hand proportions, Cloth Lab lower-body physics overhaul, and 13-seam underwear assembly (`berrystudio-v84`)
+
+Calibrates mannequin leg and hand anatomy, eliminates lower-body collision ejection and plastic surface glare in Cloth Lab, and upgrades underwear and trouser assembly across all categories:
+
+- **Mannequin thigh & Vitruvian hand proportions (`js/data.js`, `js/human-mannequin.js`, `js/three-view.js`, `cloth-lab/src/body/computeBodyDims.js`)**: Calibrates `BASE.*.thigh` (`women: 52`, `men: 55`, `girls: 38`, `boys: 39`; `GRADE.thigh: 1.4`), refines `thighR` oval leg cross-section & taper in `buildLegBranch`, upgrades hand/wrist/4-finger proportions to human anatomical ratios while preserving closed genus-0 `humanBody` topology (`euler === 2`), and syncs 3D Preview trouser and collision multipliers.
+- **Cloth Lab lower-body physics & matte fabric realism (`cloth-lab/src/body/collisionRig.js`, `bodyEnvelope.js`, `ClothSimulation.js`, `ClothMesh.jsx`, `fabricPresets.js`)**: Tightens skin/envelope clearances, adds lower-pelvis frustum guards (`caps 0..2`) to stop downward hip-sphere crotch ejection, damps `preRelax` velocity and edge-midpoint collision pushes, normalizes `roughness.jpg` weave micro-detail via `normalizeRoughnessTexture`, and tunes matte `jersey` and `scuba` presets.
+- **13-seam underwear assembly & lower-body placement (`js/underwear-library.js`, `cloth-lab/src/pattern/roles.js`, `importFromApp.js`, `placement.js`, `App.jsx`, `importFromApp.underwear.test.js`, `sw.js`)**: Sizes brief panels with knit negative ease and zero hip dog-ear across all 8,040 graded instances, welds front/back panels, waist elastic, crotch gusset, and mirrored leg elastics into unified 13-seam underwear garments, adds diagonal inguinal brief contours and coaxial boxer/trunk thigh cuffs, maps exact `mirrorSelf` crotch-fork `crotchYCm` heights across trouser panels (`boys_trousers`, `mf05`, and siblings), routes `pocket`-mapped bra bridges and leotard accessories cleanly through `autoPlan` (`wb01`), routes skirt-only plackets to `attachWaistBack` (`ref_w_skirt`), defaults intimate patterns to stretch `jersey`, and bumps service worker cache to `berrystudio-v84`.
+
 ## Lifelike human mannequins, seamless 3D shoulder tailoring, and Cloth Lab sleeve/suit sewing
 
 Upgrades anatomical realism on all four mannequin categories, eliminates shoulder/armhole tearing in 3D Preview, and completes natural multi-piece garment & sleeve sewing in Cloth Lab:

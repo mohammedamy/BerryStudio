@@ -1979,7 +1979,7 @@ export const View3D = (() => {
     const upperArmLen = armLen * 0.48;
     const forearmLen = armLen * 0.46;
     const wristDist = upperArmLen + forearmLen;
-    const wristR = upperR * (female ? 0.34 : 0.36);
+    const wristR = Math.max(upperR * (female ? 0.50 : 0.53), d.H * 0.0148);
     const totalSlLen = armLen * clamp(sSpec.lengthFrac, 0.16, 1.02);
 
     // Match the active upper garment (outer coat/blazer vs bodice vs leotard) armhole ring seamlessly
@@ -2480,10 +2480,10 @@ export const View3D = (() => {
         const y = pantHemY * (1 - f) + legStartY * f;
         const legFracUp = clamp((y - ankleY) / Math.max(0.2, legStartY - ankleY), 0, 1);
 
-        // Include gastrocnemius calf swell (legFracUp ~ 0.33, posterior reach ~0.82*thighR) & patella clearance
-        const calfSwell = thighR * 0.21 * bumpWindow(legFracUp, 0.33, 0.22);
-        const bodyLegR = thighR * (0.45 + 0.61 * Math.pow(legFracUp, 0.82)) + calfSwell + 0.016;
-        const cutR = thighR * (0.65 * tSpec.hemMult * (1 - legFracUp) + 1.08 * legFracUp) + 0.014;
+        // Include gastrocnemius calf swell (legFracUp ~ 0.33, posterior reach ~0.88*thighR) & patella clearance
+        const calfSwell = thighR * 0.25 * bumpWindow(legFracUp, 0.33, 0.22);
+        const bodyLegR = thighR * (0.49 + 0.56 * Math.pow(legFracUp, 0.82)) + calfSwell + 0.016;
+        const cutR = thighR * (0.68 * tSpec.hemMult * (1 - legFracUp) + 1.08 * legFracUp) + 0.014;
         const baseR = Math.max(bodyLegR, cutR);
 
         const topBlend = smoothstep(0.74, 1.0, legFracUp);
@@ -2699,17 +2699,20 @@ export const View3D = (() => {
     const pivotX = d.shoulderHalf * 0.82;
     const pivotY = d.shoulderY - d.span * 0.035;
     const wristDist = d.armLen * 0.94;
-    const handTipDist = d.armLen * 1.08;
+    const handLen = d.H * (d.kid ? 0.108 : (d.female ? 0.104 : 0.107));
+    const midHandDist = wristDist + handLen * 0.50;
+    const handTipDist = wristDist + handLen;
     const wristY = pivotY - wristDist;
+    const midHandY = pivotY - midHandDist;
     const handTipY = pivotY - handTipDist;
     const waistY = d.hipY + d.span * 0.44;
-    const armBuffer = d.upperR * 0.82 + 0.028;
+    const armBuffer = Math.max(d.upperR * 0.84, handLen * 0.14) + 0.032;
 
     // Base clearance over bare/clothed hips
     let maxReqAngle = Math.asin(clamp((d.hipR * 1.06 + armBuffer - pivotX) / Math.max(0.22, wristDist), 0.08, 0.52));
 
     if (pm) {
-      // Check visible skirt lateral width at elbow, forearm, wrist, and hand-tip heights
+      // Check visible skirt lateral width at elbow, forearm, wrist, palm, and fingertip heights
       if (isPartCurrentlyShown("skirt") && pm.skirt) {
         const sk = pm.skirt;
         const skHemY = clamp(waistY - cm(sk.lengthCm), 0.045, d.hipY - 0.08);
@@ -2717,6 +2720,7 @@ export const View3D = (() => {
           [ pivotY - d.armLen * 0.48, d.armLen * 0.48 ],
           [ pivotY - d.armLen * 0.68, d.armLen * 0.68 ],
           [ wristY, wristDist ],
+          [ midHandY, midHandDist ],
           [ handTipY, handTipDist ],
         ]) {
           if (sampleY <= waistY + 0.02 && sampleY >= skHemY - 0.03) {
@@ -2737,12 +2741,12 @@ export const View3D = (() => {
         }
       }
 
-      // Check visible bodice / tunic / robe flare at hip & wrist level
+      // Check visible bodice / tunic / robe flare at hip, wrist, palm & fingertip level
       if (isPartCurrentlyShown("bodice") && pm.bodice && pm.bodice.hemFlare > 1.04) {
         const bSpec = pm.bodice;
         const shoulderTopY = d.shoulderY + d.span * 0.054;
         const bHemY = clamp(shoulderTopY - cm(bSpec.lengthCm), 0.05, waistY);
-        for (const [sampleY, reachDist] of [[wristY, wristDist], [handTipY, handTipDist]]) {
+        for (const [sampleY, reachDist] of [[wristY, wristDist], [midHandY, midHandDist], [handTipY, handTipDist]]) {
           if (sampleY <= waistY && sampleY >= bHemY - 0.03) {
             const drop = clamp((waistY - sampleY) / Math.max(0.15, waistY - bHemY), 0, 1);
             const flare = 1 + (bSpec.hemFlare - 1) * Math.pow(drop, 1.12);
@@ -2906,8 +2910,9 @@ export const View3D = (() => {
     const [ankRX, ankRY, ankRZ] = getRootBonePoint(bones[BONE_IDX.footR], 0, 0, 0);
     const [toeRX, toeRY, toeRZ] = getRootBonePoint(bones[BONE_IDX.footR], 0, -d.H * 0.025, footLen * 0.56);
 
-    const wristR = d.upperR * (d.female ? 0.34 : 0.36);
-    const handTipOffset = wristR * 4.6;
+    const handLen = d.H * (d.kid ? 0.108 : (d.female ? 0.104 : 0.107));
+    const wristR = Math.max(d.upperR * (d.female ? 0.50 : 0.53), d.H * 0.0148);
+    const handTipOffset = handLen;
     const [shoLX, shoLY, shoLZ] = getRootBonePoint(bones[BONE_IDX.armL], 0, -d.upperR * 0.72, 0);
     const [elbLX, elbLY, elbLZ] = getRootBonePoint(bones[BONE_IDX.elbowL], 0, 0, 0);
     const [wriLX, wriLY, wriLZ] = getRootBonePoint(bones[BONE_IDX.handL], 0, 0, 0);
@@ -2933,7 +2938,7 @@ export const View3D = (() => {
     const fluidity = FLUIDITY_MAP[matKey] || 0.95;
 
     const p = { x: 0, y: 0, z: 0 };
-    const calfSwellFn = (u) => d.thighR * 0.25 * bumpWindow(u, 0.31, 0.28);
+    const calfSwellFn = (u) => d.thighR * 0.28 * bumpWindow(u, 0.31, 0.28);
     const forearmSwellFn = (u) => (u < 0.32 ? d.upperR * 0.04 * Math.sin((Math.PI * u) / 0.32) : 0);
 
     // Push any lower-body garment vertex away from outer bare/clothed forearms & hands so arms never enter skirts/bodices
@@ -2941,7 +2946,7 @@ export const View3D = (() => {
       if (restY > underarmY - 0.04) return;
       const armGuardL = [elbLX, elbLY, elbLZ, tipLX, tipLY, tipLZ];
       const armGuardR = [elbRX, elbRY, elbRZ, tipRX, tipRY, tipRZ];
-      const guardR = d.upperR * 0.84 + 0.022;
+      const guardR = Math.max(d.upperR * 0.84, handLen * 0.14) + 0.026;
       for (const [ax, ay, az, bx, by, bz] of [armGuardL, armGuardR]) {
         const abx = bx - ax, aby = by - ay, abz = bz - az;
         const lenSq = abx * abx + aby * aby + abz * abz;
@@ -2979,8 +2984,8 @@ export const View3D = (() => {
         const medTop = isTrousers ? Math.max(d.thighR * 0.66, hipPivotMag - 0.013) : d.thighR * 0.85;
         const latTop = d.thighR * 1.04 + margin;
         const zTop = d.thighR * 1.11 + margin;
-        const kneeRad = d.thighR * 0.68 + margin;
-        const ankRad = d.thighR * 0.44 + margin;
+        const kneeRad = d.thighR * 0.72 + margin;
+        const ankRad = d.thighR * 0.50 + margin;
 
         pushPointOutOfAnisoCapsule(pt, hipLX, hipLY, hipLZ, kneeLX, kneeLY, kneeLZ, medTop, latTop, zTop, kneeRad, kneeRad, kneeRad + 0.004, 1);
         pushPointOutOfAnisoCapsule(pt, hipRX, hipRY, hipRZ, kneeRX, kneeRY, kneeRZ, medTop, latTop, zTop, kneeRad, kneeRad, kneeRad + 0.004, -1);
@@ -3851,7 +3856,7 @@ export const View3D = (() => {
         const pivotY = d.shoulderY - d.span * 0.035;
         const upperArmLen = d.armLen * 0.48;
         const wristDist = d.armLen * 0.94;
-        const wristR = d.upperR * (d.female ? 0.34 : 0.36);
+        const wristR = Math.max(d.upperR * (d.female ? 0.50 : 0.53), d.H * 0.0148);
 
         [-1, 1].forEach((s) => {
           const bArm = s > 0 ? BONE_IDX.armL : BONE_IDX.armR;

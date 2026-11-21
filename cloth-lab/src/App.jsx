@@ -50,6 +50,18 @@ function patternSignature(payload) { return designKey(payload) }
 // measurements. It reuses debugView's existing 'off' state (Scene.jsx
 // already renders nothing but BodyAvatar for any debugView other than
 // pieces/weld/cloth/seams) rather than adding a new rendering path.
+function resolveDefaultPatternFabric(p) {
+  if (p?.fabricId && p.fabricId !== 'cotton') return p.fabricId
+  const pieces = p?.pieces
+  if (Array.isArray(pieces) && pieces.some((pc) => pc?.visible !== false && (
+    pc.role === 'brief-front' || pc.role === 'brief-back' ||
+    pc.role === 'leotard-front' || pc.role === 'cup'
+  ))) {
+    return 'jersey'
+  }
+  return p?.fabricId || DEFAULT_FABRIC
+}
+
 export default function App({ embedded = false, pattern = null, onReady, bodyOnly = false } = {}) {
   const hostOriginRef = useRef(embedded ? window.location.origin : null)
   const [category, setCategory] = useState(pattern?.category || 'women')
@@ -61,7 +73,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   // Try-on render mode: 'cloth' (simulation) or one of the inspection views
   // ('pieces' flat placed panels, 'weld' seam alignment, 'off' body only).
   const [view, setView] = useState(bodyOnly ? 'off' : 'cloth')
-  const [fabricId, setFabricId] = useState((pattern && pattern.fabricId) || DEFAULT_FABRIC)
+  const [fabricId, setFabricId] = useState(resolveDefaultPatternFabric(pattern))
   // WP-35: 'default' (unchanged) or 'high' (true dihedral-angle bend) — a
   // real sim rebuild when toggled, not a live uniform swap like fabricId
   // (see ClothMesh.jsx's own comment on why it's a separate effect
@@ -139,7 +151,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
     if (payload.lang) setLang(payload.lang)
     setCategory(payload.category)
     setMeasurementsByCategory(prev => ({ ...prev, [payload.category]: payload.measurements }))
-    if (payload.fabricId) setFabricId(payload.fabricId)
+    setFabricId(resolveDefaultPatternFabric(payload))
     setAvatarGLBByCategory(payload.avatarGLB || {})
     const signature = patternSignature(payload)
     if (signature === lastPatternSignatureRef.current) {

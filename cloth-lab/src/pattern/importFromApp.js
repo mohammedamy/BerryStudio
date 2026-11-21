@@ -852,7 +852,7 @@ function insertSegmentSubdivisions(pts, edges, segStart, tList) {
 
 const ZONE_FLIP = { frontPanel: 'hipPanelFront', backPanel: 'hipPanelBack', hipPanelFront: 'frontPanel', hipPanelBack: 'backPanel' }
 
-function resolveEffectivePlacement(p, resolved, pairGoresAsHipPanels) {
+function resolveEffectivePlacement(p, resolved, pairGoresAsHipPanels, hasUpperPanels = true) {
   const label = (p.label && p.label.en) || p.id || ''
   const bilingual = `${label} ${(p.label && p.label.ar) || ''} ${p.id || ''}`
   const schemaRole = resolved.role
@@ -862,6 +862,9 @@ function resolveEffectivePlacement(p, resolved, pairGoresAsHipPanels) {
       ? 'hipPanelBack'
       : resolved.placement
   const cutOnFold = p.cutOnFold ?? resolved.cutOnFold
+  if (!hasUpperPanels && (schemaRole === 'placket-facing' || schemaRole === 'facing' || schemaRole === 'lapel-facing')) {
+    declared = 'attachWaistBack'
+  }
   if (schemaRole === 'elastic-band') {
     if (/waist|خصر|كمر|waistelastic/i.test(bilingual)) {
       declared = 'attachWaist'
@@ -870,7 +873,7 @@ function resolveEffectivePlacement(p, resolved, pairGoresAsHipPanels) {
     }
   } else if (schemaRole === 'lining' && /gusset|crotch|دكة/i.test(bilingual)) {
     declared = 'attachCrotch'
-  } else if (schemaRole === 'other') {
+  } else if (schemaRole === 'other' || schemaRole === 'pocket') {
     if (!/underarm|إبط/i.test(bilingual) && /crotch|gusset|دكة\s*الجسم/i.test(bilingual)) {
       declared = 'attachCrotch'
     } else if (/neckline\s*binding|keyhole\s*binding|armhole\s*binding|تحبيك\s*(?:فتحة\s*الرقبة|فتحة\s*القفل|حلقة\s*الكم)/i.test(bilingual)) {
@@ -995,6 +998,11 @@ export function convertAppPattern(payload) {
   const peplumFronts = []
   const peplumBacks = []
   const closedBlazerFrontPairs = []
+  let briefFrontId = null
+  let briefBackId = null
+  let briefWaistId = null
+  let briefLegPair = null
+  const briefGussets = []
   let jacketOuterFront = null // { rId, lId, rShoulderEdge, rArmEdge, rArmLowerEdge, lShoulderEdge, lArmEdge, lArmLowerEdge }
   let jacketOuterBack = null  // { pieceId, rShoulderEdge, rArmEdge, rArmLowerEdge, lShoulderEdge, lArmEdge, lArmLowerEdge }
   let wrapCoatFrontR = null
@@ -1079,6 +1087,55 @@ export function convertAppPattern(payload) {
   })
 
   const activePieces = allInputPieces.filter((p) => p.visible !== false)
+  const hasUpperPanels = activePieces.some((p) => {
+    const r = resolveSchemaRole(p.role)
+    if (r) {
+      return (
+        r.placement === 'frontPanel' ||
+        r.placement === 'backPanel' ||
+        r.placement === 'attachBust' ||
+        r.placement === 'attachUnderbust' ||
+        SLEEVE_ROLES.has(r.role) ||
+        r.role === 'sleeve-upper'
+      )
+    }
+    const cls = classifyLegacy((p.label && p.label.en) || p.id || '', (p.label && p.label.ar) || '')
+    return cls === 'bodice-front' || cls === 'bodice-back' || cls === 'sleeve'
+  })
+  const hasBriefPanels = activePieces.some((p) => {
+    const rn = resolveSchemaRole(p.role)?.role
+    return rn === 'brief-front' || rn === 'brief-back'
+  })
+  const hasBriefWaistElastic = hasBriefPanels && activePieces.some((ap) => {
+    const rn = resolveSchemaRole(ap.role)?.role
+    const txt = `${(ap.label && ap.label.en) || ''} ${(ap.label && ap.label.ar) || ''} ${ap.id || ''}`
+    return rn === 'elastic-band' && !(ap.bilateral ?? false) && /waist|خصر|كمر|waistelastic/i.test(txt) && ap.outline?.length === 4 && !ap.edges?.length
+  })
+  const hasBriefLegElastic = hasBriefPanels && activePieces.some((ap) => {
+    const rn = resolveSchemaRole(ap.role)?.role
+    const txt = `${(ap.label && ap.label.en) || ''} ${(ap.label && ap.label.ar) || ''} ${ap.id || ''}`
+    return rn === 'elastic-band' && Boolean(ap.bilateral) && /leg\s*elastic|leg\s*opening|أستك.*ساق|legelastic/i.test(txt) && ap.outline?.length === 4 && !ap.edges?.length
+  })
+  let briefMeta = null
+  if (hasBriefPanels) {
+    const frontBrief = activePieces.find((p) => resolveSchemaRole(p.role)?.role === 'brief-front') ||
+      activePieces.find((p) => resolveSchemaRole(p.role)?.role === 'brief-back')
+    if (frontBrief?.outline?.length >= 8) {
+      const loc = relocalize(frontBrief.outline)
+      const be = frontBrief.edges?.find((e) => e?.seamId === 'briefSide')
+      const { maxX, maxY } = bbox(loc)
+      const bText = `${payload.designId || ''} ${payload.designName || ''} ${(frontBrief.label && frontBrief.label.en) || ''} ${(frontBrief.label && frontBrief.label.ar) || ''}`
+      const sideTopY = be ? (loc[be.fromIdx]?.[1] ?? 1.2) : 1.2
+      const sideBotY = be ? (loc[be.toIdx]?.[1] ?? 5.0) : 5.0
+      const sideDY = Math.abs(sideBotY - sideTopY)
+      const crotchDepthCm = Math.max(0, maxY - sideBotY)
+      const isTrunkOrBoxer = /boxer|trunk|boyshort|بوكسر|ترنك|بويشورت/i.test(bText) || crotchDepthCm < maxX * 0.24
+      const estLegExt = isTrunkOrBoxer ? Math.max(3.5, sideDY - 5.2) : 0
+      const pureSideDY = Math.max(2.5, sideDY - estLegExt)
+      const riseCm = Math.max(6, Math.min(20, Math.round(pureSideDY / 0.44)))
+      briefMeta = { riseCm, sideSeamYCm: sideBotY, crotchYCm: maxY, hasBriefLeg: isTrunkOrBoxer, legExtCm: estLegExt }
+    }
+  }
   const hasSleeveUnder = activePieces.some((p) => resolveSchemaRole(p.role)?.role === 'sleeve-under')
   const hasPrincessFrontSide = activePieces.some((p) => resolveSchemaRole(p.role)?.role === 'bodice-front-side')
   const hasPrincessBackSide = activePieces.some((p) => resolveSchemaRole(p.role)?.role === 'bodice-back-side')
@@ -1112,7 +1169,7 @@ export function convertAppPattern(payload) {
     const roleName = r?.role
     const isFold = Boolean(ap.cutOnFold ?? r?.cutOnFold)
     const isBilateral = Boolean(ap.bilateral ?? r?.bilateral)
-    const effPlacement = r ? resolveEffectivePlacement(ap, r, pairGoresAsHipPanels) : null
+    const effPlacement = r ? resolveEffectivePlacement(ap, r, pairGoresAsHipPanels, hasUpperPanels) : null
     if (isFold && roleName !== 'lining' && effPlacement === 'backPanel' && !ap.edges?.length && ap.outline?.length >= 3) {
       const { minX, maxX } = bbox(relocalize(ap.outline))
       unedgedFoldBackWidths.push(maxX - minX)
@@ -1191,7 +1248,7 @@ export function convertAppPattern(payload) {
     const princessSeamId = p.princessSeamId
     const local = relocalize(p.outline)
 
-    const placement = resolveEffectivePlacement(p, resolved, pairGoresAsHipPanels)
+    const placement = resolveEffectivePlacement(p, resolved, pairGoresAsHipPanels, hasUpperPanels)
 
     if (hasSleeveUnder && (schemaRole === 'sleeve-upper' || schemaRole === 'sleeve-under')) {
       const prepared = prepareTwoPieceSleevePanel(local, schemaRole)
@@ -1329,6 +1386,34 @@ export function convertAppPattern(payload) {
           const N = outline.length
           pushClaimedEdge(p.id, 'rightSide', be.fromIdx, be.toIdx, N)
           pushClaimedEdge(p.id, 'leftSide', N - be.toIdx, N - be.fromIdx, N)
+          const crotchFrom = baseLocal.length - 2
+          const crotchTo = N - crotchFrom
+          if (crotchFrom > be.toIdx && crotchTo < N - be.toIdx && !hasInteriorOverlap(p.id, N, crotchFrom, crotchTo)) {
+            pushClaimedEdge(p.id, 'crotchSeam', crotchFrom, crotchTo, N)
+          }
+          if (hasBriefLegElastic && be.toIdx < crotchFrom && crotchTo < N - be.toIdx) {
+            if (!hasInteriorOverlap(p.id, N, be.toIdx, crotchFrom)) {
+              pushClaimedEdge(p.id, 'rightLegOpening', be.toIdx, crotchFrom, N)
+            }
+            if (!hasInteriorOverlap(p.id, N, crotchTo, N - be.toIdx)) {
+              pushClaimedEdge(p.id, 'leftLegOpening', crotchTo, N - be.toIdx, N)
+            }
+          }
+          if (hasBriefWaistElastic && !hasInteriorOverlap(p.id, N, N - be.fromIdx, be.fromIdx)) {
+            pushClaimedEdge(p.id, 'waistSeam', N - be.fromIdx, be.fromIdx, N)
+          }
+          if (schemaRole === 'brief-front') briefFrontId = p.id
+          else if (schemaRole === 'brief-back') briefBackId = p.id
+          placementHints[p.id] = {
+            ...(placementHints[p.id] || {}),
+            isBrief: true,
+            sewnWaistElastic: Boolean(hasBriefWaistElastic),
+            riseCm: briefMeta?.riseCm ?? 12,
+            sideSeamYCm: briefMeta?.sideSeamYCm ?? (baseLocal[be.toIdx]?.[1] ?? 5),
+            crotchYCm: bbox(baseLocal).maxY,
+            hasBriefLeg: Boolean(briefMeta?.hasBriefLeg),
+            legExtCm: briefMeta?.legExtCm ?? 0,
+          }
           bySlot[placement].push({ id: p.id, label })
           recognized.push({ id: p.id, label })
           continue
@@ -1450,6 +1535,21 @@ export function convertAppPattern(payload) {
         }
         pushSeamIdEdges(p.id, adjEdges, outline.length, { cutOnFold: true })
       }
+      if (hasBriefPanels && placement === 'attachCrotch') {
+        const N = outline.length
+        const mid = baseLocal.length - 1
+        const spanK = Math.min(3, Math.floor(mid / 3))
+        const gfFrom = (N - spanK) % N, gfTo = spanK
+        const gbFrom = mid - spanK, gbTo = (mid + spanK) % N
+        if (schemaRole === 'gusset' && spanK >= 1 && !hasInteriorOverlap(p.id, N, gfFrom, gfTo) && !hasInteriorOverlap(p.id, N, gbFrom, gbTo)) {
+          pushClaimedEdge(p.id, 'gussetFront', gfFrom, gfTo, N)
+          pushClaimedEdge(p.id, 'gussetBack', gbFrom, gbTo, N)
+          briefGussets.push(p.id)
+          placementHints[p.id] = { ...(placementHints[p.id] || {}), isBriefGusset: true, sewnCrotchGusset: true, layerOffset: 0 }
+        } else {
+          placementHints[p.id] = { ...(placementHints[p.id] || {}), isBriefGusset: true, layerOffset: schemaRole === 'lining' ? -0.0015 : 0 }
+        }
+      }
       if (placement === 'attachWaist' && adjEdges?.some((e) => e?.fromIdx === 0 && /Back/i.test(e?.seamId || ''))) {
         placementHints[p.id] = { ...(placementHints[p.id] || {}), foldAtBack: true }
       }
@@ -1464,6 +1564,39 @@ export function convertAppPattern(payload) {
 
     if (bilateral) {
       const rId = p.id + '_r', lId = p.id + '_l'
+      const isBriefLegElastic = hasBriefPanels && placement === 'attachHem' && !edges?.length && local.length === 4 &&
+        /leg\s*elastic|leg\s*opening|أستك.*ساق|legelastic/i.test(`${p.id || ''} ${label} ${(p.label && p.label.ar) || ''}`)
+      if (isBriefLegElastic) {
+        const midX = 0.5 * (local[0][0] + local[1][0])
+        const rSub = [local[0], [midX, local[0][1]], local[1], local[2], [midX, local[2][1]], local[3]]
+        const lSub = mirrorOutline(rSub)
+        rawPieces.push({ id: rId, label: p.label, outline: rSub, color: p.color, darts: p.darts })
+        rawPieces.push({ id: lId, label: p.label, outline: lSub, color: p.color, darts: p.darts })
+        roles[rId] = placement
+        roles[lId] = placement
+        const legHint = {
+          isLegOpeningElastic: true,
+          sewnLegElastic: true,
+          briefRiseCm: briefMeta?.riseCm ?? 12,
+          hasBriefLeg: Boolean(briefMeta?.hasBriefLeg),
+          legExtCm: briefMeta?.legExtCm ?? 0,
+        }
+        placementHints[rId] = { ...(placementHints[rId] || {}), ...legHint }
+        placementHints[lId] = { ...(placementHints[lId] || {}), ...legHint }
+        const rDefs = [
+          { name: 'legAttachFront', fromIdx: 0, toIdx: 1 },
+          { name: 'legAttachBack', fromIdx: 1, toIdx: 2 },
+          { name: 'legEndBack', fromIdx: 2, toIdx: 3 },
+          { name: 'legEndFront', fromIdx: 5, toIdx: 0 },
+        ]
+        const lDefs = mirrorEdgeIndices(rDefs, 6)
+        for (const d of rDefs) pushClaimedEdge(rId, d.name, d.fromIdx, d.toIdx, 6)
+        for (const d of lDefs) pushClaimedEdge(lId, d.name, d.fromIdx, d.toIdx, 6)
+        briefLegPair = { rId, lId }
+        recognized.push({ id: rId, label: label + ' (R)' })
+        recognized.push({ id: lId, label: label + ' (L)' })
+        continue
+      }
       const n = local.length
       rawPieces.push({ id: rId, label: p.label, outline: local, color: p.color, darts: p.darts })
       rawPieces.push({ id: lId, label: p.label, outline: mirrorOutline(local), color: p.color, darts: (p.darts || []).map(d => d.map(([x, y]) => [-x, y])) })
@@ -1472,6 +1605,28 @@ export function convertAppPattern(payload) {
       if (placement === 'attachNeck') {
         placementHints[rId] = { ...(placementHints[rId] || {}), neckKind: schemaRole }
         placementHints[lId] = { ...(placementHints[lId] || {}), neckKind: schemaRole }
+      }
+      if (placement === 'legFront' || placement === 'legBack') {
+        const { minY: lMinY, maxY: lMaxY } = bbox(local)
+        const lH = Math.max(1e-4, lMaxY - lMinY)
+        const ms = edges?.find((e) => e?.mirrorSelf)
+        let crotchYCm = null
+        if (ms && local[ms.fromIdx] && local[ms.toIdx]) {
+          crotchYCm = Math.max(local[ms.fromIdx][1], local[ms.toIdx][1]) - lMinY
+        } else {
+          let bestX = Infinity
+          for (const [lx, ly] of local) {
+            const fy = (ly - lMinY) / lH
+            if (fy >= 0.10 && fy <= 0.56 && lx < bestX) {
+              bestX = lx
+              crotchYCm = ly - lMinY
+            }
+          }
+        }
+        if (Number.isFinite(crotchYCm)) {
+          placementHints[rId] = { ...(placementHints[rId] || {}), crotchYCm }
+          placementHints[lId] = { ...(placementHints[lId] || {}), crotchYCm }
+        }
       }
       if (edges && edges.length && !UNSEAMED_BILATERAL_ROLES.has(schemaRole)) {
         const mirrored = mirrorEdgeIndices(edges, n)
@@ -1675,6 +1830,28 @@ export function convertAppPattern(payload) {
       wrapFrontSub = sub.outline.length - singleOutline.length
       singleOutline = sub.outline
       effEdges = sub.edges
+    } else if (hasBriefPanels && placement === 'attachWaist' && !effEdges?.length && singleOutline.length === 4 && !briefWaistId && hasBriefWaistElastic) {
+      const midX = 0.5 * (singleOutline[0][0] + singleOutline[1][0])
+      singleOutline = [
+        singleOutline[0], [midX, singleOutline[0][1]], singleOutline[1],
+        singleOutline[2], [midX, singleOutline[2][1]], singleOutline[3],
+      ]
+      rawPieces.push({ id: p.id, label: p.label, outline: singleOutline, color: p.color, darts: p.darts })
+      roles[p.id] = placement
+      pushClaimedEdge(p.id, 'waistEndBack', 2, 3, 6)
+      pushClaimedEdge(p.id, 'waistAttachBack', 3, 4, 6)
+      pushClaimedEdge(p.id, 'waistAttachFront', 4, 5, 6)
+      pushClaimedEdge(p.id, 'waistEndFront', 5, 0, 6)
+      briefWaistId = p.id
+      placementHints[p.id] = {
+        ...(placementHints[p.id] || {}),
+        isBriefWaist: true,
+        sewnBriefWaist: true,
+        hasBriefLeg: Boolean(briefMeta?.hasBriefLeg),
+        briefRiseCm: briefMeta?.riseCm ?? 12,
+      }
+      recognized.push({ id: p.id, label })
+      continue
     } else if (hasSleeves && isUpperSingle && !effEdges?.length) {
       singleOutline = subdivideFullRectBodiceArmhole(local)
     }
@@ -1728,6 +1905,14 @@ export function convertAppPattern(payload) {
     pushSeamIdEdges(p.id, effEdges, singleOutline.length, { cutOnFold: false })
     if (placement === 'attachNeck') {
       placementHints[p.id] = { ...(placementHints[p.id] || {}), neckKind: schemaRole }
+    }
+    if (hasBriefPanels && placement === 'attachWaist') {
+      placementHints[p.id] = {
+        ...(placementHints[p.id] || {}),
+        isBriefWaist: true,
+        hasBriefLeg: Boolean(briefMeta?.hasBriefLeg),
+        briefRiseCm: briefMeta?.riseCm ?? 12,
+      }
     }
     recognized.push({ id: p.id, label })
   }
@@ -1824,6 +2009,35 @@ export function convertAppPattern(payload) {
       seamInstructions.push({ id: frontKey + '_rightSide', a: { piece: f, edge: 'rightSide' }, b: { piece: b, edge: 'rightSide' }, reverse: false })
       seamInstructions.push({ id: frontKey + '_leftSide', a: { piece: f, edge: 'leftSide' }, b: { piece: b, edge: 'leftSide' }, reverse: false })
     }
+  }
+
+  // Underwear brief/trunk closure: weld crotch gusset, waistband elastic, and bilateral leg elastics
+  if (briefFrontId && briefBackId && briefGussets.length > 0 && hasEdge(briefFrontId, 'crotchSeam') && hasEdge(briefBackId, 'crotchSeam')) {
+    const gId = briefGussets[0]
+    if (hasEdge(gId, 'gussetFront')) {
+      seamInstructions.push({ id: 'briefCrotch_front', a: { piece: briefFrontId, edge: 'crotchSeam' }, b: { piece: gId, edge: 'gussetFront' }, reverse: true })
+    }
+    if (hasEdge(gId, 'gussetBack')) {
+      seamInstructions.push({ id: 'briefCrotch_back', a: { piece: briefBackId, edge: 'crotchSeam' }, b: { piece: gId, edge: 'gussetBack' }, reverse: false })
+    }
+  }
+  if (briefFrontId && briefBackId && briefWaistId && hasEdge(briefFrontId, 'waistSeam') && hasEdge(briefBackId, 'waistSeam')) {
+    seamInstructions.push(
+      { id: 'briefWaist_front', a: { piece: briefFrontId, edge: 'waistSeam' }, b: { piece: briefWaistId, edge: 'waistAttachFront' }, reverse: true },
+      { id: 'briefWaist_back', a: { piece: briefBackId, edge: 'waistSeam' }, b: { piece: briefWaistId, edge: 'waistAttachBack' }, reverse: false },
+      { id: 'briefWaist_close', a: { piece: briefWaistId, edge: 'waistEndBack' }, b: { piece: briefWaistId, edge: 'waistEndFront' }, reverse: true },
+    )
+  }
+  if (briefFrontId && briefBackId && briefLegPair && hasEdge(briefFrontId, 'rightLegOpening') && hasEdge(briefBackId, 'rightLegOpening')) {
+    const { rId, lId } = briefLegPair
+    seamInstructions.push(
+      { id: 'briefLegR_front', a: { piece: briefFrontId, edge: 'rightLegOpening' }, b: { piece: rId, edge: 'legAttachFront' }, reverse: false },
+      { id: 'briefLegR_back', a: { piece: briefBackId, edge: 'rightLegOpening' }, b: { piece: rId, edge: 'legAttachBack' }, reverse: true },
+      { id: 'briefLegR_close', a: { piece: rId, edge: 'legEndBack' }, b: { piece: rId, edge: 'legEndFront' }, reverse: true },
+      { id: 'briefLegL_front', a: { piece: briefFrontId, edge: 'leftLegOpening' }, b: { piece: lId, edge: 'legAttachFront' }, reverse: false },
+      { id: 'briefLegL_back', a: { piece: briefBackId, edge: 'leftLegOpening' }, b: { piece: lId, edge: 'legAttachBack' }, reverse: true },
+      { id: 'briefLegL_close', a: { piece: lId, edge: 'legEndFront' }, b: { piece: lId, edge: 'legEndBack' }, reverse: true },
+    )
   }
 
   // Open-front un-edged pairs (`abaya`): join right/left front halves to single backPanel with vertical/horizontal orientation check

@@ -223,20 +223,45 @@ vec4 strainLimitCorrection(vec3 predicted, float idx, float rest, float invMassS
 // than either approach alone, closer to a critically-damped contact than a
 // slowly-leaking one.
 const CAPSULE_COLLISION_GLSL = `
-vec3 collideCapsule(vec3 p, vec3 prevP, vec3 a, vec3 b, float r0, float r1, float zScale, float friction) {
+vec3 collideCapsule(int capIdx, vec3 p, vec3 prevP, vec3 a, vec3 b, float r0, float r1, float zScale, float friction) {
   vec3 ab = b - a;
   float abLen2 = max(dot(ab, ab), 1e-8);
-  float t = clamp(dot(p - a, ab) / abLen2, 0.0, 1.0);
+  float rawT = dot(p - a, ab) / abLen2;
+  // Lower pelvis frusta (caps 0..2) form a continuous column above the crotch:
+  // prevent cap 1 & 2's wide hip spheres from bulging downward below the crotch.
+  if ((capIdx == 1 || capIdx == 2) && rawT < -0.02) return p;
+  if (capIdx == 0 && rawT > 1.02) return p;
+  float t = clamp(rawT, 0.0, 1.0);
   vec3 c = a + ab * t;
   float r = mix(r0, r1, t);
   vec3 offset = p - c;
-  float yWeight = (zScale < 0.99 && c.y <= uCapA[0].y + 1e-4 && offset.y < 0.0) ? 5.5 : 1.0;
-  vec3 scaledOffset = vec3(offset.x, offset.y * yWeight, offset.z / zScale);
+  float yWeight = (capIdx == 0 && offset.y < 0.0) ? 5.5 : 1.0;
+  if (yWeight > 1.5) {
+    float yTerm = abs(offset.y) * yWeight;
+    float rSlice = sqrt(max(0.0, r * r - yTerm * yTerm));
+    vec2 xz = vec2(offset.x, offset.z / zScale);
+    float xzDist = length(xz);
+    if (xzDist < rSlice && rSlice > 1e-5) {
+      float depth = rSlice - xzDist;
+      vec2 dirXZ = xzDist > 1e-6 ? (xz / xzDist) : vec2(0.0, 1.0);
+      vec3 pushed = vec3(c.x + dirXZ.x * rSlice, p.y, c.z + dirXZ.y * rSlice * zScale);
+      vec3 n = normalize(vec3(dirXZ.x, 0.0, dirXZ.y / zScale));
+      vec3 delta = pushed - prevP;
+      vec3 tangentDelta = delta - n * dot(delta, n);
+      float tangentLen = length(tangentDelta);
+      if (friction <= 0.0 || tangentLen <= 1e-7) return pushed;
+      float staticBudget = friction * depth;
+      if (tangentLen <= staticBudget) return pushed - tangentDelta;
+      vec3 remainder = tangentDelta * (1.0 - staticBudget / tangentLen);
+      return pushed - tangentDelta + remainder * friction;
+    }
+    return p;
+  }
+  vec3 scaledOffset = vec3(offset.x, offset.y, offset.z / zScale);
   float dist = length(scaledOffset);
   if (dist < r) {
     float depth = r - dist;
-    vec3 pushOff = (zScale < 0.99 && c.y <= uCapA[0].y + 1e-4 && offset.y < 0.0) ? vec3(offset.x, 0.0, offset.z) : offset;
-    vec3 safeOff = dist > 1e-6 ? pushOff : vec3(0.0, 0.0, zScale);
+    vec3 safeOff = dist > 1e-6 ? offset : vec3(0.0, 0.0, zScale);
     float safeDist = dist > 1e-6 ? dist : 1.0;
     vec3 pushed = c + safeOff * (r / safeDist);
     vec3 n = normalize(safeOff);
@@ -315,7 +340,7 @@ vec3 collideBodyEnvelope(vec3 p, vec3 prevP, float friction) {
 vec3 collideAllBody(vec3 p, vec3 prevP, float friction) {
   for (int i = 0; i < ${MAX_COLLISION_CAPSULES}; i++) {
     if (i >= uCapsuleCount) break;
-    p = collideCapsule(p, prevP, uCapA[i], uCapB[i], uCapR0[i], uCapR1[i], uCapZScale[i], friction);
+    p = collideCapsule(i, p, prevP, uCapA[i], uCapB[i], uCapR0[i], uCapR1[i], uCapZScale[i], friction);
   }
   if (uEnvEnabled > 0.5) {
     p = collideBodyEnvelope(p, prevP, friction);
@@ -850,7 +875,7 @@ ${highQuality ? DIHEDRAL_BEND_MAIN_GLSL : DEFAULT_BEND_MAIN_GLSL}
     vec3 avgPush = edgePushSum / edgePushCount;
     float avgLen = length(avgPush);
     if (avgLen > 1e-6) {
-      predicted += (avgPush / avgLen) * max(avgLen, edgePushMax);
+      predicted += (avgPush / avgLen) * (0.62 * mix(avgLen, edgePushMax, 0.5));
     }
     predicted = collideAllBody(predicted, prevPos, uFriction);
   }
@@ -1235,22 +1260,22 @@ export class ClothSimulation {
   preRelax(steps = 40) {
     const u = this.posVar.material.uniforms
     const savedGravityRamp = u.uGravityRamp.value
+    const savedVelScale = u.uVelocityScale.value
     const heavyMesh = this.simParticleCount > 2200
     const totalSteps = heavyMesh ? Math.min(steps, 20) : steps
     u.uGravityRamp.value = 0
+    u.uVelocityScale.value = 0.25
     for (let i = 0; i < totalSteps; i++) {
       const isSelfCollisionStep = !heavyMesh && i === totalSteps - 1
       u.uApplySelfCollision.value = isSelfCollisionStep ? 1 : 0
-      // WP-35b: same requirement as step() — the sorted buffer must be
-      // (re)built right before the one iteration that reads it, or the
-      // high-quality tier's self-collision pass runs against a stale
-      // (here: never-populated) uSortedBuffer.
       if (isSelfCollisionStep && this.spatialSort) {
         u.uSortedBuffer.value = this.spatialSort.compute(this.getPositionTexture())
       }
       this.gpuCompute.compute()
     }
+    u.uVelocityScale.value = savedVelScale
     u.uGravityRamp.value = savedGravityRamp
+    this._zeroNextStepVelocity = true
   }
 
   setDragParticle(particleIndex, targetPosition) {
@@ -1277,9 +1302,14 @@ export class ClothSimulation {
     const previousDt = u.uDt.value
     u.uDt.value = (1 / 60) / this.substeps
     // Verlet stores displacement over the PREVIOUS substep, not velocity.
-    // Rescale that history once when the adaptive budget changes dt. Later
-    // substeps already contain displacement measured over the new interval.
-    u.uVelocityScale.value = u.uDt.value / previousDt
+    // Zero it on the first frame after preRelax so static settling never pops,
+    // and otherwise rescale when the adaptive budget changes dt.
+    if (this._zeroNextStepVelocity) {
+      u.uVelocityScale.value = 0
+      this._zeroNextStepVelocity = false
+    } else {
+      u.uVelocityScale.value = u.uDt.value / previousDt
+    }
 
     const t0 = performance.now()
     for (let i = 0; i < this.substeps; i++) {

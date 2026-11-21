@@ -51,7 +51,7 @@ export function computeBodyDims(measurements, category) {
   const armLen = m.sleeve ? cm(m.sleeve) : H * (kid ? 0.40 : 0.44)
   const upperR = radiusFromCirc(m.bicep) * (female ? 0.9 : 1.0)
   const legLen = m.inseam ? cm(m.inseam) : hipY
-  const thighR = radiusFromCirc(m.thigh) * (female ? 1.0 : 0.98)
+  const thighR = radiusFromCirc(m.thigh) * (female ? 0.86 : 0.85)
 
   return {
     female, kid, H, headH, neckTopY, shoulderY, hipY, span,

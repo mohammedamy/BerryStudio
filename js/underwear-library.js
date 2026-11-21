@@ -150,17 +150,23 @@ import { q, PATTERNS, LIBRARY } from './data.js';
     const coverage = opts.coverage || 1.0;
     const legLength = opts.legLength || 0; // >0 = boxer-brief/trunk hem extension down the thigh
 
-    const waistX = (front ? qw * 0.52 : qw * 0.56);
-    const sideDX = rise * 0.35, sideDY = rise * 0.42; // shared side-seam vector, front == back
+    const isLegStyle = legLength > 0 || opts.legCut === "boyshort";
+    const riseBlend = opts.rise === "low" ? 0.45 : opts.rise === "mid" ? 0.24 : 0.04;
+    const topQ = qw + (qh - qw) * riseBlend;
+    const waistX = topQ * (front ? 0.78 : 0.84);
+    const boyshortExt = opts.legCut === "boyshort" ? qh * 0.18 : 0;
+    const sideDX = Math.max(1.2, (qh * 0.84 - topQ * 0.81) * 0.90);
+    const sideDY = isLegStyle ? (rise * 0.46 + legLength * 0.92 + boyshortExt) : (rise * 0.42); // shared side-seam vector, front == back
     const cornerX = waistX + sideDX, cornerY = 1.2 + sideDY;
-    const rawHipX = (front ? qh * 0.58 : qh * 0.64) * coverage;
-    const hipX = Math.abs(rawHipX - cornerX) < 0.25 ? cornerX + 0.3 : rawHipX;
-    const crotchDepth = qh * 0.32 * legF + legLength;
-    const crotchY = cornerY + crotchDepth + (front ? 0 : 2);
-    const crotchX = qh * 0.13;
+    const hipX = cornerX + 0.30;
+    const crotchDepth = isLegStyle ? Math.max(2.6, qh * 0.14) : Math.max(4.2, qh * 0.36 * legF);
+    const crotchY = cornerY + crotchDepth + (front ? 0 : 1.6);
+    const crotchX = qh * 0.135;
 
-    const waistSeg = [[0, 0], [waistX * 0.55, -1.4], [waistX, 1.2]];
-    const legSeg = [[hipX, cornerY], [hipX * 0.5, crotchY * 0.68], [crotchX, crotchY]];
+    const waistSeg = [[0, 0], [waistX * 0.55, -1.2], [waistX, 1.2]];
+    const legSeg = isLegStyle
+      ? [[hipX, cornerY], [hipX * 0.54, cornerY + (crotchY - cornerY) * 0.62], [crotchX, crotchY]]
+      : [[hipX, cornerY], [hipX * 0.46, cornerY + (crotchY - cornerY) * 0.44], [crotchX, crotchY]];
 
     const outline = [
       [0, 0],
@@ -218,11 +224,17 @@ import { q, PATTERNS, LIBRARY } from './data.js';
     const qw = q(m.waist), qh = q(m.hips);
     const front = briefPanel(qw, qh, true, opts);
     const back = briefPanel(qw, qh, false, opts);
-    const legLength = opts.legLength || 0;
     const frontLen = front[front.length - 1][1], backLen = back[back.length - 1][1];
-    const gW = qh * 0.30, gH = qh * 0.34;
-    const waistCirc = (qw * 2) * 1.85; // finished elastic waist, relaxed-to-stretched allowance
-    const legCirc = (qh * 0.62 * (LEG_F[opts.legCut] || LEG_F.full) + legLength) * 2.3;
+    const riseBlend = opts.rise === "low" ? 0.45 : opts.rise === "mid" ? 0.24 : 0.04;
+    const topQ = qw + (qh - qw) * riseBlend;
+    const gW = qh * 0.27, gH = Math.max(6.2, qh * 0.34);
+    const polyArc = (pts, a, b) => {
+      let sum = 0;
+      for (let i = a; i < b; i++) sum += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+      return sum;
+    };
+    const waistCirc = Math.round(topQ * 3.24 * 10) / 10; // finished elastic waist, relaxed-to-stretched allowance
+    const legCirc = Math.round(((polyArc(front, 7, 15) + polyArc(back, 7, 15)) * 0.96) * 10) / 10;
 
     const pieces = [
       // WP-58: grain used to be fixed cm points (y:4 to y:frontLen-4) —
