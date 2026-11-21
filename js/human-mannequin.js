@@ -53,7 +53,7 @@ export function femaleTorsoSculpt(d) {
     breast: {
       centerY: hipY + span * 0.715,
       halfWidth: span * 0.165,
-      amplitude: kid ? chestR * 0.035 : chestR * 0.165,
+      amplitude: kid ? chestR * 0.035 : chestR * 0.160,
       phi0: 0.46,
       phiHalfWidth: 0.46,
     },
@@ -63,9 +63,9 @@ export function femaleTorsoSculpt(d) {
       amplitude: waistR * (kid ? 0.065 : 0.105),
     },
     glute: {
-      centerY: hipY - span * 0.035,
+      centerY: hipY - span * 0.030,
       halfWidth: span * 0.175,
-      amplitude: hipR * (kid ? 0.095 : 0.145),
+      amplitude: hipR * (kid ? 0.095 : 0.140),
     },
   };
 }
@@ -73,10 +73,10 @@ export function femaleTorsoSculpt(d) {
 export function torsoZBump(y, phi, d) {
   const { breast, lumbar, glute } = femaleTorsoSculpt(d);
   let dz = 0;
-  // Natural teardrop bust contour: gentle upper pole slope, fuller lower cup
+  // Natural teardrop bust contour: gentle upper pole slope, smooth lower underbust curve
   const lobe = bumpWindow(phi, breast.phi0, breast.phiHalfWidth) + bumpWindow(phi, -breast.phi0, breast.phiHalfWidth);
   const yRel = (y - breast.centerY) / (breast.halfWidth || 1);
-  const teardrop = yRel > 0 ? Math.max(0, 1 - yRel * 0.22) : 1 + Math.min(0.16, -yRel * 0.14);
+  const teardrop = yRel > 0 ? Math.max(0, 1 - yRel * 0.22) : 1 + Math.min(0.14, -yRel * 0.12);
   dz += breast.amplitude * bumpWindow(y, breast.centerY, breast.halfWidth) * lobe * teardrop;
 
   // Soft lower-abdominal fullness with subtle navel indentation
@@ -597,8 +597,14 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
         const cosP = Math.cos(phi);
         const isMedial = sinP * side < 0;
 
-        let rx = baseR * (0.96 - 0.05 * upperThighBlend);
-        let rz = baseR * (1.02 + 0.02 * upperThighBlend);
+        let rx = baseR * (0.94 - 0.055 * upperThighBlend);
+        let rz = baseR * (1.01 + 0.02 * upperThighBlend);
+
+        // Sleek upper inner-thigh taper for clean bikini & trouser clearance
+        if (isMedial && f >= 0.68 && f <= 0.95) {
+          const medSlim = Math.sin(Math.PI * clamp((f - 0.68) / 0.27, 0, 1)) * Math.abs(sinP);
+          rx *= 1 - 0.038 * medSlim;
+        }
 
         const malYShift = ankleWindow * (isMedial ? 0.004 : -0.003) * Math.abs(sinP);
         rx += thighR * 0.036 * ankleWindow * Math.abs(sinP);
@@ -616,20 +622,25 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
         }
 
         if (cosP > 0) {
-          rz += thighR * 0.040 * quadWindow * cosP;
+          rz += thighR * 0.038 * quadWindow * cosP;
         } else {
-          rz += thighR * 0.034 * smoothstep(0.62, 1.0, f) * (-cosP);
+          rz += thighR * 0.030 * smoothstep(0.62, 1.0, f) * (-cosP);
+          // Smooth sub-gluteal transition
+          if (f >= 0.86 && f <= 0.96) {
+            const subGlute = bumpWindow(f, 0.91, 0.05) * smoothstep(-0.30, -0.85, cosP);
+            rz -= thighR * 0.014 * subGlute;
+          }
         }
 
         const targetRx = isMedial ? innerReachAtTop : outerReachAtTop;
-        const targetRz = hipR * zScale * (cosP >= 0 ? 0.92 : 1.01);
+        const targetRz = hipR * zScale * (cosP >= 0 ? 0.91 : 1.00);
         rx = rx * (1 - topBlend) + targetRx * topBlend;
         rz = rz * (1 - topBlend) + targetRz * topBlend;
 
         const x = cx + rx * sinP;
         const topArchBlend = smoothstep(0.76, 1.0, f);
         const inguinalSlopeY = isMedial
-          ? (-span * 0.011 * (1 - 0.45 * Math.max(0, cosP))) * Math.pow(Math.abs(sinP), 1.2) * topArchBlend
+          ? (-span * 0.013 * (1 - 0.45 * Math.max(0, cosP))) * Math.pow(Math.abs(sinP), 1.2) * topArchBlend
           : (span * 0.014 * Math.pow(Math.abs(sinP), 1.15)) * topArchBlend;
         const yVert = y + inguinalSlopeY + malYShift;
         const z = cz + rz * cosP + (i >= legFracs.length - 3
@@ -688,13 +699,13 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
   // Denser pelvic & thoracic slices eliminate gluteal side-profile spikes and origami shoulder steps
   const torsoSlices = [
     // [y, rx, rzBase, sw]
-    [hipY - span * 0.068, hipR * 0.985, hipR * 0.94, 0.96],  // T0: pelvic base (diagonal inguinal merge)
-    [hipY - span * 0.042, hipR * 1.005, hipR * 0.98, 0.78],  // lower gluteal round
-    [hipY - span * 0.014, hipR * 1.015, hipR * 0.99, 0.56],  // trochanter / gluteal fullness
+    [hipY - span * 0.068, hipR * 0.975, hipR * 0.93, 0.96],  // T0: pelvic base (diagonal inguinal merge)
+    [hipY - span * 0.042, hipR * 0.998, hipR * 0.97, 0.78],  // lower gluteal round
+    [hipY - span * 0.014, hipR * 1.012, hipR * 0.99, 0.56],  // trochanter / gluteal fullness
     [hipY + span * 0.030, hipR * 1.005, hipR * 0.98, 0.38],  // upper glute / sacrum
-    [hipY + span * 0.085, hipR * 0.985, hipR * 0.96, 0.28],  // iliac crest
-    [hipY + span * 0.19, hipR * 0.91 + waistR * 0.09, hipR * 0.90 + waistR * 0.10, 0.24],
-    [hipY + span * 0.32, hipR * 0.42 + waistR * 0.58, hipR * 0.44 + waistR * 0.56, 0.22],
+    [hipY + span * 0.085, hipR * 0.980, hipR * 0.955, 0.28], // iliac crest
+    [hipY + span * 0.19, hipR * 0.89 + waistR * 0.11, hipR * 0.88 + waistR * 0.12, 0.24],
+    [hipY + span * 0.32, hipR * 0.38 + waistR * 0.62, hipR * 0.40 + waistR * 0.60, 0.22],
     [hipY + span * 0.44, waistR * 1.00, waistR * 0.98, 0.20], // natural waist anchor
     [hipY + span * 0.55, waistR * 0.60 + chestR * 0.42, waistR * 0.63 + chestR * 0.39, 0.22], // lower ribcage
     [hipY + span * 0.65, chestR * (female ? 0.97 : 1.01), chestR * 0.96, 0.24], // underbust / lower pecs
@@ -775,10 +786,10 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
         z = z * (1 - axillaBlend) + zAx * axillaBlend;
         yLocal = y * (1 - axillaBlend) + yAx * axillaBlend;
       } else if (isPelvisBase) {
-        // Diagonal human inguinal ramp: dips softly at pubic/perineal midline, rises over outer trochanter
+        // Diagonal human inguinal ramp: smooth pubic taper and gentle lateral iliac rise
         const frontCenter = Math.max(0, cosP) * Math.pow(1 - absSin, 1.35);
-        z *= 1 - 0.11 * frontCenter;
-        yLocal = y - span * 0.011 * Math.pow(1 - absSin, 1.3) + span * 0.012 * Math.pow(absSin, 1.2);
+        z *= 1 - 0.13 * frontCenter;
+        yLocal = y - span * 0.013 * Math.pow(1 - absSin, 1.3) + span * 0.012 * Math.pow(absSin, 1.2);
       }
 
       ring.push(addVertex(x, yLocal, z, sw, torsoWeightsAtY(yLocal, x), false));
@@ -802,7 +813,7 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
   const p0Y = positions[p0Idx * 3 + 1];
   const pBackZ = positions[pBackIdx * 3 + 2];
   const pBackY = positions[pBackIdx * 3 + 1];
-  const crotchArchY = legTopY - span * 0.006;
+  const crotchArchY = legTopY - span * 0.016;
 
   const groinMid = [];
   for (let j = 1; j <= 23; j++) {
@@ -1224,9 +1235,10 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
 
   const headSlices = [
     // [yFrac, craniumFrac, sw]
-    [-0.485, 0.370, 0.16], // upper throat / hyoid junction
-    [-0.445, 0.382, 0.12], // smooth submental transition
-    [-0.405, 0.390, 0.10], // chin (menton) rounded pad
+    [-0.485, 0.370, 0.26], // upper throat / hyoid junction
+    [-0.445, 0.382, 0.24], // smooth submental transition
+    [-0.425, 0.387, 0.24], // smoothed sub-chin pad blend
+    [-0.405, 0.390, 0.20], // chin (menton) rounded pad
     [-0.348, 0.396, 0.09], // mentolabial hollow & anterior jaw taper
     [-0.285, 0.400, 0.09], // lower lip cushion & gonial mandibular angle
     [-0.238, 0.403, 0.08], // oral rima / mouth corners
@@ -1306,10 +1318,16 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       const alarLobe = superGauss(phi, 0.185, 0.085, 2.2) + superGauss(phi, -0.185, 0.085, 2.2);
       dz += headH * 0.009 * bumpWindow(yLocal, -headH * 0.130, headH * 0.030) * alarLobe;
 
-      // 4. Soft upper/lower lip fullness & oral rima
-      dz += headH * 0.014 * bumpWindow(yLocal, -headH * 0.200, headH * 0.036) * superGauss(phi, 0, 0.28, 2.6);
-      dz -= headH * 0.004 * bumpWindow(yLocal, -headH * 0.238, headH * 0.020) * superGauss(phi, 0, 0.26, 2.4);
-      dz += headH * 0.013 * bumpWindow(yLocal, -headH * 0.276, headH * 0.036) * superGauss(phi, 0, 0.26, 2.6);
+      // 4. Warm natural smiling lips, upturned oral rima & gentle corner dimples
+      const smileAmp = headH * (category === "men" ? 0.015 : 0.0195);
+      const smileRise = smileAmp * Math.pow(clamp(absPhi / 0.30, 0, 1), 1.55) * (1 - smoothstep(0.30, 0.46, absPhi));
+      dz += headH * 0.014 * bumpWindow(yLocal - smileRise * 0.72, -headH * 0.200, headH * 0.036) * superGauss(phi, 0, 0.285, 2.6);
+      dz -= headH * 0.0042 * bumpWindow(yLocal - smileRise, -headH * 0.238, headH * 0.020) * superGauss(phi, 0, 0.275, 2.4);
+      dz += headH * 0.013 * bumpWindow(yLocal - smileRise * 0.85, -headH * 0.276, headH * 0.036) * superGauss(phi, 0, 0.265, 2.6);
+      const cornerDimple = superGauss(phi, 0.28, 0.068, 2.2) + superGauss(phi, -0.28, 0.068, 2.2);
+      dz -= headH * 0.0038 * bumpWindow(yLocal, -headH * 0.225, headH * 0.024) * cornerDimple;
+      const smileCheekLift = superGauss(phi, 0.34, 0.14, 2.2) + superGauss(phi, -0.34, 0.14, 2.2);
+      dz += headH * 0.0052 * bumpWindow(yLocal, -headH * 0.145, headH * 0.055) * smileCheekLift;
 
       // 5. Mentolabial hollow & ultra-broad, smooth rounded human chin pad
       dz -= headH * 0.006 * bumpWindow(yLocal, -headH * 0.340, headH * 0.032) * superGauss(phi, 0, 0.34, 2.6);
@@ -1322,10 +1340,10 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       const jawLobe = superGauss(phi, 1.15, 0.28, 2.0) + superGauss(phi, -1.15, 0.28, 2.0);
       dx += Math.sign(sinP) * gonialAmp * bumpWindow(yLocal, -headH * 0.265, headH * 0.075) * jawLobe;
 
-      // 6. Healthy anterior midface & malar cheek fullness
-      const cheekAmp = headH * (female ? 0.020 : (kid ? 0.022 : 0.016));
+      // 6. Healthy anterior midface & malar cheek fullness (lifted for warm smile)
+      const cheekAmp = headH * (female ? 0.023 : (kid ? 0.025 : 0.018));
       const cheekLobe = superGauss(phi, 0.50, 0.35, 2.2) + superGauss(phi, -0.50, 0.35, 2.2);
-      dz += cheekAmp * bumpWindow(yLocal, -headH * 0.075, headH * 0.140) * cheekLobe;
+      dz += cheekAmp * bumpWindow(yLocal, -headH * 0.058, headH * 0.138) * cheekLobe;
 
       // 7. Integrated sculpted human ears (helix + concha hollow) aligned between brow (+0.08) and nose base (-0.14)
       const earLobe = bumpWindow(phi, 1.62, 0.18) + bumpWindow(phi, -1.62, 0.18);
@@ -1428,26 +1446,29 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       const absPhiF = Math.abs(phiF);
       if (z > 0) {
         // Warm rosy malar cheek blush + nose bridge/tip warmth
-        const cheek = bumpWindow(yHead, -headH * 0.055, headH * 0.115) * (bumpWindow(absPhiF, 0.52, 0.34));
+        const cheek = bumpWindow(yHead, -headH * 0.048, headH * 0.115) * (bumpWindow(absPhiF, 0.52, 0.34));
         const noseTip = bumpWindow(yHead, -headH * 0.115, headH * 0.065) * bumpWindow(absPhiF, 0, 0.22);
-        const warmFace = Math.min(1, cheek * (female || kid ? 0.85 : 0.45) + noseTip * 0.55);
+        const warmFace = Math.min(1, cheek * (female || kid ? 0.88 : 0.50) + noseTip * 0.55);
         cr += 0.032 * warmFace;
         cg -= 0.038 * warmFace;
         cb -= 0.046 * warmFace;
 
-        // Integrated natural vermilion lip base tone blending smoothly into skin
-        const cupidsY = mouthYRel + headH * 0.010 * bumpWindow(absPhiF, 0.10, 0.10);
+        // Integrated natural smiling vermilion lip base tone blending smoothly into skin
+        const smileAmpV = headH * (category === "men" ? 0.015 : 0.0195);
+        const smileRiseV = smileAmpV * Math.pow(clamp(absPhiF / 0.30, 0, 1), 1.55) * (1 - smoothstep(0.30, 0.46, absPhiF));
+        const cupidsY = mouthYRel + smileRiseV * 0.85 + headH * 0.010 * bumpWindow(absPhiF, 0.10, 0.10);
         const lipVert = bumpWindow(yHead, cupidsY, headH * 0.042);
-        const lipHoriz = bumpWindow(absPhiF, 0, 0.34);
+        const lipHoriz = bumpWindow(absPhiF, 0, 0.35);
         const lipMask = lipVert * lipHoriz * smoothstep(0.02, 0.25, zFront / headH);
         if (lipMask > 0.01) {
           cr += 0.055 * lipMask * lipSaturation;
           cg -= 0.125 * lipMask * lipSaturation;
           cb -= 0.135 * lipMask * lipSaturation;
         }
-        // Subtle oral rima parting crease
-        const rimaCrease = bumpWindow(yHead, mouthYRel - headH * 0.002, headH * 0.011) * bumpWindow(absPhiF, 0, 0.28);
-        cr -= 0.10 * rimaCrease; cg -= 0.12 * rimaCrease; cb -= 0.12 * rimaCrease;
+        // Subtle upturned oral rima parting crease & gentle corner smile dimple
+        const rimaCrease = bumpWindow(yHead, mouthYRel + smileRiseV - headH * 0.002, headH * 0.011) * bumpWindow(absPhiF, 0, 0.30);
+        const cornerAO = bumpWindow(yHead, mouthYRel + smileAmpV * 0.90, headH * 0.018) * bumpWindow(absPhiF, 0.28, 0.065) * 0.045;
+        cr -= 0.095 * rimaCrease + cornerAO; cg -= 0.115 * rimaCrease + cornerAO; cb -= 0.115 * rimaCrease + cornerAO;
 
         // Soft orbital socket + under-brow + subnasale AO depth
         const orbitAO = bumpWindow(yHead, headH * 0.038, headH * 0.052) * bumpWindow(absPhiF, 0.37, 0.22);
@@ -1813,10 +1834,10 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
     glint2.position.set(gx2, gy2, sampleHeadFrontZ(gx2, gy2) + headH * 0.0084);
     headBone.add(glint2);
 
-    // 4. Surface-conformed upper lash line, lower eyelid contour, and upper crease ribbon
+    // 4. Surface-conformed upper lash line, softened smiling lower eyelid, and upper crease ribbon
     const lid0x = s * (ex - eyeHalfW * 1.00), lid0y = ey - eyeHalfH * 0.04;
     const lid1x = s * (ex + eyeHalfW * 0.02), lid1y = ey + eyeHalfH * 0.86;
-    const lid2x = s * (ex + eyeHalfW * 1.04), lid2y = ey + (female ? eyeHalfH * 0.10 : -eyeHalfH * 0.04);
+    const lid2x = s * (ex + eyeHalfW * 1.04), lid2y = ey + (female ? eyeHalfH * 0.14 : eyeHalfH * 0.05);
     const lashRibbonGeo = createConformedRibbonGeo(
       [[lid0x, lid0y, 0], [lid1x, lid1y, 0], [lid2x, lid2y, 0]],
       (u) => headH * (female ? 0.0044 : 0.0032) * Math.pow(Math.sin(Math.PI * u), 0.7),
@@ -1834,7 +1855,7 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
     headBone.add(lash);
 
     const lowerLidGeo = createConformedRibbonGeo(
-      [[lid0x, lid0y, 0], [s * ex, ey - eyeHalfH * 0.92, 0], [lid2x, lid2y, 0]],
+      [[lid0x, lid0y, 0], [s * ex, ey - eyeHalfH * 0.84, 0], [lid2x, lid2y, 0]],
       (u) => headH * 0.0022 * Math.sin(Math.PI * u),
       () => [lidColor.r * 0.88, lidColor.g * 0.88, lidColor.b * 0.88],
       16,
@@ -1859,12 +1880,12 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
     crease.castShadow = false;
     headBone.add(crease);
 
-    // 5. Anatomical tapered eyebrow ribbon conformed softly to supraorbital ridge
-    const browY = ey + headH * (category === "men" ? 0.041 : 0.046);
-    const b0x = s * (ex - eyeHalfW * 0.96), b0y = browY - headH * 0.002;
-    const b1x = s * (ex + eyeHalfW * 0.22), b1y = browY + headH * (female ? 0.013 : 0.007);
-    const b2x = s * (ex + eyeHalfW * 1.16), b2y = browY - headH * 0.009;
-    const browMaxHalfW = headH * (category === "men" ? 0.0115 : (kid ? 0.0075 : 0.0080));
+    // 5. Friendly tapered eyebrow ribbon conformed softly to supraorbital ridge
+    const browY = ey + headH * (category === "men" ? 0.042 : 0.047);
+    const b0x = s * (ex - eyeHalfW * 0.96), b0y = browY;
+    const b1x = s * (ex + eyeHalfW * 0.22), b1y = browY + headH * (female ? 0.014 : 0.008);
+    const b2x = s * (ex + eyeHalfW * 1.16), b2y = browY - headH * 0.005;
+    const browMaxHalfW = headH * (category === "men" ? 0.0112 : (kid ? 0.0075 : 0.0080));
     const browGeo = createConformedRibbonGeo(
       [[b0x, b0y, 0], [b1x, b1y, 0], [b2x, b2y, 0]],
       (u) => {
@@ -1890,40 +1911,47 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
     headBone.add(brow);
   });
 
-  // 6. Sculpted surface-conformed feathered Cupid's-bow lips + natural oral parting line (replaces thick tubes)
+  // 6. Sculpted surface-conformed smiling Cupid's-bow lips + warm upturned corner accents
   const mouthY = -headH * 0.238;
-  const mouthHalfW = headH * (kid ? 0.088 : (category === "men" ? 0.102 : 0.096));
-  const lipHalfH = headH * (female ? 0.022 : 0.019);
+  const mouthHalfW = headH * (kid ? 0.108 : (category === "men" ? 0.116 : 0.114));
+  const lipHalfH = headH * (female ? 0.0235 : 0.0205);
+  const cornerLift = headH * (category === "men" ? 0.015 : 0.0195);
   const lipCenterPts = [
-    [-mouthHalfW, mouthY - headH * 0.001, 0],
-    [-mouthHalfW * 0.36, mouthY + headH * 0.004, 0],
-    [0, mouthY + headH * 0.001, 0],
-    [mouthHalfW * 0.36, mouthY + headH * 0.004, 0],
-    [mouthHalfW, mouthY - headH * 0.001, 0],
+    [-mouthHalfW, mouthY + cornerLift, 0],
+    [-mouthHalfW * 0.62, mouthY + cornerLift * 0.38, 0],
+    [-mouthHalfW * 0.28, mouthY + cornerLift * 0.02, 0],
+    [0, mouthY - headH * 0.0030, 0],
+    [mouthHalfW * 0.28, mouthY + cornerLift * 0.02, 0],
+    [mouthHalfW * 0.62, mouthY + cornerLift * 0.38, 0],
+    [mouthHalfW, mouthY + cornerLift, 0],
   ];
   const lipGeo = createConformedRibbonGeo(
     lipCenterPts,
     (u) => {
       const xRel = u * 2 - 1;
-      const bow = 1 + 0.16 * bumpWindow(Math.abs(xRel), 0.32, 0.26);
-      return lipHalfH * Math.pow(Math.max(0, 1 - xRel * xRel), 0.65) * bow;
+      const bow = 1 + 0.18 * bumpWindow(Math.abs(xRel), 0.30, 0.26);
+      const cornerFullness = 1 - 0.14 * smoothstep(0.70, 1.0, Math.abs(xRel));
+      return lipHalfH * Math.pow(Math.max(0, 1 - xRel * xRel), 0.62) * bow * cornerFullness;
     },
-    (u, v, vSigned) => {
+    (u, _v, vSigned) => {
       const xRel = u * 2 - 1;
+      const absX = Math.abs(xRel);
       const borderBlend = 1 - Math.pow(Math.abs(vSigned), 1.8);
-      const rimaDark = 1 - 0.38 * Math.exp(-Math.pow((vSigned - 0.08) / 0.16, 2)) * (1 - 0.4 * Math.abs(xRel));
-      const pillowHighlight = 1 + 0.08 * Math.exp(-Math.pow((vSigned + 0.45) / 0.28, 2));
+      const cornerTint = 1 - 0.18 * Math.exp(-Math.pow((absX - 0.90) / 0.10, 2)) * Math.exp(-Math.pow(vSigned / 0.45, 2));
+      const rimaDark = (1 - 0.48 * Math.exp(-Math.pow((vSigned - 0.04) / 0.16, 2)) * (1 - 0.22 * absX)) * cornerTint;
+      const pillowHighlight = 1 + 0.09 * Math.exp(-Math.pow((vSigned + 0.44) / 0.28, 2));
       const cR = lerp(baseSkin.r, lipColor.r * pillowHighlight, borderBlend) * rimaDark;
       const cG = lerp(baseSkin.g, lipColor.g * pillowHighlight, borderBlend) * rimaDark;
       const cB = lerp(baseSkin.b, lipColor.b * pillowHighlight, borderBlend) * rimaDark;
       return [clamp(cR, 0, 1), clamp(cG, 0, 1), clamp(cB, 0, 1)];
     },
-    28,
+    32,
     6,
-    headH * 0.0004,
-    headH * 0.0016
+    headH * 0.0005,
+    headH * 0.0018
   );
   const lipMesh = new THREE.Mesh(lipGeo, lipRibbonMat);
+  lipMesh.name = "lipMesh";
   lipMesh.castShadow = false;
   headBone.add(lipMesh);
   void browMat; void lidMat; void lashMat; void eyeWhiteMat; void irisMat; void lipMat;

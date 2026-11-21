@@ -123,6 +123,27 @@ test('Unified Human Mannequin: single watertight 2-manifold closed surface acros
     assert.equal(mat.sheen, 0.0);
     assert.equal(mat.side, THREE.DoubleSide);
     assert.equal(mat.vertexColors, true);
+
+    // Verify warm smiling expression: lateral lip corners sit strictly higher in Y than center lip
+    let lipMesh = null;
+    res.headGroup.traverse((o) => { if (o.isMesh && o.name === 'lipMesh') lipMesh = o; });
+    assert.ok(lipMesh, `${cat}: headGroup must contain sculpted lipMesh`);
+    const lp = lipMesh.geometry.attributes.position;
+    let centerYSum = 0, centerCount = 0;
+    let cornerYSum = 0, cornerCount = 0;
+    let maxAbsX = 0;
+    for (let i = 0; i < lp.count; i++) {
+      const ax = Math.abs(lp.getX(i));
+      if (ax > maxAbsX) maxAbsX = ax;
+    }
+    for (let i = 0; i < lp.count; i++) {
+      const ax = Math.abs(lp.getX(i)), ly = lp.getY(i);
+      if (ax <= maxAbsX * 0.12) { centerYSum += ly; centerCount++; }
+      else if (ax >= maxAbsX * 0.82) { cornerYSum += ly; cornerCount++; }
+    }
+    const centerY = centerYSum / Math.max(1, centerCount);
+    const cornerY = cornerYSum / Math.max(1, cornerCount);
+    assert.ok(cornerY > centerY, `${cat}: smiling mouth corners (${cornerY.toFixed(5)}) must lift above center lip (${centerY.toFixed(5)})`);
   }
 });
 

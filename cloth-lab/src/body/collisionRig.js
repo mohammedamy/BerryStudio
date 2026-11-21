@@ -351,20 +351,20 @@ export function deriveCollisionRig(dims, pose = 'standing', precomputedJoints = 
   // 14, 15: Bilateral posterior gluteal lobes + 16: Compact pubic/perineal saddle
   const gluteY = hipY - span * 0.025 + pelvDY
   const gluteX = hipR * 0.38
-  const gluteR = hipR * (female ? 0.46 : 0.43) + SKIN_CLEARANCE
-  const gluteZ = -hipR * zScale * (female ? 0.40 : 0.37) + pelvDZ
+  const gluteR = hipR * (female ? 0.44 : 0.42) + SKIN_CLEARANCE
+  const gluteZ = -hipR * zScale * (female ? 0.39 : 0.36) + pelvDZ
   for (const side of [-1, 1]) {
     const g = [pelvDX + side * gluteX, gluteY, gluteZ]
     primitives.push({ a: g, b: g, ra: gluteR, rb: gluteR, zScale: 1 })
   }
-  const pelvicSaddleY = hipY - span * 0.055 + pelvDY
-  const saddleR = Math.min(hipR * zScale * 0.50, span * 0.078) + SKIN_CLEARANCE
+  const pelvicSaddleY = hipY - span * (kid ? 0.098 : 0.110) + pelvDY
+  const saddleR = Math.min(hipR * zScale * 0.45, span * 0.068) + SKIN_CLEARANCE
   primitives.push({
-    a: [pelvDX - joints.hipPivotX * 0.72, pelvicSaddleY, pelvDZ],
-    b: [pelvDX + joints.hipPivotX * 0.72, pelvicSaddleY, pelvDZ],
+    a: [pelvDX - joints.hipPivotX * 0.68, pelvicSaddleY, pelvDZ],
+    b: [pelvDX + joints.hipPivotX * 0.68, pelvicSaddleY, pelvDZ],
     ra: saddleR,
     rb: saddleR,
-    zScale: 1,
+    zScale: 0.90,
   })
 
   // 17..22: Pose-exact Bilateral Upper Arms, Forearms & Hands
@@ -447,48 +447,66 @@ export function deriveCollisionRigFromLimbs(dims, limbs) {
  * Projects a CPU 3D point `[x, y, z]` outside every primitive of `collisionRig`
  * (used to guarantee initial rest & pinned particles never start inside the body).
  */
-export function projectPointOutsideCapsules(p, collisionRig) {
+export function projectPointOutsideCapsules(p, collisionRig, clearanceOffset = 0) {
   let px = p[0], py = p[1], pz = p[2]
-  for (let i = 0; i < collisionRig.length; i++) {
-    const cap = collisionRig[i]
-    const abx = cap.b[0] - cap.a[0]
-    const aby = cap.b[1] - cap.a[1]
-    const abz = cap.b[2] - cap.a[2]
-    const abLen2 = Math.max(abx * abx + aby * aby + abz * abz, 1e-8)
-    const rawT = ((px - cap.a[0]) * abx + (py - cap.a[1]) * aby + (pz - cap.a[2]) * abz) / abLen2
-    if ((i === 1 || i === 2) && rawT < -0.02) continue
-    if (i === 0 && rawT > 1.02) continue
-    const t = clamp(rawT, 0, 1)
-    const cx = cap.a[0] + abx * t
-    const cy = cap.a[1] + aby * t
-    const cz = cap.a[2] + abz * t
-    const ox = px - cx, oy = py - cy, oz = pz - cz
-    const r = cap.ra + (cap.rb - cap.ra) * t
-    if (i === 0 && oy < 0) {
-      const yTerm = Math.abs(oy) * 5.5
-      const rSlice = Math.sqrt(Math.max(0, r * r - yTerm * yTerm))
-      const xzDist = Math.hypot(ox, oz / cap.zScale)
-      if (xzDist < rSlice && rSlice > 1e-5) {
-        if (xzDist > 1e-6) {
-          const sc = rSlice / xzDist
-          px = cx + ox * sc
-          pz = cz + oz * sc
-        } else {
-          pz = cz + rSlice * cap.zScale
+  const effOff = clamp(clearanceOffset || 0, -0.0034, 0.0030)
+  for (let pass = 0; pass < 24; pass++) {
+    const sx = px, sy = py, sz = pz
+    let totalPush = 0
+    let hitCount = 0
+    for (let i = 0; i < collisionRig.length; i++) {
+      const cap = collisionRig[i]
+      const abx = cap.b[0] - cap.a[0]
+      const aby = cap.b[1] - cap.a[1]
+      const abz = cap.b[2] - cap.a[2]
+      const abLen2 = Math.max(abx * abx + aby * aby + abz * abz, 1e-8)
+      const rawT = ((px - cap.a[0]) * abx + (py - cap.a[1]) * aby + (pz - cap.a[2]) * abz) / abLen2
+      if ((i === 1 || i === 2) && rawT < -0.02) continue
+      if (i === 0 && rawT > 1.02) continue
+      const t = clamp(rawT, 0, 1)
+      const cx = cap.a[0] + abx * t
+      const cy = cap.a[1] + aby * t
+      const cz = cap.a[2] + abz * t
+      const ox = px - cx, oy = py - cy, oz = pz - cz
+      const r = Math.max(0.006, (cap.ra + (cap.rb - cap.ra) * t) + effOff)
+      if (i === 0 && oy < 0) {
+        const yTerm = Math.abs(oy) * 5.5
+        const rSlice = Math.sqrt(Math.max(0, r * r - yTerm * yTerm))
+        const xzDist = Math.hypot(ox, oz / cap.zScale)
+        if (xzDist < rSlice && rSlice > 1e-5) {
+          const oldX = px, oldZ = pz
+          if (xzDist > 1e-6) {
+            const sc = rSlice / xzDist
+            px = cx + ox * sc
+            pz = cz + oz * sc
+          } else {
+            pz = cz + rSlice * cap.zScale
+          }
+          totalPush += Math.hypot(px - oldX, pz - oldZ)
+          hitCount++
         }
+        continue
       }
-      continue
+      const dist = Math.hypot(ox, oy, oz / cap.zScale)
+      if (dist < r) {
+        const oldX = px, oldY = py, oldZ = pz
+        if (dist > 1e-6) {
+          const scale = r / dist
+          px = cx + ox * scale
+          py = cy + oy * scale
+          pz = cz + oz * scale
+        } else {
+          pz = cz + r * cap.zScale
+        }
+        totalPush += Math.hypot(px - oldX, py - oldY, pz - oldZ)
+        hitCount++
+      }
     }
-    const dist = Math.hypot(ox, oy, oz / cap.zScale)
-    if (dist < r) {
-      if (dist > 1e-6) {
-        const scale = r / dist
-        px = cx + ox * scale
-        py = cy + oy * scale
-        pz = cz + oz * scale
-      } else {
-        pz = cz + r * cap.zScale
-      }
+    if (hitCount === 0 || totalPush < 1e-5) break
+    const netDisp = Math.hypot(px - sx, py - sy, pz - sz)
+    // Escape unstable saddle between opposing capsules (e.g. z ~ 0 armpit crease between torso & arm)
+    if (hitCount >= 2 && netDisp < totalPush * 0.25 && totalPush > 1e-4) {
+      pz += (pz >= 0 ? 1 : -1) * 0.008
     }
   }
   return [px, py, pz]
@@ -605,6 +623,37 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
   // never pin mid-rise fly or crotch vertices open. Briefs/trunks sewn to a
   // waist elastic defer their rim pin to that waist elastic band.
   if (Array.isArray(triangulatedPieces) && triangulatedPieces.length > 0 && pieceOffset && renderVertexToSimParticle) {
+    const pinTopTacks = (pts, offset, cutY) => {
+      const bestBySector = new Array(6).fill(-1)
+      const bestDist = new Float64Array(6).fill(Infinity)
+      for (let localIdx = 0; localIdx < pts.length; localIdx++) {
+        if (pts[localIdx][1] > cutY) continue
+        const sp = renderVertexToSimParticle[offset + localIdx]
+        const px = simRestPositions[sp * 3]
+        const pz = simRestPositions[sp * 3 + 2]
+        const ang = Math.atan2(px, pz) + Math.PI
+        const sec = Math.max(0, Math.min(5, Math.floor((ang / (Math.PI * 2)) * 6)))
+        const centerAng = ((sec + 0.5) / 6) * (Math.PI * 2)
+        const dAng = Math.abs(ang - centerAng)
+        if (dAng < bestDist[sec]) {
+          bestDist[sec] = dAng
+          bestBySector[sec] = sp
+        }
+      }
+      let count = 0
+      for (let s = 0; s < 6; s++) {
+        if (bestBySector[s] >= 0) {
+          mask[bestBySector[s]] = 1
+          count++
+        }
+      }
+      if (count < 3) {
+        for (let localIdx = 0; localIdx < pts.length; localIdx++) {
+          if (pts[localIdx][1] <= cutY) mask[renderVertexToSimParticle[offset + localIdx]] = 1
+        }
+      }
+    }
+
     for (const tp of triangulatedPieces) {
       if (!LOWER_BODY_WAIST_PIN_ROLES.has(tp.role)) continue
       if (tp.placementHint?.isBrief && tp.placementHint?.sewnWaistElastic) continue
@@ -614,16 +663,11 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
       let minY = Infinity
       for (const [, y] of pts) if (y < minY) minY = y
       if (tp.placementHint?.isBrief) {
-        const pinCutY = minY + 1.8
-        for (let localIdx = 0; localIdx < pts.length; localIdx++) {
-          if (pts[localIdx][1] <= pinCutY) {
-            mask[renderVertexToSimParticle[offset + localIdx]] = 1
-          }
-        }
+        pinTopTacks(pts, offset, minY + 1.5)
         continue
       }
       const isTrouserOrSkirtPanel = tp.role === 'legFront' || tp.role === 'legBack' || tp.role === 'hipPanelFront' || tp.role === 'hipPanelBack' || tp.role.startsWith('gore')
-      const topCutY = minY + 2.8
+      const topCutY = minY + (isTrouserOrSkirtPanel ? 1.8 : 2.8)
       for (let localIdx = 0; localIdx < pts.length; localIdx++) {
         if (isTrouserOrSkirtPanel && pts[localIdx][1] > topCutY) continue
         const sp = renderVertexToSimParticle[offset + localIdx]
@@ -649,9 +693,30 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
       if (tp.placementHint?.sewnBriefWaist) {
         let minY = Infinity
         for (const [, y] of pts) if (y < minY) minY = y
+        const bestBySector = new Array(6).fill(-1)
+        const bestDist = new Float64Array(6).fill(Infinity)
         for (let localIdx = 0; localIdx < pts.length; localIdx++) {
-          if (pts[localIdx][1] <= minY + 0.7) {
-            mask[renderVertexToSimParticle[offset + localIdx]] = 1
+          if (pts[localIdx][1] > minY + 0.7) continue
+          const sp = renderVertexToSimParticle[offset + localIdx]
+          const ang = Math.atan2(simRestPositions[sp * 3], simRestPositions[sp * 3 + 2]) + Math.PI
+          const sec = Math.max(0, Math.min(5, Math.floor((ang / (Math.PI * 2)) * 6)))
+          const centerAng = ((sec + 0.5) / 6) * (Math.PI * 2)
+          const dAng = Math.abs(ang - centerAng)
+          if (dAng < bestDist[sec]) {
+            bestDist[sec] = dAng
+            bestBySector[sec] = sp
+          }
+        }
+        let tackCount = 0
+        for (let s = 0; s < 6; s++) {
+          if (bestBySector[s] >= 0) {
+            mask[bestBySector[s]] = 1
+            tackCount++
+          }
+        }
+        if (tackCount < 3) {
+          for (let localIdx = 0; localIdx < pts.length; localIdx++) {
+            if (pts[localIdx][1] <= minY + 0.7) mask[renderVertexToSimParticle[offset + localIdx]] = 1
           }
         }
         continue
@@ -710,6 +775,9 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
               }
             }
           }
+          continue
+        }
+        if (role === 'attachUnderbust' && tp.placementHint?.sewnSportBand) {
           continue
         }
         for (let localIdx = 0; localIdx < pts.length; localIdx++) {

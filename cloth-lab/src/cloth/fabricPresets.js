@@ -72,25 +72,25 @@
 // grain) drives the material-level micro-highlight streak; `sheen` above
 // already gives the broader soft glow, these work together, not redundantly.
 export const FABRIC_PRESETS = {
-  chiffon: { label: 'Chiffon', massDensity: 30, structStiff: 0.92, bendStiff: 0.10, maxStrain: 1.08, damping: 0.985, friction: 0.75, rough: 0.5, metal: 0.0, sheen: 0.45, clear: 0.0, om: 0.55, transmission: 0.18 },
-  silk: { label: 'Silk Charmeuse', massDensity: 60, structStiff: 0.94, bendStiff: 0.15, maxStrain: 1.07, damping: 0.980, friction: 0.80, rough: 0.26, metal: 0.05, sheen: 0.9, clear: 0.15, om: 0.98, anisotropy: 0.6, anisotropyRotation: 0 },
-  satin: { label: 'Satin', massDensity: 90, structStiff: 0.95, bendStiff: 0.20, maxStrain: 1.06, damping: 0.980, friction: 0.82, rough: 0.2, metal: 0.12, sheen: 0.85, clear: 0.22, om: 1, anisotropy: 0.5, anisotropyRotation: 0 },
-  cotton: { label: 'Cotton Poplin', massDensity: 150, structStiff: 0.96, bendStiff: 0.35, maxStrain: 1.05, damping: 0.970, friction: 0.90, rough: 0.85, metal: 0.0, sheen: 0.2, clear: 0.0, om: 1 },
-  linen: { label: 'Linen', massDensity: 170, structStiff: 0.96, bendStiff: 0.42, maxStrain: 1.05, damping: 0.970, friction: 0.87, rough: 0.82, metal: 0.0, sheen: 0.15, clear: 0.0, om: 1 },
-  wool: { label: 'Wool Crepe', massDensity: 300, structStiff: 0.97, bendStiff: 0.58, maxStrain: 1.04, damping: 0.950, friction: 0.93, rough: 0.96, metal: 0.0, sheen: 0.08, clear: 0.0, om: 1 },
-  denim: { label: 'Denim', massDensity: 400, structStiff: 0.98, bendStiff: 0.80, maxStrain: 1.03, damping: 0.930, friction: 0.96, rough: 0.9, metal: 0.02, sheen: 0.1, clear: 0.0, om: 1 },
-  leather: { label: 'Leather', massDensity: 550, structStiff: 0.98, bendStiff: 0.92, maxStrain: 1.02, damping: 0.900, friction: 0.97, rough: 0.4, metal: 0.2, sheen: 0.2, clear: 0.35, om: 1 },
+  chiffon: { label: 'Chiffon', massDensity: 30, structStiff: 0.92, bendStiff: 0.10, maxStrain: 1.08, damping: 0.985, friction: 0.75, rough: 0.5, metal: 0.0, sheen: 0.45, clear: 0.0, om: 0.55, transmission: 0.18, weaveScale: 2.2, normalStrength: 0.25, sheenRough: 0.52 },
+  silk: { label: 'Silk Charmeuse', massDensity: 60, structStiff: 0.94, bendStiff: 0.15, maxStrain: 1.07, damping: 0.980, friction: 0.80, rough: 0.38, metal: 0.05, sheen: 0.85, clear: 0.06, om: 0.98, anisotropy: 0.6, anisotropyRotation: 0, weaveScale: 2.4, normalStrength: 0.12, sheenRough: 0.38 },
+  satin: { label: 'Satin', massDensity: 90, structStiff: 0.95, bendStiff: 0.20, maxStrain: 1.06, damping: 0.980, friction: 0.82, rough: 0.30, metal: 0.12, sheen: 0.92, clear: 0.14, om: 1, anisotropy: 0.5, anisotropyRotation: 0, weaveScale: 2.2, normalStrength: 0.08, sheenRough: 0.30 },
+  cotton: { label: 'Cotton Poplin', massDensity: 150, structStiff: 0.96, bendStiff: 0.35, maxStrain: 1.05, damping: 0.970, friction: 0.90, rough: 0.85, metal: 0.0, sheen: 0.2, clear: 0.0, om: 1, weaveScale: 1.4, normalStrength: 0.52, sheenRough: 0.68 },
+  linen: { label: 'Linen', massDensity: 170, structStiff: 0.96, bendStiff: 0.42, maxStrain: 1.05, damping: 0.970, friction: 0.87, rough: 0.82, metal: 0.0, sheen: 0.15, clear: 0.0, om: 1, weaveScale: 1.0, normalStrength: 0.72, sheenRough: 0.72 },
+  wool: { label: 'Wool Crepe', massDensity: 300, structStiff: 0.97, bendStiff: 0.58, maxStrain: 1.04, damping: 0.950, friction: 0.93, rough: 0.96, metal: 0.0, sheen: 0.08, clear: 0.0, om: 1, weaveScale: 1.1, normalStrength: 0.68, sheenRough: 0.78 },
+  denim: { label: 'Denim', massDensity: 400, structStiff: 0.98, bendStiff: 0.80, maxStrain: 1.03, damping: 0.930, friction: 0.96, rough: 0.9, metal: 0.02, sheen: 0.1, clear: 0.0, om: 1, weaveScale: 0.95, normalStrength: 0.85, sheenRough: 0.76 },
+  leather: { label: 'Leather', massDensity: 550, structStiff: 0.98, bendStiff: 0.92, maxStrain: 1.02, damping: 0.900, friction: 0.97, rough: 0.4, metal: 0.2, sheen: 0.2, clear: 0.35, om: 1, weaveScale: 0.75, normalStrength: 0.30, sheenRough: 0.42 },
   // WP-7.2 new presets — GSM-grounded starting values, following the
   // existing file's own convention (structStiff narrow-high, bendStiff the
   // differentiating axis), except tulle which is deliberately exempted from
   // the narrow-high structStiff band: it's a loose open net, not a woven
   // sheet, and a woven-grade structStiff made it read as an invisible rigid
   // scaffold instead of the soft, airy mesh it should be.
-  jersey: { label: 'Cotton Jersey', massDensity: 180, structStiff: 0.90, bendStiff: 0.22, maxStrain: 1.18, damping: 0.965, friction: 0.88, rough: 0.82, metal: 0.0, sheen: 0.12, clear: 0.0, om: 1 },
-  scuba: { label: 'Scuba Knit', massDensity: 260, structStiff: 0.91, bendStiff: 0.45, maxStrain: 1.14, damping: 0.955, friction: 0.85, rough: 0.72, metal: 0.0, sheen: 0.20, clear: 0.0, om: 1 },
-  tulle: { label: 'Tulle', massDensity: 18, structStiff: 0.80, bendStiff: 0.06, maxStrain: 1.12, damping: 0.988, friction: 0.55, rough: 0.55, metal: 0.0, sheen: 0.3, clear: 0.0, om: 0.35, transmission: 0.12 },
-  velvet: { label: 'Velvet', massDensity: 320, structStiff: 0.96, bendStiff: 0.44, maxStrain: 1.05, damping: 0.955, friction: 0.94, rough: 0.72, metal: 0.0, sheen: 1.0, clear: 0.0, om: 1 },
-  lace: { label: 'Lace', massDensity: 75, structStiff: 0.91, bendStiff: 0.16, maxStrain: 1.09, damping: 0.980, friction: 0.80, rough: 0.58, metal: 0.0, sheen: 0.38, clear: 0.0, om: 0.78, transmission: 0.08 },
+  jersey: { label: 'Cotton Jersey', massDensity: 180, structStiff: 0.90, bendStiff: 0.22, maxStrain: 1.18, damping: 0.965, friction: 0.88, rough: 0.82, metal: 0.0, sheen: 0.12, clear: 0.0, om: 1, weaveScale: 1.8, normalStrength: 0.46, sheenRough: 0.66 },
+  scuba: { label: 'Scuba Knit', massDensity: 260, structStiff: 0.91, bendStiff: 0.45, maxStrain: 1.14, damping: 0.955, friction: 0.85, rough: 0.72, metal: 0.0, sheen: 0.20, clear: 0.0, om: 1, weaveScale: 1.9, normalStrength: 0.36, sheenRough: 0.56 },
+  tulle: { label: 'Tulle', massDensity: 18, structStiff: 0.80, bendStiff: 0.06, maxStrain: 1.12, damping: 0.988, friction: 0.55, rough: 0.55, metal: 0.0, sheen: 0.3, clear: 0.0, om: 0.35, transmission: 0.12, weaveScale: 1.5, normalStrength: 0.40, sheenRough: 0.55 },
+  velvet: { label: 'Velvet', massDensity: 320, structStiff: 0.96, bendStiff: 0.44, maxStrain: 1.05, damping: 0.955, friction: 0.94, rough: 0.72, metal: 0.0, sheen: 1.0, clear: 0.0, om: 1, weaveScale: 1.7, normalStrength: 0.42, sheenRough: 0.40 },
+  lace: { label: 'Lace', massDensity: 75, structStiff: 0.91, bendStiff: 0.16, maxStrain: 1.09, damping: 0.980, friction: 0.80, rough: 0.58, metal: 0.0, sheen: 0.38, clear: 0.0, om: 0.78, transmission: 0.08, weaveScale: 1.3, normalStrength: 0.78, sheenRough: 0.54 },
 }
 
 export const FABRIC_IDS = Object.keys(FABRIC_PRESETS)

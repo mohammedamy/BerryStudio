@@ -191,6 +191,9 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
     // simulated piece renders in the color it has in 2D instead of one flat
     // garment-wide tint.
     geom.setAttribute('color', new THREE.BufferAttribute(cloth.renderColor, 3))
+    if (cloth.renderPieceStyle) {
+      geom.setAttribute('aPieceStyle', new THREE.BufferAttribute(cloth.renderPieceStyle, 4))
+    }
     geom.setIndex(new THREE.BufferAttribute(cloth.renderTriangles, 1))
     // Vestigial: MeshPhysicalMaterial's standard vertex chunks reference a
     // `normal` attribute unconditionally even though the onBeforeCompile
@@ -233,55 +236,45 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
     return geom
   }, [assembled])
 
-  // Smooth per-vertex normals, computed live in the vertex shader from the
-  // GPU position texture — NOT flatShading. An earlier pass used
-  // flatShading (screen-space-derivative normals, free and automatic) but
-  // that gives every render TRIANGLE its own flat normal, which reads as
-  // visible facets/ridges under any glossy material (very obvious on Silk's
-  // clearcoat). Real smooth shading needs a normal that's consistent across
-  // every triangle sharing a vertex — impossible to get from screen-space
-  // derivatives alone. Since the GPU sim only ever writes particle
-  // *positions* (no vertex-normal attribute tracks the live deformation),
-  // this instead samples each vertex's precomputed neighbor ring (see
-  // assemble.js's deriveNormalRing + the aNbrUV0/aNbrUV1 attributes above)
-  // from the SAME position texture already bound below, and rebuilds an
-  // area-swept normal from current, live, deformed positions every frame.
-  //
-  // MeshPhysicalMaterial (a MeshStandardMaterial superset) so sheen/clearcoat
-  // are available — same onBeforeCompile GPU-position patch works unchanged,
-  // since it still targets the shared <begin_vertex>/<common> chunks. Rebuilt
-  // per fabricId (a real, if infrequent, shader recompile) so switching
-  // fabric actually looks different, not just simulates differently — values
-  // ported from the production app's own fabric table, see fabricPresets.js.
   const material = useMemo(() => {
     const fabric = FABRIC_PRESETS[fabricId] || FABRIC_PRESETS[DEFAULT_FABRIC]
+    const effRough = fabric.rough < 0.30 ? Math.max(0.22, fabric.rough) : Math.max(0.36, fabric.rough)
+    const normStrength = fabric.normalStrength ?? 0.55
     const mat = new THREE.MeshPhysicalMaterial({
       // White base + vertexColors: true — the geometry's own per-piece
       // `color` attribute (assemble.js's renderColor, sourced from the 2D
-      // canvas) is what actually tints the fabric now, not a fixed material
-      // color. See assemble.js's DEFAULT_PIECE_COLOR for the fallback when a
-      // piece arrives with no color at all.
+      // canvas) tints each pattern piece, while the shader adds realistic
+      // micro-weave, elastic ribbing, and seam-finishing detail.
       color: '#ffffff', vertexColors: true,
-      roughness: Math.max(0.38, fabric.rough), metalness: Math.min(0.06, fabric.metal),
-      sheen: fabric.sheen, sheenRoughness: 0.55, clearcoat: Math.min(0.1, fabric.clear), clearcoatRoughness: 0.58,
-      envMapIntensity: 0.55,
+      roughness: effRough, metalness: Math.min(0.06, fabric.metal),
+      sheen: fabric.sheen,
+      sheenRoughness: fabric.sheenRough ?? 0.58,
+      sheenColor: new THREE.Color(fabric.sheen > 0.7 ? '#f7f2ec' : '#ece7e2'),
+      clearcoat: Math.min(0.12, fabric.clear), clearcoatRoughness: 0.52,
+      normalScale: new THREE.Vector2(normStrength, normStrength),
+      envMapIntensity: fabric.rough < 0.35 ? 0.72 : 0.48,
       transparent: fabric.om < 1, opacity: fabric.om,
       side: THREE.DoubleSide,
-      // WP-9.2: only chiffon/tulle declare transmission, only silk/satin
-      // declare anisotropy (see fabricPresets.js) — Material.setValues()
-      // warns on every explicitly-`undefined` key, so these are left out
-      // of the options object entirely rather than passed as `undefined`
-      // for fabrics that don't have them (defaults to 0, i.e. off).
       // Note: omit `anisotropy` on GPU-displaced tangentless cloth geometry so
       // screen-space tangent derivatives never divide by zero and emit NaN pixels.
       ...(fabric.transmission != null && { transmission: fabric.transmission, thickness: 0.001 }),
     })
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uSimPositionTex = positionUniform.current
+      shader.uniforms.uWeaveScale = { value: fabric.weaveScale ?? 1.2 }
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
-          'attribute vec2 aSimUV;\nattribute vec4 aNbrUV0;\nattribute vec4 aNbrUV1;\nuniform sampler2D uSimPositionTex;\n#include <common>\n' + SAFE_CLOTH_NORMAL_GLSL
+          `attribute vec2 aSimUV;
+attribute vec4 aNbrUV0;
+attribute vec4 aNbrUV1;
+attribute vec4 aPieceStyle;
+uniform sampler2D uSimPositionTex;
+uniform float uWeaveScale;
+varying vec4 vPieceStyle;
+varying vec2 vFabricUV;
+#include <common>
+` + SAFE_CLOTH_NORMAL_GLSL
         )
         .replace(
           '#include <begin_vertex>',
@@ -292,15 +285,47 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
           vec3 rn3 = texture2D( uSimPositionTex, aNbrUV1.zw ).xyz - selfPos;
           vec3 smoothNormal = cross(rn0, rn1) + cross(rn1, rn2) + cross(rn2, rn3) + cross(rn3, rn0);
           vNormal = clothSafeNormal(normalMatrix * clothSafeNormal(smoothNormal, normal), vec3(0.0, 0.0, 1.0));
+          vPieceStyle = aPieceStyle;
+          vFabricUV = uv * uWeaveScale;
           vec3 transformed = selfPos;`
         )
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <dithering_fragment>',
-        `#include <dithering_fragment>
-        if (isnan(gl_FragColor.r) || isnan(gl_FragColor.g) || isnan(gl_FragColor.b) || isinf(gl_FragColor.r) || isinf(gl_FragColor.g) || isinf(gl_FragColor.b)) {
-          gl_FragColor.rgb = vec3(0.0);
-        }`
-      )
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `varying vec4 vPieceStyle;
+varying vec2 vFabricUV;
+#include <common>`
+        )
+        .replace(
+          '#include <color_fragment>',
+          `#include <color_fragment>
+          float elasticMask = clamp(vPieceStyle.x, 0.0, 1.0);
+          float seamAO = smoothstep(0.62, 1.0, vPieceStyle.y);
+          float knitMask = clamp(vPieceStyle.z, 0.0, 1.0);
+          float hemEdge = smoothstep(0.76, 1.0, vPieceStyle.w);
+          if (elasticMask > 0.25) {
+            float rib = sin(vFabricUV.x * 38.0) * 0.032 + sin(vFabricUV.y * 52.0) * 0.012;
+            diffuseColor.rgb *= (1.0 + rib * elasticMask - 0.055 * smoothstep(0.65, 1.0, vPieceStyle.w) * elasticMask);
+          } else if (knitMask > 0.25) {
+            float wale = sin(vFabricUV.x * 64.0) * 0.015;
+            diffuseColor.rgb *= (1.0 + wale * knitMask);
+          }
+          diffuseColor.rgb *= (1.0 - 0.075 * seamAO - 0.038 * hemEdge * (1.0 - elasticMask * 0.5));`
+        )
+        .replace(
+          '#include <roughnessmap_fragment>',
+          `#include <roughnessmap_fragment>
+          float elRough = clamp(vPieceStyle.x, 0.0, 1.0);
+          float sRough = smoothstep(0.62, 1.0, vPieceStyle.y);
+          roughnessFactor = clamp(roughnessFactor + 0.14 * elRough + 0.06 * sRough, 0.18, 0.98);`
+        )
+        .replace(
+          '#include <dithering_fragment>',
+          `#include <dithering_fragment>
+          if (isnan(gl_FragColor.r) || isnan(gl_FragColor.g) || isnan(gl_FragColor.b) || isinf(gl_FragColor.r) || isinf(gl_FragColor.g) || isinf(gl_FragColor.b)) {
+            gl_FragColor.rgb = vec3(0.0);
+          }`
+        )
       mat.userData.shader = shader
     }
     return mat

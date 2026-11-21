@@ -1627,7 +1627,7 @@ export function convertAppPattern(payload) {
           briefGussets.push(p.id)
           placementHints[p.id] = { ...(placementHints[p.id] || {}), isBriefGusset: true, sewnCrotchGusset: true, layerOffset: 0 }
         } else {
-          placementHints[p.id] = { ...(placementHints[p.id] || {}), isBriefGusset: true, layerOffset: schemaRole === 'lining' ? -0.0015 : 0 }
+          placementHints[p.id] = { ...(placementHints[p.id] || {}), isBriefGusset: true, layerOffset: schemaRole === 'lining' ? 0.0010 : 0 }
         }
       }
       if (placement === 'attachWaist' && adjEdges?.some((e) => e?.fromIdx === 0 && /Back/i.test(e?.seamId || ''))) {
@@ -2810,6 +2810,36 @@ export function convertAppPattern(payload) {
   }
 
   const fabricId = FABRIC_NAME_TO_ID.has(payload.fabricId) ? payload.fabricId : null
+
+  // Enrich per-piece physics metadata (schemaRole, elastic trims, fitted intimates,
+  // structured outerwear trims, and loose flowing silhouettes) for Cloth Lab's
+  // multi-zone GPU cloth solver.
+  const designText = `${payload.designId || payload.patternId || ''} ${payload.designName || ''}`
+  const isLooseDesign = /abaya|thobe|kaftan|robe|kimono|cape|poncho|palazzo|flared|tiered|circle|bisht|tunic|عباية|ثوب|قفطان|روب|كيمونو|كيب|كلوش|بشت|فضفاض|تونيك/i.test(designText)
+  const isFittedIntimateDesign = /leotard|swimsuit|bikini|bodysuit|brief|trunk|boxer|\bbra\b|bralette|bandeau|مايوه|بكيني|ليوتارد/i.test(designText)
+  for (const p of allInputPieces) {
+    if (p.visible === false) continue
+    const schemaRole = resolveSchemaRole(p.role)?.role || null
+    const nameText = `${p.id || ''} ${(p.label && p.label.en) || ''} ${(p.label && p.label.ar) || ''}`
+    const isElasticTrim = schemaRole === 'elastic-band' || schemaRole === 'rib-cuff' || schemaRole === 'hem-band' || schemaRole === 'strap' || (schemaRole === 'band' && !(p.cutOnFold ?? false))
+    const isStructuredOuter = /collar|lapel|facing|yoke|blazer|jacket|waistcoat|trench|ياقة|طية|جاكيت|بليزر|صديري/i.test(nameText)
+    for (const pid of [p.id, p.id + '_r', p.id + '_l']) {
+      if (!roles[pid]) continue
+      const existing = placementHints[pid]
+      const needSchema = Boolean(schemaRole && (!existing || !existing.schemaRole))
+      const isSport = pid === sportBraFrontId || pid === sportBraBackId
+      if (!needSchema && !isElasticTrim && !isSport && !isFittedIntimateDesign && !isStructuredOuter && !isLooseDesign) {
+        continue
+      }
+      const h = (placementHints[pid] ||= {})
+      if (needSchema) h.schemaRole = schemaRole
+      if (isElasticTrim) h.isElasticTrim = true
+      if (isSport) h.isSportBra = true
+      if (isFittedIntimateDesign) h.isFittedIntimate = true
+      if (isStructuredOuter) h.isStructuredOuter = true
+      if (isLooseDesign) h.isLooseGarment = true
+    }
+  }
 
   return { rawPieces, roles, edgeInstructions, seamInstructions, recognized, skipped, fabricId, placementHints }
 }

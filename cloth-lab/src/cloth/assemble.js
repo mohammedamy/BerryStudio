@@ -1,5 +1,14 @@
 import { placePiece } from '../pattern/placement.js'
 import { dihedralAngle } from './dihedralBend.js'
+import { classifyPiecePhysics, computePerVertexFlowWeight, PHYS_CLASS } from './piecePhysics.js'
+
+const CLASS_PRIORITY = {
+  [PHYS_CLASS.STANDARD]: 0,
+  [PHYS_CLASS.LOOSE_FLOW]: 1,
+  [PHYS_CLASS.STRUCTURED]: 2,
+  [PHYS_CLASS.BIKINI_INTIMATE]: 3,
+  [PHYS_CLASS.ELASTIC]: 4,
+}
 
 // Fixed cm-per-repeat divisor for fabric-texture UVs (see renderUV below) —
 // a real-world scale, not each piece's own bounding box, so a weave tiles at
@@ -120,12 +129,15 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
   // property of the physical fabric piece, and shouldn't depend on the
   // placement heuristic's incidental stretch/compression).
   const simAreaShare = new Float32Array(simParticleCount)
-  // Rough rest-pose normal per sim particle (placed 3D positions this time,
-  // unlike simAreaShare above) — NOT the live shading normal. Only used as a
-  // stable local "up" axis to angularly sort each particle's neighbor ring
-  // in deriveNormalRing below, so the live per-frame smooth-normal
-  // computation in ClothMesh.jsx's shader has a consistent winding order.
   const simRestNormal = new Float32Array(simParticleCount * 3)
+  const simPhysClass = new Float32Array(simParticleCount)
+  const simPhysPriority = new Int8Array(simParticleCount).fill(-1)
+  const simFlowWeight = new Float32Array(simParticleCount)
+  const simSkinOffset = new Float32Array(simParticleCount)
+  const simSkinMin = new Float32Array(simParticleCount).fill(Infinity)
+  const simRestScale = new Float32Array(simParticleCount).fill(1.0)
+  const renderPieceStyle = new Float32Array(renderVertexCount * 4)
+  const renderBoundary = new Uint8Array(renderVertexCount)
   let triWriteOffset = 0
 
   for (let pieceIdx = 0; pieceIdx < triangulatedPieces.length; pieceIdx++) {
@@ -133,6 +145,15 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
     const offset = pieceOffset[tp.pieceId]
     const positions3D = placePiece(tp, dims, pose)
     const [cr, cg, cb] = hexToLinearRGB(tp.color)
+    const physInfo = classifyPiecePhysics(tp, dims)
+    const vertFlow = computePerVertexFlowWeight(tp, physInfo)
+    const prio = CLASS_PRIORITY[physInfo.physClass] ?? 0
+
+    if (tp.boundaryChains) {
+      for (const chain of Object.values(tp.boundaryChains)) {
+        for (const localIdx of chain) renderBoundary[offset + localIdx] = 1
+      }
+    }
 
     positions3D.forEach(([x, y, z], localIdx) => {
       const g = offset + localIdx
@@ -141,9 +162,24 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
       simRestPositions[sp * 3 + 1] += y
       simRestPositions[sp * 3 + 2] += z
       contributionCount[sp]++
+      if (prio > simPhysPriority[sp]) {
+        simPhysPriority[sp] = prio
+        simPhysClass[sp] = physInfo.physClass
+      }
+      const fw = vertFlow[localIdx] || 0
+      simFlowWeight[sp] += fw
+      const localSkinOff = physInfo.physClass === PHYS_CLASS.LOOSE_FLOW
+        ? physInfo.skinOffset * fw
+        : physInfo.skinOffset
+      simSkinOffset[sp] += localSkinOff
+      if (localSkinOff < simSkinMin[sp]) simSkinMin[sp] = localSkinOff
+      if (physInfo.restScale < simRestScale[sp]) simRestScale[sp] = physInfo.restScale
+
       renderColor[g * 3] = cr
       renderColor[g * 3 + 1] = cg
       renderColor[g * 3 + 2] = cb
+      renderPieceStyle[g * 4] = physInfo.isElastic ? 1.0 : 0.0
+      renderPieceStyle[g * 4 + 2] = physInfo.isIntimateKnit ? 1.0 : 0.0
       // Fixed real-world divisor (not this piece's own bounding box) so a
       // fabric weave repeats at the same physical size on every piece
       // regardless of its area — see UV_REPEAT_CM above. UVs now legitimately
@@ -183,6 +219,11 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
     simRestPositions[i * 3] /= c
     simRestPositions[i * 3 + 1] /= c
     simRestPositions[i * 3 + 2] /= c
+    simFlowWeight[i] /= c
+    const rawOff = (simPhysClass[i] === PHYS_CLASS.ELASTIC || simPhysClass[i] === PHYS_CLASS.BIKINI_INTIMATE)
+      ? (Number.isFinite(simSkinMin[i]) ? simSkinMin[i] : simSkinOffset[i] / c)
+      : (simSkinOffset[i] / c)
+    simSkinOffset[i] = Math.max(-0.0032, Math.min(0.0020, rawOff))
 
     const nx = simRestNormal[i * 3], ny = simRestNormal[i * 3 + 1], nz = simRestNormal[i * 3 + 2]
     const nlen = Math.hypot(nx, ny, nz) || 1
@@ -195,11 +236,17 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
   const simDegree = new Uint16Array(simParticleCount)
   for (let i = 0; i < renderVertexCount; i++) simDegree[renderVertexToSimParticle[i]]++
   const weldDegree = new Uint8Array(renderVertexCount)
-  for (let i = 0; i < renderVertexCount; i++) weldDegree[i] = Math.min(255, simDegree[renderVertexToSimParticle[i]])
+  for (let i = 0; i < renderVertexCount; i++) {
+    const deg = Math.min(255, simDegree[renderVertexToSimParticle[i]])
+    weldDegree[i] = deg
+    renderPieceStyle[i * 4 + 1] = deg >= 2 ? 1.0 : 0.0
+    renderPieceStyle[i * 4 + 3] = (renderBoundary[i] && deg === 1) ? 1.0 : 0.0
+  }
 
   return {
     simParticleCount, simRestPositions, simRestNormal, simAreaShare,
-    renderVertexCount, renderVertexToSimParticle, renderUV, renderColor, renderTriangles,
+    simPhysClass, simFlowWeight, simSkinOffset, simRestScale,
+    renderVertexCount, renderVertexToSimParticle, renderUV, renderColor, renderPieceStyle, renderTriangles,
     renderTriPieceIdx, isGarmentAssembly: true,
     weldDegree, pieceOffset,
   }
@@ -213,7 +260,7 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
 // triangle edge; "bend" connects the two off-edge vertices of each pair of
 // triangles sharing an edge (the standard fold/hinge constraint).
 export function deriveNeighbors(cloth, maxNeighbors = 8) {
-  const { renderTriangles, renderVertexToSimParticle, simParticleCount, simRestPositions, renderTriPieceIdx, isGarmentAssembly } = cloth
+  const { renderTriangles, renderVertexToSimParticle, simParticleCount, simRestPositions, renderTriPieceIdx, isGarmentAssembly, simRestScale } = cloth
 
   const structuralSets = Array.from({ length: simParticleCount }, () => new Set())
   const edgeEntries = new Map() // "a_b" (a<b) -> [{ a, b, opp, pieceIdx }, ...]
@@ -290,13 +337,20 @@ export function deriveNeighbors(cloth, maxNeighbors = 8) {
   // Overflow rule: keep the `maxNeighbors` shortest-rest-length neighbors,
   // drop the rest — most particles (interior grid, 2-piece seams) never hit
   // this; only rare 3+-piece corners can exceed a Delaunay mesh's typical
-  // ~6 neighbors.
+  // ~6 neighbors. Apply per-particle elastic/intimate rest-length contraction
+  // (`simRestScale`) uniformly across connected structural & bend springs.
   function packNeighbors(sets) {
     const idx = new Int32Array(simParticleCount * maxNeighbors).fill(-1)
     const rest = new Float32Array(simParticleCount * maxNeighbors)
     for (let p = 0; p < simParticleCount; p++) {
+      const spScale = simRestScale ? simRestScale[p] : 1.0
       const neighbors = [...sets[p]].map((n) => [n, dist(p, n)]).sort((a, b) => a[1] - b[1]).slice(0, maxNeighbors)
-      neighbors.forEach(([n, d], k) => { idx[p * maxNeighbors + k] = n; rest[p * maxNeighbors + k] = d })
+      neighbors.forEach(([n, d], k) => {
+        const snScale = simRestScale ? simRestScale[n] : 1.0
+        const edgeScale = 0.5 * (spScale + snScale)
+        idx[p * maxNeighbors + k] = n
+        rest[p * maxNeighbors + k] = d * edgeScale
+      })
     }
     return { idx, rest }
   }

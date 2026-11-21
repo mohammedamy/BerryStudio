@@ -13,7 +13,7 @@ function edgeRawPoints(piece, edgeName) {
   // single point instead of going all the way around.
   if (from === to) {
     let i = from
-    for (let k = 0; k < n; k++) {
+    for (let k = 0; k <= n; k++) {
       pts.push(piece.outline[i])
       i = (i + 1) % n
     }
@@ -189,11 +189,30 @@ export function triangulatePiece(piece, subdivForPiece, targetSpacingCm) {
   const del = new Delaunator(coords)
 
   const triangles = []
+  const bLen = boundary.length
   for (let t = 0; t < del.triangles.length; t += 3) {
     const ia = del.triangles[t], ib = del.triangles[t + 1], ic = del.triangles[t + 2]
-    const cx = (allPts[ia][0] + allPts[ib][0] + allPts[ic][0]) / 3
-    const cy = (allPts[ia][1] + allPts[ib][1] + allPts[ic][1]) / 3
-    if (pointInPolygon([cx, cy], boundary)) triangles.push(ia, ib, ic)
+    const pa = allPts[ia], pb = allPts[ib], pc = allPts[ic]
+    const area2 = Math.abs((pb[0] - pa[0]) * (pc[1] - pa[1]) - (pc[0] - pa[0]) * (pb[1] - pa[1]))
+    const maxEdge = Math.max(
+      Math.hypot(pb[0] - pa[0], pb[1] - pa[1]),
+      Math.hypot(pc[0] - pb[0], pc[1] - pb[1]),
+      Math.hypot(pa[0] - pc[0], pa[1] - pc[1]),
+    )
+    if (maxEdge > 1e-6 && (area2 / maxEdge) < 1e-3) continue
+    const cx = (pa[0] + pb[0] + pc[0]) / 3
+    const cy = (pa[1] + pb[1] + pc[1]) / 3
+    if (!pointInPolygon([cx, cy], boundary)) continue
+    if (ia < bLen && ib < bLen && ic < bLen && maxEdge > targetSpacingCm * 2.5) {
+      const okMid = (u, v) => {
+        const diff = Math.abs(u - v)
+        if (diff === 1 || diff === bLen - 1) return true
+        const mid = [(allPts[u][0] + allPts[v][0]) * 0.5, (allPts[u][1] + allPts[v][1]) * 0.5]
+        return pointInPolygon(mid, boundary) && distanceToPolyline(mid, boundary) > 1e-3
+      }
+      if (!okMid(ia, ib) || !okMid(ib, ic) || !okMid(ic, ia)) continue
+    }
+    triangles.push(ia, ib, ic)
   }
 
   return {
@@ -207,9 +226,20 @@ export function triangulatePiece(piece, subdivForPiece, targetSpacingCm) {
   }
 }
 
-export function adaptiveSpacingCm(pieces, minSpacingCm = 2, maxParticles = 3000) {
+export function adaptiveSpacingCm(pieces, minSpacingOrOpts = 2, maxParticles = 3000) {
+  let minSpacingCm = typeof minSpacingOrOpts === 'number' ? minSpacingOrOpts : 2
+  let effMax = maxParticles
+  if (minSpacingOrOpts && typeof minSpacingOrOpts === 'object') {
+    if (typeof minSpacingOrOpts.minSpacingCm === 'number') minSpacingCm = minSpacingOrOpts.minSpacingCm
+    if (minSpacingOrOpts.qualityTier === 'high' && maxParticles === 3000) effMax = 3200
+  }
   let totalArea = 0
+  let hasIntimate = false
   for (const p of pieces) {
+    const h = p?.placementHint
+    if (h?.isBrief || h?.sewnCupBra || h?.sewnSportBand || h?.isBriefGusset || h?.isLegOpeningElastic || h?.isFittedIntimate) {
+      hasIntimate = true
+    }
     const pts = p?.outline
     if (!Array.isArray(pts) || pts.length < 3) continue
     let area2 = 0
@@ -218,7 +248,8 @@ export function adaptiveSpacingCm(pieces, minSpacingCm = 2, maxParticles = 3000)
     }
     totalArea += Math.abs(area2) * 0.5
   }
-  return Math.max(minSpacingCm, Math.min(4.5, Math.sqrt(Math.max(1, totalArea) / maxParticles)))
+  const effMin = hasIntimate && totalArea < 4200 ? Math.min(minSpacingCm, 1.45) : minSpacingCm
+  return Math.max(effMin, Math.min(4.5, Math.sqrt(Math.max(1, totalArea) / effMax)))
 }
 
 export function triangulateAll(pieces, seams, targetSpacingCm = 2) {

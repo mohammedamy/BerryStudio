@@ -248,7 +248,7 @@ vec4 strainLimitCorrection(vec3 predicted, float idx, float rest, float invMassS
 // than either approach alone, closer to a critically-damped contact than a
 // slowly-leaking one.
 const CAPSULE_COLLISION_GLSL = `
-vec3 collideCapsule(int capIdx, vec3 p, vec3 prevP, vec3 a, vec3 b, float r0, float r1, float zScale, float friction) {
+vec3 collideCapsule(int capIdx, vec3 p, vec3 prevP, vec3 a, vec3 b, float r0, float r1, float zScale, float friction, float skinOffset) {
   vec3 ab = b - a;
   float abLen2 = max(dot(ab, ab), 1e-8);
   float rawT = dot(p - a, ab) / abLen2;
@@ -258,7 +258,7 @@ vec3 collideCapsule(int capIdx, vec3 p, vec3 prevP, vec3 a, vec3 b, float r0, fl
   if (capIdx == 0 && rawT > 1.02) return p;
   float t = clamp(rawT, 0.0, 1.0);
   vec3 c = a + ab * t;
-  float r = mix(r0, r1, t);
+  float r = max(0.006, mix(r0, r1, t) + skinOffset);
   vec3 offset = p - c;
   float yWeight = (capIdx == 0 && offset.y < 0.0) ? 5.5 : 1.0;
   if (yWeight > 1.5) {
@@ -302,7 +302,7 @@ vec3 collideCapsule(int capIdx, vec3 p, vec3 prevP, vec3 a, vec3 b, float r0, fl
   return p;
 }
 
-vec3 collideBodyEnvelope(vec3 p, vec3 prevP, float friction) {
+vec3 collideBodyEnvelope(vec3 p, vec3 prevP, float friction, float skinOffset) {
   const float ENV_PHI_F = ${ENV_PHI_BINS}.0;
   const float ENV_T_F = ${ENV_T_BINS}.0;
   const float ENV_TEX_H = ${ENV_SEGMENT_COUNT * ENV_T_BINS}.0;
@@ -336,7 +336,8 @@ vec3 collideBodyEnvelope(vec3 p, vec3 prevP, float friction) {
     float texRow = float(s) * ENV_T_F + iv;
     vec2 envUv = vec2((iu + 0.5) / ENV_PHI_F, (texRow + 0.5) / ENV_TEX_H);
     vec4 corners = texture2D(uBodyEnvelope, envUv);
-    float rEnv = mix(mix(corners.r, corners.g, fu), mix(corners.b, corners.a, fu), fv);
+    float rEnvRaw = mix(mix(corners.r, corners.g, fu), mix(corners.b, corners.a, fu), fv);
+    float rEnv = rEnvRaw > 0.0 ? max(0.008, rEnvRaw + skinOffset) : 0.0;
 
     if (dist < rEnv && rEnv > 0.0) {
       float depth = rEnv - dist;
@@ -363,13 +364,13 @@ vec3 collideBodyEnvelope(vec3 p, vec3 prevP, float friction) {
   return p;
 }
 
-vec3 collideAllBody(vec3 p, vec3 prevP, float friction) {
+vec3 collideAllBody(vec3 p, vec3 prevP, float friction, float skinOffset) {
   for (int i = 0; i < ${MAX_COLLISION_CAPSULES}; i++) {
     if (i >= uCapsuleCount) break;
-    p = collideCapsule(i, p, prevP, uCapA[i], uCapB[i], uCapR0[i], uCapR1[i], uCapZScale[i], friction);
+    p = collideCapsule(i, p, prevP, uCapA[i], uCapB[i], uCapR0[i], uCapR1[i], uCapZScale[i], friction, skinOffset);
   }
   if (uEnvEnabled > 0.5) {
-    p = collideBodyEnvelope(p, prevP, friction);
+    p = collideBodyEnvelope(p, prevP, friction, skinOffset);
   }
   return p;
 }
@@ -381,6 +382,16 @@ vec3 collideAllBody(vec3 p, vec3 prevP, float friction) {
 // so every hinge applies zero net linear force and zero net torque across the
 // mesh (stopping radial inflation and upward levitation completely).
 const DIHEDRAL_BEND_GLSL = `
+float bendScaleFor(vec2 pcFlow) {
+  float physClass = pcFlow.x;
+  float flowW = pcFlow.y;
+  if (physClass > 0.5 && physClass < 1.5) return 1.35; // Elastic band
+  if (physClass > 1.5 && physClass < 2.5) return 0.78; // Bikini/intimate knit
+  if (physClass > 2.5 && physClass < 3.5) return mix(0.90, 0.52, flowW); // Loose flowing
+  if (physClass > 3.5) return 1.35; // Structured collar/cuff/facing
+  return 1.0;
+}
+
 vec3 dihedralCanonicalRoleDelta(
   float p1Idx, float p2Idx, float p3Idx, float p4Idx,
   float n2Sign, float seamScale, float restAngle, int role
@@ -395,10 +406,10 @@ vec3 dihedralCanonicalRoleDelta(
   vec3 p3 = texture2D(texturePosition, uv3).xyz;
   vec3 p4 = texture2D(texturePosition, uv4).xyz;
 
-  vec2 a1 = texture2D(uAreaShare, uv1).rg;
-  vec2 a2 = texture2D(uAreaShare, uv2).rg;
-  vec2 a3 = texture2D(uAreaShare, uv3).rg;
-  vec2 a4 = texture2D(uAreaShare, uv4).rg;
+  vec4 a1 = texture2D(uAreaShare, uv1);
+  vec4 a2 = texture2D(uAreaShare, uv2);
+  vec4 a3 = texture2D(uAreaShare, uv3);
+  vec4 a4 = texture2D(uAreaShare, uv4);
   float w1 = a1.g > 0.5 ? 0.0 : 1.0 / max(uMassDensity * a1.r, 1e-6);
   float w2 = a2.g > 0.5 ? 0.0 : 1.0 / max(uMassDensity * a2.r, 1e-6);
   float w3 = a3.g > 0.5 ? 0.0 : 1.0 / max(uMassDensity * a3.r, 1e-6);
@@ -441,7 +452,8 @@ vec3 dihedralCanonicalRoleDelta(
   float denom = w1 * dot(q1, q1) + w2 * dot(q2, q2) + w3 * dot(q3, q3) + w4 * dot(q4, q4);
   if (denom < 1e-10) return vec3(0.0);
 
-  float effStiff = clamp(uDihedralStiff, 0.0, 1.0) * seamScale;
+  float hingeBendScale = 0.25 * (bendScaleFor(a1.ba) + bendScaleFor(a2.ba) + bendScaleFor(a3.ba) + bendScaleFor(a4.ba));
+  float effStiff = clamp(uDihedralStiff * hingeBendScale, 0.0, 1.0) * seamScale;
   float stepAngle = clamp(effStiff * error, -uDihedralMaxDelta * 2.5, uDihedralMaxDelta * 2.5);
   float lambda = stepAngle / denom;
   float maxDisp = 0.20 * min(h3, h4);
@@ -671,9 +683,8 @@ uniform float uDihedralStiff;
 uniform float uDihedralMaxDelta;
 `
 
-// The default tier's bend application — moved out of positionFragmentShader
-// verbatim (not rewritten) so a text diff against the pre-WP-35 version of
-// this file shows exactly zero change to what the default tier compiles.
+// The default tier's bend application — consumes per-particle `effBendStiff`
+// computed from (physClass, flowWeight) and the active fabric preset.
 const DEFAULT_BEND_MAIN_GLSL = `
   // Bend: the fold/hinge constraint between the two off-edge vertices of
   // each pair of triangles sharing an edge.
@@ -690,7 +701,7 @@ const DEFAULT_BEND_MAIN_GLSL = `
   bendAcc += neighborCorrection(predicted, bB.y, brB.y, invMassSelf);
   bendAcc += neighborCorrection(predicted, bB.z, brB.z, invMassSelf);
   bendAcc += neighborCorrection(predicted, bB.w, brB.w, invMassSelf);
-  if (bendAcc.w > 0.5) predicted -= (bendAcc.xyz / bendAcc.w) * uBendStiff;
+  if (bendAcc.w > 0.5) predicted -= (bendAcc.xyz / bendAcc.w) * effBendStiff;
 `
 
 // WP-35 / v86 high-quality tier: 4-vertex momentum-conserving dihedral-angle
@@ -747,21 +758,10 @@ const DIHEDRAL_BEND_MAIN_GLSL = `
 // for every variable listed in setVariableDependencies(); declaring them
 // again here would be a duplicate-declaration compile error.
 //
-// `highQuality` (WP-35, default false): every existing caller passes
-// nothing, so `positionFragmentShader(texDim)` still returns the same
-// shader source it always has (give or take a couple of now-empty
-// template lines, harmless GLSL whitespace) — the extra uniforms/function
-// and the bend section's replacement below only exist in the string when
-// explicitly asked for, which is the strongest available guarantee that
-// "the existing default solver's behavior and performance are completely
-// unchanged" (this WP's own acceptance criterion) actually holds: the
-// compiled default-tier program contains none of this WP's new code at
-// all, not just "happens to produce the same result."
+// Keeps sampler count within the WebGL2 minimum MAX_TEXTURE_IMAGE_UNITS (16)
+// by reading per-particle physics class & flowWeight from uAreaShare.ba and
+// per-particle skin clearance offset from uRestPosition.a.
 function positionFragmentShader(texDim, highQuality = false) {
-  // WP-35b: only computed/used when highQuality — the default tier's
-  // compiled shader still contains none of this (see selfCollisionGlsl's
-  // splice below), matching the exact guarantee this file's other
-  // highQuality-gated code already makes.
   const sortDim = nextPow2(texDim)
   const maxIters = minLowerBoundIters(sortDim * sortDim)
   return `
@@ -812,7 +812,7 @@ ${CAPSULE_COLLISION_GLSL}
 ${highQuality ? selfCollisionSpatialHashGlsl(sortDim, maxIters, DEFAULT_SCAN_CAP) : selfCollisionGlsl(texDim)}
 ${highQuality ? DIHEDRAL_BEND_GLSL : ''}
 
-vec4 edgeMidpointBodyPush(vec3 predicted, float idx) {
+vec4 edgeMidpointBodyPush(vec3 predicted, float idx, float skinOffset) {
   if (idx < -0.5) return vec4(0.0);
   vec2 nuv = ( vec2( mod(idx, resolution.x), floor(idx / resolution.x) ) + 0.5 ) / resolution;
   vec3 npos = texture2D(texturePosition, nuv).xyz;
@@ -821,7 +821,7 @@ vec4 edgeMidpointBodyPush(vec3 predicted, float idx) {
   for (int k = 0; k < 3; k++) {
     float frac = k == 0 ? 0.34 : (k == 1 ? 0.50 : 0.66);
     vec3 samplePt = mix(predicted, npos, frac);
-    vec3 pushed = collideAllBody(samplePt, samplePt, 0.0);
+    vec3 pushed = collideAllBody(samplePt, samplePt, 0.0, skinOffset);
     vec3 diff = pushed - samplePt;
     float dLen = length(diff);
     if (dLen > bestLen) {
@@ -840,14 +840,43 @@ void main() {
   vec4 areaData = texture2D(uAreaShare, uv);
   float areaShare = areaData.r;
   float pinned = areaData.g;
+  float physClass = areaData.b;
+  float flowW = areaData.a;
+  vec4 restData = texture2D(uRestPosition, uv);
+  vec3 myRestPos = restData.xyz;
+  float skinOff = restData.w;
+
+  bool isElastic = physClass > 0.5 && physClass < 1.5;
+  bool isBikini  = physClass > 1.5 && physClass < 2.5;
+  bool isLoose   = physClass > 2.5 && physClass < 3.5;
+  bool isStruct  = physClass > 3.5;
+
+  float effDamping = isElastic ? min(uDamping, 0.945)
+    : (isBikini ? min(uDamping, 0.955)
+    : (isLoose ? mix(uDamping, min(0.988, uDamping + 0.010), flowW) : uDamping));
+  float effFriction = isElastic ? clamp(uFriction * 1.12, 0.92, 0.99)
+    : (isBikini ? max(uFriction, 0.92)
+    : (isLoose ? uFriction * mix(0.92, 0.44, flowW) : uFriction));
+  float effStructStiff = isElastic ? max(uStructStiff, 0.96)
+    : (isBikini ? mix(uStructStiff, 0.93, 0.5)
+    : (isStruct ? max(uStructStiff, 0.97) : uStructStiff));
+  float effMaxStrain = isElastic ? max(uMaxStrain, 1.24)
+    : (isBikini ? max(uMaxStrain, 1.22)
+    : (isStruct ? min(uMaxStrain, 1.04) : uMaxStrain));
+  float effBendScale = isElastic ? 1.35
+    : (isBikini ? 0.78
+    : (isLoose ? mix(0.90, 0.52, flowW) : (isStruct ? 1.35 : 1.0)));
+  float effBendStiff = isElastic
+    ? clamp(uBendStiff * effBendScale, 0.25, 0.72)
+    : clamp(uBendStiff * effBendScale, 0.04, 0.95);
 
   vec3 pos = texture2D(texturePosition, uv).xyz;
 
   if (pinned > 0.5) {
     vec3 pinTarget = uPinMotionActive > 0.5
-      ? (texture2D(uRestPosition, uv).xyz + uPinOffset)
+      ? (myRestPos + uPinOffset)
       : pos;
-    pinTarget = collideAllBody(pinTarget, pos, uFriction);
+    pinTarget = collideAllBody(pinTarget, pos, effFriction, skinOff);
     gl_FragColor = vec4(pinTarget, 0.0);
     return;
   }
@@ -857,21 +886,32 @@ void main() {
   // the step so a dragged particle never fights the solver — its NEIGHBORS
   // still see it move (via texturePosition) and react normally.
   if (myFlatIdx == uDragParticleIndex) {
-    gl_FragColor = vec4(collideAllBody(uDragTargetPosition, pos, uFriction), 0.0);
+    gl_FragColor = vec4(collideAllBody(uDragTargetPosition, pos, effFriction, skinOff), 0.0);
     return;
   }
 
-  vec3 prevPos = texture2D(texturePrevPosition, uv).xyz;
-  vec3 predicted = pos + (pos - prevPos) * uVelocityScale * uDamping + uGravity * uGravityRamp * uDt * uDt;
-  float invMassSelf = 1.0 / max(uMassDensity * areaShare, 1e-6);
-
-  // Structural: every unique triangle edge (see assemble.js deriveNeighbors).
-  // A Delaunay triangle's own edges already resist shear the way a
-  // quad-grid's diagonals would, so there is no separate shear pass.
+  // Structural neighbors fetched early to support aerodynamic drag on loose fabrics.
   vec4 sA = texture2D(uStructNbrA, uv);
   vec4 sB = texture2D(uStructNbrB, uv);
   vec4 srA = texture2D(uStructRestA, uv);
   vec4 srB = texture2D(uStructRestB, uv);
+
+  vec3 prevPos = texture2D(texturePrevPosition, uv).xyz;
+  vec3 velStep = (pos - prevPos) * uVelocityScale;
+  if (isLoose && flowW > 0.05 && sA.x > -0.5 && sA.y > -0.5) {
+    vec2 nUv0 = (vec2(mod(sA.x, resolution.x), floor(sA.x / resolution.x)) + 0.5) / resolution;
+    vec2 nUv1 = (vec2(mod(sA.y, resolution.x), floor(sA.y / resolution.x)) + 0.5) / resolution;
+    vec3 nCross = cross(texture2D(texturePosition, nUv0).xyz - pos, texture2D(texturePosition, nUv1).xyz - pos);
+    float nLenSq = dot(nCross, nCross);
+    if (nLenSq > 1e-10) {
+      vec3 approxN = nCross * inversesqrt(nLenSq);
+      float vNorm = dot(velStep, approxN);
+      velStep -= approxN * vNorm * clamp(0.14 * flowW, 0.0, 0.25);
+    }
+  }
+  vec3 predicted = pos + velStep * effDamping + uGravity * uGravityRamp * uDt * uDt;
+  float invMassSelf = 1.0 / max(uMassDensity * areaShare, 1e-6);
+
   vec4 structAcc = vec4(0.0);
   structAcc += neighborCorrection(predicted, sA.x, srA.x, invMassSelf);
   structAcc += neighborCorrection(predicted, sA.y, srA.y, invMassSelf);
@@ -881,36 +921,36 @@ void main() {
   structAcc += neighborCorrection(predicted, sB.y, srB.y, invMassSelf);
   structAcc += neighborCorrection(predicted, sB.z, srB.z, invMassSelf);
   structAcc += neighborCorrection(predicted, sB.w, srB.w, invMassSelf);
-  if (structAcc.w > 0.5) predicted -= (structAcc.xyz / structAcc.w) * uStructStiff;
+  if (structAcc.w > 0.5) predicted -= (structAcc.xyz / structAcc.w) * effStructStiff;
 
   // WP-7.1 strain limit: hard clamp on the same structural edges, after the
   // proportional pass above — see STRAIN_LIMIT_GLSL's header comment.
   vec4 strainAcc = vec4(0.0);
-  strainAcc += strainLimitCorrection(predicted, sA.x, srA.x, invMassSelf, uMaxStrain);
-  strainAcc += strainLimitCorrection(predicted, sA.y, srA.y, invMassSelf, uMaxStrain);
-  strainAcc += strainLimitCorrection(predicted, sA.z, srA.z, invMassSelf, uMaxStrain);
-  strainAcc += strainLimitCorrection(predicted, sA.w, srA.w, invMassSelf, uMaxStrain);
-  strainAcc += strainLimitCorrection(predicted, sB.x, srB.x, invMassSelf, uMaxStrain);
-  strainAcc += strainLimitCorrection(predicted, sB.y, srB.y, invMassSelf, uMaxStrain);
-  strainAcc += strainLimitCorrection(predicted, sB.z, srB.z, invMassSelf, uMaxStrain);
-  strainAcc += strainLimitCorrection(predicted, sB.w, srB.w, invMassSelf, uMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sA.x, srA.x, invMassSelf, effMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sA.y, srA.y, invMassSelf, effMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sA.z, srA.z, invMassSelf, effMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sA.w, srA.w, invMassSelf, effMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sB.x, srB.x, invMassSelf, effMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sB.y, srB.y, invMassSelf, effMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sB.z, srB.z, invMassSelf, effMaxStrain);
+  strainAcc += strainLimitCorrection(predicted, sB.w, srB.w, invMassSelf, effMaxStrain);
   if (strainAcc.w > 0.5) predicted -= strainAcc.xyz / strainAcc.w;
 
 ${highQuality ? DIHEDRAL_BEND_MAIN_GLSL : DEFAULT_BEND_MAIN_GLSL}
 
   // First body collision pass (capsules + exact mesh envelope) so
   // self-collision sees post-body-collision positions.
-  predicted = collideAllBody(predicted, prevPos, uFriction);
+  predicted = collideAllBody(predicted, prevPos, effFriction, skinOff);
 
   // Self-collision: \`pos\` (this substep's UNMODIFIED starting position,
   // not \`predicted\`) is passed through too — see selfCollisionCorrection's
   // own header for why the spatial-hash tier needs it.
-  vec3 selfCorr = selfCollisionCorrection(predicted, pos, texture2D(uRestPosition, uv).xyz, myFlatIdx);
+  vec3 selfCorr = selfCollisionCorrection(predicted, pos, myRestPos, myFlatIdx);
   if (dot(selfCorr, selfCorr) > 1e-12) {
     predicted += selfCorr;
     // Re-enforce body collision so an outer fold can never shove an inner
     // cloth layer inside the mannequin body!
-    predicted = collideAllBody(predicted, prevPos, uFriction);
+    predicted = collideAllBody(predicted, prevPos, effFriction, skinOff);
   }
 
   // Structural edge-midpoint collision: prevents stretched triangle edges
@@ -919,7 +959,7 @@ ${highQuality ? DIHEDRAL_BEND_MAIN_GLSL : DEFAULT_BEND_MAIN_GLSL}
   float edgePushMax = 0.0;
   float edgePushCount = 0.0;
   ${['sA.x', 'sA.y', 'sA.z', 'sA.w', 'sB.x', 'sB.y', 'sB.z', 'sB.w'].map((slot) => `{
-    vec4 ep = edgeMidpointBodyPush(predicted, ${slot});
+    vec4 ep = edgeMidpointBodyPush(predicted, ${slot}, skinOff);
     if (ep.w > 0.0) {
       edgePushSum += ep.xyz;
       edgePushMax = max(edgePushMax, ep.w);
@@ -932,7 +972,7 @@ ${highQuality ? DIHEDRAL_BEND_MAIN_GLSL : DEFAULT_BEND_MAIN_GLSL}
     if (avgLen > 1e-6) {
       predicted += (avgPush / avgLen) * (0.90 * mix(avgLen, edgePushMax, 0.5));
     }
-    predicted = collideAllBody(predicted, prevPos, uFriction);
+    predicted = collideAllBody(predicted, prevPos, effFriction, skinOff);
   }
 
   if (predicted.y < uFloorY) predicted.y = uFloorY;
@@ -1134,16 +1174,17 @@ export class ClothSimulation {
     const prevTex = gpuCompute.createTexture()
     const restTex = gpuCompute.createTexture()
     for (let i = 0; i < cloth.simParticleCount; i++) {
+      const skinOff = cloth.simSkinOffset ? cloth.simSkinOffset[i] : 0
       let pt = [
         cloth.simRestPositions[i * 3],
         cloth.simRestPositions[i * 3 + 1],
         cloth.simRestPositions[i * 3 + 2],
       ]
       if (collisionRig && collisionRig.length > 0) {
-        pt = projectPointOutsideCapsules(pt, collisionRig)
+        pt = projectPointOutsideCapsules(pt, collisionRig, skinOff)
       }
       if (bodyEnvelope && envelopeFrames) {
-        pt = projectPointOutsideBodyEnvelope(pt, bodyEnvelope, envelopeFrames)
+        pt = projectPointOutsideBodyEnvelope(pt, bodyEnvelope, envelopeFrames, skinOff)
       }
       const [x, y, z] = pt
       posTex.image.data[i * 4] = x; posTex.image.data[i * 4 + 1] = y; posTex.image.data[i * 4 + 2] = z; posTex.image.data[i * 4 + 3] = 0
@@ -1151,6 +1192,7 @@ export class ClothSimulation {
       restTex.image.data[i * 4] = x
       restTex.image.data[i * 4 + 1] = y
       restTex.image.data[i * 4 + 2] = z
+      restTex.image.data[i * 4 + 3] = skinOff
     }
 
     const posVar = gpuCompute.addVariable('texturePosition', positionFragmentShader(this.texDim, this.qualityTier === QUALITY_TIER_HIGH), posTex)
@@ -1163,11 +1205,10 @@ export class ClothSimulation {
     const areaTex = gpuCompute.createTexture()
     for (let i = 0; i < cloth.simParticleCount; i++) {
       areaTex.image.data[i * 4] = cloth.simAreaShare[i]
-      // pinned flag — shoulder-seam vertices only (see collisionRig.js's
-      // deriveShoulderPinMask); everything else stays pure collision+
-      // friction. Independent of grab-drag, which uses uDragParticleIndex
-      // (see setDragParticle) rather than this per-particle texture.
+      // pinned flag — shoulder/waist tacks & unsewn trims; .b = physClass; .a = flowWeight.
       areaTex.image.data[i * 4 + 1] = pinnedMask && pinnedMask[i] ? 1 : 0
+      areaTex.image.data[i * 4 + 2] = cloth.simPhysClass ? cloth.simPhysClass[i] : 0
+      areaTex.image.data[i * 4 + 3] = cloth.simFlowWeight ? cloth.simFlowWeight[i] : 0
     }
 
     const structTex = packNeighborTextures(neighbors.structural, neighbors.maxNeighbors, this.texDim)
@@ -1312,12 +1353,12 @@ export class ClothSimulation {
   // explosion; this is for the static placement tension having nowhere to
   // hide before gravity even starts. Doesn't touch frameCount, so the
   // visible gravity ramp still starts fresh at 0 on the next real step().
-  preRelax(steps = 40) {
+  preRelax(steps = 48) {
     const u = this.posVar.material.uniforms
     const savedGravityRamp = u.uGravityRamp.value
     const savedVelScale = u.uVelocityScale.value
     const heavyMesh = this.simParticleCount > 2200
-    const totalSteps = heavyMesh ? Math.min(steps, 20) : steps
+    const totalSteps = heavyMesh ? Math.min(steps, 26) : steps
     u.uGravityRamp.value = 0
     u.uVelocityScale.value = 0.25
     for (let i = 0; i < totalSteps; i++) {

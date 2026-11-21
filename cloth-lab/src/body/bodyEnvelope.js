@@ -230,9 +230,11 @@ export function buildBodyEnvelopeTexture(bindGeometry, dims, landmarks, clearanc
   }
 
   // Conservative 3x3 max dilation on trunk (`s === 0`, blocking upward bleed from
-  // broad upper-chest rows into the narrow neck/shoulder slope above `shCutIv`),
-  // azimuthal dilation + gentle axial blend on tapered limbs (`s >= 1`).
+  // broad upper-chest rows into the narrow neck/shoulder slope above `shCutIv`,
+  // and preventing broad hip rows from bleeding downward into the concave
+  // inguinal/bikini saddle below `bikiniCutIv`), plus gentle axial blend on limbs.
   const shCutIv = Math.floor(((dims.shoulderY - dims.span * 0.025 - segDefs[0].a[1]) / Math.max(1e-6, segDefs[0].b[1] - segDefs[0].a[1])) * ENV_T_BINS)
+  const bikiniCutIv = Math.floor(((dims.hipY - dims.span * 0.030 - segDefs[0].a[1]) / Math.max(1e-6, segDefs[0].b[1] - segDefs[0].a[1])) * ENV_T_BINS)
   const dilated = new Float32Array(filled.length)
   for (let s = 0; s < ENV_SEGMENT_COUNT; s++) {
     const segBase = s * ENV_T_BINS * ENV_PHI_BINS
@@ -249,12 +251,17 @@ export function buildBodyEnvelopeTexture(bindGeometry, dims, landmarks, clearanc
         if (s === 0) {
           for (const dv of [-1, 1]) {
             if (iv >= shCutIv && dv === -1) continue
+            if (iv <= bikiniCutIv && dv === 1) continue
             const nv = clamp(iv + dv, 0, ENV_T_BINS - 1)
             const rOff = segBase + nv * ENV_PHI_BINS
             for (let du = -1; du <= 1; du++) {
               const nu = (iu + du + ENV_PHI_BINS) % ENV_PHI_BINS
               const val = filled[rOff + nu]
-              if (val > best) best = val
+              if (iv <= bikiniCutIv && dv === -1) {
+                if (val > 0) best = Math.max(best, 0.72 * rowMax + 0.28 * val)
+              } else if (val > best) {
+                best = val
+              }
             }
           }
         } else {
@@ -400,10 +407,11 @@ export function computeEnvelopeFramesFromLimbs(limbs, dims, landmarks) {
  * Projects a 3D point `[x, y, z]` outside all 9 segments of `envelope` on CPU
  * using the exact same bilinear formula as `ClothSimulation.js`'s GLSL shader.
  */
-export function projectPointOutsideBodyEnvelope(p, envelope, frames) {
+export function projectPointOutsideBodyEnvelope(p, envelope, frames, clearanceOffset = 0) {
   if (!envelope || !frames || frames.length < ENV_SEGMENT_COUNT) return p
   let px = p[0], py = p[1], pz = p[2]
   const rgba = envelope.rgba
+  const effOffset = clamp(clearanceOffset || 0, -0.0034, 0.0030)
 
   for (let s = 0; s < ENV_SEGMENT_COUNT; s++) {
     const f = frames[s]
@@ -435,7 +443,8 @@ export function projectPointOutsideBodyEnvelope(p, envelope, frames) {
 
     const idx = ((s * ENV_T_BINS + iv) * ENV_PHI_BINS + iu) * 4
     const r00 = rgba[idx], r10 = rgba[idx + 1], r01 = rgba[idx + 2], r11 = rgba[idx + 3]
-    const rEnv = (r00 * (1 - fu) + r10 * fu) * (1 - fv) + (r01 * (1 - fu) + r11 * fu) * fv
+    const rEnvRaw = (r00 * (1 - fu) + r10 * fu) * (1 - fv) + (r01 * (1 - fu) + r11 * fu) * fv
+    const rEnv = rEnvRaw > 0 ? Math.max(0.008, rEnvRaw + effOffset) : 0
 
     if (dist < rEnv && rEnv > 0) {
       const safeDist = Math.max(dist, 1e-5)
