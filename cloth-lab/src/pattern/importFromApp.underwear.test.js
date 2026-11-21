@@ -84,6 +84,9 @@ describe.each(UNDERWEAR_IDS)('%s', (id) => {
           if (ax > maxAbsX) maxAbsX = ax
         }
         expect(maxAbsX, `${id} compact pelvic placement`).toBeLessThan(dims.hipR * 1.35)
+      } else if (/^(wb|gb)\d+$/.test(id) && rawPieces.some((rp) => rp.role === 'cup')) {
+        const expectedMin = rawPieces.some((rp) => rp.role === 'strap') ? 9 : 5
+        expect(result.seamInstructions.length, `${id} cup bra seam count`).toBeGreaterThanOrEqual(expectedMin)
       }
     }).not.toThrow()
   })

@@ -272,8 +272,9 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
       // warns on every explicitly-`undefined` key, so these are left out
       // of the options object entirely rather than passed as `undefined`
       // for fabrics that don't have them (defaults to 0, i.e. off).
+      // Note: omit `anisotropy` on GPU-displaced tangentless cloth geometry so
+      // screen-space tangent derivatives never divide by zero and emit NaN pixels.
       ...(fabric.transmission != null && { transmission: fabric.transmission, thickness: 0.001 }),
-      ...(fabric.anisotropy != null && { anisotropy: fabric.anisotropy, anisotropyRotation: fabric.anisotropyRotation ?? 0 }),
     })
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uSimPositionTex = positionUniform.current
@@ -293,6 +294,13 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
           vNormal = clothSafeNormal(normalMatrix * clothSafeNormal(smoothNormal, normal), vec3(0.0, 0.0, 1.0));
           vec3 transformed = selfPos;`
         )
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <dithering_fragment>',
+        `#include <dithering_fragment>
+        if (isnan(gl_FragColor.r) || isnan(gl_FragColor.g) || isnan(gl_FragColor.b) || isinf(gl_FragColor.r) || isinf(gl_FragColor.g) || isinf(gl_FragColor.b)) {
+          gl_FragColor.rgb = vec3(0.0);
+        }`
+      )
       mat.userData.shader = shader
     }
     return mat

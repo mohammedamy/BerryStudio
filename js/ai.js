@@ -1489,14 +1489,23 @@ export const AIGen = (() => {
     if (style.skirt) {
       const skirtLen = 13, waistCirc = m.waist * 0.62, hemCirc = waistCirc * 1.9;
       const p1 = [waistCirc / 2, 0], p2 = [(waistCirc + hemCirc) / 4, skirtLen * 0.5], p3 = [hemCirc / 2, skirtLen];
+      const ctrl = [2 * p2[0] - 0.5 * (p1[0] + p3[0]), 2 * p2[1] - 0.5 * (p1[1] + p3[1])];
+      const sidePts = [];
+      for (let i = 1; i <= 6; i++) {
+        const t = i / 6, u = 1 - t;
+        sidePts.push([
+          u * u * p1[0] + 2 * u * t * ctrl[0] + t * t * p3[0],
+          u * u * p1[1] + 2 * u * t * ctrl[1] + t * t * p3[1],
+        ]);
+      }
       const skPanel = (en, ar, role) => ({
         name: { en, ar },
         desc: { en: "Gathered ballet skirt panel attached at the hip seam.", ar: "لوحة تنورة باليه مكشكشة تُخاط عند خط الورك." },
-        outline: [[0, 0], p1, p2, p3, [0, skirtLen]],
-        curves: [{ fromIdx: 1, toIdx: 3, ...threePtCubic(p1, p2, p3) }],
-        notches: [p1, p2],
+        outline: [[0, 0], p1, ...sidePts, [0, skirtLen]],
+        curves: [{ fromIdx: 1, toIdx: 7, ...threePtCubic(p1, p2, p3) }],
+        notches: [p1, sidePts[2]],
         grain: [[waistCirc / 4, 3], [waistCirc / 4, skirtLen - 3]],
-        role,
+        role, cutOnFold: true,
       });
       pieces.push(skPanel("Ballet Skirt Front", "تنورة باليه أمامية", "hip-panel-front"));
       pieces.push(skPanel("Ballet Skirt Back", "تنورة باليه خلفية", "hip-panel-back"));

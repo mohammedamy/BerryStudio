@@ -1,5 +1,12 @@
 # Changelog
 
+## Zero mannequin-garment penetration across 3D Preview & Cloth Lab, satin shader hardening, and pattern assembly redesign (`berrystudio-v85`)
+
+Eliminates body-garment intersections across all 320 catalog patterns in both 3D Preview and Cloth Lab, resolves WebGL bloom/NaN blackouts on lustrous weaves, and corrects multi-piece pattern drafting and seam assembly:
+
+- **Zero-penetration 13-segment 3D Preview envelope & articulated accessories (`js/three-view.js`, `js/human-mannequin.js`)**: Rebuilds the bind-pose mannequin collision field into 13 isolated bone segments with dual `dilated` + exact `skinGrid` multi-pass cleft resolution and Z-valley escape across armpits and groin, raises pelvis segment floor above leg bifurcation, computes standing arm abduction across all visible bodices/outerwear/sleeves with instant `blendAlpha` snap (`damp = 1.0`), removes un-capped chest sleeve push-in, and contours zipper strips, teeth, belt rims, and hanging `fabric_sash` ribbons along the sculpted torso surface.
+- **2D pattern & 3D Cloth Lab assembly redesign (`js/fancy-patterns.js`, `js/pattern-3d-metrics.js`, `js/pattern-lookbook-styles.js`, `cloth-lab/src/cloth/ClothMesh.jsx`, `ClothSimulation.js`, `cloth-lab/src/body/bodyEnvelope.js`, `collisionRig.js`, `cloth-lab/src/pattern/placement.js`, `importFromApp.js`, `sw.js`)**: Eliminates tangentless `anisotropy` WebGL `NaN`s and adds fragment finite guards so `silk`/`satin` patterns (`abaya`, `mf04`, `wf02`) simulate reliably; closes classic `abaya` center front in both 3D Preview and Cloth Lab; narrows `isLeotardFull` detection so full-length coats/abayas (`abaya`, `thobe`, `mf04`) drape past hip level; widens `wrapPanel` / `wrapCoatBack` waist geometry and fixes `trouserPanel` medial crotch fork & quarters; closes long wrap-coat fronts (`mf04`), connects 18 cup-bra seam assemblies (`wb01..gb10`), stacks 3-tier `wf04` skirts, routes leotard `Leg Opening Binding` to `attachHem`, tightens brief waist/leg elastic drape (`wu01`, `mu04`), adds `zeroPenetration320.test.js` & `importFromApp.all320Integrity.test.js`, and bumps service worker cache to `berrystudio-v85`.
+
 ## Anatomical thigh & hand proportions, Cloth Lab lower-body physics overhaul, and 13-seam underwear assembly (`berrystudio-v84`)
 
 Calibrates mannequin leg and hand anatomy, eliminates lower-body collision ejection and plastic surface glare in Cloth Lab, and upgrades underwear and trouser assembly across all categories:

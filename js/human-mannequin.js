@@ -938,7 +938,7 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       [upperLen + foreLen * 0.22, upperR * 0.75, upperR * 0.77, 0.0, 0.002, 0.22, 0.0],    // brachioradialis swell
       [upperLen + foreLen * 0.50, upperR * 0.60, Math.max(upperR * 0.64, wristBroadR * 1.05), 0.0, 0.002, 0.20, 0.0], // mid forearm
       [upperLen + foreLen * 0.80, upperR * 0.46, Math.max(upperR * 0.54, wristBroadR * 0.94), 0.0, 0.001, 0.20, 0.0], // distal forearm
-      [wristDist,                 wristThickR, wristBroadR, 0.0, 0.0, 0.30, 0.0],          // oval carpal wrist
+      [wristDist, wristThickR, wristBroadR, 0.0, 0.0, 0.30, 0.0],          // oval carpal wrist
       [wristDist + palmLen * 0.48, palmHalfThick * 1.12, palmHalfW * 0.96, -side * palmHalfThick * 0.14, palmHalfW * 0.10, 0.45, 0.0], // palm + thenar swell
       [wristDist + palmLen * 0.94, palmHalfThick * 0.94, palmHalfW * 1.00, -side * palmHalfThick * 0.28, palmHalfW * 0.04, 0.65, 0.0], // metacarpal web split
     ];
@@ -2390,7 +2390,7 @@ export function applyNaturalHumanMotion(limbs, dims, landmarks, opts = {}) {
   const breath = reduceMotion ? 0 : Math.sin(time * 1.45);
   const idleSway = reduceMotion ? 0 : Math.sin(time * 0.72) * 0.004;
   const idleAbduct = Math.max(0.095, minArmAbduct) + (reduceMotion ? 0 : 0.005 * (breath * 0.5 + 0.5));
-  const damp = 0.14;
+  const damp = blendAlpha >= 0.99 ? 1.0 : Math.min(1.0, Math.max(0.14, blendAlpha));
 
   const dampTo = (cur, target) => cur + (target - cur) * damp;
   limbs.leg1.rotation.x = dampTo(limbs.leg1.rotation.x, 0);

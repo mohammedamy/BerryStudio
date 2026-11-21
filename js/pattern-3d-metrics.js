@@ -383,7 +383,7 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
   const hasCuffs = visible.some((p) => p.role === "cuff" || p.role === "rib-cuff" || CUFF_NAME_RE.test(getPieceDisplayName(p)));
   const isOpenFront = lbSil.isOpenFront != null
     ? Boolean(lbSil.isOpenFront)
-    : /cardigan|blazer|\bjacket\b|\bcoat\b|kimono|bolero|abaya|bisht|جاكيت|بليزر|معطف|كارديغان|عباية|بشت/i.test(allText);
+    : /cardigan|blazer|\bjacket\b|\bcoat\b|kimono|bolero|open[-\s]*abaya|bisht|جاكيت|بليزر|معطف|كارديغان|عباية\s*مفتوحة|بشت/i.test(allText);
 
   let neckline = lbSil.neckline || "crew";
   if (!lbSil.neckline) {
@@ -586,23 +586,23 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
       outerLayer: lbSil.outerLayer || null,
       leotard: bodiceStyle === "leotard"
         ? (lbSil.leotard || {
-            neckline,
-            backStyle: /racer/i.test(allText) ? "racerback" : (/cross/i.test(allText) ? "crossback" : "full"),
-            legHeight: "classic",
-            skirt: hasSeparateSkirt,
-            skirtSheer: true,
-            colorBlock: "none",
-          })
+          neckline,
+          backStyle: /racer/i.test(allText) ? "racerback" : (/cross/i.test(allText) ? "crossback" : "full"),
+          legHeight: "classic",
+          skirt: hasSeparateSkirt,
+          skirtSheer: true,
+          colorBlock: "none",
+        })
         : null,
       bra: bodiceStyle === "bra"
         ? (lbSil.bra || {
-            style: /sport/i.test(allText) ? "sport" : (/bandeau|strapless/i.test(allText) ? "bandeau" : "soft-cup"),
-            cupDepthF: 1.0,
-            longline: /longline/i.test(allText),
-            strapStyle: /racer/i.test(allText) ? "racerback" : (/bandeau|strapless/i.test(allText) ? "none" : "standard"),
-            wideStrap: /wide/i.test(allText),
-            bow: false,
-          })
+          style: /sport/i.test(allText) ? "sport" : (/bandeau|strapless/i.test(allText) ? "bandeau" : "soft-cup"),
+          cupDepthF: 1.0,
+          longline: /longline/i.test(allText),
+          strapStyle: /racer/i.test(allText) ? "racerback" : (/bandeau|strapless/i.test(allText) ? "none" : "standard"),
+          wideStrap: /wide/i.test(allText),
+          bow: false,
+        })
         : null,
     },
     sleeve: {

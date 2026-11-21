@@ -37,10 +37,10 @@ export const View3D = (() => {
   let curMeasurements = null, lastDims = null, curPatternMetrics = null;
   let tensionMapEnabled = false;
   let lastTensionMetrics = { avgEase: 4.5, peakStrain: 0.0, status: "fitOptimal", fabric: "cotton" };
-  let onTensionMetricsUpdate = () => {};
-  let onLoading = () => {};
-  let onAvatarIssue = () => {};
-  let onFatalError = () => {};
+  let onTensionMetricsUpdate = () => { };
+  let onLoading = () => { };
+  let onAvatarIssue = () => { };
+  let onFatalError = () => { };
   let noiseTex = null;
   const sharedTextures = new Set();
   const weaveBumpCache = new Map();
@@ -153,7 +153,7 @@ export const View3D = (() => {
         import(/* @vite-ignore */ addonUrl("loaders/RGBELoader.js")).then((m) => { RGBE = m.RGBELoader; }),
       ]),
       6000
-    ).catch(() => {});
+    ).catch(() => { });
     return { THREE_, OC, GL, RGBE, cloneSkeleton_ };
   }
 
@@ -493,19 +493,19 @@ export const View3D = (() => {
 
   // ---------- materials ----------
   const FABRIC = {
-    cotton:  { label: 'Cotton Poplin', massDensity: 150, structStiff: 0.96, bendStiff: 0.35, maxStrain: 1.05, damping: 0.970, friction: 0.90, rough: 0.82, metal: 0.0,  sheen: 0.25, clear: 0.0,  om: 1, bump: 0.0012 },
-    denim:   { label: 'Denim',         massDensity: 400, structStiff: 0.98, bendStiff: 0.80, maxStrain: 1.03, damping: 0.930, friction: 0.96, rough: 0.88, metal: 0.02, sheen: 0.14, clear: 0.0,  om: 1, bump: 0.0024 },
-    silk:    { label: 'Silk Charmeuse',massDensity: 60,  structStiff: 0.94, bendStiff: 0.15, maxStrain: 1.07, damping: 0.980, friction: 0.80, rough: 0.26, metal: 0.05, sheen: 0.9,  clear: 0.15, om: 0.98, anisotropy: 0.6, anisoRot: 0, bump: 0.0004 },
-    satin:   { label: 'Satin',         massDensity: 90,  structStiff: 0.95, bendStiff: 0.20, maxStrain: 1.06, damping: 0.980, friction: 0.82, rough: 0.2,  metal: 0.12, sheen: 0.85, clear: 0.22, om: 1,    anisotropy: 0.5, anisoRot: 0, bump: 0.0004 },
-    chiffon: { label: 'Chiffon',       massDensity: 30,  structStiff: 0.92, bendStiff: 0.10, maxStrain: 1.08, damping: 0.985, friction: 0.75, rough: 0.5,  metal: 0.0,  sheen: 0.45, clear: 0.0,  om: 0.55, transmission: 0.18, bump: 0.0006 },
-    wool:    { label: 'Wool Crepe',    massDensity: 300, structStiff: 0.97, bendStiff: 0.58, maxStrain: 1.04, damping: 0.950, friction: 0.93, rough: 0.94, metal: 0.0,  sheen: 0.12, clear: 0.0,  om: 1, bump: 0.0022 },
-    linen:   { label: 'Linen',         massDensity: 170, structStiff: 0.96, bendStiff: 0.42, maxStrain: 1.05, damping: 0.970, friction: 0.87, rough: 0.82, metal: 0.0,  sheen: 0.16, clear: 0.0,  om: 1, bump: 0.0020 },
-    leather: { label: 'Leather',       massDensity: 550, structStiff: 0.98, bendStiff: 0.92, maxStrain: 1.02, damping: 0.900, friction: 0.97, rough: 0.38, metal: 0.18, sheen: 0.2,  clear: 0.35, om: 1, bump: 0.0018 },
-    jersey:  { label: 'Cotton Jersey', massDensity: 180, structStiff: 0.90, bendStiff: 0.22, maxStrain: 1.18, damping: 0.965, friction: 0.88, rough: 0.68, metal: 0.0,  sheen: 0.22, clear: 0.0,  om: 1, bump: 0.0014 },
-    scuba:   { label: 'Scuba Knit',    massDensity: 260, structStiff: 0.91, bendStiff: 0.45, maxStrain: 1.14, damping: 0.955, friction: 0.85, rough: 0.35, metal: 0.0,  sheen: 0.35, clear: 0.05, om: 1, bump: 0.0008 },
-    tulle:   { label: 'Tulle',         massDensity: 18,  structStiff: 0.80, bendStiff: 0.06, maxStrain: 1.12, damping: 0.988, friction: 0.55, rough: 0.55, metal: 0.0,  sheen: 0.3,  clear: 0.0,  om: 0.56, transmission: 0.12, bump: 0.0010 },
-    velvet:  { label: 'Velvet',        massDensity: 320, structStiff: 0.96, bendStiff: 0.44, maxStrain: 1.05, damping: 0.955, friction: 0.94, rough: 0.72, metal: 0.0,  sheen: 1.0,  clear: 0.0,  om: 1, bump: 0.0020 },
-    lace:    { label: 'Lace',          massDensity: 75,  structStiff: 0.91, bendStiff: 0.16, maxStrain: 1.09, damping: 0.980, friction: 0.80, rough: 0.58, metal: 0.0,  sheen: 0.38, clear: 0.0,  om: 0.78, transmission: 0.08, bump: 0.0026 },
+    cotton: { label: 'Cotton Poplin', massDensity: 150, structStiff: 0.96, bendStiff: 0.35, maxStrain: 1.05, damping: 0.970, friction: 0.90, rough: 0.82, metal: 0.0, sheen: 0.25, clear: 0.0, om: 1, bump: 0.0012 },
+    denim: { label: 'Denim', massDensity: 400, structStiff: 0.98, bendStiff: 0.80, maxStrain: 1.03, damping: 0.930, friction: 0.96, rough: 0.88, metal: 0.02, sheen: 0.14, clear: 0.0, om: 1, bump: 0.0024 },
+    silk: { label: 'Silk Charmeuse', massDensity: 60, structStiff: 0.94, bendStiff: 0.15, maxStrain: 1.07, damping: 0.980, friction: 0.80, rough: 0.26, metal: 0.05, sheen: 0.9, clear: 0.15, om: 0.98, anisotropy: 0.6, anisoRot: 0, bump: 0.0004 },
+    satin: { label: 'Satin', massDensity: 90, structStiff: 0.95, bendStiff: 0.20, maxStrain: 1.06, damping: 0.980, friction: 0.82, rough: 0.2, metal: 0.12, sheen: 0.85, clear: 0.22, om: 1, anisotropy: 0.5, anisoRot: 0, bump: 0.0004 },
+    chiffon: { label: 'Chiffon', massDensity: 30, structStiff: 0.92, bendStiff: 0.10, maxStrain: 1.08, damping: 0.985, friction: 0.75, rough: 0.5, metal: 0.0, sheen: 0.45, clear: 0.0, om: 0.55, transmission: 0.18, bump: 0.0006 },
+    wool: { label: 'Wool Crepe', massDensity: 300, structStiff: 0.97, bendStiff: 0.58, maxStrain: 1.04, damping: 0.950, friction: 0.93, rough: 0.94, metal: 0.0, sheen: 0.12, clear: 0.0, om: 1, bump: 0.0022 },
+    linen: { label: 'Linen', massDensity: 170, structStiff: 0.96, bendStiff: 0.42, maxStrain: 1.05, damping: 0.970, friction: 0.87, rough: 0.82, metal: 0.0, sheen: 0.16, clear: 0.0, om: 1, bump: 0.0020 },
+    leather: { label: 'Leather', massDensity: 550, structStiff: 0.98, bendStiff: 0.92, maxStrain: 1.02, damping: 0.900, friction: 0.97, rough: 0.38, metal: 0.18, sheen: 0.2, clear: 0.35, om: 1, bump: 0.0018 },
+    jersey: { label: 'Cotton Jersey', massDensity: 180, structStiff: 0.90, bendStiff: 0.22, maxStrain: 1.18, damping: 0.965, friction: 0.88, rough: 0.68, metal: 0.0, sheen: 0.22, clear: 0.0, om: 1, bump: 0.0014 },
+    scuba: { label: 'Scuba Knit', massDensity: 260, structStiff: 0.91, bendStiff: 0.45, maxStrain: 1.14, damping: 0.955, friction: 0.85, rough: 0.35, metal: 0.0, sheen: 0.35, clear: 0.05, om: 1, bump: 0.0008 },
+    tulle: { label: 'Tulle', massDensity: 18, structStiff: 0.80, bendStiff: 0.06, maxStrain: 1.12, damping: 0.988, friction: 0.55, rough: 0.55, metal: 0.0, sheen: 0.3, clear: 0.0, om: 0.56, transmission: 0.12, bump: 0.0010 },
+    velvet: { label: 'Velvet', massDensity: 320, structStiff: 0.96, bendStiff: 0.44, maxStrain: 1.05, damping: 0.955, friction: 0.94, rough: 0.72, metal: 0.0, sheen: 1.0, clear: 0.0, om: 1, bump: 0.0020 },
+    lace: { label: 'Lace', massDensity: 75, structStiff: 0.91, bendStiff: 0.16, maxStrain: 1.09, damping: 0.980, friction: 0.80, rough: 0.58, metal: 0.0, sheen: 0.38, clear: 0.0, om: 0.78, transmission: 0.08, bump: 0.0026 },
   };
 
   const defaultFabricSlot = () => ({
@@ -537,34 +537,34 @@ export const View3D = (() => {
 
     const mat = isSoftwareGL
       ? new THREE.MeshPhongMaterial({
-          color: slot.textureDataURL ? 0xffffff : slot.color,
-          shininess: Math.round((1 - f.rough) * 60 + 8),
-          specular: new THREE.Color(0x1f1f1f).lerp(new THREE.Color(0x7a7a7a), 1 - f.rough),
-          bumpMap: weaveBump || null,
-          bumpScale: f.bump || 0.001,
-          transparent: op < 0.99,
-          opacity: op,
-          depthWrite: op >= 0.55,
-          side: THREE.DoubleSide,
-        })
+        color: slot.textureDataURL ? 0xffffff : slot.color,
+        shininess: Math.round((1 - f.rough) * 60 + 8),
+        specular: new THREE.Color(0x1f1f1f).lerp(new THREE.Color(0x7a7a7a), 1 - f.rough),
+        bumpMap: weaveBump || null,
+        bumpScale: f.bump || 0.001,
+        transparent: op < 0.99,
+        opacity: op,
+        depthWrite: op >= 0.55,
+        side: THREE.DoubleSide,
+      })
       : new THREE.MeshPhysicalMaterial({
-          color: slot.textureDataURL ? 0xffffff : slot.color,
-          roughness: f.rough,
-          metalness: f.metal,
-          sheen: f.sheen,
-          sheenRoughness: 0.48,
-          sheenColor: new THREE.Color(slot.textureDataURL ? 0xf8fafc : slot.color).lerp(new THREE.Color(0xffffff), 0.55),
-          clearcoat: f.clear,
-          clearcoatRoughness: 0.4,
-          bumpMap: weaveBump || null,
-          bumpScale: f.bump || 0.001,
-          transparent: op < 0.99,
-          opacity: op,
-          depthWrite: op >= 0.55,
-          side: THREE.DoubleSide,
-          ...(f.transmission != null && { transmission: f.transmission, thickness: 0.001 }),
-          ...(f.anisotropy != null && { anisotropy: f.anisotropy, anisotropyRotation: f.anisoRot ?? 0 }),
-        });
+        color: slot.textureDataURL ? 0xffffff : slot.color,
+        roughness: f.rough,
+        metalness: f.metal,
+        sheen: f.sheen,
+        sheenRoughness: 0.48,
+        sheenColor: new THREE.Color(slot.textureDataURL ? 0xf8fafc : slot.color).lerp(new THREE.Color(0xffffff), 0.55),
+        clearcoat: f.clear,
+        clearcoatRoughness: 0.4,
+        bumpMap: weaveBump || null,
+        bumpScale: f.bump || 0.001,
+        transparent: op < 0.99,
+        opacity: op,
+        depthWrite: op >= 0.55,
+        side: THREE.DoubleSide,
+        ...(f.transmission != null && { transmission: f.transmission, thickness: 0.001 }),
+        ...(f.anisotropy != null && { anisotropy: f.anisotropy, anisotropyRotation: f.anisoRot ?? 0 }),
+      });
 
     if (slot.textureDataURL) {
       const tex = getFabricTexLoader().load(slot.textureDataURL, () => {
@@ -691,14 +691,14 @@ export const View3D = (() => {
       [hipY - span * 0.015, hipR * 1.035, hipR * 1.01],
       [hipY + span * 0.030, hipR * 1.025, hipR * 1.00],
       [hipY + span * 0.085, hipR * 1.005, hipR * 0.98],
-      [hipY + span * 0.19,  hipR * 0.92 + effWaistR * 0.10, hipR * 0.91 + effWaistR * 0.11],
-      [hipY + span * 0.32,  hipR * 0.43 + effWaistR * 0.59, hipR * 0.45 + effWaistR * 0.57],
-      [hipY + span * 0.44,  effWaistR * 1.02, effWaistR * 1.00],
-      [hipY + span * 0.55,  effWaistR * 0.61 + chestR * 0.43, effWaistR * 0.64 + chestR * 0.40],
-      [hipY + span * 0.65,  chestR * (female ? 0.99 : 1.03), chestR * 0.98],
-      [hipY + span * 0.73,  chestR * (female ? 1.03 : 1.07), chestR * (female ? 1.02 : 1.04)],
-      [hipY + span * 0.81,  chestR * (female ? 1.02 : 1.08), chestR * 0.95],
-      [hipY + span * 0.88,  chestR * (female ? 1.03 : 1.09), chestR * 0.90],
+      [hipY + span * 0.19, hipR * 0.92 + effWaistR * 0.10, hipR * 0.91 + effWaistR * 0.11],
+      [hipY + span * 0.32, hipR * 0.43 + effWaistR * 0.59, hipR * 0.45 + effWaistR * 0.57],
+      [hipY + span * 0.44, effWaistR * 1.02, effWaistR * 1.00],
+      [hipY + span * 0.55, effWaistR * 0.61 + chestR * 0.43, effWaistR * 0.64 + chestR * 0.40],
+      [hipY + span * 0.65, chestR * (female ? 0.99 : 1.03), chestR * 0.98],
+      [hipY + span * 0.73, chestR * (female ? 1.03 : 1.07), chestR * (female ? 1.02 : 1.04)],
+      [hipY + span * 0.81, chestR * (female ? 1.02 : 1.08), chestR * 0.95],
+      [hipY + span * 0.88, chestR * (female ? 1.03 : 1.09), chestR * 0.90],
       [shoulderY - span * 0.03, shoulderHalf * 0.88, chestR * 0.84],
       [shoulderY + span * 0.072, shoulderHalf * 0.90, chestR * 0.80],
     ];
@@ -795,8 +795,8 @@ export const View3D = (() => {
     const underarmY = shoulderY - span * 0.09;
     const hasSleeves = Boolean(pm.present?.sleeve);
     // Natural trapezius slope from High Point Shoulder down to acromion seam
-    const shoulderTopY = shoulderY + span * 0.054;
-    const shoulderAcromionY = shoulderY + span * (hasSleeves ? 0.020 : 0.022);
+    const shoulderTopY = shoulderY + span * 0.062;
+    const shoulderAcromionY = shoulderY + span * (hasSleeves ? 0.036 : 0.034);
 
     const easeBase = 0.015 + Math.max(-0.002, (bSpec.easeRatio - 1.0) * 0.042);
     const waistRelax = bSpec.style === "robe" ? 0.88 : (bSpec.style === "tunic" ? 0.52 : 0);
@@ -842,7 +842,7 @@ export const View3D = (() => {
 
     const shoulderTipX = isBra
       ? neckHalfW + (shoulderHalf * 0.74 - neckHalfW) * 0.52
-      : (isHalter ? neckHalfW * 1.14 : shoulderHalf * (hasSleeves ? 0.84 : 0.82));
+      : (isHalter ? neckHalfW * 1.14 : shoulderHalf * (hasSleeves ? 0.87 : 0.84));
 
     function computeUpperFracs(rowsUpper, neckBotY) {
       const fracs = [];
@@ -881,7 +881,7 @@ export const View3D = (() => {
         // Smooth super-elliptical shoulder arch: climbs chest wall, rolls smoothly over top seam
         const thetaArch = (Math.PI * 0.5) * upperFrac;
         const yArchFrac = Math.pow(Math.sin(thetaArch), 0.85);
-        const zArchScale = Math.pow(Math.cos(thetaArch), 0.82);
+        const zArchScale = Math.pow(Math.cos(thetaArch), 0.38);
         const armholeZBlend = smoothstep(0.0, 0.36, upperFrac);
 
         let y;
@@ -925,7 +925,7 @@ export const View3D = (() => {
         const bodyHalfWAtUnderarm = Math.abs(getBodySurfacePoint(underarmY, Math.PI / 2, d, easeBase, waistRelax)[0]);
         let outerMaxX = Math.abs(getBodySurfacePoint(Math.min(y, underarmY), Math.PI / 2, d, easeBase, waistRelax)[0]) * lowerFlare;
         if (r > ROWS_LOWER && !isStrapless) {
-          const armscyeIndent = Math.sin(Math.PI * upperFrac) * (isBra ? chestR * 0.20 : (isHalter ? chestR * 0.08 : (hasSleeves ? chestR * 0.014 : chestR * 0.018)));
+          const armscyeIndent = Math.sin(Math.PI * upperFrac) * (isBra ? chestR * 0.18 : (isHalter ? chestR * 0.08 : (hasSleeves ? chestR * 0.012 : chestR * 0.016)));
           outerMaxX = bodyHalfWAtUnderarm * (1 - upperFrac) + shoulderTipX * upperFrac - armscyeIndent;
           outerMaxX = Math.max(innerX + (isBra ? 0.016 : 0.028), outerMaxX);
         }
@@ -1051,29 +1051,29 @@ export const View3D = (() => {
               + (backNeckBottomY - 0.002) * backW * backW
               + sideNeckY * sideW * sideW;
 
-            const [, bodyNeckZ] = getBodySurfacePoint(Math.min(seamY, shoulderY), phi, d, easeBase, waistRelax);
-            const baseZ = Math.abs(cosP) > 0.15 ? bodyNeckZ * 0.94 : rCol * cosP;
+            const [, bodyNeckZ] = getBodySurfacePoint(Math.min(seamY, shoulderY), phi, d, easeBase + 0.004, waistRelax);
+            const baseZ = Math.abs(cosP) > 0.15 ? bodyNeckZ * 1.03 : rCol * 1.03 * cosP;
 
-            let radX = rCol;
+            let radX = rCol * 1.02;
             let z = baseZ;
             let y = seamY;
             if (row === 1) {
-              radX = rCol * 0.97;
-              z = baseZ * 0.92 + 0.004 * cosP;
+              radX = rCol * 1.03;
+              z = baseZ * 1.02 + 0.006 * cosP;
               y = seamY + (isStandOnly ? collarH * 0.55 : collarH * 0.72);
             } else if (row === 2) {
               if (isStandOnly) {
-                radX = rCol * 0.95;
-                z = baseZ * 0.90 + 0.004 * cosP;
+                radX = rCol * 1.04;
+                z = baseZ * 1.02 + 0.007 * cosP;
                 y = seamY + collarH * 0.95;
               } else if (collarStyle === "sailor") {
-                radX = rCol * (1.28 + 0.18 * backW);
-                z = baseZ * 1.10 - 0.022 * backW + 0.008 * cosP;
+                radX = rCol * (1.30 + 0.18 * backW);
+                z = baseZ * 1.12 - 0.026 * backW + 0.010 * cosP;
                 y = seamY - 0.012 - 0.075 * backW;
               } else {
-                const flareF = collarStyle === "peter-pan" ? 1.24 : (1.16 + 0.08 * Math.max(0, cosP));
+                const flareF = collarStyle === "peter-pan" ? 1.26 : (1.18 + 0.08 * Math.max(0, cosP));
                 radX = rCol * flareF;
-                z = baseZ * 1.07 + 0.012 * cosP;
+                z = baseZ * 1.09 + 0.014 * cosP;
                 y = seamY + (collarStyle === "peter-pan" ? 0.002 : collarH * 0.22);
               }
             }
@@ -1127,9 +1127,9 @@ export const View3D = (() => {
           const innerX = 0.012 + (neckHalfW * 0.65) * (1 - u) * 0.6;
           const notchCut = (bSpec.lapelStyle === "notched" && u > 0.24 && u < 0.36) ? 0.65 : 1.0;
           const outerX = innerX + lapelW * Math.sin(Math.PI * clamp(u * 0.9 + 0.1, 0.1, 0.9)) * notchCut;
-          const [, zIn] = getBodySurfacePoint(y, side * 0.18, d, easeBase + 0.005, waistRelax);
-          const [, zOut] = getBodySurfacePoint(y, side * 0.45, d, easeBase + 0.008, waistRelax);
-          lPos.push(side * innerX, y, zIn + 0.002, side * outerX, y, zOut + 0.003);
+          const [, zIn] = getBodySurfacePoint(y, side * clamp(innerX / Math.max(0.06, chestR), 0.12, 0.45), d, easeBase + 0.012, waistRelax);
+          const [, zOut] = getBodySurfacePoint(y, side * clamp(outerX / Math.max(0.06, chestR), 0.25, 0.72), d, easeBase + 0.015, waistRelax);
+          lPos.push(side * innerX, y, zIn + 0.007, side * outerX, y, zOut + 0.008);
           lUvs.push(0, u, 1, u);
           const [bi, bw] = packSkinWeights(torsoGarmentWeights(y, side * outerX, d));
           for (let q = 0; q < 2; q++) {
@@ -1204,7 +1204,7 @@ export const View3D = (() => {
       const cPos = [], cUvs = [], cSi = [], cSw = [], cIdx = [];
       const uSeg = 22, vSeg = 14;
       const topCapeY = shoulderTopY + 0.002;
-      const botCapeY = Math.max(0.14, hemY - (bSpec.style === "robe" || pm.skirt.lengthCm > m.inseam * 0.55 ? 0.45 : 0.16));
+      const botCapeY = Math.max(0.14, hemY - (bSpec.style === "robe" || pm.skirt.lengthCm > d.legLen * 55 ? 0.45 : 0.16));
       for (let v = 0; v <= vSeg; v++) {
         const fv = v / vSeg;
         const y = topCapeY * (1 - fv) + botCapeY * fv;
@@ -1301,8 +1301,8 @@ export const View3D = (() => {
     const { hipY, shoulderY, span, neckR, shoulderHalf, chestR, waistR, hipR } = d;
     const waistY = hipY + span * 0.44;
     const underarmY = shoulderY - span * 0.09;
-    const shoulderTopY = shoulderY + span * 0.052;
-    const shoulderAcromionY = shoulderY + span * 0.018;
+    const shoulderTopY = shoulderY + span * 0.060;
+    const shoulderAcromionY = shoulderY + span * 0.034;
     const crotchY = hipY - span * 0.115;
     const isHighCut = lSpec.legHeight === "highcut";
     const hipLegArchY = hipY + span * (isHighCut ? 0.025 : -0.028);
@@ -1359,7 +1359,7 @@ export const View3D = (() => {
         }
 
         const upperFrac = f > upperSplit ? (f - upperSplit) / (1 - upperSplit) : 0;
-        const zArchScale = Math.pow(Math.cos((Math.PI * 0.5) * upperFrac), 0.82);
+        const zArchScale = Math.pow(Math.cos((Math.PI * 0.5) * upperFrac), 0.38);
 
         let innerX = 0;
         if (y > neckBotY + 0.0005 && !isOffSh) {
@@ -1669,11 +1669,11 @@ export const View3D = (() => {
     // 3. Straps arching smoothly over shoulders down to back band / racerback
     if (!isBandlessTop) {
       const strapW = bra.wideStrap ? 0.022 : 0.011;
-      const strapApexY = shoulderY + span * 0.046;
+      const strapApexY = shoulderY + span * 0.056;
       const isRacer = bra.strapStyle === "racerback";
       [-1, 1].forEach((side) => {
         const sPos = [], sUvs = [], sSi = [], sSw = [], sIdx = [];
-        const stepsS = 14;
+        const stepsS = 22;
         const anchorFrontX = side * (neckR * 1.15 + (shoulderHalf * 0.80 - neckR * 1.15) * 0.48);
         const anchorBackX = isRacer ? side * neckR * 0.55 : anchorFrontX;
         const startY = isSport ? cupTopY - 0.015 : cupTopY - 0.006;
@@ -1687,15 +1687,15 @@ export const View3D = (() => {
             const u = tS / 0.5;
             y = startY * (1 - u) + strapApexY * u;
             const phi = side * clamp(Math.abs(anchorFrontX) / Math.max(0.05, chestR), 0, 0.72);
-            const [, zS] = getBodySurfacePoint(Math.min(y, shoulderY - span * 0.01), phi, d, braEase + 0.007, 0);
-            zCenter = zS * Math.cos(u * Math.PI * 0.48);
+            const [, zS] = getBodySurfacePoint(Math.min(y, shoulderY - span * 0.01), phi, d, braEase + 0.010, 0);
+            zCenter = zS * Math.pow(Math.cos(u * Math.PI * 0.48), 0.45);
           } else {
             const u = (tS - 0.5) / 0.5;
             y = strapApexY * (1 - u) + endY * u;
             const curX = anchorFrontX * (1 - u) + anchorBackX * u;
             const phi = Math.PI - side * clamp(Math.abs(curX) / Math.max(0.05, chestR), 0, 0.72);
-            const [, zS] = getBodySurfacePoint(Math.min(y, shoulderY - span * 0.01), phi, d, braEase + 0.007, 0);
-            zCenter = zS * Math.cos((1 - u) * Math.PI * 0.48);
+            const [, zS] = getBodySurfacePoint(Math.min(y, shoulderY - span * 0.01), phi, d, braEase + 0.010, 0);
+            zCenter = zS * Math.pow(Math.cos((1 - u) * Math.PI * 0.48), 0.45);
           }
           const cx = tS <= 0.5 ? anchorFrontX : lerp(anchorFrontX, anchorBackX, (tS - 0.5) / 0.5);
           sPos.push(cx - strapW * 0.5, y, zCenter, cx + strapW * 0.5, y, zCenter);
@@ -1734,8 +1734,8 @@ export const View3D = (() => {
     const { hipY, shoulderY, span, neckR, shoulderHalf, chestR } = d;
     const waistY = hipY + span * 0.44;
     const underarmY = shoulderY - span * 0.09;
-    const shoulderTopY = shoulderY + span * 0.060;
-    const shoulderAcromionY = shoulderY + span * 0.026;
+    const shoulderTopY = shoulderY + span * 0.064;
+    const shoulderAcromionY = shoulderY + span * 0.040;
     const outerEase = 0.026 + Math.max(0, ((pm.bodice.easeRatio || 1.04) - 1.0) * 0.040);
 
     let hemY = hipY + span * 0.04;
@@ -1749,7 +1749,7 @@ export const View3D = (() => {
     const frontBreakY = ol.openFront ? waistY + span * 0.08 : (ol.style === "pinafore" ? hipY + span * 0.72 : shoulderY - span * 0.16);
     const isNarrowStrap = ol.style === "pinafore";
     const isVest = ol.style === "vest" || ol.style === "pinafore";
-    const shoulderTipX = isNarrowStrap ? neckHalfW * 1.55 : (isVest ? shoulderHalf * 0.80 : shoulderHalf * 0.86);
+    const shoulderTipX = isNarrowStrap ? neckHalfW * 1.55 : (isVest ? shoulderHalf * 0.83 : shoulderHalf * 0.89);
 
     function computeOuterFracs(rowsU, snapY) {
       const fracs = [];
@@ -1778,7 +1778,7 @@ export const View3D = (() => {
         const upperFrac = r <= ROWS_L ? 0 : upperFracs[r - ROWS_L - 1];
         const thetaArch = (Math.PI * 0.5) * upperFrac;
         const yArchFrac = Math.pow(Math.sin(thetaArch), 0.85);
-        const zArchScale = Math.pow(Math.cos(thetaArch), 0.82);
+        const zArchScale = Math.pow(Math.cos(thetaArch), 0.38);
 
         const y = r <= ROWS_L
           ? hemY * (1 - r / ROWS_L) + underarmY * (r / ROWS_L)
@@ -1983,7 +1983,7 @@ export const View3D = (() => {
     const totalSlLen = armLen * clamp(sSpec.lengthFrac, 0.16, 1.02);
 
     // Match the active upper garment (outer coat/blazer vs bodice vs leotard) armhole ring seamlessly
-    const activeTipX = hasOuterSleeved ? shoulderHalf * 0.86 : (isLeo ? shoulderHalf * 0.82 : shoulderHalf * 0.84);
+    const activeTipX = hasOuterSleeved ? shoulderHalf * 0.88 : (isLeo ? shoulderHalf * 0.84 : shoulderHalf * 0.86);
     const activeAcromionY = shoulderY + span * (hasOuterSleeved ? 0.026 : (isLeo ? 0.018 : 0.020));
     const activeEase = hasOuterSleeved
       ? (0.026 + Math.max(0, ((pm.bodice?.easeRatio || 1.04) - 1.0) * 0.040))
@@ -1995,7 +1995,7 @@ export const View3D = (() => {
     const armscyeBotY = shoulderY - span * (sSpec.isOffShoulder ? 0.125 : 0.090);
     const armscyeMidY = 0.5 * (armscyeTopY + armscyeBotY);
     const armscyeHalfH = 0.5 * (armscyeTopY - armscyeBotY);
-    const armscyeDepthZ = upperR * (hasOuterSleeved ? 1.12 : 1.08) + 0.004;
+    const armscyeDepthZ = upperR * (hasOuterSleeved ? 1.14 : 1.10) + 0.006;
     const capHeight = Math.max(0.075, Math.min(totalSlLen * 0.82, upperArmLen * 0.44));
 
     const N_SEG = 28;
@@ -2014,11 +2014,11 @@ export const View3D = (() => {
         const f = r / N_RINGS;
         const dyBase = f * totalSlLen;
 
-        // Match anatomical arm envelope (deltoid -> bicep -> olecranon elbow -> brachioradialis -> carpal wrist)
+        // Match anatomical arm envelope (deltoid 1.08 -> bicep -> olecranon elbow -> brachioradialis -> carpal wrist)
         let bodyArmR;
         if (dyBase <= upperArmLen) {
           const u = dyBase / Math.max(0.1, upperArmLen);
-          bodyArmR = upperR * (1.04 * (1 - u) + 0.79 * u);
+          bodyArmR = upperR * (1.09 * (1 - u) + 0.79 * u);
         } else if (dyBase <= wristDist) {
           const u = clamp((dyBase - upperArmLen) / Math.max(0.1, forearmLen), 0, 1);
           const forePeak = u < 0.28 ? (0.79 + 0.04 * Math.sin((Math.PI * u) / 0.28)) : (0.79 * (1 - (u - 0.28) / 0.72) + (wristR / upperR) * 1.18 * ((u - 0.28) / 0.72));
@@ -2027,16 +2027,16 @@ export const View3D = (() => {
           bodyArmR = wristR * 1.38;
         }
 
-        const easeOffset = hasOuterSleeved ? 0.020 : 0.013;
+        const easeOffset = hasOuterSleeved ? 0.022 : 0.015;
         let sleeveR = bodyArmR + easeOffset;
         if (sSpec.style === "puff") {
           const puffBell = Math.sin(Math.PI * Math.pow(f, 0.75));
           sleeveR = bodyArmR + easeOffset + upperR * 0.44 * puffBell;
-          if (f > 0.88) sleeveR = bodyArmR + 0.010;
+          if (f > 0.88) sleeveR = bodyArmR + 0.012;
         } else if (sSpec.style === "bishop") {
           const billow = Math.sin(Math.PI * Math.pow(f, 0.65));
           sleeveR = bodyArmR + easeOffset + upperR * 0.52 * billow;
-          if (f > 0.90) sleeveR = bodyArmR + 0.011;
+          if (f > 0.90) sleeveR = bodyArmR + 0.012;
         } else if (sSpec.style === "bell") {
           sleeveR = bodyArmR + easeOffset + upperR * 0.56 * Math.pow(f, 1.35);
         } else if (sSpec.style === "cap") {
@@ -2065,7 +2065,7 @@ export const View3D = (() => {
         const [bi, bw] = packSkinWeights(weights);
 
         const fCap = clamp(dyBase / capHeight, 0, 1);
-        const capBlendX = Math.pow(1 - fCap, 2.4);
+        const capBlendX = Math.pow(1 - clamp(dyBase / (capHeight * 0.42), 0, 1), 2.8);
         const capBlendY = Math.pow(Math.cos((Math.PI * 0.5) * fCap), 0.72);
         const capBlendZ = Math.pow(1 - fCap, 1.4);
         const deltoidArc = Math.sin(Math.PI * clamp(dyBase / Math.max(0.08, upperArmLen * 0.52), 0, 1));
@@ -2077,20 +2077,20 @@ export const View3D = (() => {
           const cFront = Math.cos(theta);
 
           const gatherFlute = sSpec.style === "puff" ? 0.003 * Math.sin(theta * 10) * Math.sin(Math.PI * f) : 0;
-          const deltoidSwell = upperR * (sSpec.style === "puff" ? 0.26 : 0.16) * deltoidArc * Math.max(0, sCrown);
+          const deltoidSwell = upperR * (sSpec.style === "puff" ? 0.30 : 0.24) * deltoidArc * Math.max(0, sCrown + 0.25);
           const rEff = sleeveR + gatherFlute + deltoidSwell;
 
           const crownFrac = 0.5 * (1 + sCrown);
           const xArmscye = side * (armscyeBotX * (1 - crownFrac) + armscyeTopX * crownFrac);
-          const yArmscye = armscyeMidY + armscyeHalfH * sCrown + 0.003 * Math.max(0, sCrown);
+          const yArmscye = armscyeMidY + armscyeHalfH * sCrown + 0.004 * Math.max(0, sCrown);
           const zArmscye = (armscyeDepthZ + gatherFlute) * Math.sign(cFront) * Math.pow(Math.abs(cFront), 0.82);
 
           const xTube = sx + side * rEff * sCrown;
-          const crownLiftY = Math.max(0, sCrown) * (shoulderY - span * 0.004 - pivotY) * (1 - smoothstep(0.0, upperArmLen * 0.65, dyBase));
+          const crownLiftY = Math.max(0, sCrown) * (shoulderY - span * 0.002 - pivotY) * (1 - smoothstep(0.0, upperArmLen * 0.65, dyBase));
           const yTube = pivotY + crownLiftY - dyBase;
-          const zTube = (sleeveR + gatherFlute) * 1.04 * cFront;
+          const zTube = (sleeveR + gatherFlute) * 1.06 * cFront;
 
-          const overDeltoidUp = sSpec.style === "puff" ? span * 0.024 * deltoidArc * Math.max(0, sCrown) : 0;
+          const overDeltoidUp = (sSpec.style === "puff" ? span * 0.024 : span * 0.010) * deltoidArc * Math.max(0, sCrown);
 
           const x = xArmscye * capBlendX + xTube * (1 - capBlendX);
           const y = (sCrown > 0 ? (yArmscye * capBlendY + yTube * (1 - capBlendY)) : (yArmscye * capBlendZ + yTube * (1 - capBlendZ))) + overDeltoidUp;
@@ -2472,7 +2472,7 @@ export const View3D = (() => {
       const legX = side * hipPivotX;
       const legSteps = tSpec.isBrief ? 3 : 14;
       const outerPelvicReach = Math.max(thighR * 1.02 + 0.012, hipR * 1.045 + 0.016 - Math.abs(legX));
-      const innerPelvicReach = Math.max(thighR * 0.80 + 0.012, Math.abs(legX) + 0.004);
+      const innerPelvicReach = Math.min(Math.max(thighR * 0.76 + 0.006, Math.abs(legX) - 0.002), Math.abs(legX) - 0.0015);
 
       let prev = null;
       for (let i = 0; i <= legSteps; i++) {
@@ -2529,14 +2529,14 @@ export const View3D = (() => {
     const briefTopRx = lerp(hipR, waistR, briefRise === "high" ? 0.86 : (briefRise === "low" ? 0.22 : 0.45));
     const pelvisSlices = [
       [hipY - span * 0.075, hipR * 1.045 + 0.016, hipR * 1.025 + 0.017],
-      [hipY,                hipR * 1.055 + 0.017, hipR * 1.045 + 0.018],
-      [waistTopY,           briefTopRx * 1.025 + 0.015, briefTopRx * 1.025 + 0.015],
+      [hipY, hipR * 1.055 + 0.017, hipR * 1.045 + 0.018],
+      [waistTopY, briefTopRx * 1.025 + 0.015, briefTopRx * 1.025 + 0.015],
     ];
     if (!tSpec.isBrief) {
       pelvisSlices[2] = [hipY + span * 0.18, (hipR * 0.72 + waistR * 0.30) + 0.016, (hipR * 0.72 + waistR * 0.30) + 0.016];
       pelvisSlices.push(
         [waistY - 0.032, (hipR * 0.18 + waistR * 0.84) + 0.015, (hipR * 0.18 + waistR * 0.84) + 0.015],
-        [waistTopY,      waistR * 1.025 + 0.016, waistR * 1.025 + 0.016]
+        [waistTopY, waistR * 1.025 + 0.016, waistR * 1.025 + 0.016]
       );
     }
 
@@ -2717,11 +2717,11 @@ export const View3D = (() => {
         const sk = pm.skirt;
         const skHemY = clamp(waistY - cm(sk.lengthCm), 0.045, d.hipY - 0.08);
         for (const [sampleY, reachDist] of [
-          [ pivotY - d.armLen * 0.48, d.armLen * 0.48 ],
-          [ pivotY - d.armLen * 0.68, d.armLen * 0.68 ],
-          [ wristY, wristDist ],
-          [ midHandY, midHandDist ],
-          [ handTipY, handTipDist ],
+          [pivotY - d.armLen * 0.48, d.armLen * 0.48],
+          [pivotY - d.armLen * 0.68, d.armLen * 0.68],
+          [wristY, wristDist],
+          [midHandY, midHandDist],
+          [handTipY, handTipDist],
         ]) {
           if (sampleY <= waistY + 0.02 && sampleY >= skHemY - 0.03) {
             let rx;
@@ -2741,18 +2741,52 @@ export const View3D = (() => {
         }
       }
 
-      // Check visible bodice / tunic / robe flare at hip, wrist, palm & fingertip level
-      if (isPartCurrentlyShown("bodice") && pm.bodice && pm.bodice.hemFlare > 1.04) {
+      // Check visible bodice / outer / tunic / robe lateral width across arm, wrist, palm & fingertip heights
+      if (pm.bodice) {
         const bSpec = pm.bodice;
-        const shoulderTopY = d.shoulderY + d.span * 0.054;
-        const bHemY = clamp(shoulderTopY - cm(bSpec.lengthCm), 0.05, waistY);
-        for (const [sampleY, reachDist] of [[wristY, wristDist], [midHandY, midHandDist], [handTipY, handTipDist]]) {
-          if (sampleY <= waistY && sampleY >= bHemY - 0.03) {
-            const drop = clamp((waistY - sampleY) / Math.max(0.15, waistY - bHemY), 0, 1);
-            const flare = 1 + (bSpec.hemFlare - 1) * Math.pow(drop, 1.12);
-            const rx = (d.hipR * 1.04 + 0.018) * flare;
-            const req = Math.asin(clamp((rx + armBuffer - pivotX) / Math.max(0.20, reachDist), 0.08, 0.56));
-            if (req > maxReqAngle) maxReqAngle = req;
+        const ol = bSpec.outerLayer;
+        const hasOuter = isPartCurrentlyShown("outer") && Boolean(ol?.enabled);
+        if (isPartCurrentlyShown("bodice") || hasOuter) {
+          const shoulderTopY = d.shoulderY + d.span * 0.054;
+          const easeRatio = Math.max(1.0, bSpec.easeRatio || 1.0);
+          const extraOuter = hasOuter ? 0.022 : 0.008;
+          let outerHemY = Infinity;
+          if (hasOuter) {
+            if (ol.lengthStyle === "waist") outerHemY = waistY - 0.015;
+            else if (ol.lengthStyle === "tunic") outerHemY = d.hipY - 0.16;
+            else if (ol.lengthStyle === "dress" || ol.lengthStyle === "coat") outerHemY = Math.max(0.18, d.hipY - d.span * 1.08);
+            else if (ol.lengthStyle === "robe") outerHemY = 0.06;
+            else outerHemY = d.hipY + d.span * 0.04;
+          }
+          const bHemY = Math.min(outerHemY, clamp(shoulderTopY - cm(bSpec.lengthCm || 62), 0.05, waistY + 0.12));
+          const flareTarget = Math.max(
+            bSpec.hemFlare || 1.0,
+            hasOuter && (ol.style === "bisht" || ol.lengthStyle === "coat") ? 1.22 : (hasOuter && ol.lengthStyle === "dress" ? 1.18 : 1.0)
+          );
+          const upperArmY = pivotY - d.armLen * 0.32;
+          if (upperArmY >= bHemY - 0.02) {
+            const rxUp = d.chestR * 0.90 * easeRatio + extraOuter;
+            const reqUp = Math.asin(clamp((rxUp + d.upperR * 0.92 + 0.016 - pivotX) / Math.max(0.18, d.armLen * 0.32), 0.08, 0.26));
+            if (reqUp > maxReqAngle) maxReqAngle = reqUp;
+          }
+          for (const [sampleY, reachDist] of [
+            [pivotY - d.armLen * 0.50, d.armLen * 0.50],
+            [pivotY - d.armLen * 0.68, d.armLen * 0.68],
+            [wristY, wristDist],
+            [midHandY, midHandDist],
+            [handTipY, handTipDist],
+          ]) {
+            if (sampleY <= waistY + 0.18 && sampleY >= bHemY - 0.03) {
+              const baseW = sampleY > waistY
+                ? lerp(d.waistR * 1.02, d.chestR * 0.92, clamp((sampleY - waistY) / Math.max(0.08, d.shoulderY - waistY), 0, 1))
+                : lerp(d.waistR * 1.02, d.hipR * 1.05, clamp((waistY - sampleY) / Math.max(0.08, waistY - d.hipY), 0, 1));
+              const flare = (sampleY < waistY && flareTarget > 1.02)
+                ? (1 + (flareTarget - 1) * Math.pow(clamp((waistY - sampleY) / Math.max(0.15, waistY - bHemY), 0, 1), 1.12))
+                : 1.0;
+              const rx = (baseW * easeRatio + extraOuter) * flare;
+              const req = Math.asin(clamp((rx + armBuffer - pivotX) / Math.max(0.20, reachDist), 0.08, 0.56));
+              if (req > maxReqAngle) maxReqAngle = req;
+            }
           }
         }
       }
@@ -2763,6 +2797,7 @@ export const View3D = (() => {
         const req = Math.asin(clamp((rx + armBuffer - pivotX) / Math.max(0.22, wristDist), 0.08, 0.48));
         if (req > maxReqAngle) maxReqAngle = req;
       }
+      if (isPartCurrentlyShown("sleeve")) maxReqAngle = Math.max(maxReqAngle, 0.155);
     }
 
     return clamp(Math.max(0.105, maxReqAngle), 0.105, 0.56);
@@ -2870,11 +2905,388 @@ export const View3D = (() => {
     return [_tmpVecA.x, _tmpVecA.y, _tmpVecA.z];
   }
 
+  // ---------- Exact 13-Segment Per-Bone Bind-Pose Mannequin Envelope (Zero Penetration) ----------
+  const ENV_SEG_N = 13;
+  const ENV_PHI_BINS = 72;
+  const ENV_T_BINS = 48;
+  const ENV_SH_XBINS = 48;
+  const ENV_SH_ZBINS = 32;
+  let _envMatTmp = null;
+  let _envVecTmp = null;
+
+  function computeExactBindEnvParams(d) {
+    const crotchY = d.hipY - d.span * 0.145;
+    const pelvisStartY = d.hipY - d.span * 0.088;
+    const pivotY = d.shoulderY - d.span * 0.035;
+    const pivotX = d.shoulderHalf * 0.82;
+    const upperArmLen = d.armLen * 0.48;
+    const forearmLen = d.armLen * 0.46;
+    const handReach = d.H * (d.kid ? 0.108 : (d.female ? 0.104 : 0.107)) * 1.05;
+    const hipPivotY = d.hipY - d.span * 0.04;
+    const hipPivotX = d.hipR * (d.female ? 0.45 : 0.47);
+    const ankleY = Math.max(0.054, d.H * 0.047);
+    const thighStartY = hipPivotY + d.span * 0.055;
+    const thighLen = Math.max(0.25, hipPivotY - ankleY) * 0.53;
+    return {
+      crotchY, pelvisStartY, pivotY, pivotX, upperArmLen, forearmLen, handReach,
+      hipPivotY, hipPivotX, ankleY, thighStartY, thighLen,
+      shCutY: d.shoulderY - d.span * 0.025,
+      groinCutY: d.hipY - d.span * 0.085,
+      shHalfSpan: d.shoulderHalf + d.upperR * 1.25,
+      shMaxZ: d.chestR * (d.female ? 0.80 : 0.84) + d.upperR * 1.15,
+    };
+  }
+
+  function ensureExactMannequinEnvelope(mannequin, d) {
+    if (!mannequin?.bodyMesh?.geometry?.attributes?.position || !d) return null;
+    const cacheHost = (mannequin.userData ||= {});
+    if (cacheHost.exactEnvelope) return cacheHost.exactEnvelope;
+
+    const geo = mannequin.bodyMesh.geometry;
+    const pos = geo.attributes.position;
+    const idx = geo.index;
+    const skinIdx = geo.attributes.skinIndex;
+    const skinWgt = geo.attributes.skinWeight;
+    if (!skinIdx || !skinWgt || !idx) return null;
+
+    _envMatTmp ||= new THREE.Matrix4();
+    _envVecTmp ||= new THREE.Vector3();
+    const invs = mannequin.skeleton?.boneInverses;
+    const bindOrigin = (bIdx, fb) => {
+      if (!invs?.[bIdx]) return fb;
+      _envMatTmp.copy(invs[bIdx]).invert();
+      return [_envMatTmp.elements[12], _envMatTmp.elements[13], _envMatTmp.elements[14]];
+    };
+    const toBoneLocal = (bIdx, wx, wy, wz) => {
+      if (!invs?.[bIdx]) return [0, 0, 0];
+      _envVecTmp.set(wx, wy, wz).applyMatrix4(invs[bIdx]);
+      return [_envVecTmp.x, _envVecTmp.y, _envVecTmp.z];
+    };
+
+    const p = computeExactBindEnvParams(d);
+    const oPelv = bindOrigin(BONE_IDX.pelvis, [0, d.hipY, 0]);
+    const oSpine = bindOrigin(BONE_IDX.spine, [0, d.hipY + d.span * 0.34, 0]);
+    const oChest = bindOrigin(BONE_IDX.chest, [0, d.hipY + d.span * 0.62, 0]);
+    const oNeck = bindOrigin(BONE_IDX.neck, [0, d.shoulderY, 0]);
+    const oHead = bindOrigin(BONE_IDX.head, [0, d.neckTopY + d.headH * 0.50, 0]);
+
+    const rawSegSpecs = [
+      { bA: BONE_IDX.pelvis, a: [0, p.pelvisStartY, 0], bB: BONE_IDX.spine, b: [0, oSpine[1] + 0.025, 0], fBone: BONE_IDX.pelvis, bones: [0, 1], minW: 0.24 },
+      { bA: BONE_IDX.spine, a: [0, oSpine[1] - 0.025, 0], bB: BONE_IDX.chest, b: [0, oChest[1] + 0.025, 0], fBone: BONE_IDX.spine, bones: [0, 1, 2], minW: 0.24 },
+      { bA: BONE_IDX.chest, a: [0, oChest[1] - 0.025, 0], bB: BONE_IDX.neck, b: [0, oNeck[1] + 0.020, 0], fBone: BONE_IDX.chest, bones: [1, 2, 3], minW: 0.24 },
+      { bA: BONE_IDX.neck, a: [0, oNeck[1] - 0.020, 0], bB: BONE_IDX.head, b: [0, oHead[1] + 0.015, 0], fBone: BONE_IDX.neck, bones: [3, 4], minW: 0.22 },
+      { bA: BONE_IDX.head, a: [0, oHead[1] - 0.015, 0], bB: BONE_IDX.head, b: [0, d.H, 0], fBone: BONE_IDX.head, bones: [4], minW: 0.25 },
+      { bA: BONE_IDX.armL, a: [p.pivotX, p.pivotY + d.upperR * 0.95, 0], bB: BONE_IDX.elbowL, b: [p.pivotX, p.pivotY - p.upperArmLen, 0], fBone: BONE_IDX.armL, bones: [5], minW: 0.12 },
+      { bA: BONE_IDX.armR, a: [-p.pivotX, p.pivotY + d.upperR * 0.95, 0], bB: BONE_IDX.elbowR, b: [-p.pivotX, p.pivotY - p.upperArmLen, 0], fBone: BONE_IDX.armR, bones: [8], minW: 0.12 },
+      { bA: BONE_IDX.elbowL, a: [p.pivotX, p.pivotY - p.upperArmLen, 0], bB: BONE_IDX.handL, b: [p.pivotX, p.pivotY - p.upperArmLen - p.forearmLen - p.handReach, 0], fBone: BONE_IDX.elbowL, bones: [6, 7], minW: 0.20 },
+      { bA: BONE_IDX.elbowR, a: [-p.pivotX, p.pivotY - p.upperArmLen, 0], bB: BONE_IDX.handR, b: [-p.pivotX, p.pivotY - p.upperArmLen - p.forearmLen - p.handReach, 0], fBone: BONE_IDX.elbowR, bones: [9, 10], minW: 0.20 },
+      { bA: BONE_IDX.legL, a: [p.hipPivotX, p.thighStartY, 0], bB: BONE_IDX.kneeL, b: [p.hipPivotX, p.hipPivotY - p.thighLen, 0], fBone: BONE_IDX.legL, bones: [11], minW: 0.16 },
+      { bA: BONE_IDX.legR, a: [-p.hipPivotX, p.thighStartY, 0], bB: BONE_IDX.kneeR, b: [-p.hipPivotX, p.hipPivotY - p.thighLen, 0], fBone: BONE_IDX.legR, bones: [14], minW: 0.16 },
+      { bA: BONE_IDX.kneeL, a: [p.hipPivotX, p.hipPivotY - p.thighLen, 0], bB: BONE_IDX.footL, b: [p.hipPivotX, 0.01, 0], fBone: BONE_IDX.kneeL, bones: [12, 13], minW: 0.20 },
+      { bA: BONE_IDX.kneeR, a: [-p.hipPivotX, p.hipPivotY - p.thighLen, 0], bB: BONE_IDX.footR, b: [-p.hipPivotX, 0.01, 0], fBone: BONE_IDX.kneeR, bones: [15, 16], minW: 0.20 },
+    ];
+    void oPelv;
+    const segDefs = rawSegSpecs.map((spec) => ({
+      ...spec,
+      aLoc: toBoneLocal(spec.bA, spec.a[0], spec.a[1], spec.a[2]),
+      bLoc: toBoneLocal(spec.bB, spec.b[0], spec.b[1], spec.b[2]),
+    }));
+
+    const wFor = (v, bones) => {
+      let sum = 0;
+      const bi = [skinIdx.getX(v), skinIdx.getY(v), skinIdx.getZ(v), skinIdx.getW(v)];
+      const bw = [skinWgt.getX(v), skinWgt.getY(v), skinWgt.getZ(v), skinWgt.getW(v)];
+      for (let c = 0; c < 4; c++) if (bones.includes(bi[c])) sum += bw[c];
+      return sum;
+    };
+
+    const raw = new Float32Array(ENV_SEG_N * ENV_T_BINS * ENV_PHI_BINS);
+    const shTopRaw = new Float32Array(ENV_SH_XBINS * ENV_SH_ZBINS).fill(-1);
+    const vertMask = new Uint16Array(pos.count);
+    for (let v = 0; v < pos.count; v++) {
+      let mask = 0;
+      for (let s = 0; s < ENV_SEG_N; s++) {
+        if (wFor(v, segDefs[s].bones) >= segDefs[s].minW) mask |= 1 << s;
+      }
+      vertMask[v] = mask;
+    }
+
+    const TWO_PI = Math.PI * 2;
+    const splat = (s, px, py, pz) => {
+      if (s === 0 && py < p.groinCutY && Math.abs(px) > p.hipPivotX * 0.78) return;
+      if (s === 2 && Math.abs(px) > p.pivotX + d.upperR * 0.42) return;
+      if (s === 3 && Math.hypot(px, pz) > d.neckR * 1.48) return;
+      if ((s === 5 || s === 7) && px < p.pivotX - d.upperR * 1.18) return;
+      if ((s === 6 || s === 8) && px > -(p.pivotX - d.upperR * 1.18)) return;
+      if ((s === 9 || s === 11) && px < -0.008) return;
+      if ((s === 10 || s === 12) && px > 0.008) return;
+      const seg = segDefs[s];
+      const abx = seg.b[0] - seg.a[0], aby = seg.b[1] - seg.a[1], abz = seg.b[2] - seg.a[2];
+      const len2 = abx * abx + aby * aby + abz * abz || 1e-8;
+      const t = ((px - seg.a[0]) * abx + (py - seg.a[1]) * aby + (pz - seg.a[2]) * abz) / len2;
+      if (t < -0.025 || t > 1.025) return;
+      const lx = px - (seg.a[0] + abx * t);
+      const lz = pz - (seg.a[2] + abz * t);
+      const r = Math.hypot(lx, lz);
+      let uNorm = Math.atan2(lx, lz) / TWO_PI + 0.5;
+      uNorm -= Math.floor(uNorm);
+      const iu = Math.min(ENV_PHI_BINS - 1, Math.floor(uNorm * ENV_PHI_BINS));
+      const iv = clamp(Math.floor(clamp(t, 0, 0.9999) * ENV_T_BINS), 0, ENV_T_BINS - 1);
+      const cIdx = (s * ENV_T_BINS + iv) * ENV_PHI_BINS + iu;
+      if (r > raw[cIdx]) raw[cIdx] = r;
+    };
+
+    const splatSh = (px, py, pz) => {
+      if (py < p.shCutY - d.span * 0.03 || py > d.shoulderY + d.span * 0.14) return;
+      if (Math.abs(px) > p.shHalfSpan || Math.abs(pz) > p.shMaxZ) return;
+      const ix = clamp(Math.floor(((px + p.shHalfSpan) / (2 * p.shHalfSpan)) * ENV_SH_XBINS), 0, ENV_SH_XBINS - 1);
+      const iz = clamp(Math.floor(((pz + p.shMaxZ) / (2 * p.shMaxZ)) * ENV_SH_ZBINS), 0, ENV_SH_ZBINS - 1);
+      const idxSh = iz * ENV_SH_XBINS + ix;
+      if (py > shTopRaw[idxSh]) shTopRaw[idxSh] = py;
+    };
+
+    const N_SUB = 6;
+    for (let i = 0; i < idx.count; i += 3) {
+      const i0 = idx.getX(i), i1 = idx.getX(i + 1), i2 = idx.getX(i + 2);
+      const shared = vertMask[i0] | vertMask[i1] | vertMask[i2];
+      if (!shared) continue;
+      const x0 = pos.getX(i0), y0 = pos.getY(i0), z0 = pos.getZ(i0);
+      const x1 = pos.getX(i1), y1 = pos.getY(i1), z1 = pos.getZ(i1);
+      const x2 = pos.getX(i2), y2 = pos.getY(i2), z2 = pos.getZ(i2);
+      const pts = [];
+      for (let a = 0; a <= N_SUB; a++) {
+        for (let b = 0; b <= N_SUB - a; b++) {
+          const c = N_SUB - a - b;
+          const wa = a / N_SUB, wb = b / N_SUB, wc = c / N_SUB;
+          pts.push([wa * x0 + wb * x1 + wc * x2, wa * y0 + wb * y1 + wc * y2, wa * z0 + wb * z1 + wc * z2]);
+        }
+      }
+      if ((wFor(i0, [2, 3, 5, 8]) + wFor(i1, [2, 3, 5, 8]) + wFor(i2, [2, 3, 5, 8])) >= 1.0) {
+        for (const qpt of pts) splatSh(qpt[0], qpt[1], qpt[2]);
+      }
+      for (let s = 0; s < ENV_SEG_N; s++) {
+        if (!(shared & (1 << s))) continue;
+        const cnt = ((vertMask[i0] >> s) & 1) + ((vertMask[i1] >> s) & 1) + ((vertMask[i2] >> s) & 1);
+        if (cnt < (s >= 5 ? 1 : 2)) continue;
+        for (const qpt of pts) splat(s, qpt[0], qpt[1], qpt[2]);
+      }
+    }
+
+    const filled = new Float32Array(raw);
+    const chSeg = segDefs[2];
+    const chShCutIv = clamp(Math.floor(((p.shCutY - chSeg.a[1]) / Math.max(0.05, chSeg.b[1] - chSeg.a[1])) * ENV_T_BINS), 0, ENV_T_BINS - 1);
+    const snap = new Float32Array(filled.length);
+    for (let s = 0; s < ENV_SEG_N; s++) {
+      const segBase = s * ENV_T_BINS * ENV_PHI_BINS;
+      for (let iv = 0; iv < ENV_T_BINS; iv++) {
+        const rowOff = segBase + iv * ENV_PHI_BINS;
+        let rowMax = 0;
+        for (let iu = 0; iu < ENV_PHI_BINS; iu++) if (filled[rowOff + iu] > rowMax) rowMax = filled[rowOff + iu];
+        if (rowMax <= 0) continue;
+        for (let pass = 0; pass < 6; pass++) {
+          for (let iu = 0; iu < ENV_PHI_BINS; iu++) {
+            if (filled[rowOff + iu] <= 0) {
+              const prev = filled[rowOff + ((iu + ENV_PHI_BINS - 1) % ENV_PHI_BINS)];
+              const next = filled[rowOff + ((iu + 1) % ENV_PHI_BINS)];
+              filled[rowOff + iu] = (prev > 0 && next > 0) ? 0.5 * (prev + next) : Math.max(prev, next);
+            }
+          }
+        }
+      }
+      for (let pass = 0; pass < 6; pass++) {
+        snap.set(filled.subarray(segBase, segBase + ENV_T_BINS * ENV_PHI_BINS), segBase);
+        for (let iv = 0; iv < ENV_T_BINS; iv++) {
+          if (s === 2 && iv >= chShCutIv) continue;
+          const rowOff = segBase + iv * ENV_PHI_BINS;
+          for (let iu = 0; iu < ENV_PHI_BINS; iu++) {
+            if (snap[rowOff + iu] <= 0) {
+              const below = iv > 0 ? snap[segBase + (iv - 1) * ENV_PHI_BINS + iu] : 0;
+              const above = iv + 1 < ENV_T_BINS ? snap[segBase + (iv + 1) * ENV_PHI_BINS + iu] : 0;
+              filled[rowOff + iu] = Math.max(below, above);
+            }
+          }
+        }
+      }
+    }
+
+    const dilated = new Float32Array(filled.length);
+    for (let s = 0; s < ENV_SEG_N; s++) {
+      const segBase = s * ENV_T_BINS * ENV_PHI_BINS;
+      for (let iv = 0; iv < ENV_T_BINS; iv++) {
+        for (let iu = 0; iu < ENV_PHI_BINS; iu++) {
+          let best = 0;
+          for (let du = -1; du <= 1; du++) {
+            const val = filled[segBase + iv * ENV_PHI_BINS + ((iu + du + ENV_PHI_BINS) % ENV_PHI_BINS)];
+            if (val > best) best = val;
+          }
+          const dvs = (s === 2 && iv >= chShCutIv) ? [1] : [-1, 1];
+          for (const dv of dvs) {
+            const nv = clamp(iv + dv, 0, ENV_T_BINS - 1);
+            const rOff = segBase + nv * ENV_PHI_BINS;
+            for (let du = -1; du <= 1; du++) {
+              const val = filled[rOff + ((iu + du + ENV_PHI_BINS) % ENV_PHI_BINS)];
+              if (val > best) best = val;
+            }
+          }
+          dilated[segBase + iv * ENV_PHI_BINS + iu] = best;
+        }
+      }
+    }
+
+    const shTop = new Float32Array(shTopRaw.length);
+    for (let iz = 0; iz < ENV_SH_ZBINS; iz++) {
+      for (let ix = 0; ix < ENV_SH_XBINS; ix++) {
+        let best = shTopRaw[iz * ENV_SH_XBINS + ix];
+        for (let dz = -1; dz <= 1; dz++) {
+          const z2 = iz + dz;
+          if (z2 < 0 || z2 >= ENV_SH_ZBINS) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            const x2 = ix + dx;
+            if (x2 < 0 || x2 >= ENV_SH_XBINS) continue;
+            const v = shTopRaw[z2 * ENV_SH_XBINS + x2];
+            if (v > best) best = v;
+          }
+        }
+        shTop[iz * ENV_SH_XBINS + ix] = best;
+      }
+    }
+
+    const env = { p, segDefs, grid: dilated, skinGrid: filled, shTop };
+    mannequin.userData.exactEnvelope = env;
+    return env;
+  }
+
+  function extractPosedMannequinEnvFrames(env, bones, d) {
+    if (!env || !bones || bones.length < 17) return null;
+    void d;
+    const makeFrame = (bone, a, b) => {
+      const m = new THREE.Matrix4().multiplyMatrices(_tmpRootInv, bone.matrixWorld);
+      const q = new THREE.Quaternion().setFromRotationMatrix(m);
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+      const ax = b[0] - a[0], ay = b[1] - a[1], az = b[2] - a[2];
+      const len = Math.hypot(ax, ay, az);
+      if (len > 1e-6) {
+        const ux = ax / len, uy = ay / len, uz = az / len;
+        const dr = right.x * ux + right.y * uy + right.z * uz;
+        right.set(right.x - ux * dr, right.y - uy * dr, right.z - uz * dr);
+        if (right.lengthSq() > 1e-8) right.normalize();
+        const df = fwd.x * ux + fwd.y * uy + fwd.z * uz;
+        fwd.set(fwd.x - ux * df, fwd.y - uy * df, fwd.z - uz * df);
+        const dp = fwd.x * right.x + fwd.y * right.y + fwd.z * right.z;
+        fwd.set(fwd.x - right.x * dp, fwd.y - right.y * dp, fwd.z - right.z * dp);
+        if (fwd.lengthSq() > 1e-8) fwd.normalize();
+      }
+      return { a, b, right: [right.x, right.y, right.z], fwd: [fwd.x, fwd.y, fwd.z] };
+    };
+
+    return env.segDefs.map((seg) => {
+      const a = getRootBonePoint(bones[seg.bA], seg.aLoc[0], seg.aLoc[1], seg.aLoc[2]);
+      const b = getRootBonePoint(bones[seg.bB], seg.bLoc[0], seg.bLoc[1], seg.bLoc[2]);
+      return makeFrame(bones[seg.fBone], a, b);
+    });
+  }
+
+  function projectOutsideExactMannequinEnvelope(pt, env, frames, d, margin = 0.0065, opts = {}) {
+    if (!env || !frames) return;
+    const TWO_PI = Math.PI * 2;
+    const segs = opts.segments || [9, 10, 11, 12, 5, 6, 7, 8, 0, 1, 2, 3, 4];
+    const bindMode = Boolean(opts.bindMode);
+    const passes = env.skinGrid ? 4 : 2;
+    const tightMargin = Math.min(margin, 0.0024);
+
+    for (let pass = 0; pass < passes; pass++) {
+      const isSkinPass = pass > 0 && Boolean(env.skinGrid);
+      const grid = isSkinPass ? env.skinGrid : env.grid;
+      const curMargin = isSkinPass ? tightMargin : margin;
+      let pushedPosX = false;
+      let pushedNegX = false;
+
+      for (const s of segs) {
+        const f = frames[s];
+        if (!f) continue;
+        const abx = f.b[0] - f.a[0], aby = f.b[1] - f.a[1], abz = f.b[2] - f.a[2];
+        const len2 = Math.max(abx * abx + aby * aby + abz * abz, 1e-8);
+        const t = ((pt.x - f.a[0]) * abx + (pt.y - f.a[1]) * aby + (pt.z - f.a[2]) * abz) / len2;
+        if (t <= -0.02 || t >= 1.02) continue;
+        const tC = clamp(t, 0, 0.9999);
+        const cx = f.a[0] + abx * tC, cy = f.a[1] + aby * tC, cz = f.a[2] + abz * tC;
+        const rx = pt.x - cx, ry = pt.y - cy, rz = pt.z - cz;
+        const lx = rx * f.right[0] + ry * f.right[1] + rz * f.right[2];
+        const lz = rx * f.fwd[0] + ry * f.fwd[1] + rz * f.fwd[2];
+        const dist = Math.hypot(lx, lz);
+
+        let uNorm = Math.atan2(lx, lz) / TWO_PI + 0.5;
+        uNorm -= Math.floor(uNorm);
+        const uS = uNorm * ENV_PHI_BINS;
+        const iu = Math.min(ENV_PHI_BINS - 1, Math.floor(uS)), fu = uS - iu, iu1 = (iu + 1) % ENV_PHI_BINS;
+        const vS = tC * ENV_T_BINS;
+        const iv = Math.min(ENV_T_BINS - 1, Math.floor(vS)), fv = vS - iv, iv1 = Math.min(ENV_T_BINS - 1, iv + 1);
+
+        const segBase = s * ENV_T_BINS * ENV_PHI_BINS;
+        const r00 = grid[segBase + iv * ENV_PHI_BINS + iu];
+        const r10 = grid[segBase + iv * ENV_PHI_BINS + iu1];
+        const r01 = grid[segBase + iv1 * ENV_PHI_BINS + iu];
+        const r11 = grid[segBase + iv1 * ENV_PHI_BINS + iu1];
+        const bilinear = (r00 * (1 - fu) + r10 * fu) * (1 - fv) + (r01 * (1 - fu) + r11 * fu) * fv;
+        const maxCorner = Math.max(r00, r10, r01, r11);
+        const rawR = Math.max(bilinear, maxCorner);
+        if (rawR <= 0.005) continue;
+        const targetR = rawR + curMargin;
+        if (dist < targetR) {
+          const safeDist = Math.max(dist, 1e-5);
+          const nlx = dist > 1e-5 ? (lx * targetR) / safeDist : 0;
+          const nlz = dist > 1e-5 ? (lz * targetR) / safeDist : targetR;
+          const dlx = nlx - lx, dlz = nlz - lz;
+          let dx = dlx * f.right[0] + dlz * f.fwd[0];
+          const dy = dlx * f.right[1] + dlz * f.fwd[1];
+          const dz = dlx * f.right[2] + dlz * f.fwd[2];
+          if ((s === 9 || s === 11) && pt.x + dx < -0.0005) dx = Math.max(0, -0.0005 - pt.x);
+          if ((s === 10 || s === 12) && pt.x + dx > 0.0005) dx = Math.min(0, 0.0005 - pt.x);
+          if (dx > 1e-4) pushedPosX = true;
+          else if (dx < -1e-4) pushedNegX = true;
+          pt.x += dx;
+          pt.y += dy;
+          pt.z += dz;
+        }
+      }
+
+      // If two adjacent cylinders (e.g., arm + chest in high axilla or thigh + thigh in groin) pinch X,
+      // step Z gently toward the open anterior/posterior cleft valley so Passes 1..3 clear both cleanly.
+      if (isSkinPass && pushedPosX && pushedNegX && !bindMode) {
+        pt.z += (Math.abs(pt.z) > 1e-4 ? Math.sign(pt.z) : 1) * 0.011;
+      }
+
+      // Upward clavicle/trapezius/deltoid shoulder heightfield protection (in chest bone frame)
+      if ((pass === 0 || pass === 2) && !opts.skipShoulderTop && _dynInvMats) {
+        const m = _dynMats[BONE_IDX.chest];
+        const invM = _dynInvMats[BONE_IDX.chest];
+        const ie = invM.elements;
+        const lx = ie[0] * pt.x + ie[4] * pt.y + ie[8] * pt.z + ie[12];
+        const ly = ie[1] * pt.x + ie[5] * pt.y + ie[9] * pt.z + ie[13];
+        const lz = ie[2] * pt.x + ie[6] * pt.y + ie[10] * pt.z + ie[14];
+        const ep = env.p;
+        if (Math.abs(lx) <= ep.shHalfSpan && Math.abs(lz) <= ep.shMaxZ && ly >= ep.shCutY - d.span * 0.03 && ly <= d.shoulderY + d.span * 0.14) {
+          const ix = clamp(Math.floor(((lx + ep.shHalfSpan) / (2 * ep.shHalfSpan)) * ENV_SH_XBINS), 0, ENV_SH_XBINS - 1);
+          const iz = clamp(Math.floor(((lz + ep.shMaxZ) / (2 * ep.shMaxZ)) * ENV_SH_ZBINS), 0, ENV_SH_ZBINS - 1);
+          const topY = env.shTop[iz * ENV_SH_XBINS + ix];
+          if (topY > 0 && ly < topY + curMargin && ly > topY - 0.045) {
+            const targetLy = topY + curMargin;
+            const fe = m.elements;
+            pt.x = fe[0] * lx + fe[4] * targetLy + fe[8] * lz + fe[12];
+            pt.y = fe[1] * lx + fe[5] * targetLy + fe[9] * lz + fe[13];
+            pt.z = fe[2] * lx + fe[6] * targetLy + fe[10] * lz + fe[14];
+          }
+        }
+      }
+    }
+  }
+
   /**
    * Evaluates CPU linear-blend skinning, fabric-aware secondary drape waves,
    * strict posed anatomical body-capsule push-out (zero skin poke-through),
-   * circumferential skirt drape tenting + side-seam welding, and bidirectional
-   * arm-outside-garment separation.
+   * exact 9-segment humanBody surface clearance, circumferential skirt drape
+   * tenting + side-seam welding, and bidirectional arm-outside-garment separation.
    */
   function updateGarmentDynamics(time = 0, isWalking = false) {
     if (!garmentGroup || !lastDims || !activeMannequin || !activeMannequin.skeleton) return;
@@ -2897,6 +3309,9 @@ export const View3D = (() => {
       _dynInvMats[b].copy(_dynMats[b]).invert();
     }
 
+    const exactEnv = ensureExactMannequinEnvelope(activeMannequin, d);
+    const exactFrames = exactEnv ? extractPosedMannequinEnvFrames(exactEnv, bones, d) : null;
+
     // Extract posed anatomical capsule endpoints in root space
     const [pelvX, , pelvZ] = getRootBonePoint(bones[BONE_IDX.pelvis], 0, 0, 0);
     const [hipLX, hipLY, hipLZ] = getRootBonePoint(bones[BONE_IDX.legL], 0, 0, 0);
@@ -2913,12 +3328,12 @@ export const View3D = (() => {
     const handLen = d.H * (d.kid ? 0.108 : (d.female ? 0.104 : 0.107));
     const wristR = Math.max(d.upperR * (d.female ? 0.50 : 0.53), d.H * 0.0148);
     const handTipOffset = handLen;
-    const [shoLX, shoLY, shoLZ] = getRootBonePoint(bones[BONE_IDX.armL], 0, -d.upperR * 0.72, 0);
+    const [shoLX, shoLY, shoLZ] = getRootBonePoint(bones[BONE_IDX.armL], 0, 0, 0);
     const [elbLX, elbLY, elbLZ] = getRootBonePoint(bones[BONE_IDX.elbowL], 0, 0, 0);
     const [wriLX, wriLY, wriLZ] = getRootBonePoint(bones[BONE_IDX.handL], 0, 0, 0);
     const [tipLX, tipLY, tipLZ] = getRootBonePoint(bones[BONE_IDX.handL], 0, -handTipOffset, 0);
 
-    const [shoRX, shoRY, shoRZ] = getRootBonePoint(bones[BONE_IDX.armR], 0, -d.upperR * 0.72, 0);
+    const [shoRX, shoRY, shoRZ] = getRootBonePoint(bones[BONE_IDX.armR], 0, 0, 0);
     const [elbRX, elbRY, elbRZ] = getRootBonePoint(bones[BONE_IDX.elbowR], 0, 0, 0);
     const [wriRX, wriRY, wriRZ] = getRootBonePoint(bones[BONE_IDX.handR], 0, 0, 0);
     const [tipRX, tipRY, tipRZ] = getRootBonePoint(bones[BONE_IDX.handR], 0, -handTipOffset, 0);
@@ -2955,12 +3370,14 @@ export const View3D = (() => {
         const dx = pt.x - cx, dy = pt.y - cy, dz = pt.z - cz;
         const dSq = dx * dx + dy * dy + dz * dz;
         if (dSq < guardR * guardR) {
-          // Gently press flared skirt/robe inward toward body axis away from the arm
+          // Gently press flared skirt/robe inward toward body axis away from the arm, never pushing inside hip radius
           const toCenterX = pelvX - cx;
           const toCenterZ = pelvZ - cz;
           const tcLen = Math.hypot(toCenterX, toCenterZ) || 1;
           const pen = guardR - Math.sqrt(dSq);
-          pt.x += (toCenterX / tcLen) * pen;
+          const nextX = pt.x + (toCenterX / tcLen) * pen;
+          const minHipX = d.hipR * 1.08;
+          pt.x = Math.abs(nextX) < minHipX ? Math.sign(pt.x || toCenterX || 1) * minHipX : nextX;
           pt.z += (toCenterZ / tcLen) * pen * 0.5;
         }
       }
@@ -2975,13 +3392,13 @@ export const View3D = (() => {
       if (restY >= d.hipY - d.span * 0.14 && restY <= waistY + d.span * 0.22) {
         enforceBoneSculptedSurface(pt, BONE_IDX.spine, d.hipY + d.span * 0.05, waistY + d.span * 0.20, d, 0.0095);
       }
-      if (restY <= waistY + 0.05 && restY >= d.hipY - d.span * 0.16) {
-        enforceBoneSculptedSurface(pt, BONE_IDX.pelvis, d.hipY - d.span * 0.13, waistY + 0.03, d, 0.010);
+      if (restY <= waistY + 0.05 && restY >= d.hipY - d.span * 0.095) {
+        enforceBoneSculptedSurface(pt, BONE_IDX.pelvis, d.hipY - d.span * 0.085, waistY + 0.03, d, 0.010);
       }
 
       // 2. Posed Left & Right Thighs, Knees, Calves & Feet
       if (restY <= d.hipY + 0.04) {
-        const medTop = isTrousers ? Math.max(d.thighR * 0.66, hipPivotMag - 0.013) : d.thighR * 0.85;
+        const medTop = isTrousers ? Math.min(Math.max(d.thighR * 0.66, hipPivotMag - 0.013), hipPivotMag - 0.005) : d.thighR * 0.85;
         const latTop = d.thighR * 1.04 + margin;
         const zTop = d.thighR * 1.11 + margin;
         const kneeRad = d.thighR * 0.72 + margin;
@@ -3016,9 +3433,10 @@ export const View3D = (() => {
       const meta = geo.userData.gridMeta;
       const isTrousers = part === "trousers";
       const isSkirt = part === "skirt";
-      const isSleeve = part === "sleeve";
+      const isSleeve = part === "sleeve" || mesh.userData.parentPart === "sleeve";
       const isBodice = part === "bodice" || part === "outer";
       const isCollar = mesh.userData.garmentType === "collar" || part === "trim";
+      const isBra = mesh.userData.garmentType === "bra";
 
       for (let i = 0; i < count; i++) {
         const i3 = i * 3;
@@ -3072,50 +3490,44 @@ export const View3D = (() => {
           }
         }
 
-        // Strict Anatomical Collision Resolution
+        // Strict Anatomical Collision Resolution + Exact Bind-Derived Envelope Guard
         if (isSleeve) {
           const sSide = mesh.userData.armSide || (rx >= 0 ? 1 : -1);
           const margin = 0.0095;
-          const ringIdx = Math.floor(i / ((meta?.segs || 28) + 1));
-          const capFade = smoothstep(0.8, 4.5, ringIdx);
           if (sSide > 0) {
-            if (capFade > 0.01) {
-              const bx = p.x, by = p.y, bz = p.z;
-              pushPointOutOfCapsule(p, shoLX, shoLY, shoLZ, elbLX, elbLY, elbLZ, d.upperR * 1.00 + margin, d.upperR * 0.79 + margin);
-              p.x = bx + (p.x - bx) * capFade;
-              p.y = by + (p.y - by) * capFade;
-              p.z = bz + (p.z - bz) * capFade;
-            }
+            pushPointOutOfCapsule(p, shoLX, shoLY, shoLZ, elbLX, elbLY, elbLZ, d.upperR * 1.04 + margin, d.upperR * 0.79 + margin);
             pushPointOutOfCapsule(p, elbLX, elbLY, elbLZ, wriLX, wriLY, wriLZ, d.upperR * 0.80 + margin, wristR * 1.18 + margin, forearmSwellFn);
             pushPointOutOfCapsule(p, wriLX, wriLY, wriLZ, tipLX, tipLY, tipLZ, wristR * 1.24 + margin, wristR * 1.36 + margin);
           } else {
-            if (capFade > 0.01) {
-              const bx = p.x, by = p.y, bz = p.z;
-              pushPointOutOfCapsule(p, shoRX, shoRY, shoRZ, elbRX, elbRY, elbRZ, d.upperR * 1.00 + margin, d.upperR * 0.79 + margin);
-              p.x = bx + (p.x - bx) * capFade;
-              p.y = by + (p.y - by) * capFade;
-              p.z = bz + (p.z - bz) * capFade;
-            }
+            pushPointOutOfCapsule(p, shoRX, shoRY, shoRZ, elbRX, elbRY, elbRZ, d.upperR * 1.04 + margin, d.upperR * 0.79 + margin);
             pushPointOutOfCapsule(p, elbRX, elbRY, elbRZ, wriRX, wriRY, wriRZ, d.upperR * 0.80 + margin, wristR * 1.18 + margin, forearmSwellFn);
             pushPointOutOfCapsule(p, wriRX, wriRY, wriRZ, tipRX, tipRY, tipRZ, wristR * 1.24 + margin, wristR * 1.36 + margin);
           }
-          if (ry < d.shoulderY - d.span * 0.07) {
-            enforceBoneSculptedSurface(p, BONE_IDX.chest, d.hipY + d.span * 0.30, d.shoulderY - d.span * 0.05, d, 0.011);
+          if (exactEnv && exactFrames) {
+            projectOutsideExactMannequinEnvelope(p, exactEnv, exactFrames, d, 0.0068, {
+              segments: sSide > 0 ? [5, 7, 0, 1, 2, 3] : [6, 8, 0, 1, 2, 3],
+              isSleeve: true,
+            });
           }
         } else if (!isCollar) {
-          // First keep flared cloth outside the swinging arms/hands, then strictly enforce body-inside-garment push-out!
-          if (!isPartCurrentlyShown("sleeve") || ry < d.hipY + d.span * 0.18) {
+          // Keep flared cloth outside swinging arms/hands (excluding fitted trousers), then enforce body clearance!
+          if (!isTrousers && (!isPartCurrentlyShown("sleeve") || ry < d.hipY + d.span * 0.18)) {
             guardArmOutsideGarment(p, ry);
           }
           collideTorsoAndLegs(p, ry, isTrousers);
           if (isBodice && ry > d.shoulderY - d.span * 0.14 && ry < d.shoulderY - d.span * 0.022 && Math.abs(rx) > d.shoulderHalf * 0.62) {
-            // Keep lateral bodice armholes cleanly outside the proximal upper-arm deltoid without splitting top shoulder seam
             if (rx >= 0) {
               pushPointOutOfCapsule(p, shoLX, shoLY, shoLZ, elbLX, elbLY, elbLZ, d.upperR * 0.90 + 0.006, d.upperR * 0.78 + 0.006);
             } else {
               pushPointOutOfCapsule(p, shoRX, shoRY, shoRZ, elbRX, elbRY, elbRZ, d.upperR * 0.90 + 0.006, d.upperR * 0.78 + 0.006);
             }
           }
+          if (exactEnv && exactFrames) {
+            projectOutsideExactMannequinEnvelope(p, exactEnv, exactFrames, d, isBra ? 0.0060 : 0.0068, { isTrousers });
+          }
+        } else if (exactEnv && exactFrames) {
+          // Collars, lapels & trim overlays: strict skin surface clearance including neck/chest
+          projectOutsideExactMannequinEnvelope(p, exactEnv, exactFrames, d, 0.0056, { skipShoulderTop: true });
         }
 
         // Prevent floor-length skirts/robes from dipping below studio floor y = 0.008
@@ -3145,12 +3557,15 @@ export const View3D = (() => {
           const dyR = fRest[i3 + 1] - bRest[i3 + 1];
           const dzR = fRest[i3 + 2] - bRest[i3 + 2];
           if (dxR * dxR + dyR * dyR + dzR * dzR < 1.6e-5) {
-            const mx = 0.5 * (fArr[i3] + bArr[i3]);
-            const my = 0.5 * (fArr[i3 + 1] + bArr[i3 + 1]);
-            const mz = 0.5 * (fArr[i3 + 2] + bArr[i3 + 2]);
-            fArr[i3] = bArr[i3] = mx;
-            fArr[i3 + 1] = bArr[i3 + 1] = my;
-            fArr[i3 + 2] = bArr[i3 + 2] = mz;
+            p.x = 0.5 * (fArr[i3] + bArr[i3]);
+            p.y = 0.5 * (fArr[i3 + 1] + bArr[i3 + 1]);
+            p.z = 0.5 * (fArr[i3 + 2] + bArr[i3 + 2]);
+            if (exactEnv && exactFrames) {
+              projectOutsideExactMannequinEnvelope(p, exactEnv, exactFrames, d, 0.0062);
+            }
+            fArr[i3] = bArr[i3] = p.x;
+            fArr[i3 + 1] = bArr[i3 + 1] = p.y;
+            fArr[i3 + 2] = bArr[i3 + 2] = p.z;
           }
         }
         fGeo.attributes.position.needsUpdate = true;
@@ -3177,20 +3592,22 @@ export const View3D = (() => {
           const rowOff = r * cols;
           // 1. Weld left (+X: front[halfSeg] <-> back[0]) and right (-X: front[0] <-> back[halfSeg]) side seams
           const fLeft = (rowOff + halfSeg) * 3, bLeft = rowOff * 3;
-          const lx = 0.5 * (fArr[fLeft] + bArr[bLeft]);
-          const ly = 0.5 * (fArr[fLeft + 1] + bArr[bLeft + 1]);
-          const lz = 0.5 * (fArr[fLeft + 2] + bArr[bLeft + 2]);
-          fArr[fLeft] = bArr[bLeft] = lx;
-          fArr[fLeft + 1] = bArr[bLeft + 1] = ly;
-          fArr[fLeft + 2] = bArr[bLeft + 2] = lz;
+          p.x = 0.5 * (fArr[fLeft] + bArr[bLeft]);
+          p.y = 0.5 * (fArr[fLeft + 1] + bArr[bLeft + 1]);
+          p.z = 0.5 * (fArr[fLeft + 2] + bArr[bLeft + 2]);
+          if (exactEnv && exactFrames) projectOutsideExactMannequinEnvelope(p, exactEnv, exactFrames, d, 0.0062);
+          fArr[fLeft] = bArr[bLeft] = p.x;
+          fArr[fLeft + 1] = bArr[bLeft + 1] = p.y;
+          fArr[fLeft + 2] = bArr[bLeft + 2] = p.z;
 
           const fRight = rowOff * 3, bRight = (rowOff + halfSeg) * 3;
-          const rx0 = 0.5 * (fArr[fRight] + bArr[bRight]);
-          const ry0 = 0.5 * (fArr[fRight + 1] + bArr[bRight + 1]);
-          const rz0 = 0.5 * (fArr[fRight + 2] + bArr[bRight + 2]);
-          fArr[fRight] = bArr[bRight] = rx0;
-          fArr[fRight + 1] = bArr[bRight + 1] = ry0;
-          fArr[fRight + 2] = bArr[bRight + 2] = rz0;
+          p.x = 0.5 * (fArr[fRight] + bArr[bRight]);
+          p.y = 0.5 * (fArr[fRight + 1] + bArr[bRight + 1]);
+          p.z = 0.5 * (fArr[fRight + 2] + bArr[bRight + 2]);
+          if (exactEnv && exactFrames) projectOutsideExactMannequinEnvelope(p, exactEnv, exactFrames, d, 0.0062);
+          fArr[fRight] = bArr[bRight] = p.x;
+          fArr[fRight + 1] = bArr[bRight + 1] = p.y;
+          fArr[fRight + 2] = bArr[bRight + 2] = p.z;
 
           // 2. Smooth outward circumferential tenting around posed pelvis axis so advancing knees create graceful cloth folds
           if (r >= 4 && (meta.pleats || 0) === 0) {
@@ -3235,9 +3652,47 @@ export const View3D = (() => {
       }
     }
 
-    // Recompute smooth lighting normals for all updated visible garment meshes
+    // Final post-weld & post-tenting exact mannequin envelope pass + smooth lighting normals
+    const segsSleeveL = [5, 7, 0, 1, 2, 3];
+    const segsSleeveR = [6, 8, 0, 1, 2, 3];
+    const segsFullBody = [9, 10, 11, 12, 5, 6, 7, 8, 0, 1, 2, 3, 4];
     garmentGroup.traverse((mesh) => {
       if (mesh.isMesh && mesh.visible && mesh.userData.cpuSkinned) {
+        if (exactEnv && exactFrames && mesh.geometry.attributes.position) {
+          const posAttr = mesh.geometry.attributes.position;
+          const arr = posAttr.array;
+          const part = mesh.name;
+          const isCollar = mesh.userData.garmentType === "collar" || part === "trim";
+          const isBra = mesh.userData.garmentType === "bra";
+          const isTrousers = part === "trousers";
+          const isSleeve = part === "sleeve" || mesh.userData.parentPart === "sleeve";
+          const margin = isCollar ? 0.0056 : (isBra ? 0.0060 : 0.0068);
+          const fixedSide = mesh.userData.armSide || 0;
+          const fixedSegs = isSleeve
+            ? (fixedSide > 0 ? segsSleeveL : (fixedSide < 0 ? segsSleeveR : null))
+            : segsFullBody;
+          let pushed = false;
+          for (let i = 0; i < posAttr.count; i++) {
+            const i3 = i * 3;
+            p.x = arr[i3];
+            p.y = arr[i3 + 1];
+            p.z = arr[i3 + 2];
+            const ox = p.x, oy = p.y, oz = p.z;
+            projectOutsideExactMannequinEnvelope(p, exactEnv, exactFrames, d, margin, {
+              segments: fixedSegs || (p.x >= 0 ? segsSleeveL : segsSleeveR),
+              isSleeve,
+              isTrousers,
+              skipShoulderTop: isCollar,
+            });
+            if (p.x !== ox || p.y !== oy || p.z !== oz) {
+              arr[i3] = p.x;
+              arr[i3 + 1] = p.y;
+              arr[i3 + 2] = p.z;
+              pushed = true;
+            }
+          }
+          if (pushed) posAttr.needsUpdate = true;
+        }
         mesh.geometry.computeVertexNormals();
       }
     });
@@ -3345,134 +3800,65 @@ export const View3D = (() => {
   }
 
   /**
-   * Projects any bind-pose garment vertex whose distance to the actual humanBody
-   * surface falls below minClearance radially or upward outside the skin envelope,
-   * eliminating shoulder, clavicle, trapezius, and bust poke-through across every
-   * category and size.
+   * Projects every bind-pose garment vertex outside the exact 9-segment
+   * humanBody surface envelope (plus clavicle/trapezius shoulder heightfield)
+   * so restPos and static/posed render start cleanly outside the mannequin.
    */
   function enforceBindPoseBodyClearance(group, mannequin, d) {
-    const bodyAttrs = mannequin?.bodyMesh?.geometry?.attributes;
-    const pos = bodyAttrs?.position;
-    if (!pos || !group || !d) return;
-    const skinIdx = bodyAttrs.skinIndex;
-    const skinWgt = bodyAttrs.skinWeight;
-
-    const Y_BINS = 64;
-    const PHI_BINS = 48;
-    const yMin = d.hipY - d.span * 0.16;
-    const yMax = d.shoulderY + d.span * 0.22;
-    const rGrid = new Float32Array(Y_BINS * PHI_BINS);
-    const maxLimX = d.shoulderHalf * 1.12;
-    const underarmCutY = d.shoulderY - d.span * 0.085;
-
-    for (let i = 0; i < pos.count; i++) {
-      // Exclude arm/forearm/hand vertices so hanging arms never inflate torso/hip radii
-      if (skinIdx && skinWgt) {
-        let domBone = skinIdx.getX(i), domW = skinWgt.getX(i);
-        if (skinWgt.getY(i) > domW) { domW = skinWgt.getY(i); domBone = skinIdx.getY(i); }
-        if (skinWgt.getZ(i) > domW) { domW = skinWgt.getZ(i); domBone = skinIdx.getZ(i); }
-        if (skinWgt.getW(i) > domW) { domBone = skinIdx.getW(i); }
-        if (domBone >= 5 && domBone <= 10) continue;
-      }
-      const bx = pos.getX(i), by = pos.getY(i), bz = pos.getZ(i);
-      if (by < yMin || by > yMax) continue;
-      if (Math.abs(bx) > maxLimX) continue;
-
-      if (by <= underarmCutY + d.span * 0.02) {
-        const yb = clamp(Math.floor(((by - yMin) / (yMax - yMin)) * (Y_BINS - 1)), 0, Y_BINS - 1);
-        let phi = Math.atan2(bx, bz);
-        if (phi < 0) phi += 2 * Math.PI;
-        const pb = Math.min(PHI_BINS - 1, Math.floor((phi / (2 * Math.PI)) * PHI_BINS));
-        const rad = Math.hypot(bx, bz);
-        const cell = yb * PHI_BINS + pb;
-        if (rad > rGrid[cell]) rGrid[cell] = rad;
-      }
+    const env = ensureExactMannequinEnvelope(mannequin, d);
+    if (!env || !group || !d) return;
+    const p = env.p;
+    const bindFrames = [
+      { a: env.segDefs[0].a, b: env.segDefs[0].b, right: [1, 0, 0], fwd: [0, 0, 1] },
+      ...env.segDefs.slice(1).map((seg) => ({ a: seg.a, b: seg.b, right: [1, 0, 0], fwd: [0, 0, 1] })),
+    ];
+    void p;
+    ensureDynamicsScratch();
+    for (let b = 0; b < 17; b++) {
+      _dynMats[b].identity();
+      _dynInvMats[b].identity();
     }
 
-    // Dilate and smoothly filter rGrid below the armpits
-    const rDilated = new Float32Array(rGrid);
-    for (let yb = 0; yb < Y_BINS; yb++) {
-      for (let pb = 0; pb < PHI_BINS; pb++) {
-        let best = rGrid[yb * PHI_BINS + pb];
-        for (const dy of [-1, 0, 1]) {
-          const y2 = yb + dy;
-          if (y2 < 0 || y2 >= Y_BINS) continue;
-          for (const dp of [-1, 0, 1]) {
-            const p2 = (pb + dp + PHI_BINS) % PHI_BINS;
-            const v = rGrid[y2 * PHI_BINS + p2];
-            if (v > best) best = v;
-          }
-        }
-        rDilated[yb * PHI_BINS + pb] = best;
-      }
-    }
-    const rTmp = new Float32Array(rDilated.length);
-    for (let pass = 0; pass < 2; pass++) {
-      rTmp.set(rDilated);
-      for (let yb = 1; yb < Y_BINS - 1; yb++) {
-        for (let pb = 0; pb < PHI_BINS; pb++) {
-          const c = yb * PHI_BINS + pb;
-          const vC = rTmp[c];
-          if (vC <= 0.01) continue;
-          const vUp = rTmp[(yb + 1) * PHI_BINS + pb] || vC;
-          const vDn = rTmp[(yb - 1) * PHI_BINS + pb] || vC;
-          const vLf = rTmp[yb * PHI_BINS + ((pb - 1 + PHI_BINS) % PHI_BINS)] || vC;
-          const vRt = rTmp[yb * PHI_BINS + ((pb + 1) % PHI_BINS)] || vC;
-          rDilated[c] = Math.max(vC, 0.50 * vC + 0.125 * (vUp + vDn + vLf + vRt));
-        }
-      }
-    }
-
+    const pt = { x: 0, y: 0, z: 0 };
     group.traverse((mesh) => {
       if (!mesh.isMesh) return;
-      const part = mesh.name;
-      if (part !== "bodice" && part !== "outer") return;
-      if (mesh.userData.garmentType === "collar") return;
       const gPos = mesh.geometry.attributes.position;
       const restPos = mesh.geometry.userData.restPos;
       if (!gPos) return;
 
+      const part = mesh.name;
+      const isCollar = mesh.userData.garmentType === "collar" || part === "trim";
       const isBra = mesh.userData.garmentType === "bra";
-      const clearRad = part === "outer" ? 0.011 : (isBra ? 0.004 : 0.006);
+      const isTrousers = part === "trousers";
+      const isSleeve = part === "sleeve" || mesh.userData.parentPart === "sleeve";
+      const margin = isCollar ? 0.0056 : (isBra ? 0.0060 : 0.0068);
+      const segs = isSleeve
+        ? ((mesh.userData.armSide || 1) > 0 ? [5, 7, 0, 1, 2, 3] : [6, 8, 0, 1, 2, 3])
+        : [9, 10, 11, 12, 0, 1, 2, 3, 4];
+
       let changed = false;
-
       for (let i = 0; i < gPos.count; i++) {
-        let gx = gPos.getX(i), gy = gPos.getY(i), gz = gPos.getZ(i);
-        if (gy < yMin || gy > underarmCutY || Math.abs(gx) > maxLimX) continue;
-
-        const seamFade = smoothstep(0.002, 0.010, Math.abs(gz));
-
-        // Cylindrical radial clearance strictly below armpit level
-        const underarmFade = 1 - smoothstep(underarmCutY - d.span * 0.04, underarmCutY, gy);
-        const radWeight = seamFade * underarmFade;
-        if (radWeight > 0.02) {
-          const yf = clamp(((gy - yMin) / (yMax - yMin)) * (Y_BINS - 1), 0, Y_BINS - 1);
-          const y0 = Math.floor(yf), y1 = Math.min(Y_BINS - 1, y0 + 1), ty = yf - y0;
-          let phi = Math.atan2(gx, gz);
-          if (phi < 0) phi += 2 * Math.PI;
-          const pf = (phi / (2 * Math.PI)) * PHI_BINS;
-          const p0 = Math.floor(pf) % PHI_BINS, p1 = (p0 + 1) % PHI_BINS, tp = pf - Math.floor(pf);
-          const r00 = rDilated[y0 * PHI_BINS + p0], r01 = rDilated[y0 * PHI_BINS + p1];
-          const r10 = rDilated[y1 * PHI_BINS + p0], r11 = rDilated[y1 * PHI_BINS + p1];
-          const minR = (r00 * (1 - tp) + r01 * tp) * (1 - ty) + (r10 * (1 - tp) + r11 * tp) * ty;
-          const curR = Math.hypot(gx, gz);
-          const targetR = minR + clearRad * radWeight;
-          if (minR > 0.01 && curR > 0.005 && curR < targetR) {
-            const sc = targetR / curR;
-            gx *= sc;
-            gz *= sc;
-            changed = true;
+        pt.x = gPos.getX(i);
+        pt.y = gPos.getY(i);
+        pt.z = gPos.getZ(i);
+        const ox = pt.x, oy = pt.y, oz = pt.z;
+        projectOutsideExactMannequinEnvelope(pt, env, bindFrames, d, margin, {
+          segments: segs,
+          isSleeve,
+          isTrousers,
+          skipShoulderTop: isCollar,
+          bindMode: true,
+        });
+        if (Math.abs(pt.x - ox) > 1e-6 || Math.abs(pt.y - oy) > 1e-6 || Math.abs(pt.z - oz) > 1e-6) {
+          gPos.setXYZ(i, pt.x, pt.y, pt.z);
+          if (restPos) {
+            restPos[i * 3] = pt.x;
+            restPos[i * 3 + 1] = pt.y;
+            restPos[i * 3 + 2] = pt.z;
           }
-        }
-
-        gPos.setXYZ(i, gx, gy, gz);
-        if (restPos) {
-          restPos[i * 3] = gx;
-          restPos[i * 3 + 1] = gy;
-          restPos[i * 3 + 2] = gz;
+          changed = true;
         }
       }
-
       if (changed) {
         gPos.needsUpdate = true;
         mesh.geometry.computeVertexNormals();
@@ -3593,8 +3979,9 @@ export const View3D = (() => {
     return btnG;
   }
 
-  function createZipperMesh(startY, endY, radius, style, openPct = 0) {
+  function createZipperMesh(startY, endY, radiusOrZFn, style, openPct = 0) {
     const zipG = new THREE.Group();
+    const getZ = typeof radiusOrZFn === "function" ? radiusOrZFn : () => radiusOrZFn;
     let teethMat;
     if (isSoftwareGL) {
       const zCol = style === "silver" ? 0xe0e0e0 : (style === "brass" ? 0xc8963e : (style === "gunmetal" ? 0x222226 : 0x888888));
@@ -3609,14 +3996,28 @@ export const View3D = (() => {
       teethMat = new THREE.MeshPhysicalMaterial({ color: 0x888888, metalness: 0.7, roughness: 0.3 });
     }
     const tapeMat = isSoftwareGL
-      ? new THREE.MeshPhongMaterial({ color: 0x1f2937, shininess: 10 })
-      : new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.85 });
+      ? new THREE.MeshPhongMaterial({ color: 0x1f2937, shininess: 10, side: THREE.DoubleSide })
+      : new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.85, side: THREE.DoubleSide });
 
     const len = Math.abs(startY - endY);
-    const midY = (startY + endY) / 2;
-
-    const tape = new THREE.Mesh(new THREE.PlaneGeometry(0.024, len), tapeMat);
-    tape.position.set(0, midY, radius + 0.002);
+    const TAPE_SEGS = 16;
+    const tPos = [];
+    const tIdx = [];
+    for (let r = 0; r <= TAPE_SEGS; r++) {
+      const ty = startY + (endY - startY) * (r / TAPE_SEGS);
+      const z = getZ(ty) + 0.0045;
+      tPos.push(-0.012, ty, z, 0.012, ty, z);
+      if (r > 0) {
+        const p = (r - 1) * 2;
+        const c = r * 2;
+        tIdx.push(p, p + 1, c + 1, p, c + 1, c);
+      }
+    }
+    const tapeGeo = new THREE.BufferGeometry();
+    tapeGeo.setAttribute("position", new THREE.Float32BufferAttribute(tPos, 3));
+    tapeGeo.setIndex(tIdx);
+    tapeGeo.computeVertexNormals();
+    const tape = new THREE.Mesh(tapeGeo, tapeMat);
     zipG.add(tape);
 
     const teethCount = Math.max(12, Math.round(len / 0.008));
@@ -3624,21 +4025,22 @@ export const View3D = (() => {
 
     for (let i = 0; i < teethCount; i++) {
       const frac = i / teethCount;
-      const ty = startY - len * frac;
+      const ty = startY + (endY - startY) * frac;
       const toothLen = 0.004;
       const toothThick = 0.002;
       const toothW = 0.007;
+      const tz = getZ(ty) + 0.0065;
 
       if (ty < closedLimitY) {
         const tooth = new THREE.Mesh(new THREE.BoxGeometry(toothW, toothLen, toothThick), teethMat);
-        tooth.position.set(0, ty, radius + 0.004);
+        tooth.position.set(0, ty, tz);
         zipG.add(tooth);
       } else {
         const spread = (ty - closedLimitY) * 0.25;
         const toothL = new THREE.Mesh(new THREE.BoxGeometry(toothW * 0.5, toothLen, toothThick), teethMat);
-        toothL.position.set(-spread - 0.003, ty, radius + 0.004);
+        toothL.position.set(-spread - 0.003, ty, tz);
         const toothR = new THREE.Mesh(new THREE.BoxGeometry(toothW * 0.5, toothLen, toothThick), teethMat);
-        toothR.position.set(spread + 0.003, ty, radius + 0.004);
+        toothR.position.set(spread + 0.003, ty, tz);
         zipG.add(toothL, toothR);
       }
     }
@@ -3652,7 +4054,7 @@ export const View3D = (() => {
     pullTab.rotation.x = 0.15;
     sliderG.add(pullTab);
 
-    sliderG.position.set(0, closedLimitY, radius + 0.008);
+    sliderG.position.set(0, closedLimitY, getZ(closedLimitY) + 0.0105);
     zipG.add(sliderG);
 
     return zipG;
@@ -3687,26 +4089,28 @@ export const View3D = (() => {
     const N = 48;
     const sPos = [];
     const sIdx = [];
-    let frontOuterZ = (waistR * 1.035 + 0.022) * zScale;
+    const yBot = waistY - h * 0.5;
+    const yTop = waistY + h * 0.5;
+    let frontOuterZ = (waistR * 1.035 + 0.024) * zScale;
     for (let k = 0; k <= N; k++) {
       const phi = (k / N) * Math.PI * 2;
-      let xi, zi, xo, zo;
+      let xiB, ziB, xoB, zoB, xiT, ziT, xoT, zoT;
       if (d) {
-        [xi, zi] = getBodySurfacePoint(waistY, phi, d, waistEase + 0.004);
-        [xo, zo] = getBodySurfacePoint(waistY, phi, d, waistEase + 0.004 + strapThick);
+        [xiB, ziB] = getBodySurfacePoint(yBot, phi, d, waistEase + 0.006);
+        [xoB, zoB] = getBodySurfacePoint(yBot, phi, d, waistEase + 0.006 + strapThick);
+        [xiT, ziT] = getBodySurfacePoint(yTop, phi, d, waistEase + 0.006);
+        [xoT, zoT] = getBodySurfacePoint(yTop, phi, d, waistEase + 0.006 + strapThick);
       } else {
         const rIn = waistR * 1.03 + waistEase;
         const rOut = rIn + strapThick;
-        xi = rIn * Math.sin(phi);
-        zi = rIn * zScale * Math.cos(phi);
-        xo = rOut * Math.sin(phi);
-        zo = rOut * zScale * Math.cos(phi);
+        xiB = xiT = rIn * Math.sin(phi);
+        ziB = ziT = rIn * zScale * Math.cos(phi);
+        xoB = xoT = rOut * Math.sin(phi);
+        zoB = zoT = rOut * zScale * Math.cos(phi);
       }
-      if (k === 0) frontOuterZ = zo;
-      const yBot = waistY - h * 0.5;
-      const yTop = waistY + h * 0.5;
+      if (k === 0) frontOuterZ = Math.max(zoB, zoT);
       // 4 vertices per slice: 0=outerBot, 1=outerTop, 2=innerTop, 3=innerBot
-      sPos.push(xo, yBot, zo, xo, yTop, zo, xi, yTop, zi, xi, yBot, zi);
+      sPos.push(xoB, yBot, zoB, xoT, yTop, zoT, xiT, yTop, ziT, xiB, yBot, ziB);
     }
     for (let k = 0; k < N; k++) {
       const a = k * 4;
@@ -3733,14 +4137,43 @@ export const View3D = (() => {
       beltG.add(knot);
       [-1, 1].forEach((side) => {
         const tieLen = h * 3.8;
-        const ribbon = new THREE.Mesh(new THREE.BoxGeometry(h * 0.75, tieLen, 0.004), strapMat);
-        ribbon.position.set(0.012 + side * h * 0.55, waistY - tieLen * 0.48, frontOuterZ + 0.008);
-        ribbon.rotation.z = side * 0.16;
-        beltG.add(ribbon);
+        const R_SEGS = 10;
+        const halfW = h * 0.375;
+        const rPos = [];
+        const rIdx = [];
+        for (let r = 0; r <= R_SEGS; r++) {
+          const u = r / R_SEGS;
+          const y = waistY - u * tieLen;
+          const cx = 0.012 + side * (h * 0.35 + u * tieLen * 0.16);
+          const xL = cx - halfW;
+          const xR = cx + halfW;
+          let zIn = frontOuterZ + 0.005;
+          if (d) {
+            const z0 = Math.abs(getBodySurfacePoint(y, 0, d, waistEase + 0.010)[1]);
+            const zL = Math.abs(getBodySurfacePoint(y, clamp(xL / Math.max(0.08, d.waistR), -0.65, 0.65), d, waistEase + 0.010)[1]);
+            const zR = Math.abs(getBodySurfacePoint(y, clamp(xR / Math.max(0.08, d.waistR), -0.65, 0.65), d, waistEase + 0.010)[1]);
+            zIn = Math.max(frontOuterZ + 0.005, Math.max(z0, zL, zR) + 0.006);
+          }
+          const zOut = zIn + 0.004;
+          rPos.push(xL, y, zOut, xR, y, zOut, xR, y, zIn, xL, y, zIn);
+          if (r > 0) {
+            const a = (r - 1) * 4;
+            const b = r * 4;
+            for (let sIdxSide = 0; sIdxSide < 4; sIdxSide++) {
+              const s1 = (sIdxSide + 1) % 4;
+              rIdx.push(a + sIdxSide, b + sIdxSide, b + s1, a + sIdxSide, b + s1, a + s1);
+            }
+          }
+        }
+        const ribGeo = new THREE.BufferGeometry();
+        ribGeo.setAttribute("position", new THREE.Float32BufferAttribute(rPos, 3));
+        ribGeo.setIndex(rIdx);
+        ribGeo.computeVertexNormals();
+        beltG.add(new THREE.Mesh(ribGeo, strapMat));
       });
     } else {
       const buckleG = new THREE.Group();
-      buckleG.position.set(0, waistY, frontOuterZ + 0.003);
+      buckleG.position.set(0, waistY, frontOuterZ + 0.004);
 
       const shape = new THREE.Shape();
       shape.moveTo(-bW / 2, -bH / 2);
@@ -3806,6 +4239,8 @@ export const View3D = (() => {
     const waistYY = d.hipY + d.span * 0.44;
     const zScale = d.female ? 0.72 : 0.78;
     const easeBodice = 0.017 + Math.max(-0.002, ((curPatternMetrics?.bodice?.easeRatio || 1.04) - 1.0) * 0.042);
+    const hasOuterVis = isPartCurrentlyShown("outer") && Boolean(curPatternMetrics?.bodice?.outerLayer?.enabled);
+    const accEase = hasOuterVis ? (0.026 + Math.max(0, ((curPatternMetrics.bodice.easeRatio || 1.04) - 1.0) * 0.040)) : easeBodice;
 
     if (bCfg && bCfg.enabled) {
       const count = Math.max(1, Math.min(12, bCfg.count || 6));
@@ -3818,9 +4253,9 @@ export const View3D = (() => {
         const step = (startY - endY) / (count + 1);
         for (let i = 1; i <= count; i++) {
           const y = startY - step * i;
-          const [, zFront] = getBodySurfacePoint(y, 0, d, easeBodice);
+          const [, zFront] = getBodySurfacePoint(y, 0, d, accEase);
           const btn = createButtonMesh(1.0, style, baseCol);
-          btn.position.set(0, y, zFront);
+          btn.position.set(0, y, zFront + 0.003);
           btn.userData.parentPart = "bodice";
           attachAccessoryRigAnchor(btn, torsoGarmentWeights(y, 0, d));
           accessoriesGroup.add(btn);
@@ -3833,10 +4268,10 @@ export const View3D = (() => {
         const colOffset = 0.042;
         for (let i = 1; i <= rows; i++) {
           const y = startY - step * i;
-          const [, zFront] = getBodySurfacePoint(y, 0.28, d, easeBodice);
+          const [, zFront] = getBodySurfacePoint(y, 0.28, d, accEase);
           [-1, 1].forEach((col) => {
             const btn = createButtonMesh(1.0, style, baseCol);
-            btn.position.set(col * colOffset, y, zFront);
+            btn.position.set(col * colOffset, y, zFront + 0.003);
             btn.userData.parentPart = "bodice";
             attachAccessoryRigAnchor(btn, torsoGarmentWeights(y, col * colOffset, d));
             accessoriesGroup.add(btn);
@@ -3845,7 +4280,7 @@ export const View3D = (() => {
       } else if (bCfg.placement === "waistband") {
         const [, zFront] = getBodySurfacePoint(waistYY, 0, d, 0.019);
         const btn = createButtonMesh(1.15, style, baseCol);
-        btn.position.set(0, waistYY, zFront);
+        btn.position.set(0, waistYY, zFront + 0.002);
         btn.userData.parentPart = "trousers";
         attachAccessoryRigAnchor(btn, [[BONE_IDX.pelvis, 0.62], [BONE_IDX.spine, 0.38]]);
         accessoriesGroup.add(btn);
@@ -3890,30 +4325,51 @@ export const View3D = (() => {
     if (zCfg && zCfg.enabled) {
       const style = zCfg.style || "silver";
       const openPct = zCfg.openPct || 0;
-      const [, waistFrontZ] = getBodySurfacePoint(waistYY, 0, d, easeBodice);
-      const [, waistBackZ] = getBodySurfacePoint(waistYY, Math.PI, d, easeBodice);
 
       if (zCfg.placement === "center_front") {
-        const zip = createZipperMesh(d.hipY + d.span * 0.72, waistYY, waistFrontZ, style, openPct);
+        const zip = createZipperMesh(
+          d.hipY + d.span * 0.72,
+          waistYY,
+          (y) => Math.abs(getBodySurfacePoint(y, 0, d, accEase + 0.003)[1]),
+          style,
+          openPct
+        );
         zip.userData.parentPart = "bodice";
         attachAccessoryRigAnchor(zip, [[BONE_IDX.chest, 0.62], [BONE_IDX.spine, 0.38]]);
         accessoriesGroup.add(zip);
       } else if (zCfg.placement === "center_back") {
-        const zip = createZipperMesh(d.hipY + d.span * 0.74, d.hipY, Math.abs(waistBackZ), style, openPct);
+        const zip = createZipperMesh(
+          d.hipY + d.span * 0.74,
+          d.hipY,
+          (y) => Math.abs(getBodySurfacePoint(y, Math.PI, d, accEase + 0.003)[1]),
+          style,
+          openPct
+        );
         zip.rotation.y = Math.PI;
         zip.userData.parentPart = "bodice";
         attachAccessoryRigAnchor(zip, [[BONE_IDX.chest, 0.48], [BONE_IDX.spine, 0.34], [BONE_IDX.pelvis, 0.18]]);
         accessoriesGroup.add(zip);
       } else if (zCfg.placement === "biker_asymmetric") {
-        const zip = createZipperMesh(d.shoulderY - d.span * 0.10, waistYY, waistFrontZ + 0.002, style, openPct);
-        zip.position.x = 0.035;
-        zip.rotation.z = -0.15;
+        const zip = createZipperMesh(
+          d.shoulderY - d.span * 0.10,
+          waistYY,
+          (y) => Math.abs(getBodySurfacePoint(y, 0.24, d, accEase + 0.005)[1]),
+          style,
+          openPct
+        );
+        zip.position.x = 0.032;
+        zip.rotation.z = 0;
         zip.userData.parentPart = "bodice";
         attachAccessoryRigAnchor(zip, [[BONE_IDX.chest, 0.65], [BONE_IDX.spine, 0.35]]);
         accessoriesGroup.add(zip);
       } else if (zCfg.placement === "trouser_fly") {
-        const [, hipFrontZ] = getBodySurfacePoint(d.hipY, 0, d, 0.020);
-        const zip = createZipperMesh(waistYY, d.hipY - d.span * 0.11, hipFrontZ, style, openPct);
+        const zip = createZipperMesh(
+          waistYY,
+          d.hipY - d.span * 0.11,
+          (y) => Math.abs(getBodySurfacePoint(y, 0, d, 0.022)[1]),
+          style,
+          openPct
+        );
         zip.userData.parentPart = "trousers";
         attachAccessoryRigAnchor(zip, [[BONE_IDX.pelvis, 0.85], [BONE_IDX.spine, 0.15]]);
         accessoriesGroup.add(zip);
@@ -3925,7 +4381,7 @@ export const View3D = (() => {
       const bWidth = beltCfg.width || "medium";
       const customBeltCol = beltCfg.color ? new THREE.Color(beltCfg.color).getHex() : null;
       const baseCol = customBeltCol || fabricState.bodice?.front?.color || fabricState.skirt?.front?.color || fabricState.trousers?.front?.color || 0x4f46e5;
-      const belt = createBeltMesh(waistYY, d.waistR, zScale, bStyle, bWidth, baseCol, d, easeBodice, customBeltCol);
+      const belt = createBeltMesh(waistYY, d.waistR, zScale, bStyle, bWidth, baseCol, d, accEase, customBeltCol);
       belt.userData.parentPart = "waist";
       attachAccessoryRigAnchor(belt, [[BONE_IDX.pelvis, 0.58], [BONE_IDX.spine, 0.42]]);
       accessoriesGroup.add(belt);
@@ -4995,16 +5451,16 @@ export const View3D = (() => {
       if (!mesh.userData.tensionMat) {
         mesh.userData.tensionMat = isSoftwareGL
           ? new THREE.MeshPhongMaterial({
-              vertexColors: true,
-              shininess: 18,
-              side: THREE.DoubleSide,
-            })
+            vertexColors: true,
+            shininess: 18,
+            side: THREE.DoubleSide,
+          })
           : new THREE.MeshStandardMaterial({
-              vertexColors: true,
-              roughness: 0.58,
-              metalness: 0.04,
-              side: THREE.DoubleSide,
-            });
+            vertexColors: true,
+            roughness: 0.58,
+            metalness: 0.04,
+            side: THREE.DoubleSide,
+          });
       }
       mesh.material = mesh.userData.tensionMat;
     };
@@ -5419,9 +5875,9 @@ export const View3D = (() => {
       reduceMotion = !!v;
       if (controls) controls.autoRotate = spinning && !reduceMotion;
     },
-    setLoadingCallback: (cb) => { onLoading = cb || (() => {}); },
-    setAvatarIssueCallback: (cb) => { onAvatarIssue = cb || (() => {}); },
-    setFatalErrorCallback: (cb) => { onFatalError = cb || (() => {}); },
+    setLoadingCallback: (cb) => { onLoading = cb || (() => { }); },
+    setAvatarIssueCallback: (cb) => { onAvatarIssue = cb || (() => { }); },
+    setFatalErrorCallback: (cb) => { onFatalError = cb || (() => { }); },
     setAvatarURL,
     isReady: () => ready,
     retryInit,
@@ -5432,7 +5888,7 @@ export const View3D = (() => {
     getFabricPreset: () => fabricState.bodice?.front?.material || "cotton",
     getFabricPresets: () => FABRIC,
     getTensionMetrics: () => lastTensionMetrics,
-    setTensionMetricsCallback: (cb) => { onTensionMetricsUpdate = cb || (() => {}); },
+    setTensionMetricsCallback: (cb) => { onTensionMetricsUpdate = cb || (() => { }); },
     exportOBJ,
     // 3D Accessories
     setAccessories,

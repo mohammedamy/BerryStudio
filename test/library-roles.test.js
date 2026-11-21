@@ -83,7 +83,8 @@ const KNOWN_INVALID_ROLE_COUNTS = { 'cape-sleeve': 2 };
 // Fitting w23 to lookbook thumbnail adds the long bishop sleeve as photographed (+1 piece).
 // Fitting g15 to lookbook thumbnail removes sleeve to match sleeveless dress as photographed (-1 piece).
 // Fitting gy012 to lookbook thumbnail adds keyhole back binding as photographed (+1 piece).
-const BASELINE = { total: 2172, valid: 2168, none: 2, roleslessPatterns: 1 };
+// v85: womens_dress adds matched skirt_back (+1 piece) for full 5-piece Fit & Flare dress.
+const BASELINE = { total: 2173, valid: 2169, none: 2, roleslessPatterns: 1 };
 
 test('every declared piece role is in the 53-value vocabulary, except the two documented pre-existing exceptions', () => {
   const ids = Object.keys(PATTERNS);

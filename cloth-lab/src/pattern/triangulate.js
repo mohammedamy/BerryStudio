@@ -169,10 +169,13 @@ export function triangulatePiece(piece, subdivForPiece, targetSpacingCm) {
 
   const xs = boundary.map((p) => p[0]), ys = boundary.map((p) => p[1])
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)
+  const wSpan = maxX - minX, hSpan = maxY - minY
   const interior = []
-  const clearance = 0.6 * targetSpacingCm
-  for (let x = minX; x <= maxX; x += targetSpacingCm) {
-    for (let y = minY; y <= maxY; y += targetSpacingCm) {
+  const clearance = Math.min(0.6 * targetSpacingCm, Math.min(wSpan, hSpan) * 0.30)
+  const stepX = wSpan > 0 && wSpan < targetSpacingCm * 1.4 && hSpan > targetSpacingCm * 2 ? Math.max(0.5, wSpan * 0.45) : targetSpacingCm
+  const stepY = hSpan > 0 && hSpan < targetSpacingCm * 1.4 && wSpan > targetSpacingCm * 2 ? Math.max(0.5, hSpan * 0.45) : targetSpacingCm
+  for (let x = minX; x <= maxX; x += stepX) {
+    for (let y = minY; y <= maxY; y += stepY) {
       const pt = [x, y]
       if (!pointInPolygon(pt, boundary)) continue
       if (distanceToPolyline(pt, boundary) < clearance) continue

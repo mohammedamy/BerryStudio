@@ -74,7 +74,7 @@ export const PATTERN_LOOKBOOK_STYLES = {
     trimColor: "#13523d",
     partColors: { bodice: "#0a3b2c", sleeve: "#0a3b2c", trim: "#13523d" },
     fabric: "satin",
-    silhouette: { isOpenFront: true, contrastCuffs: true, cuffColor: "#13523d" },
+    silhouette: { isOpenFront: false, contrastCuffs: true, cuffColor: "#13523d" },
   },
   thobe: {
     primaryColor: "#f7f7f5",

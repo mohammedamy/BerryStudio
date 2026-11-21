@@ -1058,11 +1058,12 @@ export let FancyGen;
   // Asymmetric wrap/surplice front panel (wrap dresses, sherwani-style closures).
   function wrapPanel(qc, qw, len, side) {
     const d = side === "L" ? 1 : -1;
-    const seg = [[qc*0.9*d,6], [qc*0.5*d, len*0.35], [qw*0.15*d, len*0.55]];
+    const seg = [[qc * 0.96 * d, 6], [qc * 0.90 * d, len * 0.35], [qw * 0.96 * d, len * 0.55]];
+    const frontHemW = len > 50 ? qc * 1.02 : qw * 0.96;
     const outline = [
-      [0, 4], [qc*0.9*d, 6],
+      [0, 4], [qc * 0.96 * d, 6],
       ...qBez(...seg, 7),
-      [qw*0.15*d, len], [0, len],
+      [frontHemW * d, len], [0, len],
     ];
     withCurves(outline, [{ fromIdx: 1, toIdx: 8, ...qBezToCubic(...seg) }]);
     // WP-58 (docs/plan 4.md Phase 5): this underarm-to-taper curve IS the
@@ -1091,10 +1092,11 @@ export let FancyGen;
   // deliberately left undeclared, the same "not applicable" territory
   // the bounding-box proxy always covered least honestly.
   function wrapCoatBack(qc, qw, len, hemW) {
-    const seg = [[qc*0.9, 6], [qc*0.5, len*0.35], [qw*0.15, len*0.55]];
-    const hemSeg = [[qw*0.15, len*0.55], [hemW*0.7, len*0.8], [hemW, len]];
+    const effHemW = Math.max(hemW, qw * 0.96);
+    const seg = [[qc * 0.96, 6], [qc * 0.90, len * 0.35], [qw * 0.96, len * 0.55]];
+    const hemSeg = [[qw * 0.96, len * 0.55], [lerp(qw * 0.96, effHemW, 0.55), len * 0.8], [effHemW, len]];
     const outline = [
-      [0, 0], [qc*0.9, 6],
+      [0, 0], [qc * 0.96, 6],
       ...qBez(...seg, 7),
       ...qBez(...hemSeg, 6),
       [0, len],
@@ -1127,36 +1129,24 @@ export let FancyGen;
   // undeclared edge — exactly where a real front/back rise difference
   // belongs, not on the seam this function declares).
   function trouserPanel(qw, qh, thigh, inseam, front) {
-    const crotchDrop = front ? thigh * 0.28 : thigh * 0.34;
-    const H = thigh * 0.31 + inseam; // shared waist-to-hem height, independent of crotchDrop
-    const hipW = qh * 0.56;
+    const crotchY = thigh * 0.31;
+    const H = crotchY + inseam; // shared waist-to-hem height, independent of crotchDrop
+    const hipW = qh * 1.10;
     const outInset = front ? qh * 0.04 : 0;
     const outW = hipW - outInset;
     const hipY = H * 0.13, hemY = H;
-    const hemOuterX = outW * 0.72, hemInnerX = outW * 0.15, crotchX = outW * 0.55;
+    const hemOuterX = outW - qh * 0.24;
+    const hemInnerX = thigh * 0.08;
 
-    const outSeg = [[outW, hipY], [outW * 1.03, H * 0.62], [hemOuterX, hemY]];
+    const outSeg = [[outW, hipY], [outW - qh * 0.04, H * 0.58], [hemOuterX, hemY]];
     const outline = [
-      [0, 0], [qw * 0.5, 0], [outW, hipY],
+      [0, 0], [qw, 0], [outW, hipY],
       ...qBez(...outSeg, 6),
       [hemInnerX, hemY],
-      [crotchX, crotchDrop],
-      [0, crotchDrop * 0.55],
+      [0, crotchY],
+      [0, crotchY * (front ? 0.55 : 0.62)],
     ];
     withCurves(outline, [{ fromIdx: 2, toIdx: 8, ...qBezToCubic(...outSeg) }]);
-    // WP-59 (docs/plan 4.md Phase 5, cloth-lab compatibility pass): the
-    // SECOND real seam every trouser leg panel has — hem-inner (9) up
-    // through the crotch point (10) and the rise (11) back to the waist
-    // center (0, wrapping) — is the INSEAM, sewn to this SAME piece's
-    // own mirrored copy (front-left's inseam to front-right's inseam
-    // forms the crotch seam; likewise for back). `mirrorSelf: true`
-    // (cloth-lab's importFromApp.js) is exactly this relationship: a
-    // bilateral piece's own R/L copies seamed to each other, not to a
-    // different declared piece. Every call site below now declares
-    // `role: "trouser-front"/"trouser-back"` and `bilateral: true`
-    // instead of the old `role: "other"`, which left every trouser
-    // panel placed as a small misplaced accessory patch, never seamed,
-    // in Cloth Lab.
     outline.edges = [
       { fromIdx: 2, toIdx: 8, seamId: 'trouserOutseam', reverse: false },
       { fromIdx: 9, toIdx: 10, seamId: 'trouserInseam', reverse: false },

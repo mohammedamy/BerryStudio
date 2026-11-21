@@ -13,7 +13,7 @@ import { BONE_IDX } from '../../../js/human-mannequin.js'
 export const ENV_SEGMENT_COUNT = 9
 export const ENV_PHI_BINS = 64
 export const ENV_T_BINS = 32
-export const ENV_CLEARANCE = 0.0040 // 4.0mm skin + triangle-chord safety cushion
+export const ENV_CLEARANCE = 0.0058 // 5.8mm skin + triangle-chord safety cushion
 
 const TWO_PI = Math.PI * 2
 
@@ -22,8 +22,10 @@ function clamp(v, lo, hi) {
 }
 
 function getBindSegments(dims, lm) {
-  const crotchY = dims.hipY - dims.span * 0.088
+  const crotchY = dims.hipY - dims.span * 0.145
   const handReach = dims.H * (dims.kid ? 0.108 : (dims.female ? 0.104 : 0.107)) * 1.05
+  const armTopPad = dims.span * 0.020
+  const thighTopPad = dims.span * 0.030
 
   return [
     // 0: Trunk + pelvis + shoulders + neck + head (bottom -> crown)
@@ -35,59 +37,59 @@ function getBindSegments(dims, lm) {
     },
     // 1: Left (+X) upper arm (shoulder -> elbow)
     {
-      a: [lm.shoulderPivotX, lm.shoulderPivotY, 0],
+      a: [lm.shoulderPivotX, lm.shoulderPivotY + armTopPad, 0],
       b: [lm.shoulderPivotX, lm.shoulderPivotY - lm.upperArmLen, 0],
       bones: [BONE_IDX.armL],
-      minWeight: 0.32,
+      minWeight: 0.25,
     },
     // 2: Right (-X) upper arm (shoulder -> elbow)
     {
-      a: [-lm.shoulderPivotX, lm.shoulderPivotY, 0],
+      a: [-lm.shoulderPivotX, lm.shoulderPivotY + armTopPad, 0],
       b: [-lm.shoulderPivotX, lm.shoulderPivotY - lm.upperArmLen, 0],
       bones: [BONE_IDX.armR],
-      minWeight: 0.32,
+      minWeight: 0.25,
     },
     // 3: Left (+X) forearm + hand (elbow -> fingertips)
     {
       a: [lm.shoulderPivotX, lm.shoulderPivotY - lm.upperArmLen, 0],
       b: [lm.shoulderPivotX, lm.shoulderPivotY - lm.upperArmLen - lm.forearmLen - handReach, 0],
       bones: [BONE_IDX.elbowL, BONE_IDX.handL],
-      minWeight: 0.32,
+      minWeight: 0.28,
     },
     // 4: Right (-X) forearm + hand (elbow -> fingertips)
     {
       a: [-lm.shoulderPivotX, lm.shoulderPivotY - lm.upperArmLen, 0],
       b: [-lm.shoulderPivotX, lm.shoulderPivotY - lm.upperArmLen - lm.forearmLen - handReach, 0],
       bones: [BONE_IDX.elbowR, BONE_IDX.handR],
-      minWeight: 0.32,
+      minWeight: 0.28,
     },
     // 5: Left (+X) thigh (hip -> knee)
     {
-      a: [lm.hipPivotX, lm.hipPivotY, 0],
+      a: [lm.hipPivotX, lm.hipPivotY + thighTopPad, 0],
       b: [lm.hipPivotX, lm.hipPivotY - lm.thighLen, 0],
       bones: [BONE_IDX.legL],
-      minWeight: 0.35,
+      minWeight: 0.18,
     },
     // 6: Right (-X) thigh (hip -> knee)
     {
-      a: [-lm.hipPivotX, lm.hipPivotY, 0],
+      a: [-lm.hipPivotX, lm.hipPivotY + thighTopPad, 0],
       b: [-lm.hipPivotX, lm.hipPivotY - lm.thighLen, 0],
       bones: [BONE_IDX.legR],
-      minWeight: 0.35,
+      minWeight: 0.18,
     },
     // 7: Left (+X) calf + ankle (knee -> ankle)
     {
       a: [lm.hipPivotX, lm.hipPivotY - lm.thighLen, 0],
       b: [lm.hipPivotX, lm.ankleY, 0],
       bones: [BONE_IDX.kneeL],
-      minWeight: 0.35,
+      minWeight: 0.30,
     },
     // 8: Right (-X) calf + ankle (knee -> ankle)
     {
       a: [-lm.hipPivotX, lm.hipPivotY - lm.thighLen, 0],
       b: [-lm.hipPivotX, lm.ankleY, 0],
       bones: [BONE_IDX.kneeR],
-      minWeight: 0.35,
+      minWeight: 0.30,
     },
   ]
 }
@@ -125,7 +127,11 @@ export function buildBodyEnvelopeTexture(bindGeometry, dims, landmarks, clearanc
     vertMask[v] = mask
   }
 
+  const groinFilterY = dims.hipY - dims.span * 0.095
+  const groinFilterX = landmarks.hipPivotX * 0.78
+
   function splatPoint(s, px, py, pz) {
+    if (s === 0 && py < groinFilterY && Math.abs(px) > groinFilterX) return
     const seg = segDefs[s]
     const abx = seg.b[0] - seg.a[0]
     const aby = seg.b[1] - seg.a[1]
@@ -163,19 +169,24 @@ export function buildBodyEnvelopeTexture(bindGeometry, dims, landmarks, clearanc
     const mx01 = 0.5 * (x0 + x1), my01 = 0.5 * (y0 + y1), mz01 = 0.5 * (z0 + z1)
     const mx12 = 0.5 * (x1 + x2), my12 = 0.5 * (y1 + y2), mz12 = 0.5 * (z1 + z2)
     const mx20 = 0.5 * (x2 + x0), my20 = 0.5 * (y2 + y0), mz20 = 0.5 * (z2 + z0)
+    const q01x = 0.25 * x0 + 0.75 * x1, q01y = 0.25 * y0 + 0.75 * y1, q01z = 0.25 * z0 + 0.75 * z1
+    const q12x = 0.25 * x1 + 0.75 * x2, q12y = 0.25 * y1 + 0.75 * y2, q12z = 0.25 * z1 + 0.75 * z2
+    const q20x = 0.25 * x2 + 0.75 * x0, q20y = 0.25 * y2 + 0.75 * y0, q20z = 0.25 * z2 + 0.75 * z0
     const cx = (x0 + x1 + x2) / 3, cy = (y0 + y1 + y2) / 3, cz = (z0 + z1 + z2) / 3
 
     for (let s = 0; s < ENV_SEGMENT_COUNT; s++) {
       if (!(sharedMask & (1 << s))) continue
-      // Require at least 2 vertices (or strong single-vertex junction) in segment s
       const countInSeg = ((vertMask[i0] >> s) & 1) + ((vertMask[i1] >> s) & 1) + ((vertMask[i2] >> s) & 1)
-      if (countInSeg < 2) continue
+      if (s === 0 ? countInSeg < 2 : countInSeg < 1) continue
       splatPoint(s, x0, y0, z0)
       splatPoint(s, x1, y1, z1)
       splatPoint(s, x2, y2, z2)
       splatPoint(s, mx01, my01, mz01)
       splatPoint(s, mx12, my12, mz12)
       splatPoint(s, mx20, my20, mz20)
+      splatPoint(s, q01x, q01y, q01z)
+      splatPoint(s, q12x, q12y, q12z)
+      splatPoint(s, q20x, q20y, q20z)
       splatPoint(s, cx, cy, cz)
     }
   }
@@ -218,13 +229,14 @@ export function buildBodyEnvelopeTexture(bindGeometry, dims, landmarks, clearanc
     }
   }
 
-  // Conservative 3x3 max dilation on trunk (`s === 0`), azimuthal dilation +
-  // gentle axial blend on tapered limbs (`s >= 1`) so thigh/forearm tapers
-  // stay snug without carrying proximal max radii down the limb.
+  // Conservative 3x3 max dilation on trunk (`s === 0`, blocking upward bleed from
+  // broad upper-chest rows into the narrow neck/shoulder slope above `shCutIv`),
+  // azimuthal dilation + gentle axial blend on tapered limbs (`s >= 1`).
+  const shCutIv = Math.floor(((dims.shoulderY - dims.span * 0.025 - segDefs[0].a[1]) / Math.max(1e-6, segDefs[0].b[1] - segDefs[0].a[1])) * ENV_T_BINS)
   const dilated = new Float32Array(filled.length)
   for (let s = 0; s < ENV_SEGMENT_COUNT; s++) {
     const segBase = s * ENV_T_BINS * ENV_PHI_BINS
-    const segClearance = s >= 5 ? clearance + 0.0012 : clearance
+    const segClearance = s >= 5 ? clearance + 0.0014 : clearance
     for (let iv = 0; iv < ENV_T_BINS; iv++) {
       for (let iu = 0; iu < ENV_PHI_BINS; iu++) {
         let rowMax = 0
@@ -236,6 +248,7 @@ export function buildBodyEnvelopeTexture(bindGeometry, dims, landmarks, clearanc
         let best = rowMax
         if (s === 0) {
           for (const dv of [-1, 1]) {
+            if (iv >= shCutIv && dv === -1) continue
             const nv = clamp(iv + dv, 0, ENV_T_BINS - 1)
             const rOff = segBase + nv * ENV_PHI_BINS
             for (let du = -1; du <= 1; du++) {
@@ -331,9 +344,11 @@ function boneOffsetWorld(bone, ox, oy, oz, target) {
  * has been called on the avatar group/pelvis). Runs in < 0.02ms for real-time walk!
  */
 export function computeEnvelopeFramesFromLimbs(limbs, dims, landmarks) {
-  const crotchOffsetFromPelvis = (dims.hipY - dims.span * 0.088) - dims.hipY
+  const crotchOffsetFromPelvis = (dims.hipY - dims.span * 0.145) - dims.hipY
   const crownOffsetFromHead = dims.H - landmarks.headCenterY
   const handReach = dims.H * (dims.kid ? 0.108 : (dims.female ? 0.104 : 0.107)) * 1.05
+  const armTopPad = dims.span * 0.020
+  const thighTopPad = dims.span * 0.030
 
   const pA = boneOffsetWorld(limbs.pelvis, 0, crotchOffsetFromPelvis, 0, _vA)
   const pB = boneOffsetWorld(limbs.head, 0, crownOffsetFromHead, 0, _vB)
@@ -343,24 +358,28 @@ export function computeEnvelopeFramesFromLimbs(limbs, dims, landmarks) {
     bone.getWorldPosition(_vA)
     return [_vA.x, _vA.y, _vA.z]
   }
+  const topOfOffset = (bone, oy) => {
+    boneOffsetWorld(bone, 0, oy, 0, _vA)
+    return [_vA.x, _vA.y, _vA.z]
+  }
   const tipOfHand = (handBone) => {
     boneOffsetWorld(handBone, 0, -handReach, 0, _vB)
     return [_vB.x, _vB.y, _vB.z]
   }
 
-  const shL = posOf(limbs.arm1)
+  const shL = topOfOffset(limbs.arm1, armTopPad)
   const elL = posOf(limbs.elbow1)
   const fnL = tipOfHand(limbs.hand1)
 
-  const shR = posOf(limbs['arm-1'])
+  const shR = topOfOffset(limbs['arm-1'], armTopPad)
   const elR = posOf(limbs['elbow-1'])
   const fnR = tipOfHand(limbs['hand-1'])
 
-  const hpL = posOf(limbs.leg1)
+  const hpL = topOfOffset(limbs.leg1, thighTopPad)
   const knL = posOf(limbs.knee1)
   const anL = posOf(limbs.foot1)
 
-  const hpR = posOf(limbs['leg-1'])
+  const hpR = topOfOffset(limbs['leg-1'], thighTopPad)
   const knR = posOf(limbs['knee-1'])
   const anR = posOf(limbs['foot-1'])
 
@@ -393,7 +412,7 @@ export function projectPointOutsideBodyEnvelope(p, envelope, frames) {
     const abz = f.b[2] - f.a[2]
     const len2 = Math.max(abx * abx + aby * aby + abz * abz, 1e-8)
     const t = ((px - f.a[0]) * abx + (py - f.a[1]) * aby + (pz - f.a[2]) * abz) / len2
-    if (t <= 0.015 || t >= 0.985) continue
+    if (t <= -0.01 || t >= 1.01) continue
 
     const cx = f.a[0] + abx * t
     const cy = f.a[1] + aby * t

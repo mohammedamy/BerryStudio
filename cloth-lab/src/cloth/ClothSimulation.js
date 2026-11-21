@@ -286,8 +286,9 @@ vec3 collideBodyEnvelope(vec3 p, vec3 prevP, float friction) {
     vec3 a = uEnvA[s];
     vec3 ab = uEnvB[s] - a;
     float len2 = max(dot(ab, ab), 1e-8);
-    float t = dot(p - a, ab) / len2;
-    if (t <= 0.015 || t >= 0.985) continue;
+    float rawT = dot(p - a, ab) / len2;
+    if (rawT <= -0.01 || rawT >= 1.01) continue;
+    float t = clamp(rawT, 0.0, 0.9999);
 
     vec3 c = a + ab * t;
     vec3 rel = p - c;
@@ -768,11 +769,20 @@ vec4 edgeMidpointBodyPush(vec3 predicted, float idx) {
   if (idx < -0.5) return vec4(0.0);
   vec2 nuv = ( vec2( mod(idx, resolution.x), floor(idx / resolution.x) ) + 0.5 ) / resolution;
   vec3 npos = texture2D(texturePosition, nuv).xyz;
-  vec3 mid = 0.5 * (predicted + npos);
-  vec3 pushedMid = collideAllBody(mid, mid, 0.0);
-  vec3 diff = pushedMid - mid;
-  float dLen = length(diff);
-  if (dLen > 1e-5) return vec4(diff, dLen);
+  vec3 bestDiff = vec3(0.0);
+  float bestLen = 0.0;
+  for (int k = 0; k < 3; k++) {
+    float frac = k == 0 ? 0.34 : (k == 1 ? 0.50 : 0.66);
+    vec3 samplePt = mix(predicted, npos, frac);
+    vec3 pushed = collideAllBody(samplePt, samplePt, 0.0);
+    vec3 diff = pushed - samplePt;
+    float dLen = length(diff);
+    if (dLen > bestLen) {
+      bestLen = dLen;
+      bestDiff = diff;
+    }
+  }
+  if (bestLen > 1e-5) return vec4(bestDiff, bestLen);
   return vec4(0.0);
 }
 
@@ -787,13 +797,11 @@ void main() {
   vec3 pos = texture2D(texturePosition, uv).xyz;
 
   if (pinned > 0.5) {
-    if (uPinMotionActive > 0.5) {
-      vec3 pinTarget = texture2D(uRestPosition, uv).xyz + uPinOffset;
-      pinTarget = collideAllBody(pinTarget, pos, uFriction);
-      gl_FragColor = vec4(pinTarget, 0.0);
-    } else {
-      gl_FragColor = vec4(pos, 0.0);
-    }
+    vec3 pinTarget = uPinMotionActive > 0.5
+      ? (texture2D(uRestPosition, uv).xyz + uPinOffset)
+      : pos;
+    pinTarget = collideAllBody(pinTarget, pos, uFriction);
+    gl_FragColor = vec4(pinTarget, 0.0);
     return;
   }
 
@@ -875,7 +883,7 @@ ${highQuality ? DIHEDRAL_BEND_MAIN_GLSL : DEFAULT_BEND_MAIN_GLSL}
     vec3 avgPush = edgePushSum / edgePushCount;
     float avgLen = length(avgPush);
     if (avgLen > 1e-6) {
-      predicted += (avgPush / avgLen) * (0.62 * mix(avgLen, edgePushMax, 0.5));
+      predicted += (avgPush / avgLen) * (0.90 * mix(avgLen, edgePushMax, 0.5));
     }
     predicted = collideAllBody(predicted, prevPos, uFriction);
   }
