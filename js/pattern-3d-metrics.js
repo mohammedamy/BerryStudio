@@ -84,7 +84,7 @@ function classifyDirectOrTrim(p, category = "women") {
 
   // 2. Declared sleeve roles & cuffs (authoritative schema roles before name heuristics)
   if (p && SLEEVE_ROLES.has(role)) return "sleeve";
-  if (role === "cuff" || role === "rib-cuff" || CUFF_NAME_RE.test(name)) return "trim:sleeve";
+  if (role === "cuff" || role === "rib-cuff" || (role !== "elastic-band" && CUFF_NAME_RE.test(name) && !/thigh|leg|ankle|pant|trouser|boxer|trunk|فخذ|ساق|كاحل|بنطل/i.test(fullTxt))) return "trim:sleeve";
 
   // 3. Role-derived zone from body-zone.js (guarantees bodice-* / front-panel / back-panel stay bodice even if pattern title says "Long-Sleeve" or "Sleeveless")
   const zone = inferBodyZone(p);
@@ -425,7 +425,7 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     && visible.some((p) => p.role === "peplum-front" || p.role === "peplum-back")
   ));
 
-  const isHipTopShirt = /\b(shirt(?!\s*dress)|blouse|polo|t-shirt|tee|sweater|sweatshirt|hoodie|cardigan|jacket|blazer)\b|قميص|بلوزة|توب|بليزر|جاكيت/i.test(allText)
+  const isHipTopShirt = /\b(shirt(?!\s*dress)|blouse|polo|t-shirt|tee|sweater|sweatshirt|hoodie|cardigan|jacket|blazer|vest|waistcoat|gilet|tank|camisole)\b|قميص|بلوزة|توب|بليزر|جاكيت|صديري|فانلة/i.test(allText)
     && !/\b(dress(?!\s*shirt)|shirtdress|tunic|kurta|thobe|kandura|abaya|kaftan|robe|gown|coat|overcoat|trench|sherwani|bisht|longline)\b|فستان|تونيك|ثوب|عباية|قفطان|معطف|بشت/i.test(allText);
 
   let bodiceStyle = "hip";
@@ -441,6 +441,9 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     bodiceHemFlare = 1.02;
   } else if (lbSil.style && ["crop", "waist", "hip", "tunic", "robe"].includes(lbSil.style)) {
     bodiceStyle = lbSil.style;
+  } else if (lbSil.outerLayer?.enabled && (lbSil.outerLayer.lengthStyle === "waist" || lbSil.outerLayer.lengthStyle === "hip")) {
+    bodiceStyle = lbSil.outerLayer.lengthStyle;
+    bodiceLengthCm = Math.min(bodiceLengthCm, lbSil.outerLayer.lengthStyle === "waist" ? m.backLen + 1 : m.backLen + 18);
   } else if (bodiceLengthCm < m.backLen * 0.80) bodiceStyle = "crop";
   else if (bodiceLengthCm <= m.backLen * 1.16) bodiceStyle = "waist";
   else if (bodiceLengthCm <= m.backLen + 26 || isHipTopShirt) bodiceStyle = "hip";

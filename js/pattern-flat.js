@@ -214,6 +214,11 @@ function selectParts(pieces) {
     cape: firstNonEmpty(pieces, ['cape', 'cape-overlay'])[0] || null,
     cuff: firstNonEmpty(pieces, ['cuff', 'rib-cuff', 'hem-band'])[0] || null,
     pocket: byRole(pieces, 'pocket')[0] || null,
+    bridge: pieces.find((p) => p.role === 'other' && /bridge|الجسر/i.test(`${p.key || ''} ${(p.name && p.name.en) || ''}`)) || null,
+    braBands: byRole(pieces, 'band').filter((p) => p !== core[0]),
+    straps: byRole(pieces, 'strap'),
+    gusset: byRole(pieces, 'gusset')[0] || null,
+    elasticBands: byRole(pieces, 'elastic-band'),
   };
 }
 
@@ -234,8 +239,75 @@ function composePattern(pieces) {
   const parts = []; // { shape, kind, z }
   const add = (shape, kind = 'main', z = 0) => parts.push({ shape, kind, z });
 
+  // Bilateral cup-based bra flat assembly: Center Bridge at X=0, mirrored
+  // Right + Left Cups flanking the bridge, tapered Wing Bands extending
+  // outward from each cup, and Shoulder Straps rising behind the apexes.
+  if (sel.core.role === 'cup') {
+    const cupRaw = shapeOf(sel.core);
+    const cb = bboxOf(cupRaw.outline);
+    const brNorm = sel.bridge ? normalize(shapeOf(sel.bridge)) : null;
+    const bridgeHalfGap = brNorm ? brNorm.box.w * 0.44 : 1.0;
+    const dxCup = bridgeHalfGap - cb.minX;
+    const dyCup = -cb.minY;
+    const rightCup = translateShape(cupRaw, dxCup, dyCup);
+    const leftCup = mirrorShape(rightCup);
+    const rightBox = bboxOf(rightCup.outline);
+
+    add(rightCup, 'main', 1);
+    add(leftCup, 'main', 1);
+
+    if (brNorm) {
+      const brDy = rightBox.maxY - brNorm.box.h * 0.94;
+      add(translateShape(brNorm.shape, 0, brDy), 'accessory', 2);
+    }
+
+    if (sel.braBands.length) {
+      const { shape: bShape, box: bBox } = normalize(shapeOf(sel.braBands[0]));
+      const bxShift = rightBox.maxX - bBox.w * 0.14 - (-bBox.w / 2);
+      const byShift = rightBox.maxY - bBox.h * 0.88;
+      const rightBand = translateShape(bShape, bxShift, byShift);
+      add(rightBand, 'accessory', 0);
+      add(mirrorShape(rightBand), 'accessory', 0);
+    }
+
+    if (sel.straps.length) {
+      const { shape: sShape, box: sBox } = normalize(shapeOf(sel.straps[0]));
+      const strapApexX = rightBox.minX + cb.w * 0.52;
+      const visH = Math.min(sBox.h, cb.h * 0.68);
+      const rightStrap = translateShape(sShape, strapApexX, -visH);
+      add(rightStrap, 'accessory', -1);
+      add(mirrorShape(rightStrap), 'accessory', -1);
+    }
+
+    parts.sort((a, b) => a.z - b.z);
+    return parts;
+  }
+
   const { shape: coreShape, box: coreBox, dx: coreDx, dy: coreDy } = normalize(shapeOf(sel.core));
   add(coreShape, 'main', 1);
+
+  if (sel.core.role === 'brief-front') {
+    const waistEl = sel.elasticBands.find((p) => /waist|خصر|كمر|waistelastic/i.test(`${p.key || ''} ${(p.name && p.name.en) || ''}`));
+    if (waistEl) {
+      const eb = bboxOf(waistEl.outline || [[0, 0], [coreBox.w, 2]]);
+      const eh = Math.max(1.2, eb.h);
+      const ew = coreBox.w * 0.84;
+      add({ outline: [[-ew / 2, -eh * 0.2], [ew / 2, -eh * 0.2], [ew / 2, eh * 0.8], [-ew / 2, eh * 0.8]], curves: [], darts: [], notches: [] }, 'accessory', 2);
+    }
+    if (sel.gusset) {
+      const { shape: gShape, box: gBox } = normalize(shapeOf(sel.gusset));
+      const gy = Math.max(coreBox.h * 0.35, coreBox.h - gBox.h * 0.92);
+      add(translateShape(gShape, 0, gy), 'accessory', 2);
+    }
+  } else if (sel.core.role === 'band') {
+    const bandEl = sel.elasticBands.find((p) => /band/i.test(`${p.key || ''} ${(p.name && p.name.en) || ''}`));
+    if (bandEl) {
+      const eb = bboxOf(bandEl.outline || [[0, 0], [coreBox.w, 3]]);
+      const eh = Math.max(1.6, eb.h);
+      const ew = coreBox.w * 0.94;
+      add({ outline: [[-ew / 2, coreBox.h - eh * 0.35], [ew / 2, coreBox.h - eh * 0.35], [ew / 2, coreBox.h + eh * 0.65], [-ew / 2, coreBox.h + eh * 0.65]], curves: [], darts: [], notches: [] }, 'accessory', 2);
+    }
+  }
 
   let rightEdge = coreBox.w / 2;
   const OVERLAP = 0.15;

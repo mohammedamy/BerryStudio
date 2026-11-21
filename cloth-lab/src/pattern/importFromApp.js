@@ -716,8 +716,8 @@ function deriveSleevedTorsoEdges(outline, { includeTop, necklineEndIdx, sideEndI
     shoulderIdx === crownIdx && necklineEndIdx == null && underarmIdx - shoulderIdx >= 5 &&
     outline[underarmIdx][1] - outline[shoulderIdx][1] >= 8 &&
     outline[shoulderIdx + 2][1] - outline[shoulderIdx][1] <= 4.5 &&
-    outline[shoulderIdx + 2][0] - outline[shoulderIdx][0] >= 5 &&
-    outline[shoulderIdx + 2][0] < outline[underarmIdx][0] - 4 &&
+    outline[shoulderIdx + 2][0] - outline[shoulderIdx][0] >= 3.0 &&
+    outline[shoulderIdx + 2][0] < outline[underarmIdx][0] - 2.5 &&
     !edges?.some((e) => e && e.seamId && e.fromIdx >= shoulderIdx && e.toIdx <= shoulderIdx + 2)
   ) {
     shoulderIdx = shoulderIdx + 2
@@ -1049,6 +1049,9 @@ export function convertAppPattern(payload) {
   let briefWaistId = null
   let briefLegPair = null
   const briefGussets = []
+  let sportBraFrontId = null
+  let sportBraBackId = null
+  let sportBraBandId = null
   let jacketOuterFront = null // { rId, lId, rShoulderEdge, rArmEdge, rArmLowerEdge, lShoulderEdge, lArmEdge, lArmLowerEdge }
   let jacketOuterBack = null  // { pieceId, rShoulderEdge, rArmEdge, rArmLowerEdge, lShoulderEdge, lArmEdge, lArmLowerEdge }
   let wrapCoatFrontR = null
@@ -1175,11 +1178,14 @@ export function convertAppPattern(payload) {
       const sideBotY = be ? (loc[be.toIdx]?.[1] ?? 5.0) : 5.0
       const sideDY = Math.abs(sideBotY - sideTopY)
       const crotchDepthCm = Math.max(0, maxY - sideBotY)
-      const isTrunkOrBoxer = /boxer|trunk|boyshort|بوكسر|ترنك|بويشورت/i.test(bText) || crotchDepthCm < maxX * 0.24
-      const estLegExt = isTrunkOrBoxer ? Math.max(3.5, sideDY - 5.2) : 0
-      const pureSideDY = Math.max(2.5, sideDY - estLegExt)
+      const isLeg15 = loc.length === 15
+      const isTrunkOrBoxer = isLeg15 || /boxer|trunk|boyshort|بوكسر|ترنك|بويشورت/i.test(bText) || crotchDepthCm < maxX * 0.24
+      const qScaleEst = Math.max(0.55, maxX / 23)
+      const estLegExt = isTrunkOrBoxer ? Math.max(3.5, sideDY / qScaleEst - 5.2) : 0
+      const pureSideDY = Math.max(2.5, (isLeg15 ? 5.2 : sideDY / qScaleEst))
       const riseCm = Math.max(6, Math.min(20, Math.round(pureSideDY / 0.44)))
-      briefMeta = { riseCm, sideSeamYCm: sideBotY, crotchYCm: maxY, hasBriefLeg: isTrunkOrBoxer, legExtCm: estLegExt }
+      const crotchCornerY = isLeg15 ? (loc[13]?.[1] ?? (sideBotY - 3.0)) : maxY
+      briefMeta = { riseCm, sideSeamYCm: sideBotY, crotchYCm: crotchCornerY, hasBriefLeg: isTrunkOrBoxer, legExtCm: estLegExt }
     }
   }
   const hasSleeveUnder = activePieces.some((p) => resolveSchemaRole(p.role)?.role === 'sleeve-under')
@@ -1437,7 +1443,22 @@ export function convertAppPattern(payload) {
           if (crotchFrom > be.toIdx && crotchTo < N - be.toIdx && !hasInteriorOverlap(p.id, N, crotchFrom, crotchTo)) {
             pushClaimedEdge(p.id, 'crotchSeam', crotchFrom, crotchTo, N)
           }
-          if (hasBriefLegElastic && be.toIdx < crotchFrom && crotchTo < N - be.toIdx) {
+          const isLegged15 = baseLocal.length === 15 && be.toIdx === 7 && crotchFrom === 13
+          if (isLegged15) {
+            const hemInIdx = 9
+            if (hasBriefLegElastic && !hasInteriorOverlap(p.id, N, be.toIdx, hemInIdx)) {
+              pushClaimedEdge(p.id, 'rightLegOpening', be.toIdx, hemInIdx, N)
+            }
+            if (!hasInteriorOverlap(p.id, N, hemInIdx, crotchFrom)) {
+              pushClaimedEdge(p.id, 'rightInseam', hemInIdx, crotchFrom, N)
+            }
+            if (!hasInteriorOverlap(p.id, N, crotchTo, N - hemInIdx)) {
+              pushClaimedEdge(p.id, 'leftInseam', crotchTo, N - hemInIdx, N)
+            }
+            if (hasBriefLegElastic && !hasInteriorOverlap(p.id, N, N - hemInIdx, N - be.toIdx)) {
+              pushClaimedEdge(p.id, 'leftLegOpening', N - hemInIdx, N - be.toIdx, N)
+            }
+          } else if (hasBriefLegElastic && be.toIdx < crotchFrom && crotchTo < N - be.toIdx) {
             if (!hasInteriorOverlap(p.id, N, be.toIdx, crotchFrom)) {
               pushClaimedEdge(p.id, 'rightLegOpening', be.toIdx, crotchFrom, N)
             }
@@ -1456,7 +1477,7 @@ export function convertAppPattern(payload) {
             sewnWaistElastic: Boolean(hasBriefWaistElastic),
             riseCm: briefMeta?.riseCm ?? 12,
             sideSeamYCm: briefMeta?.sideSeamYCm ?? (baseLocal[be.toIdx]?.[1] ?? 5),
-            crotchYCm: bbox(baseLocal).maxY,
+            crotchYCm: briefMeta?.crotchYCm ?? bbox(baseLocal).maxY,
             hasBriefLeg: Boolean(briefMeta?.hasBriefLeg),
             legExtCm: briefMeta?.legExtCm ?? 0,
           }
@@ -1562,16 +1583,27 @@ export function convertAppPattern(payload) {
           }
         } else if (autoTorsoSeams && !isMultiWrapPiece && (placement === 'frontPanel' || placement === 'backPanel' || placement === 'hipPanelFront' || placement === 'hipPanelBack')) {
           if (isSportBraPanel) {
-            const geo = deriveSportBraSideEdges(outline)
-            if (geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
-              bySlot[placement].push({ id: p.id, label })
-              for (const e of geo) pushClaimedEdge(p.id, e.name, e.from, e.to, outline.length)
+            const N = outline.length
+            const botIdx = baseLocal.length - 2
+            if (!hasInteriorOverlap(p.id, N, botIdx, N - botIdx)) {
+              pushClaimedEdge(p.id, 'sportBandAttach', botIdx, N - botIdx, N)
+            }
+            if (placement === 'frontPanel') sportBraFrontId = p.id
+            else if (placement === 'backPanel') sportBraBackId = p.id
+            const authoredSportSides = adjEdges?.some((e) => e?.seamId === 'sportBraSide')
+            if (!authoredSportSides) {
+              const geo = deriveSportBraSideEdges(outline)
+              if (geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
+                bySlot[placement].push({ id: p.id, label })
+                for (const e of geo) pushClaimedEdge(p.id, e.name, e.from, e.to, outline.length)
+              }
             }
           } else {
             const authoredTop = necklineEndIdx != null && adjEdges?.some(e => e.seamId && e.fromIdx === 0 && e.toIdx === necklineEndIdx)
             const authoredSides = adjEdges?.filter(e => e.seamId && /Side_[RL]$/.test(e.seamId)).length >= 2
-            const geo = hasSleeves && isUpperPanel
+            const geo = isUpperPanel && (hasSleeves || outline.length >= 10)
               ? deriveSleevedTorsoEdges(outline, { includeTop: !authoredTop, necklineEndIdx, sideEndIdx, edges: adjEdges, curves: p.curves || p.outline?.curves })
+                  .filter((e) => hasSleeves || !/Armhole/.test(e.name))
               : deriveTorsoEdgeInstructions(outline, { includeTop: !authoredTop && isUpperPanel, necklineEndIdx, sideEndIdx })
             if (!authoredSides && geo.some((e) => e.name === 'rightSide') && geo.some((e) => e.name === 'leftSide')) {
               bySlot[placement].push({ id: p.id, label })
@@ -1589,7 +1621,9 @@ export function convertAppPattern(payload) {
         const gbFrom = mid - spanK, gbTo = (mid + spanK) % N
         if (schemaRole === 'gusset' && spanK >= 1 && !hasInteriorOverlap(p.id, N, gfFrom, gfTo) && !hasInteriorOverlap(p.id, N, gbFrom, gbTo)) {
           pushClaimedEdge(p.id, 'gussetFront', gfFrom, gfTo, N)
+          if (!hasInteriorOverlap(p.id, N, gfTo, gbFrom)) pushClaimedEdge(p.id, 'gussetRight', gfTo, gbFrom, N)
           pushClaimedEdge(p.id, 'gussetBack', gbFrom, gbTo, N)
+          if (!hasInteriorOverlap(p.id, N, gbTo, gfFrom)) pushClaimedEdge(p.id, 'gussetLeft', gbTo, gfFrom, N)
           briefGussets.push(p.id)
           placementHints[p.id] = { ...(placementHints[p.id] || {}), isBriefGusset: true, sewnCrotchGusset: true, layerOffset: 0 }
         } else {
@@ -1611,15 +1645,8 @@ export function convertAppPattern(payload) {
     if (bilateral) {
       const rId = p.id + '_r', lId = p.id + '_l'
       const isBriefLegElastic = hasBriefPanels && placement === 'attachHem' && !edges?.length && local.length === 4 &&
-        /leg\s*elastic|leg\s*opening|أستك.*ساق|legelastic/i.test(`${p.id || ''} ${label} ${(p.label && p.label.ar) || ''}`)
+        /leg\s*elastic|leg\s*opening|أستك.*ساق|legelastic|thigh\s*hem/i.test(`${p.id || ''} ${label} ${(p.label && p.label.ar) || ''}`)
       if (isBriefLegElastic) {
-        const midX = 0.5 * (local[0][0] + local[1][0])
-        const rSub = [local[0], [midX, local[0][1]], local[1], local[2], [midX, local[2][1]], local[3]]
-        const lSub = mirrorOutline(rSub)
-        rawPieces.push({ id: rId, label: p.label, outline: rSub, color: p.color, darts: p.darts })
-        rawPieces.push({ id: lId, label: p.label, outline: lSub, color: p.color, darts: p.darts })
-        roles[rId] = placement
-        roles[lId] = placement
         const legHint = {
           isLegOpeningElastic: true,
           sewnLegElastic: true,
@@ -1629,15 +1656,45 @@ export function convertAppPattern(payload) {
         }
         placementHints[rId] = { ...(placementHints[rId] || {}), ...legHint }
         placementHints[lId] = { ...(placementHints[lId] || {}), ...legHint }
-        const rDefs = [
-          { name: 'legAttachFront', fromIdx: 0, toIdx: 1 },
-          { name: 'legAttachBack', fromIdx: 1, toIdx: 2 },
-          { name: 'legEndBack', fromIdx: 2, toIdx: 3 },
-          { name: 'legEndFront', fromIdx: 5, toIdx: 0 },
-        ]
-        const lDefs = mirrorEdgeIndices(rDefs, 6)
-        for (const d of rDefs) pushClaimedEdge(rId, d.name, d.fromIdx, d.toIdx, 6)
-        for (const d of lDefs) pushClaimedEdge(lId, d.name, d.fromIdx, d.toIdx, 6)
+        roles[rId] = placement
+        roles[lId] = placement
+        if (briefMeta?.hasBriefLeg) {
+          const midX = 0.5 * (local[0][0] + local[1][0])
+          const rSub = [local[0], [midX, local[0][1]], local[1], local[2], [midX, local[2][1]], local[3]]
+          const lSub = mirrorOutline(rSub)
+          rawPieces.push({ id: rId, label: p.label, outline: rSub, color: p.color, darts: p.darts })
+          rawPieces.push({ id: lId, label: p.label, outline: lSub, color: p.color, darts: p.darts })
+          const rDefs = [
+            { name: 'legAttachFront', fromIdx: 0, toIdx: 1 },
+            { name: 'legAttachBack', fromIdx: 1, toIdx: 2 },
+            { name: 'legEndBack', fromIdx: 2, toIdx: 3 },
+            { name: 'legEndFront', fromIdx: 5, toIdx: 0 },
+          ]
+          const lDefs = mirrorEdgeIndices(rDefs, 6)
+          for (const d of rDefs) pushClaimedEdge(rId, d.name, d.fromIdx, d.toIdx, 6)
+          for (const d of lDefs) pushClaimedEdge(lId, d.name, d.fromIdx, d.toIdx, 6)
+        } else {
+          const w = local[1][0] - local[0][0]
+          const x1 = local[0][0] + w * 0.43
+          const x2 = local[0][0] + w * 0.57
+          const rSub = [
+            local[0], [x1, local[0][1]], [x2, local[0][1]], local[1],
+            local[2], [x2, local[2][1]], [x1, local[2][1]], local[3],
+          ]
+          const lSub = mirrorOutline(rSub)
+          rawPieces.push({ id: rId, label: p.label, outline: rSub, color: p.color, darts: p.darts })
+          rawPieces.push({ id: lId, label: p.label, outline: lSub, color: p.color, darts: p.darts })
+          const rDefs = [
+            { name: 'legAttachFront', fromIdx: 0, toIdx: 1 },
+            { name: 'legGussetSide', fromIdx: 1, toIdx: 2 },
+            { name: 'legAttachBack', fromIdx: 2, toIdx: 3 },
+            { name: 'legEndBack', fromIdx: 3, toIdx: 4 },
+            { name: 'legEndFront', fromIdx: 7, toIdx: 0 },
+          ]
+          const lDefs = mirrorEdgeIndices(rDefs, 8)
+          for (const d of rDefs) pushClaimedEdge(rId, d.name, d.fromIdx, d.toIdx, 8)
+          for (const d of lDefs) pushClaimedEdge(lId, d.name, d.fromIdx, d.toIdx, 8)
+        }
         briefLegPair = { rId, lId }
         recognized.push({ id: rId, label: label + ' (R)' })
         recognized.push({ id: lId, label: label + ' (L)' })
@@ -1974,6 +2031,25 @@ export function convertAppPattern(payload) {
       }
       recognized.push({ id: p.id, label })
       continue
+    } else if (sportBraFrontId && sportBraBackId && placement === 'attachUnderbust' && !effEdges?.length && singleOutline.length === 4 && !sportBraBandId) {
+      const midX = 0.5 * (singleOutline[0][0] + singleOutline[1][0])
+      singleOutline = [
+        singleOutline[0], [midX, singleOutline[0][1]], singleOutline[1],
+        singleOutline[2], [midX, singleOutline[2][1]], singleOutline[3],
+      ]
+      rawPieces.push({ id: p.id, label: p.label, outline: singleOutline, color: p.color, darts: p.darts })
+      roles[p.id] = placement
+      pushClaimedEdge(p.id, 'bandAttachFront', 0, 1, 6)
+      pushClaimedEdge(p.id, 'bandAttachBack', 1, 2, 6)
+      pushClaimedEdge(p.id, 'bandEndBack', 2, 3, 6)
+      pushClaimedEdge(p.id, 'bandEndFront', 5, 0, 6)
+      sportBraBandId = p.id
+      placementHints[p.id] = {
+        ...(placementHints[p.id] || {}),
+        sewnSportBand: true,
+      }
+      recognized.push({ id: p.id, label })
+      continue
     } else if (hasSleeves && isUpperSingle && !effEdges?.length) {
       singleOutline = subdivideFullRectBodiceArmhole(local)
     }
@@ -2194,35 +2270,6 @@ export function convertAppPattern(payload) {
         }
       }
     }
-  }
-
-  // Underwear brief/trunk closure: weld crotch gusset, waistband elastic, and bilateral leg elastics
-  if (briefFrontId && briefBackId && briefGussets.length > 0 && hasEdge(briefFrontId, 'crotchSeam') && hasEdge(briefBackId, 'crotchSeam')) {
-    const gId = briefGussets[0]
-    if (hasEdge(gId, 'gussetFront')) {
-      seamInstructions.push({ id: 'briefCrotch_front', a: { piece: briefFrontId, edge: 'crotchSeam' }, b: { piece: gId, edge: 'gussetFront' }, reverse: true })
-    }
-    if (hasEdge(gId, 'gussetBack')) {
-      seamInstructions.push({ id: 'briefCrotch_back', a: { piece: briefBackId, edge: 'crotchSeam' }, b: { piece: gId, edge: 'gussetBack' }, reverse: false })
-    }
-  }
-  if (briefFrontId && briefBackId && briefWaistId && hasEdge(briefFrontId, 'waistSeam') && hasEdge(briefBackId, 'waistSeam')) {
-    seamInstructions.push(
-      { id: 'briefWaist_front', a: { piece: briefFrontId, edge: 'waistSeam' }, b: { piece: briefWaistId, edge: 'waistAttachFront' }, reverse: true },
-      { id: 'briefWaist_back', a: { piece: briefBackId, edge: 'waistSeam' }, b: { piece: briefWaistId, edge: 'waistAttachBack' }, reverse: false },
-      { id: 'briefWaist_close', a: { piece: briefWaistId, edge: 'waistEndBack' }, b: { piece: briefWaistId, edge: 'waistEndFront' }, reverse: true },
-    )
-  }
-  if (briefFrontId && briefBackId && briefLegPair && hasEdge(briefFrontId, 'rightLegOpening') && hasEdge(briefBackId, 'rightLegOpening')) {
-    const { rId, lId } = briefLegPair
-    seamInstructions.push(
-      { id: 'briefLegR_front', a: { piece: briefFrontId, edge: 'rightLegOpening' }, b: { piece: rId, edge: 'legAttachFront' }, reverse: false },
-      { id: 'briefLegR_back', a: { piece: briefBackId, edge: 'rightLegOpening' }, b: { piece: rId, edge: 'legAttachBack' }, reverse: true },
-      { id: 'briefLegR_close', a: { piece: rId, edge: 'legEndBack' }, b: { piece: rId, edge: 'legEndFront' }, reverse: true },
-      { id: 'briefLegL_front', a: { piece: briefFrontId, edge: 'leftLegOpening' }, b: { piece: lId, edge: 'legAttachFront' }, reverse: false },
-      { id: 'briefLegL_back', a: { piece: briefBackId, edge: 'leftLegOpening' }, b: { piece: lId, edge: 'legAttachBack' }, reverse: true },
-      { id: 'briefLegL_close', a: { piece: lId, edge: 'legEndFront' }, b: { piece: lId, edge: 'legEndBack' }, reverse: true },
-    )
   }
 
   // Open-front un-edged pairs (`abaya`): join right/left front halves to single backPanel with vertical/horizontal orientation check
@@ -2480,6 +2527,86 @@ export function convertAppPattern(payload) {
     return placed
   }
   const dist3 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2])
+  const sampleEdge3D = (p3, n, edge, t) => {
+    const step = (edge.toIdx - edge.fromIdx + n) % n
+    if (step === 0) return p3[edge.fromIdx]
+    const f = t * step
+    const i0 = Math.min(step - 1, Math.floor(f))
+    const a = f - i0
+    const u = p3[(edge.fromIdx + i0) % n]
+    const v = p3[(edge.fromIdx + i0 + 1) % n]
+    if (!u || !v) return p3[edge.fromIdx]
+    return [u[0] + (v[0] - u[0]) * a, u[1] + (v[1] - u[1]) * a, u[2] + (v[2] - u[2]) * a]
+  }
+  const push3DOrientedSeam = (id, pAId, edgeA, pBId, edgeB, defaultRev = false) => {
+    const eA = edgeInstructions.find((e) => e.pieceId === pAId && e.edgeName === edgeA)
+    const eB = edgeInstructions.find((e) => e.pieceId === pBId && e.edgeName === edgeB)
+    if (!eA || !eB) return
+    let rev = defaultRev
+    const p3A = getPlaced3D(pAId), p3B = getPlaced3D(pBId)
+    const aPc = rawPieces.find((p) => p.id === pAId), bPc = rawPieces.find((p) => p.id === pBId)
+    if (p3A && p3B && aPc?.outline?.length && bPc?.outline?.length) {
+      let dSame = 0, dRev = 0
+      for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+        const qA = sampleEdge3D(p3A, aPc.outline.length, eA, t)
+        const qBSame = sampleEdge3D(p3B, bPc.outline.length, eB, t)
+        const qBRev = sampleEdge3D(p3B, bPc.outline.length, eB, 1 - t)
+        if (qA && qBSame && qBRev) {
+          dSame += dist3(qA, qBSame)
+          dRev += dist3(qA, qBRev)
+        }
+      }
+      if (Math.abs(dSame - dRev) > 1e-3) rev = dRev < dSame
+    } else if (aPc && bPc) {
+      const dyA = aPc.outline[eA.toIdx][1] - aPc.outline[eA.fromIdx][1]
+      const dyB = bPc.outline[eB.toIdx][1] - bPc.outline[eB.fromIdx][1]
+      if (Math.abs(dyA) > 0.2 && Math.abs(dyB) > 0.2) rev = dyA * dyB < 0
+    }
+    seamInstructions.push({ id, a: { piece: pAId, edge: edgeA }, b: { piece: pBId, edge: edgeB }, reverse: rev })
+  }
+
+  // Underwear brief/trunk/boxer closure: crotch gusset, inseams (if legged), waistband, and bilateral leg elastics
+  if (briefFrontId && briefBackId && briefGussets.length > 0 && hasEdge(briefFrontId, 'crotchSeam') && hasEdge(briefBackId, 'crotchSeam')) {
+    const gId = briefGussets[0]
+    if (hasEdge(gId, 'gussetFront')) {
+      push3DOrientedSeam('briefCrotch_front', briefFrontId, 'crotchSeam', gId, 'gussetFront', true)
+    }
+    if (hasEdge(gId, 'gussetBack')) {
+      push3DOrientedSeam('briefCrotch_back', briefBackId, 'crotchSeam', gId, 'gussetBack', false)
+    }
+  }
+  if (briefFrontId && briefBackId && hasEdge(briefFrontId, 'rightInseam') && hasEdge(briefBackId, 'rightInseam')) {
+    push3DOrientedSeam('briefInseam_R', briefFrontId, 'rightInseam', briefBackId, 'rightInseam', true)
+    if (hasEdge(briefFrontId, 'leftInseam') && hasEdge(briefBackId, 'leftInseam')) {
+      push3DOrientedSeam('briefInseam_L', briefFrontId, 'leftInseam', briefBackId, 'leftInseam', true)
+    }
+  }
+  if (briefFrontId && briefBackId && briefWaistId && hasEdge(briefFrontId, 'waistSeam') && hasEdge(briefBackId, 'waistSeam')) {
+    push3DOrientedSeam('briefWaist_front', briefFrontId, 'waistSeam', briefWaistId, 'waistAttachFront', true)
+    push3DOrientedSeam('briefWaist_back', briefBackId, 'waistSeam', briefWaistId, 'waistAttachBack', false)
+    push3DOrientedSeam('briefWaist_close', briefWaistId, 'waistEndBack', briefWaistId, 'waistEndFront', true)
+  }
+  if (briefFrontId && briefBackId && briefLegPair && hasEdge(briefFrontId, 'rightLegOpening') && hasEdge(briefBackId, 'rightLegOpening')) {
+    const { rId, lId } = briefLegPair
+    const gId = briefGussets[0]
+    push3DOrientedSeam('briefLegR_front', briefFrontId, 'rightLegOpening', rId, 'legAttachFront', false)
+    if (gId && hasEdge(gId, 'gussetRight') && hasEdge(rId, 'legGussetSide')) {
+      push3DOrientedSeam('briefLegR_gusset', gId, 'gussetRight', rId, 'legGussetSide', false)
+    }
+    push3DOrientedSeam('briefLegR_back', briefBackId, 'rightLegOpening', rId, 'legAttachBack', true)
+    push3DOrientedSeam('briefLegR_close', rId, 'legEndBack', rId, 'legEndFront', true)
+    push3DOrientedSeam('briefLegL_front', briefFrontId, 'leftLegOpening', lId, 'legAttachFront', false)
+    if (gId && hasEdge(gId, 'gussetLeft') && hasEdge(lId, 'legGussetSide')) {
+      push3DOrientedSeam('briefLegL_gusset', gId, 'gussetLeft', lId, 'legGussetSide', false)
+    }
+    push3DOrientedSeam('briefLegL_back', briefBackId, 'leftLegOpening', lId, 'legAttachBack', true)
+    push3DOrientedSeam('briefLegL_close', lId, 'legEndFront', lId, 'legEndBack', true)
+  }
+  if (sportBraFrontId && sportBraBackId && sportBraBandId && hasEdge(sportBraFrontId, 'sportBandAttach') && hasEdge(sportBraBackId, 'sportBandAttach')) {
+    push3DOrientedSeam('sportBand_front', sportBraFrontId, 'sportBandAttach', sportBraBandId, 'bandAttachFront', true)
+    push3DOrientedSeam('sportBand_back', sportBraBackId, 'sportBandAttach', sportBraBandId, 'bandAttachBack', false)
+    push3DOrientedSeam('sportBand_close', sportBraBandId, 'bandEndBack', sportBraBandId, 'bandEndFront', true)
+  }
 
   // Sew 18 cup-bra designs (`wb01..gb10`) that declare no seam edges:
   // connect Center Bridge <-> R/L Cups <-> R/L Back Bands <-> Back Closure & R/L Straps.
@@ -2530,37 +2657,16 @@ export function convertAppPattern(payload) {
         pushClaimedEdge(strapL.id, 'strapBack', 0, 1, 4)
       }
 
-      const pushOrientedBraSeam = (id, pAId, edgeA, pBId, edgeB, defaultRev = false) => {
-        const eA = edgeInstructions.find((e) => e.pieceId === pAId && e.edgeName === edgeA)
-        const eB = edgeInstructions.find((e) => e.pieceId === pBId && e.edgeName === edgeB)
-        if (!eA || !eB) return
-        let rev = defaultRev
-        const p3A = getPlaced3D(pAId), p3B = getPlaced3D(pBId)
-        if (p3A?.[eA.fromIdx] && p3A?.[eA.toIdx] && p3B?.[eB.fromIdx] && p3B?.[eB.toIdx]) {
-          const dSame = dist3(p3A[eA.fromIdx], p3B[eB.fromIdx]) + dist3(p3A[eA.toIdx], p3B[eB.toIdx])
-          const dRev = dist3(p3A[eA.fromIdx], p3B[eB.toIdx]) + dist3(p3A[eA.toIdx], p3B[eB.fromIdx])
-          rev = !(dSame + 0.01 < dRev)
-        } else {
-          const aPc = rawPieces.find((p) => p.id === pAId), bPc = rawPieces.find((p) => p.id === pBId)
-          if (aPc && bPc) {
-            const dyA = aPc.outline[eA.toIdx][1] - aPc.outline[eA.fromIdx][1]
-            const dyB = bPc.outline[eB.toIdx][1] - bPc.outline[eB.fromIdx][1]
-            if (Math.abs(dyA) > 0.2 && Math.abs(dyB) > 0.2) rev = dyA * dyB < 0
-          }
-        }
-        seamInstructions.push({ id, a: { piece: pAId, edge: edgeA }, b: { piece: pBId, edge: edgeB }, reverse: rev })
-      }
-
-      pushOrientedBraSeam('braBridge_R', bridgeP.id, 'bridgeRight', cupR.id, 'cupInner', true)
-      pushOrientedBraSeam('braBridge_L', bridgeP.id, 'bridgeLeft', cupL.id, 'cupInner', false)
-      pushOrientedBraSeam('braWing_R', cupR.id, 'cupWing', bandR.id, 'bandInner', true)
-      pushOrientedBraSeam('braWing_L', cupL.id, 'cupWing', bandL.id, 'bandInner', true)
-      pushOrientedBraSeam('braBackClose', bandR.id, 'bandBack', bandL.id, 'bandBack', true)
+      push3DOrientedSeam('braBridge_R', bridgeP.id, 'bridgeRight', cupR.id, 'cupInner', true)
+      push3DOrientedSeam('braBridge_L', bridgeP.id, 'bridgeLeft', cupL.id, 'cupInner', false)
+      push3DOrientedSeam('braWing_R', cupR.id, 'cupWing', bandR.id, 'bandInner', true)
+      push3DOrientedSeam('braWing_L', cupL.id, 'cupWing', bandL.id, 'bandInner', true)
+      push3DOrientedSeam('braBackClose', bandR.id, 'bandBack', bandL.id, 'bandBack', true)
       if (hasStraps) {
-        pushOrientedBraSeam('braStrapFront_R', cupR.id, 'cupApex', strapR.id, 'strapFront', false)
-        pushOrientedBraSeam('braStrapBack_R', bandR.id, 'bandStrap', strapR.id, 'strapBack', true)
-        pushOrientedBraSeam('braStrapFront_L', cupL.id, 'cupApex', strapL.id, 'strapFront', false)
-        pushOrientedBraSeam('braStrapBack_L', bandL.id, 'bandStrap', strapL.id, 'strapBack', true)
+        push3DOrientedSeam('braStrapFront_R', cupR.id, 'cupApex', strapR.id, 'strapFront', false)
+        push3DOrientedSeam('braStrapBack_R', bandR.id, 'bandStrap', strapR.id, 'strapBack', true)
+        push3DOrientedSeam('braStrapFront_L', cupL.id, 'cupApex', strapL.id, 'strapFront', false)
+        push3DOrientedSeam('braStrapBack_L', bandL.id, 'bandStrap', strapL.id, 'strapBack', true)
       }
     }
   }

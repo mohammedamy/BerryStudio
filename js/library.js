@@ -86,7 +86,8 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
     const chest = q(m.chest) * Math.max(1, flareF), waist = q(m.waist) * flareF, hips = q(m.hips) * flareF;
     const necklineDepth = opts.wrap ? 11 : Math.max(4, 6 + (1 - fitF) * 5);
     const pieces = [];
-    const suppression = fitF <= 0.9 ? 'princess' : (fitF >= 1.1 ? 'none' : 'darted');
+    const isFemale = opts.category === 'women' || opts.category === 'girls';
+    const suppression = (fitF <= 0.9 && isFemale) ? 'princess' : (fitF >= 1.1 ? 'none' : 'darted');
     const seamId = `${opts.id}Side`;
 
     if (opts.wrap) {
@@ -138,19 +139,30 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
           edges: [{ fromIdx: b.backSide.princessFromIdx, toIdx: b.backSide.princessToIdx, seamId: `${seamId}PrincessBack` }] },
       );
     } else {
-      const shoulderX = chest * 0.27;
-      const hemY = m.backLen + 20 + opts.hemBelowHip;
-      const front = plainBodicePanel(shoulderX, necklineDepth, chest + 3, m.backLen * 0.3, waist + 3, m.backLen, hips + 3, m.backLen + 20, hips + 3, hemY, opts.squareNeck);
-      const back = plainBodicePanel(shoulderX, necklineDepth * 0.45, chest + 2, m.backLen * 0.3, waist + 2, m.backLen, hips + 2, m.backLen + 20, hips + 2, hemY, false);
+      const shoulderX = chest * (opts.isTop && !(opts.sleeveLenF > 0) ? 0.235 : 0.27);
+      const isShortTop = opts.isTop && (opts.lengthF || 1) < 1.15;
+      const hemY = opts.isTop
+        ? Math.max(m.backLen * 0.84, m.backLen * (0.55 + 0.85 * (opts.lengthF || 0.9)))
+        : (m.backLen + 20 + opts.hemBelowHip);
+      const underarmY = m.backLen * (opts.isTop && !(opts.sleeveLenF > 0) ? 0.36 : 0.30);
+      const waistY = opts.isTop
+        ? Math.min(m.backLen * (isShortTop ? 0.90 : 0.96), hemY - Math.max(4, (hemY - underarmY) * 0.22))
+        : m.backLen;
+      const hipY = opts.isTop
+        ? waistY + Math.max(2.0, (hemY - waistY) * 0.58)
+        : (m.backLen + 20);
+      const front = plainBodicePanel(shoulderX, necklineDepth, chest + 3, underarmY, waist + 3, waistY, hips + 3, hipY, hips + 3, hemY, opts.squareNeck);
+      const back = plainBodicePanel(shoulderX, necklineDepth * 0.45, chest + 2, underarmY, waist + 2, waistY, hips + 2, hipY, hips + 2, hemY, false);
       const darts = suppression === 'darted';
+      const dartApexY = Math.max(underarmY + 2, waistY - Math.min(9, (waistY - underarmY) * 0.48));
       pieces.push(
         { key: 'front', name: { en: `${opts.nameEn} Front`, ar: `مقدمة ${opts.nameAr}` }, desc: { en: darts ? 'Center-front panel with a single waist dart.' : 'Center-front panel, deliberately un-darted for a relaxed cut.', ar: darts ? 'لوحة المقدمة مع بنسة خصر واحدة.' : 'لوحة المقدمة بدون بنسة عمدًا لقصة مريحة.' },
-          outline: front, darts: darts ? [[[waist * 0.55, m.backLen - 10], [waist * 0.55 - 1.6, m.backLen], [waist * 0.55 + 1.6, m.backLen]]] : [],
+          outline: front, darts: darts ? [[[waist * 0.55, dartApexY], [waist * 0.55 - 1.6, waistY], [waist * 0.55 + 1.6, waistY]]] : [],
           notches: [[front[front.chestIdx][0], front[front.chestIdx][1]]], grain: [[shoulderX * 0.5, 10], [shoulderX * 0.5, hemY - 10]],
           role: 'bodice-front-center', cutOnFold: true, chestEdgeIndices: [front.chestIdx],
           edges: [{ fromIdx: front.chestIdx, toIdx: front.chestIdx + 3, seamId: seamId }] },
         { key: 'back', name: { en: `${opts.nameEn} Back`, ar: `خلفية ${opts.nameAr}` }, desc: { en: darts ? 'Center-back panel with a single waist dart.' : 'Center-back panel, deliberately un-darted for a relaxed cut.', ar: darts ? 'لوحة الخلفية مع بنسة خصر واحدة.' : 'لوحة الخلفية بدون بنسة عمدًا لقصة مريحة.' },
-          outline: back, darts: darts ? [[[waist * 0.5, m.backLen - 10], [waist * 0.5 - 1.6, m.backLen], [waist * 0.5 + 1.6, m.backLen]]] : [],
+          outline: back, darts: darts ? [[[waist * 0.5, dartApexY], [waist * 0.5 - 1.6, waistY], [waist * 0.5 + 1.6, waistY]]] : [],
           notches: [[back[back.chestIdx][0], back[back.chestIdx][1]]], grain: [[shoulderX * 0.5, 10], [shoulderX * 0.5, hemY - 10]],
           role: 'bodice-back-center', cutOnFold: true, chestEdgeIndices: [back.chestIdx],
           edges: [{ fromIdx: back.chestIdx, toIdx: back.chestIdx + 3, seamId: seamId }] },
@@ -574,7 +586,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         ar: `${e.name.ar}: باترون حقيقي مُصمَّم فرديًا (راجع تعليق js/library.js لقواعد اختيار الإنشاء). السماحية والطول والاتساع مُدرَّجة من قياسات الجسم.`,
       },
       pieces: (m) => {
-        const opts = { id: e.id, nameEn: e.name.en, nameAr: e.name.ar, lengthF: s.lengthF, flareF: s.flareF, fitF: s.fitF, sleeveLenF: s.sleeveLenF, sleeveWideF: s.sleeveWideF, wrap, pleated, straight, circle, cargo, tie, squareNeck };
+        const opts = { id: e.id, category: e.category, isTop: s.type === 'top', nameEn: e.name.en, nameAr: e.name.ar, lengthF: s.lengthF, flareF: s.flareF, fitF: s.fitF, sleeveLenF: s.sleeveLenF, sleeveWideF: s.sleeveWideF, wrap, pleated, straight, circle, cargo, tie, squareNeck };
         if (s.type === 'dress' || s.type === 'top') {
           const hemBelowHip = s.type === 'dress' ? Math.max(20, m.height * 0.28 * s.lengthF) : Math.max(4, m.backLen * 0.35 * s.lengthF);
           return bodiceFamily(m, { ...opts, hemBelowHip });

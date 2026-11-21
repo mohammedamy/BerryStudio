@@ -353,10 +353,10 @@ export const PATTERN_LOOKBOOK_STYLES = {
   b16: { primaryColor: "#c9b293", fabric: "cotton" },
   b17: {
     primaryColor: "#27334b", secondaryColor: "#f4f5f7",
-    partColors: { bodice: "#f4f5f7", sleeve: "#f4f5f7", outer: "#27334b" },
+    partColors: { bodice: "#27334b", sleeve: "#f4f5f7", outer: "#27334b" },
     fabric: "scuba",
     silhouette: {
-      outerLayer: { enabled: true, style: "vest", openFront: false, color: "#27334b", fabric: "scuba", innerColor: "#f4f5f7", innerNeckline: "round", lengthStyle: "hip" },
+      outerLayer: { enabled: true, style: "vest", openFront: true, color: "#27334b", fabric: "scuba", innerColor: "#f4f5f7", innerNeckline: "round", lengthStyle: "hip" },
     },
     accessories: { zipper: { enabled: true, style: "matte_black", placement: "center_front", openPct: 0.1 } },
   },
@@ -1097,8 +1097,8 @@ export const PATTERN_LOOKBOOK_STYLES = {
     silhouette: { style: "bra", bra: { style: "bandeau", cupDepthF: 0.4, longline: false, strapStyle: "none", wideStrap: false, bow: false } },
   },
   wb09: {
-    primaryColor: "#1449a3", trimColor: "#1449a3",
-    partColors: { bodice: "#1449a3", trim: "#1449a3" },
+    primaryColor: "#1449a3", trimColor: "#1e293b",
+    partColors: { bodice: "#1449a3", trim: "#1e293b" },
     fabric: "scuba",
     silhouette: { style: "bra", bra: { style: "sport", cupDepthF: 0.95, longline: false, strapStyle: "racerback", wideStrap: true, bow: false } },
   },

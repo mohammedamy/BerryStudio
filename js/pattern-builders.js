@@ -424,7 +424,7 @@ export function plainBodicePanel(shoulderX, necklineY, chestX, underarmY, waistX
     : [[0, necklineY], [shoulderX * 0.5, necklineY - 2], shoulderPt];
   const neckPts = qBez(...neckSeg, 5);
   const underarmPt = [chestX, underarmY];
-  const armSeg = [shoulderPt, [shoulderX + (chestX - shoulderX) * 0.6, topY + underarmY * 0.12], underarmPt];
+  const armSeg = [shoulderPt, [shoulderX + (chestX - shoulderX) * 0.48, topY + 0.6], underarmPt];
   const armPts = qBez(...armSeg, 6);
   const outline = [[0, necklineY], ...neckPts, ...armPts, [waistX, waistY], [hipX, hipY], [hemX, hemY], [0, hemY]];
   const neckOff = neckPts.length; // shoulderPt index (qBez omits p0 and ends at shoulderPt)

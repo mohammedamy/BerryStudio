@@ -112,7 +112,9 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
   // copy — see pieceOffset above), so there's no seam-boundary ambiguity to
   // resolve: a render vertex always belongs to exactly one piece.
   const renderColor = new Float32Array(renderVertexCount * 3)
-  const renderTriangles = new Uint32Array(triangulatedPieces.reduce((n, tp) => n + tp.triangles.length, 0))
+  const totalTriIndices = triangulatedPieces.reduce((n, tp) => n + tp.triangles.length, 0)
+  const renderTriangles = new Uint32Array(totalTriIndices)
+  const renderTriPieceIdx = new Uint16Array(Math.floor(totalTriIndices / 3))
   // Rest-state area share (m²) per sim particle — 1/3 of every incident
   // triangle's flat 2D pattern-space area (not the placed 3D area: mass is a
   // property of the physical fabric piece, and shouldn't depend on the
@@ -126,7 +128,8 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
   const simRestNormal = new Float32Array(simParticleCount * 3)
   let triWriteOffset = 0
 
-  for (const tp of triangulatedPieces) {
+  for (let pieceIdx = 0; pieceIdx < triangulatedPieces.length; pieceIdx++) {
+    const tp = triangulatedPieces[pieceIdx]
     const offset = pieceOffset[tp.pieceId]
     const positions3D = placePiece(tp, dims, pose)
     const [cr, cg, cb] = hexToLinearRGB(tp.color)
@@ -149,6 +152,9 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
       renderUV[g * 2 + 1] = tp.positions2D[localIdx][1] / UV_REPEAT_CM
     })
     for (let i = 0; i < tp.triangles.length; i++) renderTriangles[triWriteOffset + i] = tp.triangles[i] + offset
+    const triStart = Math.floor(triWriteOffset / 3)
+    const triCount = Math.floor(tp.triangles.length / 3)
+    renderTriPieceIdx.fill(pieceIdx, triStart, triStart + triCount)
     triWriteOffset += tp.triangles.length
 
     for (let t = 0; t < tp.triangles.length; t += 3) {
@@ -194,6 +200,7 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
   return {
     simParticleCount, simRestPositions, simRestNormal, simAreaShare,
     renderVertexCount, renderVertexToSimParticle, renderUV, renderColor, renderTriangles,
+    renderTriPieceIdx, isGarmentAssembly: true,
     weldDegree, pieceOffset,
   }
 }
@@ -206,10 +213,10 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
 // triangle edge; "bend" connects the two off-edge vertices of each pair of
 // triangles sharing an edge (the standard fold/hinge constraint).
 export function deriveNeighbors(cloth, maxNeighbors = 8) {
-  const { renderTriangles, renderVertexToSimParticle, simParticleCount, simRestPositions } = cloth
+  const { renderTriangles, renderVertexToSimParticle, simParticleCount, simRestPositions, renderTriPieceIdx, isGarmentAssembly } = cloth
 
   const structuralSets = Array.from({ length: simParticleCount }, () => new Set())
-  const edgeOpposite = new Map() // "a_b" (a<b) -> [opposite vertex, ...]
+  const edgeEntries = new Map() // "a_b" (a<b) -> [{ a, b, opp, pieceIdx }, ...]
 
   for (let t = 0; t < renderTriangles.length; t += 3) {
     const tri = [
@@ -217,36 +224,62 @@ export function deriveNeighbors(cloth, maxNeighbors = 8) {
       renderVertexToSimParticle[renderTriangles[t + 1]],
       renderVertexToSimParticle[renderTriangles[t + 2]],
     ]
+    const pieceIdx = renderTriPieceIdx ? renderTriPieceIdx[Math.floor(t / 3)] : 0
     for (let e = 0; e < 3; e++) {
       const v0 = tri[e], v1 = tri[(e + 1) % 3], opp = tri[(e + 2) % 3]
       if (v0 === v1) continue // degenerate after welding — shouldn't occur, skip defensively
       structuralSets[v0].add(v1)
       structuralSets[v1].add(v0)
       const key = v0 < v1 ? `${v0}_${v1}` : `${v1}_${v0}`
-      if (!edgeOpposite.has(key)) edgeOpposite.set(key, [])
-      edgeOpposite.get(key).push(opp)
+      if (!edgeEntries.has(key)) edgeEntries.set(key, [])
+      edgeEntries.get(key).push({ a: v0, b: v1, opp, pieceIdx })
     }
   }
 
   const bendSets = Array.from({ length: simParticleCount }, () => new Set())
-  // WP-35: alongside the existing wing-to-wing distance pairs (bendSets,
-  // feeding the default distance-based bend spring, unchanged below), also
-  // record which SHARED EDGE (v0,v1) produced each pair — the true
-  // dihedral-angle bend constraint (dihedralBend.js) needs both edge
-  // endpoints, not just the opposite corner, to measure the actual angle
-  // between the two triangles. Keyed by the "c" side of each pair so
-  // packHinges below can look it up per (particle, neighbor) slot exactly
-  // the way packNeighbors already does for idx/rest.
-  const hingeEdgeFor = new Map() // "c_d" -> [v0, v1]
-  for (const [key, opps] of edgeOpposite.entries()) {
-    if (opps.length < 2) continue // boundary edge — only one triangle, no fold to resist
-    const [c, d] = opps
-    if (c === d) continue
+  const posOf = (idx) => [simRestPositions[idx * 3], simRestPositions[idx * 3 + 1], simRestPositions[idx * 3 + 2]]
+  const cross3 = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
+  const dot3 = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
+  const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+
+  const hingeForWingPair = new Map() // "c_d" -> canonical hinge record
+  const hingeForEdge = new Map()     // "min_max" -> canonical hinge record
+  for (const [key, entries] of edgeEntries.entries()) {
+    if (entries.length !== 2) continue // boundary or non-manifold T-junction — no clean fold hinge
+    const [e1, e2] = entries
+    if (e1.opp === e2.opp) continue
+    const c = Math.min(e1.opp, e2.opp)
+    const d = Math.max(e1.opp, e2.opp)
+    const tC = c === e1.opp ? e1 : e2
+    const tD = c === e1.opp ? e2 : e1
+    const p1 = tC.a, p2 = tC.b
+
+    const pt1 = posOf(p1), pt2 = posOf(p2), ptC = posOf(c), ptD = posOf(d)
+    const edgeVec = sub3(pt2, pt1)
+    if (Math.hypot(...edgeVec) < 1e-6) continue
+    const n1r = cross3(edgeVec, sub3(ptC, pt1))
+    const n2r = cross3(sub3(pt1, pt2), sub3(ptD, pt1))
+    if (Math.hypot(...n1r) < 1e-8 || Math.hypot(...n2r) < 1e-8) continue
+
+    const isCrossPiece = Boolean(isGarmentAssembly && renderTriPieceIdx && tC.pieceIdx !== tD.pieceIdx)
+    const n2Sign = isCrossPiece
+      ? (dot3(n1r, n2r) < 0 ? -1 : 1)
+      : ((tD.a === p2 && tD.b === p1) ? 1 : -1)
+    const seamScale = isCrossPiece ? 0.35 : 1.0
+
+    let canonRest = 0.0
+    if (!isGarmentAssembly) {
+      const measured = dihedralAngle(pt1, pt2, ptC, ptD)
+      if (measured === null) continue
+      canonRest = measured
+    }
+
     bendSets[c].add(d)
     bendSets[d].add(c)
-    const [v0, v1] = key.split('_').map(Number)
-    hingeEdgeFor.set(`${c}_${d}`, [v0, v1])
-    hingeEdgeFor.set(`${d}_${c}`, [v0, v1])
+    const rec = { p1, p2, c, d, n2Sign, seamScale, canonRest }
+    hingeForWingPair.set(`${c}_${d}`, rec)
+    hingeForWingPair.set(`${d}_${c}`, rec)
+    hingeForEdge.set(key, rec)
   }
 
   const dist = (a, b) => Math.hypot(
@@ -268,53 +301,90 @@ export function deriveNeighbors(cloth, maxNeighbors = 8) {
     return { idx, rest }
   }
 
-  // WP-35: same particle/slot layout packNeighbors(bendSets) uses — SAME
-  // sort, SAME slice, SAME slot index k per neighbor — so the GLSL shader
-  // can read "my k-th bend neighbor"'s index from bend's own nbrA/B texture
-  // and its hinge data (edge endpoints + rest angle) from this one at that
-  // EXACT same slot, with no separate idx texture of its own needed. This
-  // must never skip-and-reindex: an earlier version incremented its output
-  // slot only on success, which would silently shift every hinge after the
-  // first degenerate one down by one slot relative to bend's own idx —
-  // pairing particle N's edge/angle data with particle N+1's neighbor
-  // index. A degenerate hinge (dihedralAngle returns null — e.g. a
-  // zero-length edge from bad topology) instead writes idx=-1 at its OWN
-  // slot k, same "not present" sentinel packNeighbors already uses,
-  // leaving every later slot's alignment untouched. The plain `bend` list
-  // above is built independently and never filtered this way, so the
-  // default distance-based path is completely unaffected by a degeneracy
-  // only the new tier cares about.
-  function packHinges(sets) {
+  const structural = packNeighbors(structuralSets)
+  const bend = packNeighbors(bendSets)
+
+  // Fast 4-way slot completeness check: only activate a 4-vertex momentum-conserving
+  // hinge if p1, p2, c, and d all retain their corresponding slot within `maxNeighbors`.
+  const structSlotSet = new Set()
+  const bendSlotSet = new Set()
+  for (let p = 0; p < simParticleCount; p++) {
+    for (let k = 0; k < maxNeighbors; k++) {
+      const sn = structural.idx[p * maxNeighbors + k]
+      if (sn >= 0) structSlotSet.add(`${p}_${sn}`)
+      const bn = bend.idx[p * maxNeighbors + k]
+      if (bn >= 0) bendSlotSet.add(`${p}_${bn}`)
+    }
+  }
+  const hasAll4Slots = (rec) => (
+    bendSlotSet.has(`${rec.c}_${rec.d}`) &&
+    bendSlotSet.has(`${rec.d}_${rec.c}`) &&
+    structSlotSet.has(`${rec.p1}_${rec.p2}`) &&
+    structSlotSet.has(`${rec.p2}_${rec.p1}`)
+  )
+
+  function packHinges() {
     const idx = new Int32Array(simParticleCount * maxNeighbors).fill(-1)
     const edgeV0 = new Int32Array(simParticleCount * maxNeighbors).fill(-1)
     const edgeV1 = new Int32Array(simParticleCount * maxNeighbors).fill(-1)
     const restAngle = new Float32Array(simParticleCount * maxNeighbors)
+    const n2Sign = new Int8Array(simParticleCount * maxNeighbors).fill(1)
+    const seamScale = new Float32Array(simParticleCount * maxNeighbors).fill(1)
+    const active = new Uint8Array(simParticleCount * maxNeighbors)
+
     for (let p = 0; p < simParticleCount; p++) {
-      const neighbors = [...sets[p]].map((n) => [n, dist(p, n)]).sort((a, b) => a[1] - b[1]).slice(0, maxNeighbors)
-      neighbors.forEach(([n], k) => {
+      for (let k = 0; k < maxNeighbors; k++) {
         const slot = p * maxNeighbors + k
-        const edge = hingeEdgeFor.get(`${p}_${n}`)
-        if (!edge) return // should not happen — bendSets is derived from the same edgeOpposite map
-        const [v0, v1] = edge
-        const p1 = [simRestPositions[v0 * 3], simRestPositions[v0 * 3 + 1], simRestPositions[v0 * 3 + 2]]
-        const p2 = [simRestPositions[v1 * 3], simRestPositions[v1 * 3 + 1], simRestPositions[v1 * 3 + 2]]
-        const p3 = [simRestPositions[p * 3], simRestPositions[p * 3 + 1], simRestPositions[p * 3 + 2]]
-        const p4 = [simRestPositions[n * 3], simRestPositions[n * 3 + 1], simRestPositions[n * 3 + 2]]
-        const angle = dihedralAngle(p1, p2, p3, p4)
-        if (angle === null) return // degenerate at rest — leave idx=-1 at THIS slot, don't invent an angle
+        const n = bend.idx[slot]
+        if (n < 0) continue
+        const rec = hingeForWingPair.get(`${p}_${n}`)
+        if (!rec) continue
         idx[slot] = n
-        edgeV0[slot] = v0
-        edgeV1[slot] = v1
-        restAngle[slot] = angle
-      })
+        edgeV0[slot] = rec.p1
+        edgeV1[slot] = rec.p2
+        restAngle[slot] = p === rec.c ? rec.canonRest : (isGarmentAssembly ? 0.0 : -rec.canonRest)
+        n2Sign[slot] = rec.n2Sign
+        seamScale[slot] = rec.seamScale
+        active[slot] = hasAll4Slots(rec) ? 1 : 0
+      }
     }
-    return { idx, edgeV0, edgeV1, restAngle }
+    return { idx, edgeV0, edgeV1, restAngle, n2Sign, seamScale, active }
+  }
+
+  function packEdgeHinges() {
+    const wingC = new Int32Array(simParticleCount * maxNeighbors).fill(-1)
+    const wingD = new Int32Array(simParticleCount * maxNeighbors).fill(-1)
+    const meIsP1 = new Uint8Array(simParticleCount * maxNeighbors)
+    const n2Sign = new Int8Array(simParticleCount * maxNeighbors).fill(1)
+    const seamScale = new Float32Array(simParticleCount * maxNeighbors).fill(1)
+    const restAngle = new Float32Array(simParticleCount * maxNeighbors)
+    const active = new Uint8Array(simParticleCount * maxNeighbors)
+
+    for (let p = 0; p < simParticleCount; p++) {
+      for (let k = 0; k < maxNeighbors; k++) {
+        const slot = p * maxNeighbors + k
+        const n = structural.idx[slot]
+        if (n < 0) continue
+        const key = p < n ? `${p}_${n}` : `${n}_${p}`
+        const rec = hingeForEdge.get(key)
+        if (!rec || !hasAll4Slots(rec)) continue
+        wingC[slot] = rec.c
+        wingD[slot] = rec.d
+        meIsP1[slot] = p === rec.p1 ? 1 : 0
+        n2Sign[slot] = rec.n2Sign
+        seamScale[slot] = rec.seamScale
+        restAngle[slot] = rec.canonRest
+        active[slot] = 1
+      }
+    }
+    return { wingC, wingD, meIsP1, n2Sign, seamScale, restAngle, active }
   }
 
   return {
-    structural: packNeighbors(structuralSets),
-    bend: packNeighbors(bendSets),
-    bendHinge: packHinges(bendSets),
+    structural,
+    bend,
+    bendHinge: packHinges(),
+    edgeHinge: packEdgeHinges(),
     maxNeighbors,
   }
 }

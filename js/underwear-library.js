@@ -147,79 +147,78 @@ import { q, PATTERNS, LIBRARY } from './data.js';
   function briefPanel(qw, qh, front, opts) {
     const rise = RISE_CM[opts.rise] || RISE_CM.mid;
     const legF = LEG_F[opts.legCut] || LEG_F.full;
-    const coverage = opts.coverage || 1.0;
     const legLength = opts.legLength || 0; // >0 = boxer-brief/trunk hem extension down the thigh
 
+    const qScale = qh / 24;
     const isLegStyle = legLength > 0 || opts.legCut === "boyshort";
     const riseBlend = opts.rise === "low" ? 0.45 : opts.rise === "mid" ? 0.24 : 0.04;
     const topQ = qw + (qh - qw) * riseBlend;
-    const waistX = topQ * (front ? 0.78 : 0.84);
-    const boyshortExt = opts.legCut === "boyshort" ? qh * 0.18 : 0;
-    const sideDX = Math.max(1.2, (qh * 0.84 - topQ * 0.81) * 0.90);
-    const sideDY = isLegStyle ? (rise * 0.46 + legLength * 0.92 + boyshortExt) : (rise * 0.42); // shared side-seam vector, front == back
-    const cornerX = waistX + sideDX, cornerY = 1.2 + sideDY;
-    const hipX = cornerX + 0.30;
-    const crotchDepth = isLegStyle ? Math.max(2.6, qh * 0.14) : Math.max(4.2, qh * 0.36 * legF);
-    const crotchY = cornerY + crotchDepth + (front ? 0 : 1.6);
+    const waistX = topQ * (front ? 0.88 : 0.94);
+    const sideDX = Math.max(1.0, (qh * 0.92 - topQ * 0.91) * 0.90);
+
+    if (isLegStyle) {
+      const legExt = legLength > 0 ? legLength : 4.5;
+      const waistDropY = 1.2 * qScale;
+      const inseamH = Math.max(3.8, (legLength > 0 ? legLength * 0.56 : 3.8) * qScale);
+      const sideDY = Math.max(rise * 0.44 * qScale + inseamH + 1.8 * qScale, (rise * 0.48 + legExt) * qScale); // shared outer thigh side-seam vector
+      const cornerX = waistX + sideDX, hemY = waistDropY + sideDY;
+      const crotchX = Math.max(2.1, qh * 0.125);
+      const inseamHemX = Math.max(crotchX + 2.1, qh * 0.21);
+      const crotchY = hemY - inseamH - (front ? 0.65 * qScale : 0);
+      const midHemX = 0.5 * (cornerX + inseamHemX);
+
+      const waistSeg = [[0, 0], [waistX * 0.55, -1.0 * qScale], [waistX, waistDropY]];
+      const legRise = hemY - crotchY;
+      const inseamCtrlX = crotchX + (inseamHemX - crotchX) * (front ? 0.52 : 0.68);
+      const inseamSeg = [[inseamHemX, hemY], [inseamCtrlX, crotchY + legRise * 0.28], [crotchX, crotchY]];
+
+      const outline = [
+        [0, 0],
+        ...qBez(...waistSeg, 6),
+        [cornerX, hemY],
+        [midHemX, hemY],
+        [inseamHemX, hemY],
+        ...qBez(...inseamSeg, 4),
+        [0, crotchY],
+      ];
+      withCurves(outline, [
+        { fromIdx: 0, toIdx: 6, ...qBezToCubic(...waistSeg) },
+        { fromIdx: 9, toIdx: 13, ...qBezToCubic(...inseamSeg) },
+      ]);
+      outline.edges = [{ fromIdx: 6, toIdx: 7, seamId: 'briefSide' }];
+      outline.notches = [[cornerX, hemY]];
+      outline.sideEndIdx = 6;
+      return outline;
+    }
+
+    const waistDropY = 1.2 * qScale;
+    const sideDY = rise * 0.44 * qScale; // shared side-seam vector, front == back
+    const cornerX = waistX + sideDX, cornerY = waistDropY + sideDY;
+    const crotchDepth = Math.max(4.2, qh * 0.38 * legF);
+    const crotchY = cornerY + crotchDepth + (front ? 0 : 1.5 * qScale);
     const crotchX = qh * 0.135;
 
-    const waistSeg = [[0, 0], [waistX * 0.55, -1.2], [waistX, 1.2]];
-    const legSeg = isLegStyle
-      ? [[hipX, cornerY], [hipX * 0.54, cornerY + (crotchY - cornerY) * 0.62], [crotchX, crotchY]]
-      : [[hipX, cornerY], [hipX * 0.46, cornerY + (crotchY - cornerY) * 0.44], [crotchX, crotchY]];
+    const waistSeg = [[0, 0], [waistX * 0.55, -1.0 * qScale], [waistX, waistDropY]];
+    const legCtrlX = crotchX + (cornerX - crotchX) * (front ? 0.26 : 0.58);
+    const legCtrlY = cornerY + (crotchY - cornerY) * (front ? 0.56 : 0.48);
+    const legSeg = [[cornerX, cornerY], [legCtrlX, legCtrlY], [crotchX, crotchY]];
 
     const outline = [
       [0, 0],
       ...qBez(...waistSeg, 6),
       [cornerX, cornerY],
-      [hipX, cornerY],
-      ...qBez(...legSeg, 7),
+      ...qBez(...legSeg, 8),
       [0, crotchY],
     ];
     withCurves(outline, [
       { fromIdx: 0, toIdx: 6, ...qBezToCubic(...waistSeg) },
-      { fromIdx: 8, toIdx: 15, ...qBezToCubic(...legSeg) },
+      { fromIdx: 7, toIdx: 15, ...qBezToCubic(...legSeg) },
     ]);
     outline.edges = [{ fromIdx: 6, toIdx: 7, seamId: 'briefSide' }];
-    // WP-44: a single side-seam notch at the corner itself (index 7 — the
-    // real declared `briefSide` edge's own far end) — a real, common
-    // brief-construction notch marking where front and back meet at the
-    // side, placed on the one seam this panel actually shares with its
-    // pair. Front/back each get their own literal [cornerX, cornerY], not
-    // a shared literal — cornerX differs slightly front vs back (translated
-    // by each side's own waistX, per the WP-58 comment above), but both
-    // notches sit exactly at their own seam's toIdx endpoint, so
-    // checkNotchAlignment's seam-relative arc position matches by
-    // construction regardless.
     outline.notches = [[cornerX, cornerY]];
-    // BerryStudio-Upgrade-Plan-v5.md WP-45: cloth-lab's importer, with no
-    // sideEndIdx hint, auto-derives its own geometric 'rightSide'/
-    // 'leftSide' claim running all the way from just past the waist (index
-    // 1) down to the piece's own lowest point (the crotch/leg-opening
-    // corner) — which fully SWALLOWS this outline's own declared
-    // `briefSide` edge (index 6-7) rather than sharing a boundary with it,
-    // confirmed by direct reproduction: cloth-lab/src/pattern/
-    // importFromApp.underwear.test.js threw `"seamId_briefSide" overlaps
-    // existing edge "rightSide" at point 6` on all 24 brief/trunk patterns
-    // before this fix, not a hypothetical. `sideEndIdx` (the same
-    // mechanism WP-64/65 already added for exactly this class of
-    // collision elsewhere) narrows where that auto-derived claim ENDS to
-    // index 6 — exactly where `briefSide` begins — so the two no longer
-    // compete for the same points. Structural, not a per-call value: the
-    // waist curve is always exactly 6 qBez samples regardless of front/
-    // back or any opts, so index 6 is always the real waist-curve/corner
-    // boundary here.
     outline.sideEndIdx = 6;
     return outline;
   }
-  // WP-44: deliberately no `chestEdgeIndices` anywhere in this function —
-  // a brief has no chest dimension at all (it's a waist/hip garment), so
-  // `checkEase`'s implied-full-chest math has nothing honest to measure
-  // here; every piece correctly reports ease as "not applicable" rather
-  // than a fabricated pass. Not a coverage gap to close, an architectural
-  // non-fit — same category as the hand-imported/princess-seamed/
-  // asymmetric-wrap exclusions `checkEase`'s own module comment already
-  // documents.
   function briefPieces(m, opts) {
     const qw = q(m.waist), qh = q(m.hips);
     const front = briefPanel(qw, qh, true, opts);
@@ -227,78 +226,79 @@ import { q, PATTERNS, LIBRARY } from './data.js';
     const frontLen = front[front.length - 1][1], backLen = back[back.length - 1][1];
     const riseBlend = opts.rise === "low" ? 0.45 : opts.rise === "mid" ? 0.24 : 0.04;
     const topQ = qw + (qh - qw) * riseBlend;
-    const gW = qh * 0.27, gH = Math.max(6.2, qh * 0.34);
+    const qScale = qh / 24;
+    const isLegStyle = (opts.legLength || 0) > 0 || opts.legCut === "boyshort";
+    const gW = Math.max(4.6, qh * 0.26), gH = Math.max(5.8, qh * 0.34);
     const polyArc = (pts, a, b) => {
       let sum = 0;
       for (let i = a; i < b; i++) sum += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
       return sum;
     };
-    const waistCirc = Math.round(topQ * 3.24 * 10) / 10; // finished elastic waist, relaxed-to-stretched allowance
-    const legCirc = Math.round(((polyArc(front, 7, 15) + polyArc(back, 7, 15)) * 0.96) * 10) / 10;
+    const waistCirc = Math.round(topQ * 3.55 * 10) / 10; // finished elastic waist (-10% negative stretch ease)
+    const legCirc = isLegStyle
+      ? Math.round(((polyArc(front, 7, 9) + polyArc(back, 7, 9)) * 2 * 0.94) * 10) / 10
+      : Math.round(((polyArc(front, 7, 15) + polyArc(back, 7, 15)) * 0.94) * 10) / 10;
 
     const pieces = [
-      // WP-58: grain used to be fixed cm points (y:4 to y:frontLen-4) —
-      // for the shortest real style combination (low rise + bikini leg
-      // cut, e.g. gu03), `frontLen` itself comes out under 8cm, so the
-      // 2nd point landed ABOVE the 1st — the exact same "reads as 180°,
-      // not 0°" symptom WP-57 already fixed on the bra Center Bridge
-      // piece, same fix: proportional to the piece's own length instead
-      // of a fixed cm margin.
-      { key: "front", name: opts.frontName || { en: "Front Panel", ar: "القطعة الأمامية" },
-        desc: opts.frontDesc || { en: "Front panel with a curved waist edge and a curved leg opening.", ar: "قطعة أمامية بحافة خصر منحنية وفتحة ساق منحنية." },
+      {
+        key: "front", name: opts.frontName || { en: "Front Panel", ar: "القطعة الأمامية" },
+        desc: opts.frontDesc || { en: "Front panel with a curved waist edge and contoured leg cut.", ar: "قطعة أمامية بحافة خصر منحنية وقصة ساق مجسمة." },
         outline: front, role: "brief-front", cutOnFold: true, edges: front.edges, sideEndIdx: front.sideEndIdx, notches: front.notches,
-        grain: [[qw * 0.15, frontLen * 0.2], [qw * 0.15, frontLen * 0.85]] },
+        grain: [[qw * 0.15, Math.max(1.5, frontLen * 0.2)], [qw * 0.15, Math.min(frontLen - 1.2, frontLen * 0.82)]] },
       { key: "back", name: opts.backName || { en: "Back Panel", ar: "القطعة الخلفية" },
-        desc: opts.backDesc || { en: "Back panel, cut higher at the waist and deeper at the crotch than the front for real seat coverage.", ar: "قطعة خلفية أعلى عند الخصر وأعمق عند خط الجسم من الأمامية لتغطية حقيقية للمقعد." },
+        desc: opts.backDesc || { en: "Back panel shaped for full anatomical seat coverage.", ar: "قطعة خلفية مصممة لتغطية مريحة وكاملة للمقعد." },
         outline: back, role: "brief-back", cutOnFold: true, edges: back.edges, sideEndIdx: back.sideEndIdx, notches: back.notches,
-        grain: [[qw * 0.15, backLen * 0.2], [qw * 0.15, backLen * 0.85]] },
+        grain: [[qw * 0.15, Math.max(1.5, backLen * 0.2)], [qw * 0.15, Math.min(backLen - 1.2, backLen * 0.82)]] },
       { key: "gusset", name: opts.gussetName || { en: "Crotch Gusset", ar: "دكة الجسم" },
         desc: opts.gussetDesc || { en: "Curved cotton-lining gusset seamed into the crotch, cut on the fold.", ar: "دكة قطنية منحنية تُخاط عند خط الجسم، تُقص على الطية." },
         outline: gussetOval(gW, gH), notches: [[gW / 2, gH / 2]], role: "gusset", cutOnFold: true,
-        grain: [[gW / 4, 2], [gW / 4, gH - 2]] },
+        grain: [[gW / 4, 1.5 * qScale], [gW / 4, gH - 1.5 * qScale]] },
       { key: "gussetLining", name: opts.gussetLiningName || { en: "Gusset Lining", ar: "بطانة الدكة" },
         desc: opts.gussetLiningDesc || { en: "Second gusset layer for opacity and comfort, cut on the fold.", ar: "طبقة ثانية للدكة لمزيد من التغطية والراحة، تُقص على الطية." },
         outline: gussetOval(gW, gH), notches: [[gW / 2, gH / 2]], role: "lining", cutOnFold: true,
-        grain: [[gW / 4, 2], [gW / 4, gH - 2]] },
+        grain: [[gW / 4, 1.5 * qScale], [gW / 4, gH - 1.5 * qScale]] },
       { key: "waistElastic", name: opts.waistElasticName || { en: "Waist Elastic", ar: "أستك الخصر" },
         desc: opts.waistElasticDesc || { en: "Soft knit elastic stitched to the waist edge.", ar: "أستك ناعم يُخاط على حافة الخصر." },
-        outline: elasticStrip(waistCirc), notches: [[waistCirc, 0]], role: "elastic-band",
-        grain: [[waistCirc / 2, 0.6], [waistCirc / 2, 1.6]] },
-      { key: "legElastic", name: opts.legElasticName || { en: "Leg Elastic", ar: "أستك فتحة الساق" },
-        desc: opts.legElasticDesc || { en: "Soft knit elastic stitched to each leg opening.", ar: "أستك ناعم يُخاط على كل فتحة ساق." },
-        outline: elasticStrip(legCirc, 1.6), notches: [[legCirc, 0]], role: "elastic-band", bilateral: true,
-        grain: [[legCirc / 2, 0.4], [legCirc / 2, 1.2]] },
+        outline: elasticStrip(waistCirc, Math.max(1.8, 2.4 * qScale)), notches: [[waistCirc, 0]], role: "elastic-band",
+        grain: [[waistCirc / 2, 0.5], [waistCirc / 2, Math.max(1.4, 2.0 * qScale)]] },
+      { key: "legElastic", name: opts.legElasticName || { en: isLegStyle ? "Thigh Hem Band" : "Leg Elastic", ar: isLegStyle ? "تشطيب حافة الفخذ" : "أستك فتحة الساق" },
+        desc: opts.legElasticDesc || { en: "Soft knit binding finishing each leg opening.", ar: "تشطيب مرن ناعم يحيط بكل فتحة ساق." },
+        outline: elasticStrip(legCirc, Math.max(1.4, 1.6 * qScale)), notches: [[legCirc, 0]], role: "elastic-band", bilateral: true,
+        grain: [[legCirc / 2, 0.4], [legCirc / 2, Math.max(1.0, 1.2 * qScale)]] },
     ];
     return pieces;
   }
 
   // ---------------- bras ----------------
-  // Single-piece soft/molded cup (curved top/neckline edge, curved
-  // side/armhole edge, curved bottom/band edge, straight inner edge against
-  // the bridge) — a real, common commercial construction (most bralettes
-  // and many everyday bras use exactly one visible cup panel), chosen over
-  // a hand-split 2-piece seamed cup specifically to keep every curve
-  // independently verifiable against self-intersection rather than relying
-  // on an unverified hand-derived split of a more complex shape. Style
-  // variety comes from real shape parameters, not a name change alone.
   function braCup(cupW, cupD, o) {
     o = o || {};
-    const innerTopY = cupD * (o.plunge ? 0.30 : 0.12);
-    const strapX = cupW * (o.wide ? 0.72 : 0.50);
-    const sideY = cupD * (o.high ? 0.30 : 0.46);
-    const sideCtrlX = o.triangle ? cupW * 1.0 : cupW * 1.08; // triangle: flatter side curve, less bowed out
-    const bandCtrlY = o.triangle ? cupD * 0.92 : cupD * 1.05;
+    const isBandeau = o.strap === "none" && (o.cupDepthF || 1) <= 0.5;
+    const innerTopY = cupD * (o.plunge ? 0.42 : (isBandeau ? 0.12 : (o.wide ? 0.22 : 0.16)));
+    const strapX = cupW * (isBandeau ? 0.66 : (o.wide ? 0.72 : 0.50));
+    const topOuterY = isBandeau ? cupD * 0.04 : -cupD * 0.06;
+    const sideY = cupD * (isBandeau ? 0.18 : (o.high ? 0.30 : (o.wide ? 0.36 : 0.44)));
+    const topCtrl = o.triangle
+      ? [cupW * 0.26, innerTopY * 0.46]
+      : o.plunge
+        ? [cupW * 0.25, innerTopY * 0.54]
+        : o.wide
+          ? [cupW * 0.38, cupD * 0.26]
+          : isBandeau
+            ? [cupW * 0.34, cupD * 0.06]
+            : [cupW * 0.35, -cupD * 0.04];
+    const sideCtrlX = o.triangle ? cupW * 0.90 : (isBandeau ? cupW * 0.98 : cupW * 1.06);
+    const bandCtrlY = o.triangle ? cupD * 0.90 : cupD * 1.06;
 
-    const topSeg = [[0, innerTopY], [cupW * 0.35, -cupD * 0.06], [strapX, -cupD * 0.08]];
-    const sideSeg = [[strapX, -cupD * 0.08], [sideCtrlX, cupD * 0.10], [cupW, sideY]];
-    const botSeg = [[cupW, sideY], [cupW * 0.55, bandCtrlY], [cupW * 0.32, cupD]];
+    const topSeg = [[0, innerTopY], topCtrl, [strapX, topOuterY]];
+    const sideSeg = [[strapX, topOuterY], [sideCtrlX, cupD * 0.12], [cupW, sideY]];
+    const botSeg = [[cupW, sideY], [cupW * 0.56, bandCtrlY], [cupW * 0.26, cupD]];
 
     const outline = [
       [0, innerTopY],
       ...qBez(...topSeg, 6),
       ...qBez(...sideSeg, 6),
       ...qBez(...botSeg, 7),
-      [0, cupD * 0.80],
+      [0, cupD * (isBandeau ? 0.92 : 0.84)],
     ];
     return withCurves(outline, [
       { fromIdx: 0, toIdx: 6, ...qBezToCubic(...topSeg) },
@@ -306,109 +306,141 @@ import { q, PATTERNS, LIBRARY } from './data.js';
       { fromIdx: 12, toIdx: 19, ...qBezToCubic(...botSeg) },
     ]);
   }
-  // Band/wing strip with one gently curved top edge (follows the underbust
-  // curve) and a straight bottom edge — same family used for the narrower
-  // center-front bridge/gore piece (just a smaller w/h).
-  function curvedBandPc(w, h, dip) {
-    dip = dip != null ? dip : h * 0.18;
-    const seg = [[0, 0], [w * 0.5, -dip], [w, 0]];
-    const outline = [[0, h], [0, 0], ...qBez(...seg, 6), [w, h]];
+  // Tapered band/wing strip (or level center bridge when outerH === innerH):
+  // keeps exact 9-vertex layout (0: bot-inner, 1: top-inner, 2..7: top underbust
+  // curve, 8: bot-outer).
+  function curvedBandPc(w, innerH, dip, outerH) {
+    outerH = outerH != null ? outerH : innerH;
+    dip = dip != null ? dip : innerH * 0.16;
+    const topEndY = Math.max(0, innerH - outerH);
+    const seg = [[0, 0], [w * 0.5, -dip + topEndY * 0.35], [w, topEndY]];
+    const outline = [[0, innerH], [0, 0], ...qBez(...seg, 6), [w, innerH]];
     return withCurves(outline, [{ fromIdx: 1, toIdx: 7, ...qBezToCubic(...seg) }]);
   }
   function strapPc(len, w) { return [[0, 0], [w, 0], [w, len], [0, len]]; }
 
   function braPieces(m, opts) {
     const chestW = q(m.chest);
-    const cupW = chestW * 0.34 * (opts.cupDepthF || 1);
-    const cupD = chestW * 0.42 * (opts.cupDepthF || 1);
-    const bandH = 5.5 * (opts.bandWidthF || 1) + (opts.longline ? 9 : 0);
+    const isBandeau = opts.strap === "none" && (opts.cupDepthF || 1) <= 0.5;
+    const wScale = Math.max(0.78, Math.min(1.12, opts.cupDepthF || 1));
+    const hScale = isBandeau ? 0.62 : Math.max(0.70, opts.cupDepthF || 1);
+    const cupW = chestW * 0.52 * wScale;
+    const cupD = chestW * 0.64 * hScale;
     const cup = braCup(cupW, cupD, opts);
-    const bridgeW = opts.plunge ? cupW * 0.18 : cupW * 0.30;
-    const bandW = chestW * 0.62 * (opts.bandWidthF || 1);
-    const bridgeOut = curvedBandPc(bridgeW, cupD * 0.55, cupD * 0.04);
-    const bandOut = curvedBandPc(bandW, bandH);
+    const cupDarts = (!opts.triangle && !isBandeau)
+      ? [[[cupW * 0.46, cupD * 0.48], [cupW * 0.40, cupD * 0.96], [cupW * 0.52, cupD * 0.96]]]
+      : [];
+
+    const bridgeW = opts.plunge ? chestW * 0.075 : chestW * 0.11;
+    const bridgeH = Math.max(cupD * 0.44, 4.2);
+    const bridgeOut = curvedBandPc(bridgeW, bridgeH, cupD * 0.03, bridgeH);
+
+    const bandH = (isBandeau ? cupD * 0.72 : 6.2 * (opts.bandWidthF || 1)) + (opts.longline ? chestW * 0.36 : 0);
+    const outerBandH = opts.longline ? bandH * 0.85 : bandH * 0.64;
+    const bandW = chestW * 0.88 + ((opts.bandWidthF || 1) - 1) * 1.8;
+    const bandOut = curvedBandPc(bandW, bandH, bandH * 0.12, outerBandH);
 
     const pieces = [
-      { key: "cup", name: { en: "Cup", ar: "الكأس" },
-        desc: { en: "Curved soft cup, seamed at the underarm, top, and band edges; straight along the inner edge against the bridge.", ar: "كأس ناعم منحنٍ، مخيط عند الإبط والأعلى وحافة الحزام؛ مستقيم عند الحافة الداخلية الملاصقة للجسر." },
-        outline: cup, notches: [cup[6], cup[12]], role: "cup", bilateral: true,
-        grain: [[cupW * 0.4, cupD * 0.1], [cupW * 0.4, cupD * 0.7]] },
+      {
+        key: "cup", name: { en: "Cup", ar: "الكأس" },
+        desc: { en: "Anatomically proportioned soft cup with lower shaping dart, meeting bridge and side wing.", ar: "كأس ناعم بقياسات تشريحية وبنسة تشكيل سفلية يتصل بالجسر والجناح الجانبي." },
+        outline: cup, darts: cupDarts, notches: [cup[6], cup[12]], role: "cup", bilateral: true,
+        grain: [[cupW * 0.40, cupD * 0.20], [cupW * 0.40, cupD * 0.76]] },
       { key: "bridge", name: { en: "Center Bridge", ar: "الجسر الأوسط" },
-        desc: { en: "Narrow center-front panel joining the two cups.", ar: "قطعة ضيقة في مقدمة الوسط تصل بين الكأسين." },
+        desc: { en: "Center-front gore joining the two cups.", ar: "قطعة الجسر الأمامي الوسطى تصل بين الكأسين." },
         outline: bridgeOut, notches: [bridgeOut[4]], role: "other", cutOnFold: true,
-        // WP-57 (docs/plan 4.md Phase 5): both grain points used to be
-        // fixed cm values (y:2 and y:cupD*0.4) sized for a full-depth
-        // adult cup. This piece's own height is `cupD * 0.55`, which for
-        // six real shallow-cup patterns (cupDepthF <= ~0.7 — wb08,
-        // gb01/02/05/06/10, mostly girls' training styles) is itself
-        // BELOW 2cm — so the 1st point already sat outside the piece,
-        // and for some of those six the 2nd point (cupD*0.4) landed
-        // above the 1st, which checkGrainline's atan2 reads as 180°
-        // rather than 0° (same vertical axis, but direction isn't
-        // normalized) — the reported "90° off cardinal" symptom. Real
-        // fix is proportional to this piece's own height, like the cup
-        // piece just above already does, not another fixed-cm patch —
-        // guarantees both points stay inside the piece and p2.y > p1.y
-        // (matching every other grain declaration in this file) at any
-        // size.
-        grain: [[bridgeW / 2, cupD * 0.55 * 0.2], [bridgeW / 2, cupD * 0.55 * 0.8]] },
+        grain: [[bridgeW / 2, bridgeH * 0.22], [bridgeW / 2, bridgeH * 0.78]] },
       { key: "band", name: { en: opts.longline ? "Longline Band" : "Band", ar: opts.longline ? "حزام ممتد" : "الحزام" },
-        desc: { en: "Band/wing panel from the cup side around to the center back, with a curved top edge following the underbust.", ar: "قطعة الحزام/الجانب من جانب الكأس حتى وسط الظهر، بحافة علوية منحنية تتبع أسفل الصدر." },
+        desc: { en: "Tapered underarm-to-back wing band following the ribcage line to the center back closure.", ar: "قطعة جناح الحزام المتدرجة من تحت الإبط حتى مشبك وسط الظهر." },
         outline: bandOut, notches: [bandOut[4]], role: "band", bilateral: true,
-        grain: [[bandW / 2, 1.5], [bandW / 2, bandH - 1.5]] },
+        grain: [[bandW * 0.5, bandH - outerBandH * 0.80], [bandW * 0.5, bandH - outerBandH * 0.20]] },
     ];
     if (opts.strap !== "none") {
       const sW = opts.wideStrap ? 2.6 : 1.6;
+      const strapLen = Math.round(m.backLen * (opts.strap === "racerback" ? 0.88 : (opts.longline ? 0.76 : 0.82)) * 10) / 10;
       pieces.push({ key: "strap", name: { en: "Strap", ar: "الحمالة" },
-        desc: { en: opts.strap === "racerback" ? "Racerback strap, angled in toward the center back." : "Adjustable shoulder strap.",
-                ar: opts.strap === "racerback" ? "حمالة رياضية بظهر متقاطع، مائلة نحو وسط الظهر." : "حمالة كتف قابلة للتعديل." },
-        outline: strapPc(opts.longline ? 14 : 18, sW), notches: [[sW, 0]], role: "strap", bilateral: true,
-        grain: [[sW / 2, 3], [sW / 2, (opts.longline ? 14 : 18) - 3]] });
+        desc: { en: opts.strap === "racerback" ? "Racerback shoulder strap angling toward the center back." : "Full over-shoulder adjustable strap.",
+                ar: opts.strap === "racerback" ? "حمالة كتف رياضية مائلة نحو وسط الظهر." : "حمالة كتف كاملة قابلة للتعديل." },
+        outline: strapPc(strapLen, sW), notches: [[sW, 0]], role: "strap", bilateral: true,
+        grain: [[sW / 2, 3], [sW / 2, strapLen - 3]] });
     }
     return pieces;
   }
 
-  // Sport bra: a genuinely different construction (front + back panel
-  // joined at the sides, elastic band at the bottom, no separate cups) —
-  // most real sport bras are drafted this way, not as a cup-based design.
-  function sportBraFront(chestW, depth) {
-    const seg1 = [[0, depth * 0.15], [chestW * 0.35, -depth * 0.05], [chestW * 0.75, depth * 0.10]];
-    const seg2 = [[chestW * 0.75, depth * 0.10], [chestW * 1.05, depth * 0.4], [chestW * 0.9, depth]];
-    const outline = [[0, depth * 0.15], ...qBez(...seg1, 6), ...qBez(...seg2, 6), [0, depth]];
-    return withCurves(outline, [
-      { fromIdx: 0, toIdx: 6, ...qBezToCubic(...seg1) },
-      { fromIdx: 6, toIdx: 12, ...qBezToCubic(...seg2) },
+  // Sport bra: sculpted compression front + Y-racerback panel joined cleanly
+  // at declared shoulder (`5..6`) and side (`11..12`) seams, finished with a
+  // full-circumference underbust elastic band (`bandCirc ≈ 0.80 * m.chest`).
+  function sportBraFront(bandW, depth) {
+    const neckW = bandW * 0.42;
+    const shW = Math.max(2.6, bandW * 0.18);
+    const scoopY = depth * 0.34;
+    const neckSeg = [[0, scoopY], [neckW * 0.65, scoopY * 0.92], [neckW, 0]];
+    const armSeg = [[neckW + shW, 1.4], [bandW * 0.78, depth * 0.44], [bandW, depth * 0.56]];
+    const outline = [
+      [0, scoopY],
+      ...qBez(...neckSeg, 5),
+      [neckW + shW, 1.4],
+      ...qBez(...armSeg, 5),
+      [bandW * 0.94, depth],
+      [0, depth],
+    ];
+    withCurves(outline, [
+      { fromIdx: 0, toIdx: 5, ...qBezToCubic(...neckSeg) },
+      { fromIdx: 6, toIdx: 11, ...qBezToCubic(...armSeg) },
     ]);
+    outline.edges = [
+      { fromIdx: 5, toIdx: 6, seamId: 'sportBraShoulder' },
+      { fromIdx: 11, toIdx: 12, seamId: 'sportBraSide' },
+    ];
+    outline.notches = [[bandW, depth * 0.56], [bandW * 0.94, depth]];
+    return outline;
   }
-  function sportBraBack(chestW, depth, racer) {
-    const topW = racer ? chestW * 0.18 : chestW * 0.55;
-    const seg1 = [[0, depth * 0.05], [topW * 0.5, -depth * 0.02], [topW, depth * 0.12]];
-    const seg2 = [[topW, depth * 0.12], [chestW * 1.0, depth * 0.35], [chestW * 0.88, depth]];
-    const outline = [[0, depth * 0.05], ...qBez(...seg1, 6), ...qBez(...seg2, 6), [0, depth]];
-    return withCurves(outline, [
-      { fromIdx: 0, toIdx: 6, ...qBezToCubic(...seg1) },
-      { fromIdx: 6, toIdx: 12, ...qBezToCubic(...seg2) },
+  function sportBraBack(bandW, depth, racer) {
+    const neckW = racer ? bandW * 0.32 : bandW * 0.42;
+    const shW = Math.max(2.6, bandW * 0.18);
+    const backNeckY = depth * 0.16;
+    const neckSeg = [[0, backNeckY], [neckW * 0.65, backNeckY * 0.88], [neckW, 0]];
+    const armCtrlX = racer ? bandW * 0.28 : bandW * 0.72;
+    const armSeg = [[neckW + shW, 1.4], [armCtrlX, depth * 0.44], [bandW, depth * 0.56]];
+    const outline = [
+      [0, backNeckY],
+      ...qBez(...neckSeg, 5),
+      [neckW + shW, 1.4],
+      ...qBez(...armSeg, 5),
+      [bandW * 0.94, depth],
+      [0, depth],
+    ];
+    withCurves(outline, [
+      { fromIdx: 0, toIdx: 5, ...qBezToCubic(...neckSeg) },
+      { fromIdx: 6, toIdx: 11, ...qBezToCubic(...armSeg) },
     ]);
+    outline.edges = [
+      { fromIdx: 5, toIdx: 6, seamId: 'sportBraShoulder' },
+      { fromIdx: 11, toIdx: 12, seamId: 'sportBraSide' },
+    ];
+    outline.notches = [[bandW, depth * 0.56], [bandW * 0.94, depth]];
+    return outline;
   }
   function sportBraPieces(m, opts) {
-    const chestW = q(m.chest) * 0.92; // negative ease — compression-style fit
-    const depth = m.backLen * 0.42;
-    const front = sportBraFront(chestW, depth);
-    const back = sportBraBack(chestW, depth, opts.racer);
-    const bandCirc = q(m.chest) * 2 * 0.94;
+    const bandW = Math.round(q(m.chest) * 0.85 * 10) / 10; // compressive athletic fit (~0.85 quarter chest)
+    const depth = Math.max(17, m.backLen * 0.50);
+    const front = sportBraFront(bandW, depth);
+    const back = sportBraBack(bandW, depth, opts.racer);
+    const bandCirc = Math.round(m.chest * 0.80 * 10) / 10;
     return [
-      { key: "front", name: { en: "Front Panel", ar: "القطعة الأمامية" },
-        desc: { en: "Compression-fit front panel with a curved scoop neckline.", ar: "قطعة أمامية ضاغطة بفتحة رقبة منحنية." },
-        outline: front, notches: [front[12]], role: "band", cutOnFold: true,
-        grain: [[chestW * 0.4, depth * 0.2], [chestW * 0.4, depth - 3]] },
+      {
+        key: "front", name: { en: "Front Panel", ar: "القطعة الأمامية" },
+        desc: { en: "Compression-fit front panel with scooped neckline, contoured armholes, and shoulder/side seams.", ar: "قطعة أمامية ضاغطة بفتحة رقبة مقوسة وفتحات ذراع محددة ودرزات كتف وجنب." },
+        outline: front, edges: front.edges, notches: front.notches, role: "band", cutOnFold: true, necklineEndIdx: 5, sideEndIdx: 11,
+        grain: [[bandW * 0.30, depth * 0.38], [bandW * 0.30, depth - 2]] },
       { key: "back", name: { en: opts.racer ? "Racerback Panel" : "Back Panel", ar: opts.racer ? "قطعة الظهر الرياضي" : "القطعة الخلفية" },
-        desc: { en: opts.racer ? "Narrow racerback panel crossing high between the shoulder blades." : "Back panel with a plain scoop.", ar: opts.racer ? "قطعة ظهر رياضي ضيقة تتقاطع عاليًا بين لوحي الكتف." : "قطعة خلفية بفتحة بسيطة." },
-        outline: back, notches: [back[12]], role: "band", cutOnFold: true,
-        grain: [[chestW * 0.3, depth * 0.2], [chestW * 0.3, depth - 3]] },
+        desc: { en: opts.racer ? "Y-racerback athletic panel with shoulder-blade cutouts and matching shoulder/side seams." : "Athletic back panel with scooped neckline.", ar: opts.racer ? "قطعة ظهر رياضي بتفريغ لوحي الكتف ودرزات كتف وجنب متطابقة." : "قطعة خلفية رياضية بفتحة رقبة مقوسة." },
+        outline: back, edges: back.edges, notches: back.notches, role: "band", cutOnFold: true, necklineEndIdx: 5, sideEndIdx: 11,
+        grain: [[bandW * 0.18, depth * 0.32], [bandW * 0.18, depth - 2]] },
       { key: "bandElastic", name: { en: "Band Elastic", ar: "أستك الحزام" },
-        desc: { en: "Wide elastic band finishing the bottom edge.", ar: "أستك عريض يُنهي الحافة السفلية." },
-        outline: elasticStrip(bandCirc, 3.5), notches: [[bandCirc, 0]], role: "elastic-band",
-        grain: [[bandCirc / 2, 1], [bandCirc / 2, 2.5]] },
+        desc: { en: "Wide brushed-back elastic band sewn around the underbust edge.", ar: "أستك عريض مبطن يُخاط على محيط أسفل الصدر." },
+        outline: elasticStrip(bandCirc, 3.4), notches: [[bandCirc, 0]], role: "elastic-band",
+        grain: [[bandCirc / 2, 0.8], [bandCirc / 2, 2.6]] },
     ];
   }
 

@@ -96,10 +96,10 @@ function packNeighborTextures(neighbors, maxNeighbors, texDim) {
 // GLSL for the matching read-side change (same values, two texture2D
 // reads at a left/right-half uv offset into ONE sampler instead of one
 // read each from two separate samplers).
-function packHingeTextures(bendHinge, maxNeighbors, texDim) {
-  const w = texDim * 2, h = texDim
-  const edgeV0 = new Float32Array(w * h * 4).fill(-1)
-  const edgeV1 = new Float32Array(w * h * 4).fill(-1)
+function packHingeTextures(bendHinge, edgeHinge, maxNeighbors, texDim) {
+  const w = texDim * 4, h = texDim
+  const edgeV0 = new Float32Array(w * h * 4)
+  const edgeV1 = new Float32Array(w * h * 4)
   const restAngle = new Float32Array(w * h * 4)
   const particleCount = bendHinge.idx.length / maxNeighbors
   for (let p = 0; p < particleCount; p++) {
@@ -107,12 +107,37 @@ function packHingeTextures(bendHinge, maxNeighbors, texDim) {
     const py = Math.floor(p / texDim)
     for (let k = 0; k < maxNeighbors; k++) {
       const slot = p * maxNeighbors + k
-      const half = k < 4 ? 0 : 1 // "A" batch (slots 0-3) in the left half, "B" (4-7) in the right half
       const ch = k % 4
-      const texelIdx = (py * w + (px + half * texDim)) * 4
-      edgeV0[texelIdx + ch] = bendHinge.edgeV0[slot]
-      edgeV1[texelIdx + ch] = bendHinge.edgeV1[slot]
-      restAngle[texelIdx + ch] = bendHinge.restAngle[slot]
+
+      // Quarters 0..1: wing-role hinges (aligned 1:1 with bA, bB)
+      const qWing = k < 4 ? 0 : 1
+      const tIdxWing = (py * w + (px + qWing * texDim)) * 4
+      const nWing = bendHinge.idx[slot]
+      const wingActive = nWing >= 0 && (!bendHinge.active || bendHinge.active[slot])
+      if (wingActive) {
+        const p1 = bendHinge.edgeV0[slot]
+        const p2 = bendHinge.edgeV1[slot]
+        const n2s = bendHinge.n2Sign ? bendHinge.n2Sign[slot] : 1
+        const sScale = bendHinge.seamScale ? bendHinge.seamScale[slot] : 1
+        const canonRest = p < nWing ? bendHinge.restAngle[slot] : -bendHinge.restAngle[slot]
+        edgeV0[tIdxWing + ch] = (sScale < 0.99 ? -1 : 1) * (p1 + 1)
+        edgeV1[tIdxWing + ch] = (n2s < 0 ? -1 : 1) * (p2 + 1)
+        restAngle[tIdxWing + ch] = canonRest
+      }
+
+      // Quarters 2..3: edge-endpoint-role hinges (aligned 1:1 with sA, sB)
+      if (edgeHinge && edgeHinge.active && edgeHinge.active[slot]) {
+        const qEdge = k < 4 ? 2 : 3
+        const tIdxEdge = (py * w + (px + qEdge * texDim)) * 4
+        const c = edgeHinge.wingC[slot]
+        const d = edgeHinge.wingD[slot]
+        const meP1 = edgeHinge.meIsP1[slot]
+        const n2s = edgeHinge.n2Sign[slot]
+        const sScale = edgeHinge.seamScale[slot]
+        edgeV0[tIdxEdge + ch] = (meP1 ? 1 : -1) * (c + 1)
+        edgeV1[tIdxEdge + ch] = (n2s < 0 ? -1 : 1) * (d + 1)
+        restAngle[tIdxEdge + ch] = edgeHinge.restAngle[slot] + (sScale < 0.99 ? 64.0 : 0.0)
+      }
     }
   }
   const makeTex = (arr) => {
@@ -350,72 +375,86 @@ vec3 collideAllBody(vec3 p, vec3 prevP, float friction) {
 }
 `
 
-// WP-35 high-quality tier: true dihedral-angle bend, replacing the default
-// tier's wing-to-wing DISTANCE constraint (see NEIGHBOR_CORRECTION_GLSL's
-// bend usage below) with the actual angle between the two triangles'
-// normals — verified first as plain JS in dihedralBend.js (see that file's
-// own header for why: reproducing a textbook PBD dihedral gradient formula
-// from memory carries real risk of a subtle sign/normalization bug, and a
-// GPU shader is a far harder place to debug one than a Vitest assertion).
-// This is a direct, mechanical translation of that verified module — same
-// variable names, same structure, so a discrepancy is easy to spot by
-// re-reading the two side by side. `stiffness` in [0,1] scales one Jacobi
-// substep's correction toward zero angular error, same convention as
-// dihedralBend.js's own `stiffness` parameter.
-//
-// `me` always plays the "p3" role and `neighbor` (this hinge's bend
-// partner) plays "p4" — matching assemble.js's packHinges, which always
-// computes `restAngle` calling the CURRENT particle p3 regardless of
-// whether it was originally the mesh's "c" or "d" opposite-corner — so
-// this one function correctly handles both sides of every hinge with no
-// role flag needed.
-//
-// Deliberate scope (matches dihedralBend.js): only `me` (the wing vertex)
-// moves here — the shared hinge edge (p1, p2) is left to the existing
-// structural constraint, not touched by this function.
+// WP-35 / v86 high-quality tier: 4-vertex momentum-conserving PBD dihedral-
+// angle bend constraint (Bridson et al. / Müller et al.). Every active hinge
+// (p1, p2, p3, p4) evaluates the exact angular gradient across all 4 vertices
+// so every hinge applies zero net linear force and zero net torque across the
+// mesh (stopping radial inflation and upward levitation completely).
 const DIHEDRAL_BEND_GLSL = `
-vec3 dihedralBendDelta(vec3 mePredicted, float neighborIdx, float edgeV0Idx, float edgeV1Idx, float restAngle, float stiffness, float maxDelta) {
-  if (neighborIdx < -0.5) return vec3(0.0);
-  vec2 nuv = ( vec2( mod(neighborIdx, resolution.x), floor(neighborIdx / resolution.x) ) + 0.5 ) / resolution;
-  vec2 e0uv = ( vec2( mod(edgeV0Idx, resolution.x), floor(edgeV0Idx / resolution.x) ) + 0.5 ) / resolution;
-  vec2 e1uv = ( vec2( mod(edgeV1Idx, resolution.x), floor(edgeV1Idx / resolution.x) ) + 0.5 ) / resolution;
-  vec3 p1 = texture2D(texturePosition, e0uv).xyz;
-  vec3 p2 = texture2D(texturePosition, e1uv).xyz;
-  vec3 p3 = mePredicted;
-  vec3 p4 = texture2D(texturePosition, nuv).xyz;
+vec3 dihedralCanonicalRoleDelta(
+  float p1Idx, float p2Idx, float p3Idx, float p4Idx,
+  float n2Sign, float seamScale, float restAngle, int role
+) {
+  vec2 uv1 = (vec2(mod(p1Idx, resolution.x), floor(p1Idx / resolution.x)) + 0.5) / resolution;
+  vec2 uv2 = (vec2(mod(p2Idx, resolution.x), floor(p2Idx / resolution.x)) + 0.5) / resolution;
+  vec2 uv3 = (vec2(mod(p3Idx, resolution.x), floor(p3Idx / resolution.x)) + 0.5) / resolution;
+  vec2 uv4 = (vec2(mod(p4Idx, resolution.x), floor(p4Idx / resolution.x)) + 0.5) / resolution;
+
+  vec3 p1 = texture2D(texturePosition, uv1).xyz;
+  vec3 p2 = texture2D(texturePosition, uv2).xyz;
+  vec3 p3 = texture2D(texturePosition, uv3).xyz;
+  vec3 p4 = texture2D(texturePosition, uv4).xyz;
+
+  vec2 a1 = texture2D(uAreaShare, uv1).rg;
+  vec2 a2 = texture2D(uAreaShare, uv2).rg;
+  vec2 a3 = texture2D(uAreaShare, uv3).rg;
+  vec2 a4 = texture2D(uAreaShare, uv4).rg;
+  float w1 = a1.g > 0.5 ? 0.0 : 1.0 / max(uMassDensity * a1.r, 1e-6);
+  float w2 = a2.g > 0.5 ? 0.0 : 1.0 / max(uMassDensity * a2.r, 1e-6);
+  float w3 = a3.g > 0.5 ? 0.0 : 1.0 / max(uMassDensity * a3.r, 1e-6);
+  float w4 = a4.g > 0.5 ? 0.0 : 1.0 / max(uMassDensity * a4.r, 1e-6);
 
   vec3 edge = p2 - p1;
   float edgeLen = length(edge);
-  if (edgeLen < 1e-6) return vec3(0.0); // degenerate hinge — matches dihedralAngle's own bail-out
+  if (edgeLen < 1e-6) return vec3(0.0);
+  vec3 e = edge / edgeLen;
+  vec3 v3 = p3 - p1;
+  vec3 v4 = p4 - p1;
 
-  // n2 uses the edge walked in the OPPOSITE direction (p1-p2) — see
-  // dihedralBend.js's dihedralAngle for why: it's what makes a flat,
-  // normally-wound pair of triangles read as angle ~0.
-  vec3 n1raw = cross(edge, p3 - p1);
-  vec3 n2raw = cross(p1 - p2, p4 - p1);
+  vec3 n1raw = cross(edge, v3);
+  vec3 n2raw = cross(p1 - p2, v4) * n2Sign;
   float n1len = length(n1raw);
   float n2len = length(n2raw);
-  if (n1len < 1e-9 || n2len < 1e-9) return vec3(0.0);
+  if (n1len < 1e-8 || n2len < 1e-8) return vec3(0.0);
+
+  float h3 = n1len / edgeLen;
+  float h4 = n2len / edgeLen;
+  if (h3 < 1e-5 || h4 < 1e-5) return vec3(0.0);
+
   vec3 n1 = n1raw / n1len;
   vec3 n2 = n2raw / n2len;
-  vec3 e = edge / edgeLen;
   float cosT = clamp(dot(n1, n2), -1.0, 1.0);
   float sinT = dot(cross(n1, n2), e);
   float angle = atan(sinT, cosT);
 
   float error = angle - restAngle;
-  if (error > 3.14159265) error -= 6.28318531; // shortest angular path — see dihedralBend.js
+  if (error > 3.14159265) error -= 6.28318531;
   if (error < -3.14159265) error += 6.28318531;
-  float delta = clamp(stiffness * error, -maxDelta, maxDelta); // see dihedralBend.js's own header for why
 
-  // Rodrigues' rotation of p3 around the (p1, e) axis by +delta — exact
-  // for any angle, matching dihedralBend.js's rotateAroundAxis.
-  vec3 v = p3 - p1;
-  float cosD = cos(delta);
-  float sinD = sin(delta);
-  vec3 vRot = v * cosD + cross(e, v) * sinD + e * (dot(e, v) * (1.0 - cosD));
-  vec3 p3New = p1 + vRot;
-  return p3New - p3;
+  float t3 = dot(v3, e) / edgeLen;
+  float t4 = dot(v4, e) / edgeLen;
+  vec3 q3 = -n1 / h3;
+  vec3 q4 = -n2 / h4;
+  vec3 q1 = -((1.0 - t3) * q3 + (1.0 - t4) * q4);
+  vec3 q2 = -(t3 * q3 + t4 * q4);
+
+  float denom = w1 * dot(q1, q1) + w2 * dot(q2, q2) + w3 * dot(q3, q3) + w4 * dot(q4, q4);
+  if (denom < 1e-10) return vec3(0.0);
+
+  float effStiff = clamp(uDihedralStiff, 0.0, 1.0) * seamScale;
+  float stepAngle = clamp(effStiff * error, -uDihedralMaxDelta * 2.5, uDihedralMaxDelta * 2.5);
+  float lambda = stepAngle / denom;
+  float maxDisp = 0.20 * min(h3, h4);
+  float peakDisp = max(
+    max(w1 * length(q1), w2 * length(q2)),
+    max(w3 * length(q3), w4 * length(q4))
+  ) * abs(lambda);
+  float lam = peakDisp > maxDisp ? lambda * (maxDisp / peakDisp) : lambda;
+
+  if (role == 1) return -w1 * lam * q1;
+  if (role == 2) return -w2 * lam * q2;
+  if (role == 3) return -w3 * lam * q3;
+  return -w4 * lam * q4;
 }
 `
 
@@ -654,45 +693,53 @@ const DEFAULT_BEND_MAIN_GLSL = `
   if (bendAcc.w > 0.5) predicted -= (bendAcc.xyz / bendAcc.w) * uBendStiff;
 `
 
-// WP-35 high-quality tier's bend application: the true dihedral-angle
-// constraint (DIHEDRAL_BEND_GLSL) REPLACES the default distance-based one
-// above — a "second bend mode," per this WP's own plan, not an additional
-// pass stacked on top of it (running both at once would fight each other:
-// the distance spring resists exactly the deformation the angle constraint
-// is trying to allow-or-correct on its own terms). Same slot layout as
-// bend (uBendNbrA/B for the neighbor index, reused here — see
-// assemble.js's packHinges, which keeps bendHinge's idx aligned with
-// bend's own), plus the three new hinge-only textures for the shared
-// edge's two endpoints and this hinge's rest angle.
-//
-// WP-35b: each "A"/"B" batch is now the left/right HALF of one double-wide
-// texture (see packHingeTextures's header) rather than two separate
-// textures — `uv.x*0.5` addresses the left half (same column a plain
-// texDim-wide texture would use), `uv.x*0.5+0.5` the right half. Same two
-// texture2D calls per array as before, same values read, just one sampler
-// uniform instead of two.
+// WP-35 / v86 high-quality tier: 4-vertex momentum-conserving dihedral-angle
+// constraint replacing the default distance-based spring. Evaluates both wing
+// roles (Quarters 0..1, aligned with uBendNbrA/B) and edge-endpoint roles
+// (Quarters 2..3, aligned with uStructNbrA/B) with a constant Jacobi weight
+// (0.125) so ∑ m_i Δp_i === 0 identically across every active hinge.
 const DIHEDRAL_BEND_MAIN_GLSL = `
-  // Bend (WP-35 high-quality tier): true dihedral angle, not wing-to-wing
-  // distance — see DIHEDRAL_BEND_GLSL's own header for why only the wing
-  // vertices (never the shared edge) move here.
   vec4 bA = texture2D(uBendNbrA, uv);
   vec4 bB = texture2D(uBendNbrB, uv);
-  vec2 uvHalfA = vec2(uv.x * 0.5, uv.y);
-  vec2 uvHalfB = vec2(uv.x * 0.5 + 0.5, uv.y);
-  vec4 bev0A = texture2D(uBendEdgeV0, uvHalfA);
-  vec4 bev0B = texture2D(uBendEdgeV0, uvHalfB);
-  vec4 bev1A = texture2D(uBendEdgeV1, uvHalfA);
-  vec4 bev1B = texture2D(uBendEdgeV1, uvHalfB);
-  vec4 braA = texture2D(uBendRestAngle, uvHalfA);
-  vec4 braB = texture2D(uBendRestAngle, uvHalfB);
-  vec3 dihedralDelta = vec3(0.0);
-  float dihedralCount = 0.0;
+  int texDimI = int(floor(resolution.x + 0.5));
+  ivec2 pxCoord = ivec2(int(floor(gl_FragCoord.x)), int(floor(gl_FragCoord.y)));
+  vec4 bev0A = texelFetch(uBendEdgeV0, pxCoord, 0);
+  vec4 bev0B = texelFetch(uBendEdgeV0, pxCoord + ivec2(texDimI, 0), 0);
+  vec4 bev1A = texelFetch(uBendEdgeV1, pxCoord, 0);
+  vec4 bev1B = texelFetch(uBendEdgeV1, pxCoord + ivec2(texDimI, 0), 0);
+  vec4 braA = texelFetch(uBendRestAngle, pxCoord, 0);
+  vec4 braB = texelFetch(uBendRestAngle, pxCoord + ivec2(texDimI, 0), 0);
+  vec4 eev0A = texelFetch(uBendEdgeV0, pxCoord + ivec2(texDimI * 2, 0), 0);
+  vec4 eev0B = texelFetch(uBendEdgeV0, pxCoord + ivec2(texDimI * 3, 0), 0);
+  vec4 eev1A = texelFetch(uBendEdgeV1, pxCoord + ivec2(texDimI * 2, 0), 0);
+  vec4 eev1B = texelFetch(uBendEdgeV1, pxCoord + ivec2(texDimI * 3, 0), 0);
+  vec4 eraA = texelFetch(uBendRestAngle, pxCoord + ivec2(texDimI * 2, 0), 0);
+  vec4 eraB = texelFetch(uBendRestAngle, pxCoord + ivec2(texDimI * 3, 0), 0);
+  vec3 dihedralTotal = vec3(0.0);
   ${['A.x', 'A.y', 'A.z', 'A.w', 'B.x', 'B.y', 'B.z', 'B.w'].map((ch) => `
-  if (b${ch} > -0.5) {
-    dihedralDelta += dihedralBendDelta(predicted, b${ch}, bev0${ch}, bev1${ch}, bra${ch}, uDihedralStiff, uDihedralMaxDelta);
-    dihedralCount += 1.0;
+  if (b${ch} > -0.5 && abs(bev0${ch}) > 0.5) {
+    float p1Idx = abs(bev0${ch}) - 1.0;
+    float seamScale = bev0${ch} < 0.0 ? 0.35 : 1.0;
+    float p2Idx = abs(bev1${ch}) - 1.0;
+    float n2Sign = bev1${ch} < 0.0 ? -1.0 : 1.0;
+    bool meIsC = myFlatIdx < b${ch};
+    float p3Idx = meIsC ? myFlatIdx : b${ch};
+    float p4Idx = meIsC ? b${ch} : myFlatIdx;
+    float canonRest = meIsC ? bra${ch} : -bra${ch};
+    dihedralTotal += dihedralCanonicalRoleDelta(p1Idx, p2Idx, p3Idx, p4Idx, n2Sign, seamScale, canonRest, meIsC ? 3 : 4);
+  }
+  if (s${ch} > -0.5 && abs(eev0${ch}) > 0.5) {
+    bool meP1 = eev0${ch} > 0.0;
+    float p1Idx = meP1 ? myFlatIdx : s${ch};
+    float p2Idx = meP1 ? s${ch} : myFlatIdx;
+    float p3Idx = abs(eev0${ch}) - 1.0;
+    float p4Idx = abs(eev1${ch}) - 1.0;
+    float n2Sign = eev1${ch} < 0.0 ? -1.0 : 1.0;
+    float seamScale = era${ch} > 32.0 ? 0.35 : 1.0;
+    float canonRest = era${ch} > 32.0 ? (era${ch} - 64.0) : era${ch};
+    dihedralTotal += dihedralCanonicalRoleDelta(p1Idx, p2Idx, p3Idx, p4Idx, n2Sign, seamScale, canonRest, meP1 ? 1 : 2);
   }`).join('')}
-  if (dihedralCount > 0.5) predicted += dihedralDelta / dihedralCount;
+  predicted += dihedralTotal * 0.125;
 `
 
 // NOTE: `texturePosition` / `texturePrevPosition` are NOT declared here —
@@ -1179,7 +1226,7 @@ export class ClothSimulation {
     // memory footprint and upload cost are completely unaffected, matching
     // the shader source itself (see positionFragmentShader's own comment).
     if (this.qualityTier === QUALITY_TIER_HIGH) {
-      const hingeTex = packHingeTextures(neighbors.bendHinge, neighbors.maxNeighbors, this.texDim)
+      const hingeTex = packHingeTextures(neighbors.bendHinge, neighbors.edgeHinge, neighbors.maxNeighbors, this.texDim)
       Object.assign(posVar.material.uniforms, {
         uBendEdgeV0: { value: hingeTex.edgeV0 },
         uBendEdgeV1: { value: hingeTex.edgeV1 },

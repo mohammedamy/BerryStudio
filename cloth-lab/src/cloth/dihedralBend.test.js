@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dihedralAngle, dihedralBendCorrection } from './dihedralBend.js'
+import { dihedralAngle, dihedralBendCorrection, dihedralBend4Vertex } from './dihedralBend.js'
 
 // A simple hinge: edge along Y, p3 in the XY plane out to +X, p4 rotated by
 // `wingSpread` around the Y axis from p3's position — lets every test below
@@ -157,5 +157,105 @@ describe('dihedralBendCorrection — convergence (the property that actually mat
   it('returns null (no correction) for a degenerate hinge, never NaN', () => {
     const p1 = [0, -0.5, 0], p2 = [0, 0.5, 0]
     expect(dihedralBendCorrection(p1, p2, [0, 0, 0], [1, 0, 0], 0, 0.5)).toBeNull()
+  })
+})
+
+describe('dihedralBend4Vertex — momentum conservation & convergence', () => {
+  it('conserves linear and angular momentum identically across arbitrary masses and angles', () => {
+    const p1 = [0.1, -0.4, 0.2]
+    const p2 = [-0.2, 0.6, -0.1]
+    const p3 = [0.9, 0.1, 0.3]
+    const p4 = [-0.4, -0.1, 0.7]
+    const m1 = 1.7, m2 = 2.3, m3 = 0.9, m4 = 3.1
+    const r = dihedralBend4Vertex(p1, p2, p3, p4, 0, {
+      stiffness: 0.75,
+      w1: 1 / m1, w2: 1 / m2, w3: 1 / m3, w4: 1 / m4,
+    })
+    expect(r).not.toBeNull()
+    const pts = [p1, p2, p3, p4]
+    const ms = [m1, m2, m3, m4]
+    const dps = [r.dp1, r.dp2, r.dp3, r.dp4]
+    for (let axis = 0; axis < 3; axis++) {
+      const lin = dps.reduce((sum, dp, i) => sum + ms[i] * dp[axis], 0)
+      expect(lin).toBeCloseTo(0, 9)
+    }
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    const ang = [0, 1, 2].map((ax) => dps.reduce((sum, dp, i) => sum + ms[i] * cross(pts[i], dp)[ax], 0))
+    expect(Math.hypot(...ang)).toBeLessThan(1e-9)
+  })
+
+  it('converges curved multi-hinge meshes toward rest without net center-of-mass drift', () => {
+    let { p1, p2, p3, p4 } = makeHinge(1.2)
+    const com0 = [0, 1, 2].map((ax) => (p1[ax] + p2[ax] + p3[ax] + p4[ax]) / 4)
+    for (let i = 0; i < 40; i++) {
+      const r = dihedralBend4Vertex(p1, p2, p3, p4, 0.25, { stiffness: 0.5 })
+      p1 = p1.map((v, a) => v + r.dp1[a])
+      p2 = p2.map((v, a) => v + r.dp2[a])
+      p3 = p3.map((v, a) => v + r.dp3[a])
+      p4 = p4.map((v, a) => v + r.dp4[a])
+    }
+    expect(dihedralAngle(p1, p2, p3, p4)).toBeCloseTo(0.25, 3)
+    const com1 = [0, 1, 2].map((ax) => (p1[ax] + p2[ax] + p3[ax] + p4[ax]) / 4)
+    expect(Math.hypot(com1[0] - com0[0], com1[1] - com0[1], com1[2] - com0[2])).toBeLessThan(1e-9)
+  })
+
+  it('stays finite, momentum-conserving, and bounded across 240 Jacobi steps for soft and stiff regimes (including n2Sign = -1 seam hinges)', () => {
+    for (const stiffness of [0.08, 0.85]) {
+      const verts = [
+        [0.00, 0.20, 0.14],
+        [0.00, 0.00, 0.15],
+        [0.10, 0.20, 0.11],
+        [0.10, 0.00, 0.12],
+        [-0.10, 0.20, 0.10],
+        [-0.10, 0.00, 0.11],
+      ]
+      const invMasses = [1.0, 1.1, 0.9, 1.0, 1.2, 0.85]
+      const masses = invMasses.map((w) => 1 / w)
+      const com = (pts) => {
+        const totalM = masses.reduce((s, m) => s + m, 0)
+        return [0, 1, 2].map((ax) => pts.reduce((s, p, idx) => s + masses[idx] * p[ax], 0) / totalM)
+      }
+      const com0 = com(verts)
+      const maxSpread0 = Math.max(...verts.map((p) => Math.hypot(p[0] - com0[0], p[1] - com0[1], p[2] - com0[2])))
+      // Couple interior (n2Sign = 1) and cross-seam mirrored (n2Sign = -1) hinges
+      const hinges = [
+        { i1: 0, i2: 1, i3: 2, i4: 4, n2Sign: 1 },
+        { i1: 0, i2: 3, i3: 1, i4: 2, n2Sign: 1 },
+        { i1: 1, i2: 0, i3: 5, i4: 4, n2Sign: 1 },
+        { i1: 2, i2: 3, i3: 0, i4: 4, n2Sign: -1 },
+      ]
+      const jacobiScale = 0.125
+      for (let step = 0; step < 240; step++) {
+        const accum = verts.map(() => [0, 0, 0])
+        for (const h of hinges) {
+          const r = dihedralBend4Vertex(verts[h.i1], verts[h.i2], verts[h.i3], verts[h.i4], 0, {
+            stiffness,
+            n2Sign: h.n2Sign,
+            w1: invMasses[h.i1],
+            w2: invMasses[h.i2],
+            w3: invMasses[h.i3],
+            w4: invMasses[h.i4],
+          })
+          if (!r) continue
+          const pairs = [[h.i1, r.dp1], [h.i2, r.dp2], [h.i3, r.dp3], [h.i4, r.dp4]]
+          for (const [idx, dp] of pairs) {
+            for (let ax = 0; ax < 3; ax++) {
+              expect(Number.isFinite(dp[ax])).toBe(true)
+              accum[idx][ax] += jacobiScale * dp[ax]
+            }
+          }
+        }
+        for (let idx = 0; idx < verts.length; idx++) {
+          for (let ax = 0; ax < 3; ax++) {
+            verts[idx][ax] += accum[idx][ax]
+            expect(Number.isFinite(verts[idx][ax])).toBe(true)
+          }
+        }
+      }
+      const comN = com(verts)
+      expect(Math.hypot(comN[0] - com0[0], comN[1] - com0[1], comN[2] - com0[2])).toBeLessThan(1e-6)
+      const maxSpreadN = Math.max(...verts.map((p) => Math.hypot(p[0] - comN[0], p[1] - comN[1], p[2] - comN[2])))
+      expect(maxSpreadN).toBeLessThanOrEqual(maxSpread0 * 1.15)
+    }
   })
 })

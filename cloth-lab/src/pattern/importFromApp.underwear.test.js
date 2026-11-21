@@ -77,7 +77,13 @@ describe.each(UNDERWEAR_IDS)('%s', (id) => {
       const triangulated = triangulateAll(finalPieces, result.seamInstructions)
       const cloth = assembleCloth(triangulated, dims, result.seamInstructions)
       if (/^(wu|mu|gu|bu)\d+$/.test(id)) {
-        expect(result.seamInstructions.length, `${id} should sew sides, crotch gusset, waist elastic, & leg elastics`).toBeGreaterThanOrEqual(13)
+        const isLegged = /^(wu05|gu05|mu03|mu04|bu01|bu03|bu04)$/.test(id)
+        const minSeams = isLegged ? 15 : 13
+        expect(result.seamInstructions.length, `${id} should sew sides, crotch gusset, waist elastic, & leg elastics`).toBeGreaterThanOrEqual(minSeams)
+        if (isLegged) {
+          expect(result.seamInstructions.some((s) => s.id === 'briefInseam_R')).toBe(true)
+          expect(result.seamInstructions.some((s) => s.id === 'briefInseam_L')).toBe(true)
+        }
         let maxAbsX = 0
         for (let i = 0; i < cloth.simRestPositions.length; i += 3) {
           const ax = Math.abs(cloth.simRestPositions[i])
@@ -87,6 +93,8 @@ describe.each(UNDERWEAR_IDS)('%s', (id) => {
       } else if (/^(wb|gb)\d+$/.test(id) && rawPieces.some((rp) => rp.role === 'cup')) {
         const expectedMin = rawPieces.some((rp) => rp.role === 'strap') ? 9 : 5
         expect(result.seamInstructions.length, `${id} cup bra seam count`).toBeGreaterThanOrEqual(expectedMin)
+      } else if (id === 'wb09' || id === 'gb07') {
+        expect(result.seamInstructions.length, `${id} sport bra sews shoulders, sides & underbust band`).toBeGreaterThanOrEqual(7)
       }
     }).not.toThrow()
   })

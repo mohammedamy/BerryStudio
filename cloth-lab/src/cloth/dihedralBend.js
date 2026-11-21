@@ -153,3 +153,71 @@ export function dihedralBendCorrection(p1, p2, p3, p4, restAngle, stiffness = 0.
   const p4New = rotateAroundAxis(p4, p1, e, -delta)
   return { p3: p3New, p4: p4New, angle }
 }
+
+// 4-vertex momentum-conserving PBD dihedral-angle constraint (Bridson et al. /
+// Müller et al.). Every active hinge distributes displacements across ALL FOUR
+// vertices (p1, p2, p3, p4) inversely proportional to their masses using exact
+// angular gradients q1..q4 satisfying q1 + q2 + q3 + q4 === 0 and sum(pi x qi)
+// === 0 identically — eliminating net linear/angular drift (inflation and
+// upward levitation) on curved or hanging meshes.
+export function dihedralBend4Vertex(p1, p2, p3, p4, restAngle, {
+  stiffness = 0.5,
+  maxDelta = Math.PI,
+  n2Sign = 1,
+  w1 = 1,
+  w2 = 1,
+  w3 = 1,
+  w4 = 1,
+} = {}) {
+  const edge = sub(p2, p1)
+  const edgeLen = length(edge)
+  if (edgeLen < 1e-6) return null
+  const e = scale(edge, 1 / edgeLen)
+  const v3 = sub(p3, p1)
+  const v4 = sub(p4, p1)
+  const n1raw = cross(edge, v3)
+  const n2raw = scale(cross(sub(p1, p2), v4), n2Sign)
+  const n1len = length(n1raw)
+  const n2len = length(n2raw)
+  if (n1len < 1e-8 || n2len < 1e-8) return null
+  const h3 = n1len / edgeLen
+  const h4 = n2len / edgeLen
+  if (h3 < 1e-5 || h4 < 1e-5) return null
+  const n1 = scale(n1raw, 1 / n1len)
+  const n2 = scale(n2raw, 1 / n2len)
+  const cosT = Math.max(-1, Math.min(1, dot(n1, n2)))
+  const sinT = dot(cross(n1, n2), e)
+  const angle = Math.atan2(sinT, cosT)
+
+  let error = angle - restAngle
+  if (error > Math.PI) error -= 2 * Math.PI
+  if (error < -Math.PI) error += 2 * Math.PI
+
+  const t3 = dot(v3, e) / edgeLen
+  const t4 = dot(v4, e) / edgeLen
+  const q3 = scale(n1, -1 / h3)
+  const q4 = scale(n2, -1 / h4)
+  const q1 = add(scale(q3, -(1 - t3)), scale(q4, -(1 - t4)))
+  const q2 = add(scale(q3, -t3), scale(q4, -t4))
+
+  const denom = w1 * dot(q1, q1) + w2 * dot(q2, q2) + w3 * dot(q3, q3) + w4 * dot(q4, q4)
+  if (denom < 1e-10) return null
+
+  const stepAngle = Math.max(-maxDelta, Math.min(maxDelta, stiffness * error))
+  const lambda = stepAngle / denom
+  const maxDisp = 0.25 * Math.min(h3, h4)
+  const peakDisp = Math.max(
+    w1 * length(q1) * Math.abs(lambda),
+    w2 * length(q2) * Math.abs(lambda),
+    w3 * length(q3) * Math.abs(lambda),
+    w4 * length(q4) * Math.abs(lambda),
+  )
+  const lam = peakDisp > maxDisp ? lambda * (maxDisp / peakDisp) : lambda
+  return {
+    dp1: scale(q1, -w1 * lam),
+    dp2: scale(q2, -w2 * lam),
+    dp3: scale(q3, -w3 * lam),
+    dp4: scale(q4, -w4 * lam),
+    angle,
+  }
+}
