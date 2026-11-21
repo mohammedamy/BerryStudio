@@ -367,24 +367,25 @@ test('Grade Rules: authoring a per-point override changes graded output, Grade N
   expect(rules[firstPieceKey]['0']).toEqual({ dx: 2, dy: 1 });
 
   // Grade up one step (M -> L) and confirm point 0 resolves to exactly
-  // base-at-M + {dx,dy}*step = [0,0] + {2,1}*1 = [2,1]. Checked against
+  // base-at-M + {dx,dy}*step (e.g. [0,3] + {2,1}*1 = [2,4]). Checked against
   // the raw (pre-layout) graded output via the same resolveGradedPieces
   // the app itself calls — NOT Canvas.getPieces()'s post-layout outline,
   // since layoutPieces re-normalizes each piece to its own bounding box
-  // (`place = ([x,y]) => [x-minX+px, y-minY+py]`); point 0 happens to be
-  // this piece's own (0,0) drafting origin, so overriding it shifts the
-  // piece's minY too, and the layout renormalization would silently
-  // absorb the very delta this assertion needs to see.
+  // (`place = ([x,y]) => [x-minX+px, y-minY+py]`).
   await page.getByRole('button', { name: 'L', exact: true }).click();
-  const gradedPoint0 = await page.evaluate(async () => {
+  const { basePoint0, gradedPoint0 } = await page.evaluate(async () => {
     const { PATTERNS, computeMeasurements } = await import('/js/data.js');
     const { resolveGradedPieces } = await import('/js/grading.js');
     const s = JSON.parse(localStorage.getItem('pps'));
     const opts = { category: s.category, size: s.size, standard: s.standard, kids: s.kids, custom: s.custom };
+    const basePieces = resolveGradedPieces(PATTERNS[s.loaded], { ...opts, size: 'M' }, computeMeasurements, s.gradeRules[s.loaded]);
     const pieces = resolveGradedPieces(PATTERNS[s.loaded], opts, computeMeasurements, s.gradeRules[s.loaded]);
-    return pieces.find((p) => p.key === s.gradeRulesPiece).outline[0];
+    return {
+      basePoint0: basePieces.find((p) => p.key === s.gradeRulesPiece).outline[0],
+      gradedPoint0: pieces.find((p) => p.key === s.gradeRulesPiece).outline[0],
+    };
   });
-  expect(gradedPoint0).toEqual([2, 1]);
+  expect(gradedPoint0).toEqual([basePoint0[0] + 2, basePoint0[1] + 1]);
 
   // Grade Nest preview: overlays S/M/L/XL of the selected piece — real
   // canvas content, not a blank modal.
