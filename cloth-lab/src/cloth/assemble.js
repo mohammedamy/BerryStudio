@@ -223,7 +223,7 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
     const rawOff = (simPhysClass[i] === PHYS_CLASS.ELASTIC || simPhysClass[i] === PHYS_CLASS.BIKINI_INTIMATE)
       ? (Number.isFinite(simSkinMin[i]) ? simSkinMin[i] : simSkinOffset[i] / c)
       : (simSkinOffset[i] / c)
-    simSkinOffset[i] = Math.max(-0.0032, Math.min(0.0020, rawOff))
+    simSkinOffset[i] = Math.max(-0.0038, Math.min(0.0020, rawOff))
 
     const nx = simRestNormal[i * 3], ny = simRestNormal[i * 3 + 1], nz = simRestNormal[i * 3 + 2]
     const nlen = Math.hypot(nx, ny, nz) || 1

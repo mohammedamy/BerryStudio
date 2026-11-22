@@ -25,6 +25,7 @@ import {
 } from "./human-mannequin.js";
 import { getMannequinFor } from "./mannequin-catalog.js";
 import { computePatternMetrics3D } from "./pattern-3d-metrics.js";
+import { getFabricTextureSet } from "./fabric-textures.js";
 
 export const View3D = (() => {
   let THREE, OrbitControls, GLTFLoader, RGBELoader, cloneSkeleton;
@@ -45,7 +46,6 @@ export const View3D = (() => {
   let onFatalError = () => { };
   let noiseTex = null;
   const sharedTextures = new Set();
-  const weaveBumpCache = new Map();
   let bodiceFrontMesh = null, bodiceBackMesh = null;
   let skirtFrontMesh = null, skirtBackMesh = null;
   let accessoriesGroup = null;
@@ -273,7 +273,7 @@ export const View3D = (() => {
           loadEnvironmentMap().then((envMap) => {
             if (envMap && scene) {
               scene.environment = envMap;
-              scene.environmentIntensity = 0.45;
+              scene.environmentIntensity = 0.72;
             }
           });
         }
@@ -428,86 +428,21 @@ export const View3D = (() => {
     return tex;
   }
 
-  // ---------- Procedural micro-weave bump maps for realistic textiles ----------
-  function getWeaveBumpMap(materialKey) {
-    if (typeof document === "undefined" || !THREE) return null;
-    let style = "plain";
-    if (materialKey === "denim" || materialKey === "wool") style = "twill";
-    else if (materialKey === "linen") style = "linen";
-    else if (materialKey === "jersey" || materialKey === "scuba") style = "knit";
-    else if (materialKey === "leather") style = "leather";
-    else if (materialKey === "silk" || materialKey === "satin") style = "satin";
-    else if (materialKey === "velvet") style = "velvet";
-    else if (materialKey === "lace") style = "lace";
-
-    if (weaveBumpCache.has(style)) return weaveBumpCache.get(style);
-
-    const c = document.createElement("canvas");
-    c.width = c.height = 64;
-    const ctx = c.getContext("2d");
-    const img = ctx.createImageData(64, 64);
-    const d = img.data;
-
-    for (let y = 0; y < 64; y++) {
-      for (let x = 0; x < 64; x++) {
-        let v = 128;
-        if (style === "twill") {
-          const diag = (x + y * 2) % 6;
-          v = diag < 3 ? 175 : 92;
-        } else if (style === "linen") {
-          const wx = Math.sin(x * 1.57) * 28;
-          const wy = Math.sin(y * 1.57) * 28;
-          const slub = ((x * 13 + y * 7) % 19) < 2 ? 26 : 0;
-          v = 128 + wx + wy + slub;
-        } else if (style === "knit") {
-          const col = (x % 8) - 4;
-          const row = (y + Math.abs(col)) % 6;
-          v = row < 3 ? 168 : 96;
-        } else if (style === "leather") {
-          const hash = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
-          v = 110 + (hash - Math.floor(hash)) * 55;
-        } else if (style === "satin") {
-          v = 124 + ((x + y * 4) % 5 === 0 ? 18 : -4);
-        } else if (style === "velvet") {
-          const nap = Math.sin(x * 1.7 + y * 0.45) * 16;
-          const micro = Math.sin(x * 17.3 + y * 31.7) * 18;
-          v = 128 + nap + micro;
-        } else if (style === "lace") {
-          const ring = Math.abs(Math.sin(x * 0.39) * Math.sin(y * 0.39));
-          v = 90 + ring * 130;
-        } else {
-          // Crisp cotton poplin plain cross-weave
-          v = ((x + y) % 2 === 0) ? 156 : 108;
-        }
-        const idx = (y * 64 + x) * 4;
-        d[idx] = d[idx + 1] = d[idx + 2] = Math.max(0, Math.min(255, v));
-        d[idx + 3] = 255;
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-    const tex = new THREE.CanvasTexture(c);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(26, 26);
-    weaveBumpCache.set(style, tex);
-    sharedTextures.add(tex);
-    return tex;
-  }
-
   // ---------- materials ----------
   const FABRIC = {
-    cotton: { label: 'Cotton Poplin', massDensity: 150, structStiff: 0.96, bendStiff: 0.35, maxStrain: 1.05, damping: 0.970, friction: 0.90, rough: 0.82, metal: 0.0, sheen: 0.25, clear: 0.0, om: 1, bump: 0.0012 },
-    denim: { label: 'Denim', massDensity: 400, structStiff: 0.98, bendStiff: 0.80, maxStrain: 1.03, damping: 0.930, friction: 0.96, rough: 0.88, metal: 0.02, sheen: 0.14, clear: 0.0, om: 1, bump: 0.0024 },
-    silk: { label: 'Silk Charmeuse', massDensity: 60, structStiff: 0.94, bendStiff: 0.15, maxStrain: 1.07, damping: 0.980, friction: 0.80, rough: 0.26, metal: 0.05, sheen: 0.9, clear: 0.15, om: 0.98, anisotropy: 0.6, anisoRot: 0, bump: 0.0004 },
-    satin: { label: 'Satin', massDensity: 90, structStiff: 0.95, bendStiff: 0.20, maxStrain: 1.06, damping: 0.980, friction: 0.82, rough: 0.2, metal: 0.12, sheen: 0.85, clear: 0.22, om: 1, anisotropy: 0.5, anisoRot: 0, bump: 0.0004 },
-    chiffon: { label: 'Chiffon', massDensity: 30, structStiff: 0.92, bendStiff: 0.10, maxStrain: 1.08, damping: 0.985, friction: 0.75, rough: 0.5, metal: 0.0, sheen: 0.45, clear: 0.0, om: 0.55, transmission: 0.18, bump: 0.0006 },
-    wool: { label: 'Wool Crepe', massDensity: 300, structStiff: 0.97, bendStiff: 0.58, maxStrain: 1.04, damping: 0.950, friction: 0.93, rough: 0.94, metal: 0.0, sheen: 0.12, clear: 0.0, om: 1, bump: 0.0022 },
-    linen: { label: 'Linen', massDensity: 170, structStiff: 0.96, bendStiff: 0.42, maxStrain: 1.05, damping: 0.970, friction: 0.87, rough: 0.82, metal: 0.0, sheen: 0.16, clear: 0.0, om: 1, bump: 0.0020 },
-    leather: { label: 'Leather', massDensity: 550, structStiff: 0.98, bendStiff: 0.92, maxStrain: 1.02, damping: 0.900, friction: 0.97, rough: 0.38, metal: 0.18, sheen: 0.2, clear: 0.35, om: 1, bump: 0.0018 },
-    jersey: { label: 'Cotton Jersey', massDensity: 180, structStiff: 0.90, bendStiff: 0.22, maxStrain: 1.18, damping: 0.965, friction: 0.88, rough: 0.68, metal: 0.0, sheen: 0.22, clear: 0.0, om: 1, bump: 0.0014 },
-    scuba: { label: 'Scuba Knit', massDensity: 260, structStiff: 0.91, bendStiff: 0.45, maxStrain: 1.14, damping: 0.955, friction: 0.85, rough: 0.35, metal: 0.0, sheen: 0.35, clear: 0.05, om: 1, bump: 0.0008 },
-    tulle: { label: 'Tulle', massDensity: 18, structStiff: 0.80, bendStiff: 0.06, maxStrain: 1.12, damping: 0.988, friction: 0.55, rough: 0.55, metal: 0.0, sheen: 0.3, clear: 0.0, om: 0.56, transmission: 0.12, bump: 0.0010 },
-    velvet: { label: 'Velvet', massDensity: 320, structStiff: 0.96, bendStiff: 0.44, maxStrain: 1.05, damping: 0.955, friction: 0.94, rough: 0.72, metal: 0.0, sheen: 1.0, clear: 0.0, om: 1, bump: 0.0020 },
-    lace: { label: 'Lace', massDensity: 75, structStiff: 0.91, bendStiff: 0.16, maxStrain: 1.09, damping: 0.980, friction: 0.80, rough: 0.58, metal: 0.0, sheen: 0.38, clear: 0.0, om: 0.78, transmission: 0.08, bump: 0.0026 },
+    cotton: { label: 'Cotton Poplin', massDensity: 150, structStiff: 0.96, bendStiff: 0.36, maxStrain: 1.04, damping: 0.968, friction: 0.91, rough: 0.80, metal: 0.0, sheen: 0.28, sheenRough: 0.74, clear: 0.0, om: 1, bump: 0.0014 },
+    denim: { label: 'Denim', massDensity: 400, structStiff: 0.97, bendStiff: 0.78, maxStrain: 1.02, damping: 0.952, friction: 0.96, rough: 0.88, metal: 0.01, sheen: 0.18, sheenRough: 0.82, clear: 0.0, om: 1, bump: 0.0024 },
+    silk: { label: 'Silk Charmeuse', massDensity: 65, structStiff: 0.91, bendStiff: 0.10, maxStrain: 1.06, damping: 0.964, friction: 0.80, rough: 0.28, metal: 0.04, sheen: 0.72, sheenRough: 0.34, clear: 0.12, om: 0.98, anisotropy: 0.6, anisoRot: 0, bump: 0.0005 },
+    satin: { label: 'Satin', massDensity: 95, structStiff: 0.93, bendStiff: 0.16, maxStrain: 1.05, damping: 0.966, friction: 0.82, rough: 0.24, metal: 0.06, sheen: 0.78, sheenRough: 0.30, clear: 0.15, om: 1, anisotropy: 0.5, anisoRot: 0, bump: 0.0005 },
+    chiffon: { label: 'Chiffon', massDensity: 35, structStiff: 0.89, bendStiff: 0.08, maxStrain: 1.07, damping: 0.968, friction: 0.82, rough: 0.62, metal: 0.0, sheen: 0.55, sheenRough: 0.55, clear: 0.0, om: 0.58, transmission: 0.16, bump: 0.0008 },
+    wool: { label: 'Wool Crepe', massDensity: 310, structStiff: 0.95, bendStiff: 0.48, maxStrain: 1.04, damping: 0.962, friction: 0.93, rough: 0.86, metal: 0.0, sheen: 0.52, sheenRough: 0.62, clear: 0.0, om: 1, bump: 0.0022 },
+    linen: { label: 'Linen', massDensity: 175, structStiff: 0.96, bendStiff: 0.46, maxStrain: 1.03, damping: 0.966, friction: 0.92, rough: 0.86, metal: 0.0, sheen: 0.22, sheenRough: 0.80, clear: 0.0, om: 1, bump: 0.0022 },
+    leather: { label: 'Leather', massDensity: 550, structStiff: 0.98, bendStiff: 0.90, maxStrain: 1.015, damping: 0.945, friction: 0.97, rough: 0.42, metal: 0.08, sheen: 0.20, sheenRough: 0.48, clear: 0.18, om: 1, bump: 0.0020 },
+    jersey: { label: 'Cotton Jersey', massDensity: 185, structStiff: 0.89, bendStiff: 0.16, maxStrain: 1.12, damping: 0.960, friction: 0.93, rough: 0.82, metal: 0.0, sheen: 0.42, sheenRough: 0.68, clear: 0.0, om: 1, bump: 0.0016 },
+    scuba: { label: 'Scuba Knit', massDensity: 260, structStiff: 0.93, bendStiff: 0.52, maxStrain: 1.09, damping: 0.958, friction: 0.94, rough: 0.56, metal: 0.0, sheen: 0.45, sheenRough: 0.52, clear: 0.05, om: 1, bump: 0.0010 },
+    tulle: { label: 'Tulle', massDensity: 20, structStiff: 0.84, bendStiff: 0.18, maxStrain: 1.06, damping: 0.966, friction: 0.80, rough: 0.56, metal: 0.0, sheen: 0.48, sheenRough: 0.48, clear: 0.0, om: 0.42, transmission: 0.12, bump: 0.0014 },
+    velvet: { label: 'Velvet', massDensity: 330, structStiff: 0.94, bendStiff: 0.36, maxStrain: 1.05, damping: 0.958, friction: 0.95, rough: 0.84, metal: 0.0, sheen: 0.95, sheenRough: 0.32, clear: 0.0, om: 1, bump: 0.0020 },
+    lace: { label: 'Lace', massDensity: 75, structStiff: 0.91, bendStiff: 0.24, maxStrain: 1.05, damping: 0.968, friction: 0.86, rough: 0.74, metal: 0.0, sheen: 0.45, sheenRough: 0.58, clear: 0.0, om: 0.82, transmission: 0.08, bump: 0.0026 },
   };
 
   const defaultFabricSlot = () => ({
@@ -533,17 +468,26 @@ export const View3D = (() => {
   function fabricMat(part, side) {
     const st = fabricState[part] || fabricState.bodice;
     const slot = side === "back" && st.back ? st.back : st.front;
-    const f = FABRIC[slot.material] || FABRIC.cotton;
+    const fabricKey = slot.material || "cotton";
+    const f = FABRIC[fabricKey] || FABRIC.cotton;
     const op = Math.max(0.25, Math.min(1, st.opacity * f.om));
-    const weaveBump = getWeaveBumpMap(slot.material || "cotton");
+    const maxAniso = renderer ? Math.min(8, renderer.capabilities.getMaxAnisotropy()) : 4;
+    const pbr = getFabricTextureSet(THREE, fabricKey, { uvSpanCm: 52, anisotropy: maxAniso });
+    if (pbr) {
+      sharedTextures.add(pbr.map);
+      sharedTextures.add(pbr.normalMap);
+      sharedTextures.add(pbr.roughnessMap);
+    }
+    const normScaleVal = pbr?.spec?.normalScale ?? 0.72;
 
     const mat = isSoftwareGL
       ? new THREE.MeshPhongMaterial({
         color: slot.textureDataURL ? 0xffffff : slot.color,
         shininess: Math.round((1 - f.rough) * 60 + 8),
         specular: new THREE.Color(0x1f1f1f).lerp(new THREE.Color(0x7a7a7a), 1 - f.rough),
-        bumpMap: weaveBump || null,
-        bumpScale: f.bump || 0.001,
+        map: (!slot.textureDataURL && pbr?.map) ? pbr.map : null,
+        normalMap: pbr?.normalMap || null,
+        normalScale: new THREE.Vector2(normScaleVal, normScaleVal),
         transparent: op < 0.99,
         opacity: op,
         depthWrite: op >= 0.55,
@@ -554,12 +498,15 @@ export const View3D = (() => {
         roughness: f.rough,
         metalness: f.metal,
         sheen: f.sheen,
-        sheenRoughness: 0.48,
-        sheenColor: new THREE.Color(slot.textureDataURL ? 0xf8fafc : slot.color).lerp(new THREE.Color(0xffffff), 0.55),
+        sheenRoughness: f.sheenRough ?? pbr?.spec?.sheenRoughness ?? 0.52,
+        sheenColor: new THREE.Color(slot.textureDataURL ? 0xf8fafc : slot.color).lerp(new THREE.Color(0xffffff), 0.58),
         clearcoat: f.clear,
-        clearcoatRoughness: 0.4,
-        bumpMap: weaveBump || null,
-        bumpScale: f.bump || 0.001,
+        clearcoatRoughness: pbr?.spec?.clearcoatRoughness ?? 0.38,
+        map: (!slot.textureDataURL && pbr?.map) ? pbr.map : null,
+        normalMap: pbr?.normalMap || null,
+        normalScale: new THREE.Vector2(normScaleVal, normScaleVal),
+        roughnessMap: pbr?.roughnessMap || null,
+        envMapIntensity: pbr?.spec?.envMapIntensity ?? 0.85,
         transparent: op < 0.99,
         opacity: op,
         depthWrite: op >= 0.55,
@@ -1607,7 +1554,7 @@ export const View3D = (() => {
     const cupTopY = isSport
       ? shoulderY - span * 0.08
       : hipY + span * (isBandeau ? 0.745 : (0.64 + 0.145 * Math.min(1.15, cupDepthF)));
-    const braEase = 0.009;
+    const braEase = 0.0032;
     const SEG = 48;
     const stride = SEG + 1;
 
@@ -1635,7 +1582,7 @@ export const View3D = (() => {
             topAtPhi -= backArmCutout + backNeckDip;
           }
           const yEff = bandBotY * (1 - f) + topAtPhi * f;
-          const [bx, bz] = getBodySurfacePoint(yEff, phi, d, braEase + 0.002, 0);
+          const [bx, bz] = getBodySurfacePoint(yEff, phi, d, braEase + 0.0008, 0);
           bPos.push(bx, yEff, bz);
           bUvs.push(u, f);
           const [bi, bw] = packSkinWeights(torsoGarmentWeights(yEff, bx, d));
@@ -1669,7 +1616,7 @@ export const View3D = (() => {
           for (let k = 0; k <= SEG; k++) {
             const u = k / SEG;
             const phi = u * Math.PI * 2;
-            const [bx, bz] = getBodySurfacePoint(y, phi, d, braEase + 0.008, 0);
+            const [bx, bz] = getBodySurfacePoint(y, phi, d, braEase + 0.0014, 0);
             ePos.push(bx, y, bz);
             eUvs.push(u, r / eRows);
             const [bi, bw] = packSkinWeights(torsoGarmentWeights(y, bx, d));
@@ -1710,8 +1657,8 @@ export const View3D = (() => {
           const topAtPhi = lerp(cupTopY, underbustY + span * 0.085, sideT) - sweetheartDip;
           const botAtPhi = lerp(bandBotY + span * 0.02, underbustY - span * 0.015, sideT);
           const yEff = botAtPhi * (1 - f) + topAtPhi * f;
-          const ruche = cosP > 0 ? 0.0025 * Math.sin(f * Math.PI) * Math.cos(phi * 10) : 0;
-          const [bx, bz] = getBodySurfacePoint(yEff, phi, d, braEase + 0.004 + ruche, 0);
+          const ruche = cosP > 0 ? 0.0020 * Math.sin(f * Math.PI) * Math.cos(phi * 10) : 0;
+          const [bx, bz] = getBodySurfacePoint(yEff, phi, d, braEase + 0.0010 + ruche, 0);
           bPos.push(bx, yEff, bz);
           bUvs.push(u, f);
           const [bi, bw] = packSkinWeights(torsoGarmentWeights(yEff, bx, d));
@@ -1746,8 +1693,10 @@ export const View3D = (() => {
           const phi = u * Math.PI * 2;
           const cosP = Math.cos(phi);
           const backFrac = clamp((-cosP + 0.15) / 1.15, 0, 1);
-          const goreDepth = cosP > 0.75 ? (bra.style === "plunge" ? -0.008 : 0.005) : 0.008;
-          const topAtPhi = underbustY + lerp(goreDepth, -0.004, backFrac);
+          const goreBridge = cosP > 0.80
+            ? lerp(bra.style === "plunge" ? 0.015 : 0.034, 0.004, Math.pow(1 - (cosP - 0.80) / 0.20, 1.5))
+            : 0.006;
+          const topAtPhi = underbustY + lerp(goreBridge, -0.004, backFrac);
           const botAtPhi = bandBotY + (bra.longline ? 0 : 0.012 * backFrac);
           const yEff = botAtPhi * (1 - f) + topAtPhi * f;
           const [bx, bz] = getBodySurfacePoint(yEff, phi, d, braEase + 0.001, 0);
@@ -1783,7 +1732,7 @@ export const View3D = (() => {
       [-1, 1].forEach((side) => {
         const cPos = [], cUvs = [], cSi = [], cSw = [], cIdx = [];
         const cRows = 11, cCols = 13;
-        const innerGap = bra.style === "plunge" ? 0.014 : 0.011;
+        const innerGap = bra.style === "plunge" ? 0.012 : 0.005;
         const outerPhiSide = side * Math.PI * (bra.style === "balconette" ? 0.45 : 0.43);
         const trimPts = [];
         for (let r = 0; r <= cRows; r++) {
@@ -1803,7 +1752,7 @@ export const View3D = (() => {
             const phi = side * lerp(innerGap / Math.max(0.05, chestR), phiMax, xFrac);
             const cupBotY = underbustY - 0.004 * Math.sin(Math.PI * uc);
             const cupY = cupBotY + vr * (rowTopY - cupBotY);
-            const cupDomeEase = braEase + 0.009 * Math.sin(Math.PI * vr) * Math.sin(Math.PI * uc);
+            const cupDomeEase = braEase + 0.0035 * Math.sin(Math.PI * vr) * Math.sin(Math.PI * uc);
             const [bx, bz] = getBodySurfacePoint(cupY, phi, d, cupDomeEase, 0);
             cPos.push(bx, cupY, bz);
             cUvs.push(uc, vr);
@@ -1893,17 +1842,17 @@ export const View3D = (() => {
         } else if (bra.style === "balconette") {
           frontRimY = underbustY + (cupTopY - underbustY) * 0.88;
         }
-        const startY = frontRimY - 0.012;
-        const endY = backRimY - 0.012;
-        const strapEase = braEase + 0.001;
+        const startY = frontRimY - 0.010;
+        const endY = backRimY - 0.010;
+        const strapEase = braEase + 0.0035;
 
         for (let i = 0; i <= stepsS; i++) {
           const tS = i / stepsS;
           const cx = tS <= 0.5 ? anchorFrontX : lerp(anchorFrontX, anchorBackX, (tS - 0.5) / 0.5);
           const xL = cx - strapW * 0.5;
           const xR = cx + strapW * 0.5;
-          const apexL = getAnatomicalShoulderTopY(Math.abs(xL), d, 0.0085);
-          const apexR = getAnatomicalShoulderTopY(Math.abs(xR), d, 0.0085);
+          const apexL = getAnatomicalShoulderTopY(Math.abs(xL), d, 0.0115);
+          const apexR = getAnatomicalShoulderTopY(Math.abs(xR), d, 0.0115);
           const apexC = 0.5 * (apexL + apexR);
           const edgeDY = (apexR - apexL) * 0.5;
 
@@ -2681,7 +2630,7 @@ export const View3D = (() => {
     const sideH = briefCut === "bikini" ? span * 0.068 : (briefCut === "hipster" ? span * 0.125 : span * (briefRise === "high" ? 0.22 : 0.155));
     const sideHipBotY = waistTopY - sideH;
     const crotchY = hipY - span * 0.115;
-    const briefEase = 0.0095;
+    const briefEase = 0.0034;
 
     const N = 40;
     const ROWS = 10;
@@ -2835,7 +2784,7 @@ export const View3D = (() => {
         const y = lerp(eBotY, waistTopY + 0.002, r / 2);
         for (let k = 0; k <= N; k++) {
           const phi = (2 * Math.PI * k) / N;
-          const [bx, bz] = getBodySurfacePoint(y, phi, d, briefEase + 0.0025, 0);
+          const [bx, bz] = getBodySurfacePoint(y, phi, d, briefEase + 0.0014, 0);
           ePos.push(bx, y, bz);
           eUvs.push(k / N, r / 2);
           const [bi, bw] = packSkinWeights([[BONE_IDX.pelvis, 0.72], [BONE_IDX.spine, 0.28]]);
@@ -2873,7 +2822,7 @@ export const View3D = (() => {
         const lPos = [], lUvs = [], lSi = [], lSw = [], lIdx = [];
         const trimW = 0.008;
         legPts.forEach((pt, i) => {
-          const outX = pt.x * 1.015, outZ = pt.z * 1.015;
+          const outX = pt.x * 1.005, outZ = pt.z * 1.005;
           lPos.push(outX, pt.y - 0.001, outZ, outX, pt.y + trimW, outZ);
           lUvs.push(i / (legPts.length - 1), 0, i / (legPts.length - 1), 1);
           const [bi, bw] = packSkinWeights([[BONE_IDX.pelvis, 0.85], [sideSign > 0 ? BONE_IDX.legL : BONE_IDX.legR, 0.15]]);
@@ -2971,8 +2920,12 @@ export const View3D = (() => {
     function buildPantLeg(side) {
       const legX = side * hipPivotX;
       const legSteps = tSpec.isBrief ? 7 : 14;
-      const outerPelvicReach = Math.max(thighR * 1.02 + 0.012, hipR * 1.045 + 0.016 - Math.abs(legX));
-      const innerPelvicReach = Math.min(Math.max(thighR * 0.76 + 0.006, Math.abs(legX) - 0.002), Math.abs(legX) - 0.0015);
+      const outerPelvicReach = isExtendedBrief
+        ? Math.max(thighR * 1.00 + 0.004, hipR * 1.012 + 0.0045 - Math.abs(legX))
+        : Math.max(thighR * 1.02 + 0.012, hipR * 1.045 + 0.016 - Math.abs(legX));
+      const innerPelvicReach = isExtendedBrief
+        ? Math.min(Math.max(thighR * 0.74 + 0.003, Math.abs(legX) - 0.002), Math.abs(legX) - 0.0015)
+        : Math.min(Math.max(thighR * 0.76 + 0.006, Math.abs(legX) - 0.002), Math.abs(legX) - 0.0015);
 
       let prev = null;
       for (let i = 0; i <= legSteps; i++) {
@@ -2982,8 +2935,8 @@ export const View3D = (() => {
 
         // Include gastrocnemius calf swell (legFracUp ~ 0.33, posterior reach ~0.88*thighR) & patella clearance
         const calfSwell = thighR * 0.25 * bumpWindow(legFracUp, 0.33, 0.22);
-        const bodyLegR = thighR * (0.49 + 0.56 * Math.pow(legFracUp, 0.82)) + calfSwell + 0.016;
-        const cutR = thighR * (0.68 * tSpec.hemMult * (1 - legFracUp) + 1.08 * legFracUp) + 0.014;
+        const bodyLegR = thighR * (0.49 + 0.56 * Math.pow(legFracUp, 0.82)) + calfSwell + (isExtendedBrief ? 0.0038 : 0.016);
+        const cutR = thighR * (0.68 * tSpec.hemMult * (1 - legFracUp) + 1.08 * legFracUp) + (isExtendedBrief ? 0.0036 : 0.014);
         const baseR = Math.max(bodyLegR, cutR);
 
         const topBlend = smoothstep(0.74, 1.0, legFracUp);
@@ -2997,7 +2950,7 @@ export const View3D = (() => {
           const isMedial = sinP * side < 0;
 
           const targetRx = isMedial ? innerPelvicReach : outerPelvicReach;
-          const targetRz = (hipR * zScale + 0.017) * (cosP >= 0 ? 0.95 : 1.05);
+          const targetRz = (hipR * zScale + (isExtendedBrief ? 0.0045 : 0.017)) * (cosP >= 0 ? 0.95 : 1.05);
 
           const rx = baseR * 0.97 * (1 - topBlend) + targetRx * topBlend;
           let rz = baseR * 1.04 * (1 - topBlend) + targetRz * topBlend;
@@ -3027,11 +2980,17 @@ export const View3D = (() => {
     const riseSpanMult = briefRise === "high" ? 0.38 : (briefRise === "low" ? 0.10 : 0.20);
     const waistTopY = tSpec.isBrief ? (hipY + span * riseSpanMult) : waistY;
     const briefTopRx = lerp(hipR, waistR, briefRise === "high" ? 0.86 : (briefRise === "low" ? 0.22 : 0.45));
-    const pelvisSlices = [
-      [hipY - span * 0.075, hipR * 1.045 + 0.016, hipR * 1.025 + 0.017],
-      [hipY, hipR * 1.055 + 0.017, hipR * 1.045 + 0.018],
-      [waistTopY, briefTopRx * 1.025 + 0.015, briefTopRx * 1.025 + 0.015],
-    ];
+    const pelvisSlices = tSpec.isBrief
+      ? [
+        [hipY - span * 0.075, hipR * 1.010 + 0.0042, hipR * 1.008 + 0.0042],
+        [hipY, hipR * 1.014 + 0.0045, hipR * 1.012 + 0.0045],
+        [waistTopY, briefTopRx * 1.006 + 0.0036, briefTopRx * 1.006 + 0.0036],
+      ]
+      : [
+        [hipY - span * 0.075, hipR * 1.045 + 0.016, hipR * 1.025 + 0.017],
+        [hipY, hipR * 1.055 + 0.017, hipR * 1.045 + 0.018],
+        [waistTopY, briefTopRx * 1.025 + 0.015, briefTopRx * 1.025 + 0.015],
+      ];
     if (!tSpec.isBrief) {
       pelvisSlices[2] = [hipY + span * 0.18, (hipR * 0.72 + waistR * 0.30) + 0.016, (hipR * 0.72 + waistR * 0.30) + 0.016];
       pelvisSlices.push(
@@ -3127,7 +3086,7 @@ export const View3D = (() => {
       const ePos = [], eUvs = [], eSi = [], eSw = [], eIdx = [];
       const eBotY = waistTopY - span * 0.045;
       const eTopY = waistTopY + 0.002;
-      const eRx = briefTopRx * 1.025 + 0.0185;
+      const eRx = briefTopRx * 1.008 + 0.0052;
       for (let r = 0; r <= 2; r++) {
         const y = eBotY + (r / 2) * (eTopY - eBotY);
         for (let k = 0; k <= N; k++) {

@@ -3,153 +3,14 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { TSHIRT_PIECES, TSHIRT_SEAMS } from '../pattern/tshirt'
 import { triangulateAll, adaptiveSpacingCm } from '../pattern/triangulate'
-import { assembleCloth, deriveNeighbors, deriveNormalRing } from './assemble'
+import { assembleCloth, deriveNeighbors, deriveNormalRing, UV_REPEAT_CM } from './assemble'
 import { ClothSimulation, textureDimFor, QUALITY_TIER_DEFAULT } from './ClothSimulation'
 import { FABRIC_PRESETS, DEFAULT_FABRIC } from './fabricPresets'
 import { deriveCollisionRig, deriveGarmentPinMask } from '../body/collisionRig'
-import { getAssetBase } from '../assetBase'
 import { updateExportGeometry } from '../export/prepareScene'
 import { SAFE_CLOTH_NORMAL_GLSL } from './surfaceShader'
 import { createEmptyPrintTexture, createPrintOverlayTexture } from './printTextures'
-
-// A single real (CC0, see public/textures/fabric-weave/README.md) fabric-
-// weave texture set, shared across every fabric preset — color/roughness/
-// sheen/clearcoat still differ per fabric (below), this only replaces "flat
-// solid color" with real woven-fabric surface detail. Loaded once at module
-// scope (not per fabric switch, not via a Suspense hook — see the cloth-lab
-// realism plan's Tier-1/B2 notes on why plain TextureLoader was chosen over
-// drei's useTexture here) so switching fabrics never re-triggers a network
-// fetch or shows a pop-in.
-//
-// WP-5.2: TEX_BASE is computed INSIDE loadFabricTextures(), not as a
-// top-level module const — ES module imports are hoisted and evaluated
-// before any importing module's own top-level code runs, so a module-level
-// `const TEX_BASE = getAssetBase() + ...` would capture the embedded
-// build's default base before embed.js's mount() ever gets a chance to
-// call setAssetBase(). Reading it lazily, on first actual call (still
-// cached via fabricTexturesPromise below, so this costs nothing extra),
-// guarantees setAssetBase() has already run by the time it matters.
-let fabricTexturesPromise = null
-function normalizeDiffuseTexture(tex) {
-  if (!tex?.image || typeof document === 'undefined') {
-    tex?.dispose?.()
-    return null
-  }
-  try {
-    const img = tex.image
-    const w = Math.min(256, img.naturalWidth || img.videoWidth || img.width || 256)
-    const h = Math.min(256, img.naturalHeight || img.videoHeight || img.height || 256)
-    if (!(w > 0 && h > 0)) {
-      tex.dispose?.()
-      return null
-    }
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = h
-    const ctx = canvas.getContext?.('2d')
-    if (!ctx) {
-      tex.dispose?.()
-      return null
-    }
-    ctx.drawImage(img, 0, 0, w, h)
-    const imgData = ctx.getImageData(0, 0, w, h)
-    const d = imgData.data
-    let sum = 0
-    const n = d.length / 4
-    for (let i = 0; i < d.length; i += 4) {
-      sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-    }
-    const mean = sum / Math.max(1, n)
-    for (let i = 0; i < d.length; i += 4) {
-      for (let c = 0; c < 3; c++) {
-        d[i + c] = Math.max(195, Math.min(250, Math.round(232 + (d[i + c] - mean) * 0.42)))
-      }
-    }
-    ctx.putImageData(imgData, 0, 0)
-    const normTex = new THREE.CanvasTexture(canvas)
-    normTex.wrapS = normTex.wrapT = THREE.RepeatWrapping
-    normTex.colorSpace = THREE.SRGBColorSpace
-    tex.dispose?.()
-    return normTex
-  } catch {
-    tex.dispose?.()
-    return null
-  }
-}
-
-function normalizeRoughnessTexture(tex) {
-  if (!tex?.image || typeof document === 'undefined') {
-    tex?.dispose?.()
-    return null
-  }
-  try {
-    const img = tex.image
-    const w = Math.min(256, img.naturalWidth || img.videoWidth || img.width || 256)
-    const h = Math.min(256, img.naturalHeight || img.videoHeight || img.height || 256)
-    if (!(w > 0 && h > 0)) {
-      tex.dispose?.()
-      return null
-    }
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = h
-    const ctx = canvas.getContext?.('2d')
-    if (!ctx) {
-      tex.dispose?.()
-      return null
-    }
-    ctx.drawImage(img, 0, 0, w, h)
-    const imgData = ctx.getImageData(0, 0, w, h)
-    const d = imgData.data
-    let sum = 0
-    const n = d.length / 4
-    for (let i = 0; i < d.length; i += 4) {
-      sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-    }
-    const mean = sum / Math.max(1, n)
-    for (let i = 0; i < d.length; i += 4) {
-      const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-      const v = Math.max(216, Math.min(254, Math.round(238 + (lum - mean) * 0.35)))
-      d[i] = v; d[i + 1] = v; d[i + 2] = v
-    }
-    ctx.putImageData(imgData, 0, 0)
-    const normTex = new THREE.CanvasTexture(canvas)
-    normTex.wrapS = normTex.wrapT = THREE.RepeatWrapping
-    normTex.colorSpace = THREE.NoColorSpace
-    tex.dispose?.()
-    return normTex
-  } catch {
-    tex.dispose?.()
-    return null
-  }
-}
-
-function loadFabricTextures() {
-  if (fabricTexturesPromise) return fabricTexturesPromise
-  const texBase = `${getAssetBase()}textures/fabric-weave/`
-  const loader = new THREE.TextureLoader()
-  const load = (file, kind) => new Promise((resolve) => {
-    loader.load(texBase + file, (tex) => {
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-      if (kind === 'color') {
-        tex.colorSpace = THREE.SRGBColorSpace
-        resolve(normalizeDiffuseTexture(tex))
-        return
-      }
-      if (kind === 'roughness') {
-        resolve(normalizeRoughnessTexture(tex))
-        return
-      }
-      resolve(tex)
-    }, undefined, () => resolve(null)) // missing/broken texture -> fall back to flat color, not a crash
-  })
-  fabricTexturesPromise = Promise.all([
-    load('diffuse.jpg', 'color'),
-    load('normal.jpg', 'normal'),
-    load('roughness.jpg', 'roughness'),
-  ]).then(([map, normalMap, roughnessMap]) => ({ map, normalMap, roughnessMap }))
-  return fabricTexturesPromise
-}
+import { getFabricTextureSet } from '../../../js/fabric-textures.js'
 
 // Build-order steps 6+: the actual simulated garment. Geometry is built once
 // per `dims`/`pieces`/`seams` change (placement is a pure function of body
@@ -246,21 +107,30 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
 
   const material = useMemo(() => {
     const fabric = FABRIC_PRESETS[fabricId] || FABRIC_PRESETS[DEFAULT_FABRIC]
-    const effRough = fabric.rough < 0.30 ? Math.max(0.22, fabric.rough) : Math.max(0.36, fabric.rough)
-    const normStrength = fabric.normalStrength ?? 0.55
+    const maxAniso = Math.min(8, gl?.capabilities?.getMaxAnisotropy?.() || 4)
+    const pbr = getFabricTextureSet(THREE, fabricId || DEFAULT_FABRIC, { uvSpanCm: UV_REPEAT_CM, anisotropy: maxAniso })
+    const normStrength = fabric.normalStrength ?? pbr?.spec?.normalScale ?? 0.65
+    const isVelvet = fabricId === 'velvet'
+    const isLuster = fabricId === 'satin' || fabricId === 'silk'
     const mat = new THREE.MeshPhysicalMaterial({
       // White base + vertexColors: true — the geometry's own per-piece
       // `color` attribute (assemble.js's renderColor, sourced from the 2D
-      // canvas) tints each pattern piece, while the shader adds realistic
-      // micro-weave, elastic ribbing, and seam-finishing detail.
+      // canvas) tints each pattern piece, while the procedural PBR texture set
+      // adds authentic micro-weave, normal relief, roughness variation, sheen,
+      // elastic ribbing, and seam-finishing detail.
       color: '#ffffff', vertexColors: true,
-      roughness: effRough, metalness: Math.min(0.06, fabric.metal),
-      sheen: Math.min(fabric.sheen, 0.52),
-      sheenRoughness: fabric.sheenRough ?? 0.58,
-      sheenColor: new THREE.Color(fabric.sheen > 0.7 ? '#d8d2cb' : '#cfc9c2'),
-      clearcoat: Math.min(0.12, fabric.clear), clearcoatRoughness: 0.52,
+      roughness: fabric.rough ?? pbr?.spec?.roughness ?? 0.72,
+      metalness: Math.min(0.08, fabric.metal ?? 0),
+      sheen: fabric.sheen ?? pbr?.spec?.sheen ?? 0.3,
+      sheenRoughness: fabric.sheenRough ?? pbr?.spec?.sheenRoughness ?? 0.52,
+      sheenColor: new THREE.Color(isVelvet ? '#f3efe9' : ((fabric.sheen ?? 0) > 0.65 ? '#ece6de' : '#d6d0c8')),
+      clearcoat: fabric.clear ?? pbr?.spec?.clearcoat ?? 0,
+      clearcoatRoughness: fabric.clearcoatRough ?? pbr?.spec?.clearcoatRoughness ?? 0.38,
+      map: pbr?.map || null,
+      normalMap: pbr?.normalMap || null,
+      roughnessMap: pbr?.roughnessMap || null,
       normalScale: new THREE.Vector2(normStrength, normStrength),
-      envMapIntensity: fabric.rough < 0.35 ? 0.72 : 0.48,
+      envMapIntensity: fabric.envMapIntensity ?? pbr?.spec?.envMapIntensity ?? 0.85,
       transparent: fabric.om < 1, opacity: fabric.om,
       side: THREE.DoubleSide,
       // Note: omit `anisotropy` on GPU-displaced tangentless cloth geometry so
@@ -270,6 +140,8 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uSimPositionTex = positionUniform.current
       shader.uniforms.uWeaveScale = { value: fabric.weaveScale ?? 1.2 }
+      shader.uniforms.uVelvetFactor = { value: isVelvet ? 1.0 : 0.0 }
+      shader.uniforms.uLusterFactor = { value: isLuster ? (fabricId === 'satin' ? 1.0 : 0.78) : 0.0 }
       shader.uniforms.uPrintTex = printUniforms.current.tex
       shader.uniforms.uHasPrint = printUniforms.current.hasPrint
       shader.uniforms.uPrintRepeat = printUniforms.current.repeat
@@ -284,7 +156,7 @@ uniform sampler2D uSimPositionTex;
 uniform float uWeaveScale;
 varying vec4 vPieceStyle;
 varying vec2 vFabricUV;
-varying vec2 vRawUV;
+varying vec2 vPrintUv;
 #include <common>
 ` + SAFE_CLOTH_NORMAL_GLSL
         )
@@ -299,7 +171,7 @@ varying vec2 vRawUV;
           vNormal = clothSafeNormal(normalMatrix * clothSafeNormal(smoothNormal, normal), vec3(0.0, 0.0, 1.0));
           vPieceStyle = aPieceStyle;
           vFabricUV = uv * uWeaveScale;
-          vRawUV = uv;
+          vPrintUv = uv;
           vec3 transformed = selfPos;`
         )
       shader.fragmentShader = shader.fragmentShader
@@ -308,9 +180,11 @@ varying vec2 vRawUV;
           `uniform sampler2D uPrintTex;
 uniform float uHasPrint;
 uniform float uPrintRepeat;
+uniform float uVelvetFactor;
+uniform float uLusterFactor;
 varying vec4 vPieceStyle;
 varying vec2 vFabricUV;
-varying vec2 vRawUV;
+varying vec2 vPrintUv;
 #include <common>`
         )
         .replace(
@@ -320,15 +194,23 @@ varying vec2 vRawUV;
           float seamAO = smoothstep(0.62, 1.0, vPieceStyle.y);
           float knitMask = clamp(vPieceStyle.z, 0.0, 1.0);
           float hemEdge = smoothstep(0.76, 1.0, vPieceStyle.w);
+          float ndotv = abs(dot(normalize(vNormal), normalize(vViewPosition)));
+          float fres = pow(clamp(1.0 - ndotv, 0.0, 1.0), 2.5);
+          if (uVelvetFactor > 0.05) {
+            diffuseColor.rgb *= mix(0.80, 1.20, fres * uVelvetFactor);
+          } else if (uLusterFactor > 0.05) {
+            float foldGleam = smoothstep(0.18, 0.72, ndotv) * (1.0 - ndotv) * 4.0;
+            diffuseColor.rgb *= (1.0 + foldGleam * 0.08 * uLusterFactor);
+          }
           if (elasticMask > 0.25) {
-            float rib = sin(vFabricUV.x * 38.0) * 0.032 + sin(vFabricUV.y * 52.0) * 0.012;
+            float rib = sin(vFabricUV.x * 38.0) * 0.036 + sin(vFabricUV.y * 52.0) * 0.014;
             diffuseColor.rgb *= (1.0 + rib * elasticMask - 0.055 * smoothstep(0.65, 1.0, vPieceStyle.w) * elasticMask);
           } else if (knitMask > 0.25) {
-            float wale = sin(vFabricUV.x * 64.0) * 0.015;
+            float wale = sin(vFabricUV.x * 64.0) * 0.016;
             diffuseColor.rgb *= (1.0 + wale * knitMask);
           }
-          diffuseColor.rgb *= (1.0 - 0.075 * seamAO - 0.038 * hemEdge * (1.0 - elasticMask * 0.5));
-          vec4 printSample = (uHasPrint > 0.5) ? texture2D(uPrintTex, vRawUV * uPrintRepeat) : vec4(0.0);
+          diffuseColor.rgb *= (1.0 - 0.085 * seamAO - 0.042 * hemEdge * (1.0 - elasticMask * 0.5));
+          vec4 printSample = (uHasPrint > 0.5) ? texture2D(uPrintTex, vPrintUv * uPrintRepeat) : vec4(0.0);
           if (printSample.a > 0.01) {
             diffuseColor.rgb = mix(diffuseColor.rgb, printSample.rgb, clamp(printSample.a, 0.0, 1.0) * 0.92);
           }`
@@ -338,7 +220,7 @@ varying vec2 vRawUV;
           `#include <roughnessmap_fragment>
           float elRough = clamp(vPieceStyle.x, 0.0, 1.0);
           float sRough = smoothstep(0.62, 1.0, vPieceStyle.y);
-          roughnessFactor = clamp(roughnessFactor + 0.14 * elRough + 0.06 * sRough, 0.18, 0.98);
+          roughnessFactor = clamp(roughnessFactor + 0.14 * elRough + 0.06 * sRough, 0.16, 0.98);
           if (printSample.a > 0.01) {
             roughnessFactor = mix(roughnessFactor, 0.26, clamp(printSample.a, 0.0, 1.0) * 0.65);
           }`
@@ -346,6 +228,7 @@ varying vec2 vRawUV;
         .replace(
           '#include <dithering_fragment>',
           `#include <dithering_fragment>
+          gl_FragColor.rgb = min(gl_FragColor.rgb, vec3(2.2));
           if (isnan(gl_FragColor.r) || isnan(gl_FragColor.g) || isnan(gl_FragColor.b) || isinf(gl_FragColor.r) || isinf(gl_FragColor.g) || isinf(gl_FragColor.b)) {
             gl_FragColor.rgb = vec3(0.0);
           }`
@@ -353,25 +236,10 @@ varying vec2 vRawUV;
       mat.userData.shader = shader
     }
     return mat
-  }, [fabricId])
+  }, [fabricId, gl])
 
-  // Applied asynchronously once the (module-cached, loaded-once) fabric
-  // texture set resolves — kept separate from the material useMemo above
-  // since texture loading is inherently async and useMemo must return
-  // synchronously. `needsUpdate=true` forces a recompile that re-runs
-  // onBeforeCompile above, so the GPU-position patch survives. The `live`
-  // flag guards against applying a stale/superseded load to a material from
-  // a since-changed fabricId (this effect's own cleanup flips it off).
-  useEffect(() => {
-    let live = true
-    loadFabricTextures().then(({ map, normalMap, roughnessMap }) => {
-      if (!live) return
-      material.map = map
-      material.normalMap = normalMap
-      material.roughnessMap = roughnessMap
-      material.needsUpdate = true
-    })
-    return () => { live = false }
+  useEffect(() => () => {
+    material.dispose()
   }, [material])
 
   const printKey = print ? JSON.stringify(print) : ''

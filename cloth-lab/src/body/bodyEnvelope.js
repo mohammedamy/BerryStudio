@@ -411,7 +411,7 @@ export function projectPointOutsideBodyEnvelope(p, envelope, frames, clearanceOf
   if (!envelope || !frames || frames.length < ENV_SEGMENT_COUNT) return p
   let px = p[0], py = p[1], pz = p[2]
   const rgba = envelope.rgba
-  const effOffset = clamp(clearanceOffset || 0, -0.0034, 0.0030)
+  const effOffset = clamp(clearanceOffset || 0, -0.0038, 0.0030)
 
   for (let s = 0; s < ENV_SEGMENT_COUNT; s++) {
     const f = frames[s]

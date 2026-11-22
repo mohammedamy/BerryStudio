@@ -30,8 +30,8 @@ describe('classifyPiecePhysics & computePerVertexFlowWeight', () => {
       placementHint: { sewnBriefWaist: true, isBriefWaist: true, schemaRole: 'elastic-band', isElasticTrim: true },
     }, SAMPLE_DIMS)
     expect(waistElastic.physClass).toBe(PHYS_CLASS.ELASTIC)
-    expect(waistElastic.restScale).toBeCloseTo(0.92, 3)
-    expect(waistElastic.skinOffset).toBe(-0.0032)
+    expect(waistElastic.restScale).toBeCloseTo(0.87, 3)
+    expect(waistElastic.skinOffset).toBe(-0.0036)
 
     const legElastic = classifyPiecePhysics({
       pieceId: 'legElastic_r',
@@ -40,7 +40,7 @@ describe('classifyPiecePhysics & computePerVertexFlowWeight', () => {
       placementHint: { isLegOpeningElastic: true, sewnLegElastic: true, schemaRole: 'elastic-band', isElasticTrim: true },
     }, SAMPLE_DIMS)
     expect(legElastic.physClass).toBe(PHYS_CLASS.ELASTIC)
-    expect(legElastic.restScale).toBeCloseTo(0.93, 3)
+    expect(legElastic.restScale).toBeCloseTo(0.89, 3)
 
     const sportBand = classifyPiecePhysics({
       pieceId: 'bandElastic_1',
@@ -49,7 +49,7 @@ describe('classifyPiecePhysics & computePerVertexFlowWeight', () => {
       placementHint: { sewnSportBand: true, isElasticTrim: true },
     }, SAMPLE_DIMS)
     expect(sportBand.physClass).toBe(PHYS_CLASS.ELASTIC)
-    expect(sportBand.restScale).toBeCloseTo(0.92, 3)
+    expect(sportBand.restScale).toBeCloseTo(0.87, 3)
 
     const strap = classifyPiecePhysics({
       pieceId: 'strap_r',
@@ -58,7 +58,7 @@ describe('classifyPiecePhysics & computePerVertexFlowWeight', () => {
       placementHint: { schemaRole: 'strap', isElasticTrim: true },
     }, SAMPLE_DIMS)
     expect(strap.physClass).toBe(PHYS_CLASS.ELASTIC)
-    expect(strap.restScale).toBeCloseTo(0.93, 3)
+    expect(strap.restScale).toBeCloseTo(0.89, 3)
   })
 
   it('classifies bikini briefs, gussets, cups, and leotards into BIKINI_INTIMATE with safe positive skin clearance', () => {
@@ -69,8 +69,8 @@ describe('classifyPiecePhysics & computePerVertexFlowWeight', () => {
       placementHint: { isBrief: true, schemaRole: 'brief-front' },
     }, SAMPLE_DIMS)
     expect(brief.physClass).toBe(PHYS_CLASS.BIKINI_INTIMATE)
-    expect(brief.restScale).toBeCloseTo(0.965, 3)
-    expect(brief.skinOffset).toBe(-0.0030)
+    expect(brief.restScale).toBeCloseTo(0.915, 3)
+    expect(brief.skinOffset).toBe(-0.0034)
     expect(ENV_CLEARANCE + brief.skinOffset).toBeGreaterThanOrEqual(0.0020)
 
     const cup = classifyPiecePhysics({
@@ -147,8 +147,8 @@ describe('assembleCloth + deriveNeighbors multi-zone physics threading', () => {
     const cloth = assembleCloth(triPieces, SAMPLE_DIMS, [], 'standing')
     expect(cloth.simPhysClass.length).toBe(cloth.simParticleCount)
     expect(cloth.simPhysClass[0]).toBe(PHYS_CLASS.ELASTIC)
-    expect(cloth.simSkinOffset[0]).toBeCloseTo(-0.0032, 6)
-    expect(cloth.simRestScale[0]).toBeCloseTo(0.92, 3)
+    expect(cloth.simSkinOffset[0]).toBeCloseTo(-0.0036, 6)
+    expect(cloth.simRestScale[0]).toBeCloseTo(0.87, 3)
     expect(cloth.renderPieceStyle[0]).toBe(1.0) // isElastic
     expect(cloth.renderPieceStyle[3]).toBe(1.0) // boundary hem edge
 
@@ -161,6 +161,6 @@ describe('assembleCloth + deriveNeighbors multi-zone physics threading', () => {
       cloth.simRestPositions[i0 * 3 + 1] - cloth.simRestPositions[n0 * 3 + 1],
       cloth.simRestPositions[i0 * 3 + 2] - cloth.simRestPositions[n0 * 3 + 2],
     )
-    expect(rest0).toBeCloseTo(rawDist * 0.92, 5)
+    expect(rest0).toBeCloseTo(rawDist * 0.87, 5)
   })
 })

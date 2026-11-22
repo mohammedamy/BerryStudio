@@ -22,8 +22,8 @@ import { GPUBitonicSort } from './bitonicSortGPU.js'
 // simulated time per real frame stays ~1/60s regardless of how many
 // substeps that's currently split across — changing substep count changes
 // stability/accuracy, deliberately, not simulation SPEED.
-const SUBSTEPS_MIN = 4
-const SUBSTEPS_MAX = 12
+const SUBSTEPS_MIN = 6
+const SUBSTEPS_MAX = 14
 const SUBSTEPS_START = 8
 const SUBSTEP_TARGET_MS = 1000 / 60 * 0.5 // budget the sim to ~half a 60fps frame, leaving room for render+scene
 const GRAVITY = new THREE.Vector3(0, -9.81, 0)
@@ -431,7 +431,7 @@ vec3 dihedralCanonicalRoleDelta(
 
   vec3 edge = p2 - p1;
   float edgeLen = length(edge);
-  if (edgeLen < 1e-6) return vec3(0.0);
+  if (edgeLen < 0.002) return vec3(0.0);
   vec3 e = edge / edgeLen;
   vec3 v3 = p3 - p1;
   vec3 v4 = p4 - p1;
@@ -444,12 +444,13 @@ vec3 dihedralCanonicalRoleDelta(
 
   float h3 = n1len / edgeLen;
   float h4 = n2len / edgeLen;
-  if (h3 < 1e-5 || h4 < 1e-5) return vec3(0.0);
+  if (h3 < 0.0025 || h4 < 0.0025) return vec3(0.0);
 
   vec3 n1 = n1raw / n1len;
   vec3 n2 = n2raw / n2len;
   float cosT = clamp(dot(n1, n2), -1.0, 1.0);
   float sinT = dot(cross(n1, n2), e);
+  if (sinT * sinT + cosT * cosT < 1e-10) return vec3(0.0);
   float angle = atan(sinT, cosT);
 
   float error = angle - restAngle;
@@ -469,9 +470,9 @@ vec3 dihedralCanonicalRoleDelta(
   float hingeBendScale = 0.25 * (bendScaleFor(a1.ba) + bendScaleFor(a2.ba) + bendScaleFor(a3.ba) + bendScaleFor(a4.ba));
   float effStiff = clamp(uDihedralStiff * hingeBendScale, 0.0, 1.0) * seamScale;
   float foldGuard = smoothstep(-0.995, -0.80, cosT);
-  float stepAngle = clamp(effStiff * error, -uDihedralMaxDelta * 1.5, uDihedralMaxDelta * 1.5) * foldGuard;
+  float stepAngle = clamp(effStiff * error, -uDihedralMaxDelta, uDihedralMaxDelta) * foldGuard;
   float lambda = stepAngle / denom;
-  float maxDisp = 0.14 * min(h3, h4);
+  float maxDisp = min(0.005, 0.12 * min(h3, h4));
   float peakDisp = max(
     max(w1 * length(q1), w2 * length(q2)),
     max(w3 * length(q3), w4 * length(q4))
@@ -539,7 +540,10 @@ vec3 selfCollisionCorrection(vec3 predicted, vec3 substepStartPos, vec3 myRestPo
       if (flatIdx >= uParticleCount || flatIdx == myFlatIdx) continue;
       vec2 juv = (vec2(float(xi), float(yi)) + 0.5) / resolution;
       vec3 jRest = texture2D(uRestPosition, juv).xyz;
-      if (distance(myRestPos, jRest) < uSelfCollisionRestThreshold) continue;
+      float restDist = distance(myRestPos, jRest);
+      if (restDist < uSelfCollisionRestThreshold) continue;
+      float jPinned = texture2D(uAreaShare, juv).g;
+      if (jPinned > 0.5 && restDist < 0.14) continue;
       vec3 jPos = texture2D(texturePosition, juv).xyz;
       vec3 diff = predicted - jPos;
       float d = length(diff);
@@ -664,7 +668,10 @@ vec3 selfCollisionCorrection(vec3 predicted, vec3 substepStartPos, vec3 myRestPo
           if (j < -0.5 || j == myFlatIdx) continue;
           vec2 nuv = particleUV(j);
           vec3 jRest = texture2D(uRestPosition, nuv).xyz;
-          if (distance(myRestPos, jRest) < uSelfCollisionRestThreshold) continue;
+          float restDist = distance(myRestPos, jRest);
+          if (restDist < uSelfCollisionRestThreshold) continue;
+          float jPinned = texture2D(uAreaShare, nuv).g;
+          if (jPinned > 0.5 && restDist < 0.14) continue;
           vec3 jPos = texture2D(texturePosition, nuv).xyz;
           vec3 diff = predicted - jPos;
           float d = length(diff);
@@ -765,7 +772,10 @@ const DIHEDRAL_BEND_MAIN_GLSL = `
     float canonRest = era${ch} > 32.0 ? (era${ch} - 64.0) : era${ch};
     dihedralTotal += dihedralCanonicalRoleDelta(p1Idx, p2Idx, p3Idx, p4Idx, n2Sign, seamScale, canonRest, meP1 ? 1 : 2);
   }`).join('')}
-  predicted += dihedralTotal * 0.0625;
+  vec3 dihStep = dihedralTotal * 0.0625;
+  float dihLen = length(dihStep);
+  if (dihLen > 0.006) dihStep *= 0.006 / dihLen;
+  predicted += dihStep;
 `
 
 // NOTE: `texturePosition` / `texturePrevPosition` are NOT declared here —
@@ -802,6 +812,7 @@ uniform float uVelocityScale;
 uniform float uGravityRamp;
 uniform vec3 uGravity;
 uniform float uDamping;
+uniform float uAirDrag;
 uniform float uMassDensity;
 uniform float uStructStiff;
 uniform float uBendStiff;
@@ -867,18 +878,18 @@ void main() {
   bool isLoose   = physClass > 2.5 && physClass < 3.5;
   bool isStruct  = physClass > 3.5;
 
-  float effDamping = isElastic ? min(uDamping, 0.945)
-    : (isBikini ? min(uDamping, 0.955)
-    : (isLoose ? mix(uDamping, min(0.988, uDamping + 0.010), flowW) : uDamping));
+  float effDamping = isElastic ? min(uDamping, 0.940)
+    : (isBikini ? min(uDamping, 0.948)
+    : (isLoose ? mix(uDamping, min(0.978, uDamping + 0.008), flowW) : uDamping));
   float effFriction = isElastic ? clamp(uFriction * 1.12, 0.92, 0.99)
     : (isBikini ? max(uFriction, 0.92)
     : (isLoose ? uFriction * mix(0.92, 0.44, flowW) : uFriction));
-  float effStructStiff = isElastic ? max(uStructStiff, 0.96)
-    : (isBikini ? mix(uStructStiff, 0.93, 0.5)
+  float effStructStiff = isElastic ? max(uStructStiff, 0.98)
+    : (isBikini ? mix(uStructStiff, 0.955, 0.65)
     : (isStruct ? max(uStructStiff, 0.97) : uStructStiff));
-  float effMaxStrain = isElastic ? max(uMaxStrain, 1.24)
-    : (isBikini ? max(uMaxStrain, 1.22)
-    : (isStruct ? min(uMaxStrain, 1.04) : uMaxStrain));
+  float effMaxStrain = isElastic ? 1.14
+    : (isBikini ? 1.12
+    : (isStruct ? min(uMaxStrain, 1.03) : uMaxStrain));
   float effBendScale = isElastic ? 1.35
     : (isBikini ? 0.78
     : (isLoose ? mix(0.90, 0.52, flowW) : (isStruct ? 1.35 : 1.0)));
@@ -914,7 +925,9 @@ void main() {
 
   vec3 prevPos = texture2D(texturePrevPosition, uv).xyz;
   vec3 velStep = (pos - prevPos) * uVelocityScale;
-  if (isLoose && flowW > 0.05 && sA.x > -0.5 && sA.y > -0.5) {
+  float velLen = length(velStep);
+  if (velLen > 0.018) velStep *= 0.018 / velLen;
+  if (sA.x > -0.5 && sA.y > -0.5) {
     vec2 nUv0 = particleUV(sA.x);
     vec2 nUv1 = particleUV(sA.y);
     vec3 nCross = cross(texture2D(texturePosition, nUv0).xyz - pos, texture2D(texturePosition, nUv1).xyz - pos);
@@ -922,7 +935,8 @@ void main() {
     if (nLenSq > 1e-10) {
       vec3 approxN = nCross * inversesqrt(nLenSq);
       float vNorm = dot(velStep, approxN);
-      velStep -= approxN * vNorm * clamp(0.14 * flowW, 0.0, 0.25);
+      float dragStrength = clamp(uAirDrag * (isLoose ? mix(1.0, 1.85, flowW) : 1.0), 0.02, 0.34);
+      velStep -= approxN * vNorm * dragStrength;
     }
   }
   vec3 predicted = pos + velStep * effDamping + uGravity * uGravityRamp * uDt * uDt;
@@ -962,7 +976,9 @@ ${highQuality ? DIHEDRAL_BEND_MAIN_GLSL : DEFAULT_BEND_MAIN_GLSL}
   // not \`predicted\`) is passed through too — see selfCollisionCorrection's
   // own header for why the spatial-hash tier needs it.
   vec3 selfCorr = selfCollisionCorrection(predicted, pos, myRestPos, myFlatIdx);
-  if (dot(selfCorr, selfCorr) > 1e-12) {
+  float selfLen = length(selfCorr);
+  if (selfLen > 1e-6) {
+    if (selfLen > 0.009) selfCorr *= 0.009 / selfLen;
     predicted += selfCorr;
     // Re-enforce body collision so an outer fold can never shove an inner
     // cloth layer inside the mannequin body!
@@ -986,12 +1002,22 @@ ${highQuality ? DIHEDRAL_BEND_MAIN_GLSL : DEFAULT_BEND_MAIN_GLSL}
     vec3 avgPush = edgePushSum / edgePushCount;
     float avgLen = length(avgPush);
     if (avgLen > 1e-6) {
-      predicted += (avgPush / avgLen) * (0.90 * mix(avgLen, edgePushMax, 0.5));
+      float pushMag = min(0.014, 0.90 * mix(avgLen, edgePushMax, 0.5));
+      predicted += (avgPush / avgLen) * pushMag;
     }
     predicted = collideAllBody(predicted, prevPos, effFriction, skinOff);
   }
 
+  vec3 netStep = predicted - pos;
+  float netLen = length(netStep);
+  if (netLen > 0.032) predicted = pos + netStep * (0.032 / netLen);
+
   if (predicted.y < uFloorY) predicted.y = uFloorY;
+
+  vec3 fromRest = predicted - myRestPos;
+  if (any(isnan(predicted)) || any(isinf(predicted)) || dot(fromRest, fromRest) > 9.0) {
+    predicted = collideAllBody(myRestPos, myRestPos, effFriction, skinOff);
+  }
 
   gl_FragColor = vec4(predicted, 0.0);
 }
@@ -1260,6 +1286,7 @@ export class ClothSimulation {
       uGravityRamp: { value: 0 },
       uGravity: { value: GRAVITY },
       uDamping: { value: fabric.damping },
+      uAirDrag: { value: fabric.airDrag ?? 0.11 },
       uMassDensity: { value: fabric.massDensity },
       uStructStiff: { value: fabric.structStiff },
       uBendStiff: { value: fabric.bendStiff },
@@ -1342,6 +1369,7 @@ export class ClothSimulation {
   setFabric(fabric) {
     const u = this.posVar.material.uniforms
     u.uDamping.value = fabric.damping
+    u.uAirDrag.value = fabric.airDrag ?? 0.11
     u.uMassDensity.value = fabric.massDensity
     u.uStructStiff.value = fabric.structStiff
     u.uBendStiff.value = fabric.bendStiff

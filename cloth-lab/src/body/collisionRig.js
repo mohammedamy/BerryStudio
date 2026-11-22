@@ -461,7 +461,7 @@ export function deriveCollisionRigFromLimbs(dims, limbs) {
  */
 export function projectPointOutsideCapsules(p, collisionRig, clearanceOffset = 0) {
   let px = p[0], py = p[1], pz = p[2]
-  const effOff = clamp(clearanceOffset || 0, -0.0034, 0.0030)
+  const effOff = clamp(clearanceOffset || 0, -0.0038, 0.0030)
   for (let pass = 0; pass < 24; pass++) {
     const sx = px, sy = py, sz = pz
     let totalPush = 0
@@ -779,7 +779,7 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
       const widthCm = Math.max(1e-6, maxX - minX)
       const heightCm = Math.max(1e-6, maxY - minY)
 
-      if ((role === 'attachBust' || role === 'attachUnderbust') && heightCm <= 18) {
+      if ((role === 'attachBust' || role === 'attachUnderbust') && (tp.placementHint?.sewnCupBra || tp.placementHint?.sewnSportBand || heightCm <= 24)) {
         if (tp.placementHint?.sewnCupBra) {
           if (role === 'attachUnderbust' && tp.placementHint?.pinTopForStrapless) {
             for (let localIdx = 0; localIdx < pts.length; localIdx++) {

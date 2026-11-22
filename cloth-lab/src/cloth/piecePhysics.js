@@ -110,11 +110,11 @@ export function classifyPiecePhysics(tp, dims = null) {
       hint.sewnLegElastic ||
       role === 'attachStrap'
     )
-    const restScale = isWaistOrUnderbust ? 0.92 : (isLegOrStrap ? 0.93 : 0.95)
+    const restScale = isWaistOrUnderbust ? 0.87 : (isLegOrStrap ? 0.89 : 0.92)
     return {
       physClass: PHYS_CLASS.ELASTIC,
       restScale,
-      skinOffset: -0.0032,
+      skinOffset: -0.0036,
       isElastic: true,
       isIntimateKnit: false,
       isLoose: false,
@@ -132,11 +132,11 @@ export function classifyPiecePhysics(tp, dims = null) {
     role === 'attachBust'
   )
   if (isBikiniIntimate) {
-    const restScale = (hint.isSportBra || hint.isFittedIntimate) ? 0.975 : 0.965
+    const restScale = (hint.isSportBra || hint.isFittedIntimate) ? 0.93 : 0.915
     return {
       physClass: PHYS_CLASS.BIKINI_INTIMATE,
       restScale,
-      skinOffset: -0.0030 + siblingOffset,
+      skinOffset: -0.0034 + siblingOffset,
       isElastic: false,
       isIntimateKnit: true,
       isLoose: false,

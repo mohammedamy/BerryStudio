@@ -1,5 +1,18 @@
 # Changelog
 
+## Realistic Cloth Lab Physics, Snug Underwear Fit & Seamless PBR Fabric Textures (`berrystudio-v101`)
+
+- **Explosion-Proof & Realistic Cloth Lab Simulation ([`ClothSimulation.js`](cloth-lab/src/cloth/ClothSimulation.js), [`fabricPresets.js`](cloth-lab/src/cloth/fabricPresets.js), [`collisionRig.js`](cloth-lab/src/body/collisionRig.js)):**
+  - Hardened dihedral bending (`edgeLen`/`h3`/`h4` sliver guards, zero `1.5x` overshoot, bounded per-hinge and total dihedral displacement) and added a pinned-overlay self-collision guard so unsewn pinned facings (such as `gf02` `facing_5`) no longer kick garment bodices into spikes on High dihedral bend tier.
+  - Added per-fabric aerodynamic air drag (`uAirDrag`), bounded per-substep Verlet velocities, self-collision offsets, edge-midpoint push, net displacement, and `NaN`/`Inf` recovery while keeping realistic fabric GSM mass density, stiffness, and drape across all 13 fabrics.
+- **Snug Second-Skin Fit Across All 44 Underwear Patterns ([`placement.js`](cloth-lab/src/pattern/placement.js), [`piecePhysics.js`](cloth-lab/src/cloth/piecePhysics.js), [`assemble.js`](cloth-lab/src/cloth/assemble.js), [`bodyEnvelope.js`](cloth-lab/src/body/bodyEnvelope.js), [`three-view.js`](js/three-view.js)):**
+  - Tightened Cloth Lab pelvis, crotch, waist, leg-opening, bust, and underbust initial ease and elastic/intimate negative `skinOffset` + compression `restScale`, and fixed full-coverage cup bra (`wb04`) pinning in `collisionRig.js`.
+  - Tightened 3D Preview tailored bras (closing sternum gore gap and keeping straps snug over shoulders), briefs, trunks, boxers, and boyshorts while maintaining zero skin penetration.
+- **Shared Seamless Procedural PBR Textile Textures & Studio Lighting ([`fabric-textures.js`](js/fabric-textures.js), [`ClothMesh.jsx`](cloth-lab/src/cloth/ClothMesh.jsx), [`Scene.jsx`](cloth-lab/src/scene/Scene.jsx), [`three-view.js`](js/three-view.js)):**
+  - Added deterministic seamless `256×256` procedural `map`, Sobel `normalMap`, and `roughnessMap` generation across all 13 garment fabrics (diagonal denim twill, plain weave, silk/satin luster, honeycomb tulle, lace motifs, velvet pile, leather pebble grain, rib jersey, wool crepe, and linen slub) with calibrated `MeshPhysicalMaterial` sheen/clearcoat and studio lighting across both 3D Preview and Cloth Lab.
+- **Tests & Service Worker Cache ([`fabric-textures.test.js`](test/fabric-textures.test.js), [`underwearFitAndStability.test.js`](cloth-lab/src/cloth/underwearFitAndStability.test.js), [`sw.js`](sw.js)):**
+  - Added unit/regression coverage for procedural PBR texture generation across all 13 fabrics and zero-penetration/stability verification across all 44 underwear patterns; updated `sw.js` pre-cache (`berrystudio-v101`) and rebuilt embedded `cloth-lab` bundle.
+
 ## Enhanced Hairstyles, Long Hair Collection & Customizable Long Islamic Hijab / Niqab Studio (`berrystudio-v100`)
 
 Dramatically upgrades 3D mannequin hairstyle realism, introduces a comprehensive collection of cascading long hairstyles across categories, and adds authentic customizable long Islamic hijabs and niqab versions synchronized across 3D Preview, Cloth Lab, BodyForm, and the 3D Measurement Teaching Studio:
