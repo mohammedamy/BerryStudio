@@ -83,8 +83,8 @@ export function computeMannequinPoseJoints(dims, pose = 'standing') {
 
   let pelvisRotZ = 0, spineRotZ = 0, chestRotZ = 0, headRotZ = 0
   const armCfg = {
-    1: { z: 0.095, elbowX: -0.11 },
-    [-1]: { z: -0.095, elbowX: -0.11 },
+    1: { z: 0.175, elbowX: -0.11 },
+    [-1]: { z: -0.175, elbowX: -0.11 },
   }
   const legCfg = {
     1: { x: 0, z: 0, kneeX: 0 },
@@ -317,23 +317,27 @@ export function deriveCollisionRig(dims, pose = 'standing', precomputedJoints = 
   })
 
   // 10, 11: Left & Right sloped clavicle-to-acromion shoulder bridges
+  const clavRa = upperR * 0.62 + SKIN_CLEARANCE
+  const clavRb = upperR * 0.68 + SKIN_CLEARANCE
+  const innerTopY = shoulderY + span * (kid ? 0.044 : 0.030) + pelvDY
+  const outerTopY = shoulderY - span * 0.010 + pelvDY
   for (const side of [-1, 1]) {
     const innerClav = [
       joints.neckPos[0] + side * neckR * 0.72,
-      shoulderY + span * 0.018 + pelvDY,
+      innerTopY - clavRa + SKIN_CLEARANCE,
       joints.neckPos[2],
     ]
     const sh = joints.arms[side].shoulder
     const outerAcromion = [
       sh[0] + side * upperR * 0.14,
-      sh[1] + upperR * 0.12,
+      outerTopY - clavRb + SKIN_CLEARANCE,
       sh[2],
     ]
     primitives.push({
       a: innerClav,
       b: outerAcromion,
-      ra: upperR * 0.98 + SKIN_CLEARANCE,
-      rb: upperR * 1.06 + SKIN_CLEARANCE,
+      ra: clavRa,
+      rb: clavRb,
       zScale: 1,
     })
   }
@@ -370,9 +374,15 @@ export function deriveCollisionRig(dims, pose = 'standing', precomputedJoints = 
   // 17..22: Pose-exact Bilateral Upper Arms, Forearms & Hands
   for (const side of [-1, 1]) {
     const arm = joints.arms[side]
-    // Upper arm (shoulder -> elbow)
+    // Upper arm (shoulder -> elbow): start below the deltoid apex so its top hemisphere
+    // doesn't project 3-4 cm above the sloped clavicle shoulder bridge
+    const ax = arm.elbow[0] - arm.shoulder[0]
+    const ay = arm.elbow[1] - arm.shoulder[1]
+    const az = arm.elbow[2] - arm.shoulder[2]
+    const armSegLen = Math.hypot(ax, ay, az) || 1
+    const upperArmStart = lerp3(arm.shoulder, arm.elbow, Math.min(0.35, (upperR * 0.62) / armSegLen))
     primitives.push({
-      a: arm.shoulder,
+      a: upperArmStart,
       b: arm.elbow,
       ra: upperR * 1.04 + SKIN_CLEARANCE,
       rb: upperR * 0.78 + SKIN_CLEARANCE,
@@ -462,7 +472,8 @@ export function projectPointOutsideCapsules(p, collisionRig, clearanceOffset = 0
       const abLen2 = Math.max(abx * abx + aby * aby + abz * abz, 1e-8)
       const rawT = ((px - cap.a[0]) * abx + (py - cap.a[1]) * aby + (pz - cap.a[2]) * abz) / abLen2
       if ((i === 1 || i === 2) && rawT < -0.02) continue
-      if (i === 0 && rawT > 1.02) continue
+      if ((i === 0 || i === 5 || i === 6) && rawT > 1.02) continue
+      if (i === 7 && (rawT < -0.02 || rawT > 1.02)) continue
       const t = clamp(rawT, 0, 1)
       const cx = cap.a[0] + abx * t
       const cy = cap.a[1] + aby * t
@@ -515,10 +526,10 @@ export function projectPointOutsideCapsules(p, collisionRig, clearanceOffset = 0
 const SHOULDER_PIN_RADIUS = 0.040
 
 export function deriveShoulderPinSegments(dims) {
-  const { shoulderHalf, shoulderY, span } = dims
+  const { shoulderHalf, shoulderY, span, kid } = dims
   return [-1, 1].map((side) => ([
-    [side * shoulderHalf * 0.15, shoulderY + span * 0.02, 0],
-    [side * shoulderHalf * 0.90, shoulderY - span * 0.035, 0],
+    [side * shoulderHalf * 0.15, shoulderY + span * (kid ? 0.036 : 0.024), 0],
+    [side * shoulderHalf * 0.90, shoulderY - span * 0.014, 0],
   ]))
 }
 

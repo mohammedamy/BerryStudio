@@ -67,9 +67,12 @@ void main() {
   }
   // flatIdx indexes the SOURCE (main sim) texture, which uses texDim, not
   // this pass's own sortDim — same row-major convention
-  // ClothSimulation.js's neighbor lookups already use.
-  vec2 srcUV = ( vec2( mod(float(flatIdx), uTexDim), floor(float(flatIdx) / uTexDim) ) + 0.5 ) / uTexDim;
-  vec3 pos = texture2D(uSourcePosition, srcUV).xyz;
+  // ClothSimulation.js's neighbor lookups already use. Integer division
+  // avoids float32 reciprocal underflow (e.g. floor(55.0 / 55.0) == 0.0).
+  int texDimI = int(floor(uTexDim + 0.5));
+  int srcRow = flatIdx / texDimI;
+  int srcCol = flatIdx - srcRow * texDimI;
+  vec3 pos = texelFetch(uSourcePosition, ivec2(srcCol, srcRow), 0).xyz;
   vec3 rel = (pos - uGridMin) / uCellSize;
   // Clamped, not rejected — mirrors spatialHash.js's cellCoords exactly
   // (see that function's header for why: a particle that ends up outside

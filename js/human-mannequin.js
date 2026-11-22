@@ -1054,19 +1054,30 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     }
     tcx /= 8; tcy /= 8; tcz /= 8;
 
-    const thumbLen = handLen * 0.34;
-    for (const [f, radScale] of [[0.48, 0.78], [0.88, 0.54]]) {
+    const thumbLen = handLen * 0.32;
+    const baseAngs = thumbBase.map((vid) => Math.atan2(positions[vid * 3 + 2] - tcz, (positions[vid * 3] - tcx) * side));
+    const thumbStops = [
+      [0.34, 0.90, 0.45],
+      [0.68, 0.78, 0.75],
+      [0.92, 0.50, 0.92],
+    ];
+    for (const [f, radScale, ovalMix] of thumbStops) {
       const tRing = [];
-      const cx = tcx - side * palmHalfThick * 0.44 * f;
+      const cx = tcx - side * palmHalfThick * 0.34 * f;
       const cy = tcy - thumbLen * f;
-      const cz = tcz + palmHalfW * 0.48 * f;
+      const cz = tcz + palmHalfW * 0.24 * f;
+      const ovalRx = palmHalfThick * 0.64 * radScale;
+      const ovalRz = palmHalfThick * 0.70 * radScale;
       for (let k = 0; k < 8; k++) {
         const vx = positions[thumbBase[k] * 3] - tcx;
         const vz = positions[thumbBase[k] * 3 + 2] - tcz;
+        const ang = baseAngs[k];
+        const ox = side * ovalRx * Math.cos(ang);
+        const oz = ovalRz * Math.sin(ang);
         tRing.push(addVertex(
-          cx + vx * radScale,
+          cx + vx * radScale * (1 - ovalMix) + ox * ovalMix,
           cy,
-          cz + vz * radScale,
+          cz + vz * radScale * (1 - ovalMix) + oz * ovalMix,
           0.32,
           handWeights,
           false
@@ -1076,9 +1087,9 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       tPrev = tRing;
     }
     const thumbTip = addVertex(
-      tcx - side * palmHalfThick * 0.56,
-      tcy - thumbLen * 1.06,
-      tcz + palmHalfW * 0.56,
+      tcx - side * palmHalfThick * 0.36,
+      tcy - thumbLen * 1.00,
+      tcz + palmHalfW * 0.25,
       0.28,
       handWeights,
       false
@@ -2229,8 +2240,8 @@ export function applyMannequinPose(limbs, pose = "standing", dims = null) {
 
   const p = pose || "standing";
   if (p === "standing") {
-    limbs.arm1.rotation.z = 0.095;
-    limbs["arm-1"].rotation.z = -0.095;
+    limbs.arm1.rotation.z = 0.175;
+    limbs["arm-1"].rotation.z = -0.175;
     limbs.elbow1.rotation.x = -0.11;
     limbs["elbow-1"].rotation.x = -0.11;
   } else if (p === "apose") {

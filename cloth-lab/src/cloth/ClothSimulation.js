@@ -169,10 +169,23 @@ function packHingeTextures(bendHinge, edgeHinge, maxNeighbors, texDim) {
 // `areaShare` (denser triangulation = smaller share = lighter), but it's
 // what makes the per-fabric `massDensity` value (previously computed into
 // `uAreaShare` but never actually consumed by anything) do anything at all.
+const PARTICLE_UV_GLSL = `
+// Exact integer texel coordinate mapping — float mod/floor(idx / dim)
+// underflows on non-power-of-two texDims (e.g. 55.0 / 55.0 < 1.0 in fp32),
+// wrapping column-0 particles onto row k-1 (shoulder).
+vec2 particleUV(float idx) {
+  int iIdx = int(floor(idx + 0.5));
+  int dimI = int(floor(resolution.x + 0.5));
+  int row = iIdx / dimI;
+  int col = iIdx - row * dimI;
+  return (vec2(float(col), float(row)) + 0.5) / resolution;
+}
+`
+
 const NEIGHBOR_CORRECTION_GLSL = `
 vec4 neighborCorrection(vec3 predicted, float idx, float rest, float invMassSelf) {
   if (idx < -0.5) return vec4(0.0);
-  vec2 nuv = ( vec2( mod(idx, resolution.x), floor(idx / resolution.x) ) + 0.5 ) / resolution;
+  vec2 nuv = particleUV(idx);
   vec3 npos = texture2D(texturePosition, nuv).xyz;
   vec2 nArea = texture2D(uAreaShare, nuv).rg;
   float invMassNbr = nArea.g > 0.5 ? 0.0 : 1.0 / max(uMassDensity * nArea.r, 1e-6);
@@ -192,7 +205,7 @@ vec4 neighborCorrection(vec3 predicted, float idx, float rest, float invMassSelf
 const STRAIN_LIMIT_GLSL = `
 vec4 strainLimitCorrection(vec3 predicted, float idx, float rest, float invMassSelf, float maxStrain) {
   if (idx < -0.5) return vec4(0.0);
-  vec2 nuv = ( vec2( mod(idx, resolution.x), floor(idx / resolution.x) ) + 0.5 ) / resolution;
+  vec2 nuv = particleUV(idx);
   vec3 npos = texture2D(texturePosition, nuv).xyz;
   vec2 nArea = texture2D(uAreaShare, nuv).rg;
   float invMassNbr = nArea.g > 0.5 ? 0.0 : 1.0 / max(uMassDensity * nArea.r, 1e-6);
@@ -255,7 +268,8 @@ vec3 collideCapsule(int capIdx, vec3 p, vec3 prevP, vec3 a, vec3 b, float r0, fl
   // Lower pelvis frusta (caps 0..2) form a continuous column above the crotch:
   // prevent cap 1 & 2's wide hip spheres from bulging downward below the crotch.
   if ((capIdx == 1 || capIdx == 2) && rawT < -0.02) return p;
-  if (capIdx == 0 && rawT > 1.02) return p;
+  if ((capIdx == 0 || capIdx == 5 || capIdx == 6) && rawT > 1.02) return p;
+  if (capIdx == 7 && (rawT < -0.02 || rawT > 1.02)) return p;
   float t = clamp(rawT, 0.0, 1.0);
   vec3 c = a + ab * t;
   float r = max(0.006, mix(r0, r1, t) + skinOffset);
@@ -396,10 +410,10 @@ vec3 dihedralCanonicalRoleDelta(
   float p1Idx, float p2Idx, float p3Idx, float p4Idx,
   float n2Sign, float seamScale, float restAngle, int role
 ) {
-  vec2 uv1 = (vec2(mod(p1Idx, resolution.x), floor(p1Idx / resolution.x)) + 0.5) / resolution;
-  vec2 uv2 = (vec2(mod(p2Idx, resolution.x), floor(p2Idx / resolution.x)) + 0.5) / resolution;
-  vec2 uv3 = (vec2(mod(p3Idx, resolution.x), floor(p3Idx / resolution.x)) + 0.5) / resolution;
-  vec2 uv4 = (vec2(mod(p4Idx, resolution.x), floor(p4Idx / resolution.x)) + 0.5) / resolution;
+  vec2 uv1 = particleUV(p1Idx);
+  vec2 uv2 = particleUV(p2Idx);
+  vec2 uv3 = particleUV(p3Idx);
+  vec2 uv4 = particleUV(p4Idx);
 
   vec3 p1 = texture2D(texturePosition, uv1).xyz;
   vec3 p2 = texture2D(texturePosition, uv2).xyz;
@@ -647,7 +661,7 @@ vec3 selfCollisionCorrection(vec3 predicted, vec3 substepStartPos, vec3 myRestPo
           if (entry.r != targetId) break;
           float j = entry.g;
           if (j < -0.5 || j == myFlatIdx) continue;
-          vec2 nuv = ( vec2( mod(j, resolution.x), floor(j / resolution.x) ) + 0.5 ) / resolution;
+          vec2 nuv = particleUV(j);
           vec3 jRest = texture2D(uRestPosition, nuv).xyz;
           if (distance(myRestPos, jRest) < uSelfCollisionRestThreshold) continue;
           vec3 jPos = texture2D(texturePosition, nuv).xyz;
@@ -806,6 +820,7 @@ uniform float uSelfCollisionRestThreshold;
 uniform float uDragParticleIndex;
 uniform vec3 uDragTargetPosition;
 ${highQuality ? DIHEDRAL_BEND_UNIFORMS_GLSL : ''}
+${PARTICLE_UV_GLSL}
 ${NEIGHBOR_CORRECTION_GLSL}
 ${STRAIN_LIMIT_GLSL}
 ${CAPSULE_COLLISION_GLSL}
@@ -814,7 +829,7 @@ ${highQuality ? DIHEDRAL_BEND_GLSL : ''}
 
 vec4 edgeMidpointBodyPush(vec3 predicted, float idx, float skinOffset) {
   if (idx < -0.5) return vec4(0.0);
-  vec2 nuv = ( vec2( mod(idx, resolution.x), floor(idx / resolution.x) ) + 0.5 ) / resolution;
+  vec2 nuv = particleUV(idx);
   vec3 npos = texture2D(texturePosition, nuv).xyz;
   vec3 bestDiff = vec3(0.0);
   float bestLen = 0.0;
@@ -899,8 +914,8 @@ void main() {
   vec3 prevPos = texture2D(texturePrevPosition, uv).xyz;
   vec3 velStep = (pos - prevPos) * uVelocityScale;
   if (isLoose && flowW > 0.05 && sA.x > -0.5 && sA.y > -0.5) {
-    vec2 nUv0 = (vec2(mod(sA.x, resolution.x), floor(sA.x / resolution.x)) + 0.5) / resolution;
-    vec2 nUv1 = (vec2(mod(sA.y, resolution.x), floor(sA.y / resolution.x)) + 0.5) / resolution;
+    vec2 nUv0 = particleUV(sA.x);
+    vec2 nUv1 = particleUV(sA.y);
     vec3 nCross = cross(texture2D(texturePosition, nUv0).xyz - pos, texture2D(texturePosition, nUv1).xyz - pos);
     float nLenSq = dot(nCross, nCross);
     if (nLenSq > 1e-10) {

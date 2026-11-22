@@ -1,5 +1,13 @@
 # Changelog
 
+## Anatomical shoulder tailoring, constant-width bra straps, rounded hands & exact GPU Cloth Lab texel indexing (`berrystudio-v88`)
+
+Eliminates tented shoulder seams and loose/kinked bra straps across all 320 catalog models in both 3D Preview and Cloth Lab, refines hand/thumb sculpting and skirt hem flare, and fixes GPU solver texel-wrapping spikes on non-power-of-two particle grids:
+
+- **Exact-integer Cloth Lab GPU texel addressing (`cloth-lab/src/cloth/ClothSimulation.js`, `bitonicSortGPU.js`)**: Replaces floating-point `mod()`/`floor(idx / dim)` texel coordinate math across structural, strain-limit, dihedral-bend, spatial-hash, edge-midpoint, aerodynamic-drag, and bitonic-sort shaders with exact integer `particleUV(idx)` / `texelFetch` indexing, preventing float32 reciprocal underflow on non-power-of-two textures (e.g. `texDim = 55`) from wrapping hem vertices onto row 0 shoulders (`w01`, `abaya`).
+- **Sloped anatomical shoulders, relaxed standing arm clearance & flared skirt placement (`cloth-lab/src/body/collisionRig.js`, `cloth-lab/src/pattern/placement.js`, `js/human-mannequin.js`)**: Resizes clavicle/acromion bridge capsules and lowers upper-arm cap starts to eliminate shoulder tenting, syncs standing arm abduction (`0.175` rad) across 3D mannequin and Cloth Lab collision rigs, adds smoothed per-row A-line hem flare helpers in `placeTorsoPanel` and `placeHipPanel`, closes HPS shoulder placement seams, and upgrades mannequin thumbs to 3-ring rounded oval geometry (`human-mannequin.js`).
+- **3D Preview constant-width bra straps, smooth underbust band & rounded sleeve caps (`js/three-view.js`, `sw.js`)**: Adds `sampleShoulderTopY` bilinear shoulder-heightfield interpolation and width-preserving `projectBraStrapRibbon` so bra straps track clavicles cleanly without collapsing or zigzagging, increases sport-bra elastic band vertical rows to eliminate z-fighting, softens shoulder slopes and sleevehead cap curves across bodices, leotards, outer coats, and sleeves, preserves 320/320 BVH zero-penetration parity, and bumps the service worker cache to `berrystudio-v88`.
+
 ## Smiling mannequins, idealized bikini-zone anatomy, multi-zone Cloth Lab physics & elastic fabric realism (`berrystudio-v87`)
 
 Upgrades mannequin facial warmth and bikini-zone anatomy, reprograms per-piece GPU physics across elastic bands, intimates, structured trims, and flowing garments in Cloth Lab, enhances procedural fabric/elastic surface finishing, and locks in 320/320 zero-penetration parity:

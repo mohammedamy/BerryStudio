@@ -85,6 +85,50 @@ function applySeatedSkirtDrape(x, worldY, z, dims, zSign, pose) {
   return [x, underHipY - shinDrop, z + fwd]
 }
 
+function computeSmoothedRowHalfWidths(positions2D, minY, panelHeightCm, cx) {
+  const ROW_BINS = 14
+  const binHalfW = new Float32Array(ROW_BINS)
+  for (const [x, y] of positions2D) {
+    const b = clamp(Math.floor(((y - minY) / panelHeightCm) * (ROW_BINS - 1)), 0, ROW_BINS - 1)
+    const hw = Math.abs(x - cx)
+    if (hw > binHalfW[b]) binHalfW[b] = hw
+  }
+  for (let pass = 0; pass < 3; pass++) {
+    for (let b = 0; b < ROW_BINS; b++) {
+      if (binHalfW[b] <= 0) {
+        const prev = b > 0 ? binHalfW[b - 1] : 0
+        const next = b + 1 < ROW_BINS ? binHalfW[b + 1] : 0
+        binHalfW[b] = prev > 0 && next > 0 ? 0.5 * (prev + next) : Math.max(prev, next)
+      }
+    }
+  }
+  for (let pass = 0; pass < 2; pass++) {
+    const next = new Float32Array(binHalfW)
+    for (let b = 1; b < ROW_BINS - 1; b++) {
+      next[b] = 0.25 * binHalfW[b - 1] + 0.5 * binHalfW[b] + 0.25 * binHalfW[b + 1]
+    }
+    binHalfW.set(next)
+  }
+  return binHalfW
+}
+
+function sampleFlaredSkirtRadius(rCurrent, rBody, dims, worldY, yCm, minY, panelHeightCm, binHalfW) {
+  if (!binHalfW || worldY >= dims.hipY - dims.span * 0.04) {
+    return { r: rCurrent, rowHalfW: 0, startFlare: 0 }
+  }
+  const bF = clamp(((yCm - minY) / panelHeightCm) * (binHalfW.length - 1), 0, binHalfW.length - 1)
+  const b0 = Math.floor(bF)
+  const b1 = Math.min(binHalfW.length - 1, b0 + 1)
+  const rowHalfW = lerp(binHalfW[b0], binHalfW[b1], bF - b0)
+  const naturalR = cm(rowHalfW) / (Math.PI * 0.5 * 0.96)
+  const armCap = Math.min(naturalR, dims.hipR * 1.24)
+  const lowCap = Math.min(naturalR, rBody * 1.65)
+  const belowFingers = smoothstep(dims.hipY - dims.span * 0.40, dims.hipY - dims.span * 0.56, worldY)
+  const targetR = lerp(armCap, lowCap, belowFingers)
+  const startFlare = smoothstep(dims.hipY - dims.span * 0.04, dims.hipY - dims.span * 0.20, worldY)
+  return { r: lerp(rCurrent, Math.max(rCurrent, targetR), startFlare), rowHalfW, startFlare }
+}
+
 export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, angleSpan = Math.PI * 0.94, pose = 'standing', splitSide = 0, princessSide = 0, hint = null } = {}) {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
   for (const [x, y] of positions2D) {
@@ -114,7 +158,7 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
     && (panelHeightCm / Math.max(0.2, dims.span * 100)) < 1.52
     && botSpan < Math.max(1, maxX - minX) * 0.42
   const isLooseTorso = !isLeotardFull && panelHeightCm > 48 && (hint?.isLooseGarment || botSpan > Math.max(1, topSpan) * 1.18)
-  const topWorldY = dims.shoulderY + dims.span * (isLeotardFull ? 0.032 : 0.012)
+  const topWorldY = dims.shoulderY + dims.span * (isLeotardFull ? 0.026 : (dims.kid ? 0.036 : 0.024))
   const zScale = dims.female ? 0.78 : 0.82
   const cx = splitSide > 0
     ? (Number.isFinite(minX) ? minX : 0)
@@ -124,6 +168,8 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
         ? 0
         : (Number.isFinite(minX) && Number.isFinite(maxX) ? (minX + maxX) / 2 : 0)
   const halfSpanCm = splitSide !== 0 ? Math.max(0, maxX - minX) : Math.max(0, (maxX - minX) * 0.5)
+  const useRowWidth = !isLeotardFull && splitSide === 0 && princessSide === 0
+  const binHalfW = useRowWidth ? computeSmoothedRowHalfWidths(positions2D, minY, panelHeightCm, cx) : null
   const maxDropCm = Math.max(20, (topWorldY - 0.025) * 100)
   const yScale = (Number.isFinite(maxY) && maxY > maxDropCm && minY >= -1)
     ? maxDropCm / Math.max(1e-4, maxY)
@@ -137,7 +183,11 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
     const lowerEase = princessSide !== 0
       ? Math.max(easeFactor, lerp(easeFactor, 1.17, hipBlend))
       : (easeFactor + hemFlare)
-    const r = radiusAtHeight(dims, worldYBase) * lowerEase
+    const rBody = radiusAtHeight(dims, worldYBase)
+    const flared = sampleFlaredSkirtRadius(rBody * lowerEase, rBody, dims, worldYBase, yCm, minY, panelHeightCm, binHalfW)
+    const r = flared.r
+    const rowHalfW = flared.rowHalfW || halfSpanCm
+    const startFlare = flared.startFlare
     const effZScale = lerp(zScale, isLooseTorso ? 0.99 : 0.94, hipBlend)
     let theta
     if (princessSide !== 0) {
@@ -145,19 +195,23 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
       const uLat = princessSide > 0 ? u : (1 - u)
       theta = princessSide * lerp(0.22 * Math.PI, 0.50 * Math.PI, uLat)
     } else {
-      const halfCirc = Math.max(Math.PI * r * (1 + effZScale) * 0.5, cm(halfSpanCm) * 1.12)
+      const rawHalfCirc = Math.max(Math.PI * r * (1 + effZScale) * 0.5, cm(halfSpanCm) * 1.12)
+      const flaredHalfCirc = Math.min(rawHalfCirc, Math.max(cm(rowHalfW) * (angleSpan / (Math.PI * 0.5)) * 0.96, cm(halfSpanCm) * 1.12))
+      const halfCirc = startFlare > 0 ? lerp(rawHalfCirc, flaredHalfCirc, startFlare) : rawHalfCirc
       theta = clamp((cm(xCm - cx) / Math.max(1e-4, halfCirc)) * angleSpan, -Math.PI * 0.50, Math.PI * 0.50)
     }
-    const shArch = smoothstep(5.5, 0.0, yCm - minY) * smoothstep(0.16 * Math.PI, 0.36 * Math.PI, Math.abs(theta))
-    const worldY = worldYBase + dims.span * 0.028 * shArch
+    const shNearTop = smoothstep(5.5, 0.0, yCm - minY)
+    const shSlope = smoothstep(0.14 * Math.PI, 0.44 * Math.PI, Math.abs(theta))
+    const shArch = shNearTop * smoothstep(0.04 * Math.PI, 0.22 * Math.PI, Math.abs(theta))
+    const worldY = worldYBase - dims.span * 0.034 * shNearTop * shSlope
     const excessRatio = isLooseTorso ? (cm(halfSpanCm) / Math.max(0.14, Math.PI * r * 0.5)) : 1.0
     const waveDrop = isLooseTorso ? smoothstep(dims.hipY + dims.span * 0.16, dims.hipY - dims.span * 0.45, worldYBase) : 0
     const zDrapeWave = excessRatio > 1.35
-      ? (1 + 0.16 * Math.min(1.0, excessRatio - 1.35) * waveDrop * (0.5 - 0.5 * Math.cos(theta * 6.0)))
+      ? (1 + 0.08 * Math.min(1.0, excessRatio - 1.35) * waveDrop * (0.5 - 0.5 * Math.cos(theta * 6.0)))
       : 1.0
     const x = r * Math.sin(theta)
     const zBase = zSign * r * effZScale * Math.cos(theta) * zDrapeWave
-    const z = zBase * lerp(1.0, 0.18, shArch)
+    const z = zBase * lerp(1.0, 0.12, shArch)
     return applySeatedSkirtDrape(x, worldY, z, dims, zSign, pose)
   })
 }
@@ -301,13 +355,17 @@ export function placeHipPanel(positions2D, dims, { zSign, easeFactor = 1.16, ang
   const topW = Number.isFinite(topMaxX - topMinX) ? (topMaxX - topMinX) : (maxX - minX)
   const botW = Number.isFinite(botMaxX - botMinX) ? (botMaxX - botMinX) : (maxX - minX)
   const isLooseSkirt = panelHeightCm > 38 && (hint?.isLooseGarment || botW > Math.max(1, topW) * 1.18)
+  const binHalfW = computeSmoothedRowHalfWidths(positions2D, minY, panelHeightCm, cx)
   return positions2D.map(([xCm, yCm]) => {
     const worldY = topWorldY - cm(yCm)
     const hemFlare = isLooseSkirt ? smoothstep(dims.hipY + dims.span * 0.10, 0.15, worldY) * 0.08 : 0
-    const r = radiusAtHeight(dims, worldY) * (easeFactor + hemFlare)
+    const rBody = radiusAtHeight(dims, worldY)
+    const { r, rowHalfW, startFlare } = sampleFlaredSkirtRadius(rBody * (easeFactor + hemFlare), rBody, dims, worldY, yCm, minY, panelHeightCm, binHalfW)
     const hipBlend = smoothstep(dims.hipY + dims.span * 0.12, dims.hipY - dims.span * 0.08, worldY)
     const effZScale = lerp(zScale, 0.94, hipBlend)
-    const halfCirc = Math.max(Math.PI * r * (1 + effZScale) * 0.5, cm(halfSpanCm) * 1.05)
+    const rawHalfCirc = Math.max(Math.PI * r * (1 + effZScale) * 0.5, cm(halfSpanCm) * 1.05)
+    const flaredHalfCirc = Math.min(rawHalfCirc, Math.max(cm(rowHalfW || halfSpanCm) * (angleSpan / (Math.PI * 0.5)) * 0.98, cm(halfSpanCm) * 1.05))
+    const halfCirc = startFlare > 0 ? lerp(rawHalfCirc, flaredHalfCirc, startFlare) : rawHalfCirc
     const theta = clamp((cm(xCm - cx) / Math.max(1e-4, halfCirc)) * angleSpan, -Math.PI * 0.92, Math.PI * 0.92)
     const x = r * Math.sin(theta)
     const z = zSign * r * effZScale * Math.cos(theta)
@@ -518,7 +576,7 @@ export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */,
 
   const capRoot = [
     arm.shoulder[0] + side * dims.upperR * 0.04,
-    arm.shoulder[1] + dims.span * 0.012,
+    arm.shoulder[1] + dims.span * 0.002,
     arm.shoulder[2],
   ]
   const upperSegLen = Math.hypot(
@@ -609,7 +667,7 @@ export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */,
     const uCap = smoothstep(0.0, Math.max(0.08, dims.armLen * 0.18), alongArm)
     const cOut = radius * Math.cos(alpha) * (0.28 + 0.72 * uCap)
     const cFront = -side * radius * Math.sin(alpha)
-    const crownLift = dims.upperR * 0.26 * (1 - uCap) * Math.max(0, Math.cos(alpha))
+    const crownLift = dims.upperR * 0.14 * (1 - uCap) * Math.max(0, Math.cos(alpha))
     return [
       center[0] + cOut * out[0] + cFront * front[0],
       center[1] + crownLift + cOut * out[1] + cFront * front[1],
@@ -1053,9 +1111,9 @@ export function placeAttachStrap(positions2D, dims, side = 1) {
   let minY = Infinity, maxY = -Infinity
   for (const [, y] of positions2D) { if (y < minY) minY = y; if (y > maxY) maxY = y }
   const h = Math.max(1e-4, maxY - minY)
-  const frontY = dims.hipY + dims.span * 0.775
-  const topY = dims.shoulderY + dims.span * 0.028
-  const backY = dims.hipY + dims.span * 0.645
+  const frontY = dims.hipY + dims.span * 0.765
+  const topY = dims.shoulderY + dims.span * (dims.kid ? 0.022 : 0.008)
+  const backY = dims.hipY + dims.span * 0.640
   const strapXBase = s * clamp(dims.neckR * 1.55, dims.neckR * 1.35, dims.chestR * 0.52)
   return positions2D.map(([xCm, yCm]) => {
     const u = (yCm - minY) / h // 0 = front cup apex -> 0.5 = shoulder crest -> 1 = back band
@@ -1063,11 +1121,11 @@ export function placeAttachStrap(positions2D, dims, side = 1) {
     if (u <= 0.5) {
       const f = u / 0.5
       y = lerp(frontY, topY, f)
-      z = lerp(dims.chestR * 0.76, 0.004, Math.pow(f, 1.3))
+      z = lerp(dims.chestR * (dims.female ? 0.70 : 0.74), 0.004, Math.pow(f, 1.3))
     } else {
       const f = (u - 0.5) / 0.5
       y = lerp(topY, backY, f)
-      z = lerp(0.004, -dims.chestR * 0.70, Math.pow(f, 0.77))
+      z = lerp(0.004, -dims.chestR * 0.64, Math.pow(f, 0.77))
     }
     return [strapXBase + cm(xCm - cx), y, z]
   })
