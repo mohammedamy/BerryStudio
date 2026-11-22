@@ -1,16 +1,22 @@
 /* ============================================================
    Shared measurement-input UI (BerryStudio-Upgrade-Plan WP-10) —
-   the numeric fields + reference diagram used by both the main
-   app's Measures pane (js/app.js) and the standalone BodyForm
-   page (body.html). Framework-free, DOM-only, no dependency on
-   js/app.js's own state/Canvas — callers own persistence.
+   Interactive 3D Measurement Teaching Studio (js/measure-guide-3d.js +
+   js/measure-guide-data.js) with 2D couture SVG fallback, live numeric
+   inputs, and expandable Studio Modal shared by Measures pane & body.html.
    ============================================================ */
 
-export const MEAS_KEYS = ["chest","waist","hips","shoulder","backLen","sleeve","neck","bicep","inseam","thigh","height"];
+import { MEAS_GUIDE_KEYS, MEAS_GUIDE_SPECS } from "./measure-guide-data.js";
+import {
+  mountMeasureGuide3D,
+  renderGuideLessonHTML,
+  openExpandedMeasureGuideModal,
+} from "./measure-guide-3d.js";
+
+export const MEAS_KEYS = [...MEAS_GUIDE_KEYS];
 
 // Haute-couture anthropometric tailor's croquis with 3D elliptical tape wraps,
 // anatomical landmark calipers, and numbered callouts (1-11, matching MEAS_KEYS
-// order) showing precisely where each body measurement is taken.
+// order) used as the instant/offline 2D fallback mode.
 export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Body measurement reference guide">
     <defs>
       <linearGradient id="bsCroquisFill" x1="0" y1="0" x2="1" y2="0">
@@ -30,7 +36,6 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
 
     <!-- Sculpted 8-head couture mannequin / human silhouette (symmetric about X = 136) -->
     <g class="croquis-body" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-      <!-- Full torso, arms, graceful hands, pelvis, legs & feet -->
       <path fill="url(#bsCroquisFill)" stroke-width="1.6" d="
         M 129.2,51.5
         C 129.2,58.5 127.8,63 123.8,66
@@ -82,8 +87,6 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
         C 168.8,71.5 157,69.2 148.2,66
         C 144.2,63 142.8,58.5 142.8,51.5
       "/>
-
-      <!-- Sculpted head with opaque base so neck stroke never ghosts behind chin -->
       <path fill="var(--panel-2, #f7f8fb)" stroke-width="1.5" d="M 121.8,35.5 C 119.3,35.5 119.3,41.8 122.2,42.8"/>
       <path fill="var(--panel-2, #f7f8fb)" stroke-width="1.5" d="M 150.2,35.5 C 152.7,35.5 152.7,41.8 149.8,42.8"/>
       <path fill="var(--panel-2, #f7f8fb)" stroke="none" d="
@@ -100,8 +103,6 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
         C 127.8,54.8 122.2,45.2 121.8,36.5
         C 121.4,26.8 126.6,19.5 136,19.5 Z
       "/>
-
-      <!-- Atelier dress-form construction seams (armscyes, princess lines, thumb creases, pelvic arch, knees) -->
       <g fill="none" stroke-width="0.85" stroke-opacity="0.26">
         <path d="M 94,75.2 C 99,86 100.5,96.5 101.8,105.5"/>
         <path d="M 178,75.2 C 173,86 171.5,96.5 170.2,105.5"/>
@@ -115,10 +116,7 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
       </g>
     </g>
 
-    <!-- Measurement Tapes, Calipers & Numbered Callouts (1-11) -->
     <g class="callout-num" font-family="Inter, Cairo, sans-serif" font-size="10.5" font-weight="800" text-anchor="middle" dominant-baseline="central">
-
-      <!-- 1. Chest / Bust Circumference -->
       <g class="meas-callout" data-meas="chest">
         <path class="meas-tape-back" d="M 101,118 Q 136,112 171,118"/>
         <line class="meas-halo" x1="33" y1="118" x2="101" y2="118"/>
@@ -129,8 +127,6 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
         <circle class="meas-badge" cx="22" cy="118" r="10.5"/>
         <text x="22" y="118">1</text>
       </g>
-
-      <!-- 2. Natural Waist Circumference -->
       <g class="meas-callout" data-meas="waist">
         <path class="meas-tape-back" d="M 109,158 Q 136,153.5 163,158"/>
         <line class="meas-halo" x1="33" y1="158" x2="109" y2="158"/>
@@ -141,8 +137,6 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
         <circle class="meas-badge" cx="22" cy="158" r="10.5"/>
         <text x="22" y="158">2</text>
       </g>
-
-      <!-- 3. Full Hips Circumference -->
       <g class="meas-callout" data-meas="hips">
         <path class="meas-tape-back" d="M 97,202 Q 136,196 175,202"/>
         <line class="meas-halo" x1="33" y1="202" x2="97" y2="202"/>
@@ -153,8 +147,6 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
         <circle class="meas-badge" cx="22" cy="202" r="10.5"/>
         <text x="22" y="202">3</text>
       </g>
-
-      <!-- 4. Shoulder Width (Acromion to Acromion across upper shoulders) -->
       <g class="meas-callout" data-meas="shoulder">
         <path class="meas-span" d="M 94,75.2 Q 136,82.5 178,75.2"/>
         <path class="meas-arrow" d="M 98.5,73.5 L 94,75.2 L 98,78"/>
@@ -165,8 +157,6 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
         <circle class="meas-badge" cx="22" cy="54" r="10.5"/>
         <text x="22" y="54">4</text>
       </g>
-
-      <!-- 5. Back Waist Length (C7 Nape to Natural Waist) -->
       <g class="meas-callout" data-meas="backLen">
         <line class="meas-span" x1="136" y1="69" x2="136" y2="158"/>
         <line class="meas-witness" x1="131.5" y1="69" x2="140.5" y2="69"/>
@@ -176,8 +166,6 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
         <circle class="meas-badge" cx="154" cy="138" r="10.5"/>
         <text x="154" y="138">5</text>
       </g>
-
-      <!-- 6. Sleeve / Arm Length (Shoulder Acromion -> Elbow -> Wrist) -->
       <g class="meas-callout" data-meas="sleeve">
         <line class="meas-witness" x1="87" y1="73.2" x2="94" y2="75.2"/>
         <line class="meas-witness" x1="61.5" y1="196.2" x2="68.8" y2="197"/>
@@ -187,8 +175,6 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
         <circle class="meas-badge" cx="22" cy="86" r="10.5"/>
         <text x="22" y="86">6</text>
       </g>
-
-      <!-- 7. Neck Base Circumference -->
       <g class="meas-callout" data-meas="neck">
         <path class="meas-tape-back" d="M 123.8,66 Q 136,62.5 148.2,66"/>
         <path class="meas-tape-front" d="M 123.8,66 Q 136,70.8 148.2,66"/>
@@ -198,8 +184,6 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
         <circle class="meas-badge" cx="222" cy="45" r="10.5"/>
         <text x="222" y="45">7</text>
       </g>
-
-      <!-- 8. Bicep / Upper Arm Circumference -->
       <g class="meas-callout" data-meas="bicep">
         <path class="meas-tape-back" d="M 176.2,118 Q 183.5,112.5 191.5,115"/>
         <path class="meas-tape-front" d="M 176.2,118 Q 184.5,120.8 191.5,115"/>
@@ -209,8 +193,6 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
         <circle class="meas-badge" cx="222" cy="115" r="10.5"/>
         <text x="222" y="115">8</text>
       </g>
-
-      <!-- 9. Inseam (Crotch to Inner Ankle along clean inner-leg space) -->
       <g class="meas-callout" data-meas="inseam">
         <line class="meas-witness" x1="130.5" y1="214" x2="136" y2="214"/>
         <line class="meas-witness" x1="124" y1="368" x2="135" y2="368"/>
@@ -223,8 +205,6 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
         <circle class="meas-badge" cx="22" cy="296" r="10.5"/>
         <text x="22" y="296">9</text>
       </g>
-
-      <!-- 10. Thigh Circumference -->
       <g class="meas-callout" data-meas="thigh">
         <path class="meas-tape-back" d="M 142.2,236 Q 157.5,231 172.8,236"/>
         <path class="meas-tape-front" d="M 142.2,236 Q 157.5,241.8 172.8,236"/>
@@ -234,8 +214,6 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
         <circle class="meas-badge" cx="222" cy="236" r="10.5"/>
         <text x="222" y="236">10</text>
       </g>
-
-      <!-- 11. Total Stature / Height (Crown to Sole) -->
       <g class="meas-callout" data-meas="height">
         <line class="meas-witness" x1="142" y1="19.5" x2="263" y2="19.5"/>
         <line class="meas-witness" x1="166" y1="389" x2="263" y2="389"/>
@@ -250,42 +228,113 @@ export const MEAS_DIAGRAM_SVG = `<svg viewBox="0 0 280 412" xmlns="http://www.w3
   </svg>`;
 
 const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
+const containerCleanups = new WeakMap();
 
-// Renders the diagram-toggle + numeric input rows for MEAS_KEYS into
-// `container` (cleared first). `measurements` is a plain {key:number}
-// object (e.g. computeMeasurements()'s return value); `T` is an i18n
-// lookup `(key) => string`. `onFieldChange(key, rawValue)` fires on each
-// input's change event — the caller decides what a new value means (an
-// override layered on a size/grade, or the value outright). Diagram
-// open/closed state is the caller's to persist (js/app.js keeps it in
-// state.showMeasDiagram; body.html can just close over a local variable).
-export function renderMeasureFields(container, { measurements, T, onFieldChange, showDiagram = false, onToggleDiagram, icon = "" } = {}) {
+export function renderMeasureFields(
+  container,
+  {
+    measurements,
+    T,
+    onFieldChange,
+    showDiagram = false,
+    onToggleDiagram,
+    icon = "",
+    category = "women",
+    mannequin = null,
+    lang = null,
+  } = {},
+) {
+  const prevCleanup = containerCleanups.get(container);
+  if (prevCleanup) prevCleanup();
   container.innerHTML = "";
+
+  const resolvedLang = lang || (document.documentElement?.lang === "ar" ? "ar" : "en");
+  const curMeas = { ...measurements };
 
   const diagToggle = el("button", "big-btn ghost", icon + T("measDiagramToggle"));
   diagToggle.style.marginTop = "8px";
+
   const diagWrap = el("div", "meas-diagram" + (showDiagram ? " show" : ""));
-  diagWrap.innerHTML = `<div class="meas-diagram-stage">${MEAS_DIAGRAM_SVG}</div><div class="meas-diagram-legend">` +
-    MEAS_KEYS.map((k, i) => (
+  diagWrap.innerHTML = `
+    <div class="mg3d-toolbar">
+      <div class="mg3d-seg" role="group" aria-label="Guide view mode">
+        <button type="button" class="is-active" data-mode="3d">${T("measGuide3D")}</button>
+        <button type="button" data-mode="2d">${T("measGuide2D")}</button>
+      </div>
+      <div class="mg3d-seg mg3d-view-btns" role="group" aria-label="Camera angle">
+        <button type="button" data-view="front">${T("measGuideFront")}</button>
+        <button type="button" data-view="side">${T("measGuideSide")}</button>
+        <button type="button" data-view="back">${T("measGuideBack")}</button>
+      </div>
+      <button type="button" class="mg3d-act-btn" data-expand="1">${T("measGuideExpand")}</button>
+    </div>
+    <div class="meas-diagram-stage">
+      <div class="mg3d-stage">
+        <div class="mg3d-viewport">
+          <div class="mg3d-host"><div class="mg3d-loading">${T("measGuideLoading")}</div></div>
+          <div class="mg3d-drag-hint">${T("measGuideDragHint")}</div>
+        </div>
+      </div>
+      <div class="mg2d-stage" hidden>${MEAS_DIAGRAM_SVG}</div>
+    </div>
+    <div class="meas-diagram-legend">${MEAS_KEYS.map((k, i) => (
       `<span class="meas-legend-item" data-meas="${k}">` +
       `<b class="meas-legend-num">${i + 1}</b>` +
       `<span class="meas-legend-label">${T("m_" + k)}</span>` +
-      `<em class="meas-legend-val" data-val="${k}">${measurements[k]}</em>` +
+      `<em class="meas-legend-val" data-val="${k}">${curMeas[k] ?? ""}</em>` +
       `</span>`
-    )).join("") + `</div>`;
+    )).join("")}</div>
+    <div class="mg3d-card"></div>
+  `;
 
-  diagToggle.onclick = () => {
-    const next = !diagWrap.classList.contains("show");
-    diagWrap.classList.toggle("show", next);
-    if (onToggleDiagram) onToggleDiagram(next);
-  };
   container.appendChild(diagToggle);
   container.appendChild(diagWrap);
 
   const box = el("div", "meas-rows-list");
   box.style.marginTop = "10px";
 
-  const setActiveMeas = (key) => {
+  const stage3dEl = diagWrap.querySelector(".mg3d-stage");
+  const host3dEl = diagWrap.querySelector(".mg3d-host");
+  const stage2dEl = diagWrap.querySelector(".mg2d-stage");
+  const viewBtnsEl = diagWrap.querySelector(".mg3d-view-btns");
+  const cardEl = diagWrap.querySelector(".mg3d-card");
+
+  let viewMode = "3d";
+  let pinnedKey = null;
+  let hoverKey = null;
+  let guideCtrl = null;
+  let guideMounting = false;
+  let modalRef = null;
+  let unmounted = false;
+
+  const getActiveKey = () => pinnedKey || hoverKey;
+
+  function renderLessonCard() {
+    const k = pinnedKey;
+    cardEl.innerHTML = renderGuideLessonHTML(k, {
+      valueCm: k ? curMeas[k] : null,
+      lang: resolvedLang,
+      T,
+    });
+    cardEl.querySelectorAll("[data-guide-act]").forEach((btn) => {
+      btn.onclick = () => {
+        const act = btn.dataset.guideAct;
+        if (act === "replay") {
+          guideCtrl?.replayAnimation();
+          return;
+        }
+        const curr = getActiveKey() || MEAS_KEYS[0];
+        const idx = MEAS_KEYS.indexOf(curr);
+        const nextIdx = act === "prev"
+          ? (idx - 1 + MEAS_KEYS.length) % MEAS_KEYS.length
+          : (idx + 1) % MEAS_KEYS.length;
+        selectMeasurement(MEAS_KEYS[nextIdx], { pin: true, animate: true, focusInput: false });
+      };
+    });
+  }
+
+  function syncActiveHighlights({ animateCamera = false, replay = false, updateCard = true } = {}) {
+    const key = getActiveKey();
     if (key) diagWrap.dataset.active = key;
     else delete diagWrap.dataset.active;
     diagWrap.querySelectorAll(".meas-callout").forEach((node) => {
@@ -297,6 +346,111 @@ export function renderMeasureFields(container, { measurements, T, onFieldChange,
     box.querySelectorAll(".meas-row").forEach((node) => {
       node.classList.toggle("is-active", node.dataset.meas === key);
     });
+    if (updateCard) renderLessonCard();
+    guideCtrl?.setActive(key, { animate: animateCamera, replay });
+  }
+
+  function selectMeasurement(key, { pin = false, animate = true, focusInput = false } = {}) {
+    if (pin) pinnedKey = key;
+    else hoverKey = key;
+    syncActiveHighlights({ animateCamera: animate, replay: animate, updateCard: pin });
+    if (focusInput && key) {
+      const targetInput = box.querySelector(`input[data-k="${key}"]`);
+      if (targetInput && document.activeElement !== targetInput) {
+        targetInput.focus();
+      }
+    }
+  }
+
+  function setMode(nextMode) {
+    viewMode = nextMode === "2d" ? "2d" : "3d";
+    diagWrap.querySelectorAll("[data-mode]").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.mode === viewMode);
+    });
+    stage3dEl.hidden = viewMode !== "3d";
+    stage2dEl.hidden = viewMode !== "2d";
+    if (viewBtnsEl) viewBtnsEl.style.display = viewMode === "3d" ? "" : "none";
+    if (viewMode === "3d") {
+      if (!guideCtrl) ensure3DMounted();
+      else guideCtrl.setPaused(false);
+    } else {
+      guideCtrl?.setPaused(true);
+    }
+  }
+
+  function ensure3DMounted() {
+    if (unmounted || viewMode !== "3d" || guideCtrl || guideMounting) return;
+    if (!diagWrap.classList.contains("show")) return;
+    guideMounting = true;
+    requestAnimationFrame(() => {
+      if (unmounted || !diagWrap.classList.contains("show") || viewMode !== "3d") {
+        guideMounting = false;
+        return;
+      }
+      mountMeasureGuide3D(host3dEl, {
+        category,
+        measurements: curMeas,
+        mannequin,
+        lang: resolvedLang,
+        activeKey: getActiveKey(),
+        onSelect: (k) => selectMeasurement(k, { pin: true, animate: true, focusInput: false }),
+      }).then((ctrl) => {
+        guideMounting = false;
+        if (unmounted || !diagWrap.classList.contains("show") || viewMode !== "3d") {
+          ctrl.dispose();
+          return;
+        }
+        guideCtrl = ctrl;
+        syncActiveHighlights({ animateCamera: Boolean(getActiveKey()), replay: Boolean(getActiveKey()) });
+      }).catch(() => {
+        guideMounting = false;
+        setMode("2d");
+      });
+    });
+  }
+
+  function disposeGuide3D() {
+    if (guideCtrl) {
+      guideCtrl.dispose();
+      guideCtrl = null;
+    }
+    if (modalRef) {
+      modalRef.close();
+      modalRef = null;
+    }
+  }
+
+  diagWrap.querySelectorAll("[data-mode]").forEach((btn) => {
+    btn.onclick = () => setMode(btn.dataset.mode);
+  });
+  diagWrap.querySelectorAll("[data-view]").forEach((btn) => {
+    btn.onclick = () => guideCtrl?.setViewPreset(btn.dataset.view);
+  });
+  diagWrap.querySelector("[data-expand]").onclick = () => {
+    guideCtrl?.setPaused(true);
+    modalRef = openExpandedMeasureGuideModal({
+      category,
+      measurements: curMeas,
+      mannequin,
+      lang: resolvedLang,
+      T,
+      initialKey: getActiveKey() || "chest",
+      onSelectKey: (k) => selectMeasurement(k, { pin: true, animate: true }),
+      onClose: () => {
+        modalRef = null;
+        if (!unmounted && viewMode === "3d" && diagWrap.classList.contains("show")) {
+          guideCtrl?.setPaused(false);
+        }
+      },
+    });
+  };
+
+  diagToggle.onclick = () => {
+    const next = !diagWrap.classList.contains("show");
+    diagWrap.classList.toggle("show", next);
+    if (next) ensure3DMounted();
+    else disposeGuide3D();
+    if (onToggleDiagram) onToggleDiagram(next);
   };
 
   MEAS_KEYS.forEach((k, i) => {
@@ -304,39 +458,61 @@ export function renderMeasureFields(container, { measurements, T, onFieldChange,
     row.dataset.meas = k;
     const inp = el("input");
     inp.type = "number";
-    inp.value = measurements[k];
+    inp.value = curMeas[k] ?? "";
     inp.dataset.k = k;
-    inp.onfocus = () => setActiveMeas(k);
-    inp.onblur = () => setActiveMeas(null);
-    row.onmouseenter = () => setActiveMeas(k);
+    inp.onfocus = () => {
+      if (MEAS_GUIDE_SPECS[k]) selectMeasurement(k, { pin: true, animate: true });
+    };
+    row.onmouseenter = () => {
+      if (!pinnedKey) {
+        hoverKey = k;
+        syncActiveHighlights({ animateCamera: false, replay: false, updateCard: false });
+      }
+    };
     row.onmouseleave = () => {
-      const focused = box.querySelector("input:focus");
-      setActiveMeas(focused ? focused.dataset.k : null);
+      if (!pinnedKey) {
+        hoverKey = null;
+        syncActiveHighlights({ animateCamera: false, replay: false, updateCard: false });
+      }
     };
     inp.onchange = () => {
+      curMeas[k] = Number(inp.value) || curMeas[k];
       const valBadge = diagWrap.querySelector(`.meas-legend-val[data-val="${k}"]`);
       if (valBadge) valBadge.textContent = inp.value;
-      onFieldChange(k, inp.value);
+      renderLessonCard();
+      guideCtrl?.update({ measurements: curMeas });
+      if (onFieldChange) onFieldChange(k, inp.value);
     };
     row.appendChild(inp);
     box.appendChild(row);
   });
 
-  diagWrap.querySelectorAll("[data-meas]").forEach((node) => {
+  diagWrap.querySelectorAll(".meas-callout, .meas-legend-item").forEach((node) => {
     const k = node.dataset.meas;
-    node.onmouseenter = () => setActiveMeas(k);
+    node.onmouseenter = () => {
+      if (!pinnedKey) {
+        hoverKey = k;
+        syncActiveHighlights({ animateCamera: false, replay: false, updateCard: false });
+      }
+    };
     node.onmouseleave = () => {
-      const focused = box.querySelector("input:focus");
-      setActiveMeas(focused ? focused.dataset.k : null);
+      if (!pinnedKey) {
+        hoverKey = null;
+        syncActiveHighlights({ animateCamera: false, replay: false, updateCard: false });
+      }
     };
     node.onclick = () => {
-      const targetInput = box.querySelector(`input[data-k="${k}"]`);
-      if (targetInput) {
-        targetInput.focus();
-        targetInput.select?.();
-      }
+      const next = pinnedKey === k ? null : k;
+      selectMeasurement(next, { pin: true, animate: true, focusInput: Boolean(next) });
     };
   });
 
   container.appendChild(box);
+  renderLessonCard();
+  if (showDiagram) ensure3DMounted();
+
+  containerCleanups.set(container, () => {
+    unmounted = true;
+    disposeGuide3D();
+  });
 }

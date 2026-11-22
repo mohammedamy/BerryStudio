@@ -1,5 +1,12 @@
 # Changelog
 
+## Interactive 3D Measurement Teaching Studio (`berrystudio-v96`)
+
+Upgrades the body measurement guide in both the main studio Measures pane and `body.html` from a static 2D diagram into an **interactive 3D Measurement Teaching Studio** powered by the live watertight mannequin:
+
+- **Anatomical 3D Tape Placement & Convex Bridging (`js/measure-guide-data.js`, `js/measure-guide-3d.js`)**: Projects all 11 body measurements (`chest`..`height`) onto the posed 3D mannequin surface using raycast loops perpendicular to torso and tilted limb axes, anterior/posterior convex bridging across cleavage and gluteal valleys, C7/acromion back arcs for `shoulder` and `backLen`, outer bent-arm contour for `sleeve`, sloped collar base for `neck`, and stadiometer height rulers.
+- **Auto-Focus Camera Choreography & Guided Step-by-Step Trainer (`js/measure-form.js`, `js/app.js`, `js/body-page.js`, `js/i18n.js`, `css/styles.css`)**: Selecting or stepping through any measurement smoothly flies the camera to its optimal front, side, or back angle, animates the centimeter-graduated tape tracer across named 3D landmark pins, displays full EN/AR step-by-step instructions, tension rules, and mistakes to avoid, and adds an expandable full-screen studio modal with seamless 2D SVG fallback and `berrystudio-v96` precache.
+
 ## Plan 7 P7-05 4-Family Construction Packet & Readiness Closure (`berrystudio-v95`)
 
 Closes Plan 7 engineering evidence, P7-05 multi-family construction packets & readiness reporting, and P7-07/P7-09 multi-family benchmark coverage across all four reviewed starter families (`woven-a-line-skirt`, `woven-basic-bodice`, `woven-basic-dress`, `woven-basic-trousers`):

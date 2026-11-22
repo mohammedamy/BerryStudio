@@ -91,8 +91,12 @@ import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
     });
   }
   function renderMeasure() {
+    const mqSize = isActiveMannequinSize(size) ? normalizeMannequinSize(size) : "M";
     renderMeasureFields($("#measureFields"), {
       measurements: currentMeas(), T,
+      category,
+      mannequin: getMannequinFor(category, mqSize),
+      lang,
       showDiagram,
       onToggleDiagram: (v) => { showDiagram = v; },
       onFieldChange: (k, v) => { custom[k] = v; mountOrUpdateAvatar(); },

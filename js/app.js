@@ -800,8 +800,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     c.appendChild(el("div","help-note",T("liveUpdate")));
 
     const fieldsWrap = el("div"); c.appendChild(fieldsWrap);
+    const guideCat = state.avatarCategory || state.category || "women";
     renderMeasureFields(fieldsWrap, {
       measurements: currentMeas(), T, icon: IC.measure,
+      category: guideCat,
+      mannequin: getMannequinFor(guideCat, effectiveAvatarSize()),
+      lang: state.lang || "en",
       showDiagram: state.showMeasDiagram,
       onToggleDiagram: (v)=>{ state.showMeasDiagram=v; save(); },
       onFieldChange: (k,v)=>{ detachMeasurementProfile(); state.custom[k]=v; grade(); },
