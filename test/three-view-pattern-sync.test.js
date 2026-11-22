@@ -4,6 +4,7 @@ import { PATTERNS, computeMeasurements } from '../js/data.js';
 import '../js/library.js';
 import '../js/underwear-library.js';
 import '../js/reference-patterns.js';
+import '../js/abaya-collection.js';
 
 const PALETTE = ['#4f46e5', '#db2777', '#059669', '#d97706', '#2563eb', '#7c3aed'];
 import {

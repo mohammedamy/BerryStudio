@@ -262,7 +262,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
         skinToneId={skinToneId} onSkinToneChange={setSkinToneId}
         poseId={poseId} onPoseChange={setPoseId}
         poseWarning={poseWarning} onPoseWarning={setPoseWarning}
-        garment={garment} notice={notice} onNotice={setNotice}
+        garment={garment} notice={notice} onNotice={setNotice} print={source?.lookbookPrint || null}
         imported={imported} restored={savedEditor}
         onEditorChange={editor => { setSavedEditor(editor); persist(answers, editor); setGarment(null) }}
         avatarGLBUrl={avatarGLBByCategory[category]}
@@ -293,7 +293,7 @@ const TABS = [
 // Try-on canvas — split out from App so the whole thing can be remounted
 // (via App's key={garmentVersion}) as a unit whenever a new garment import
 // needs a fresh seam-editor rather than picking up on top of a stale one.
-function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChange, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, qualityTier, onQualityTierChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, garment, notice, onNotice, imported, restored, onEditorChange, avatarGLBUrl, onSimulate }) {
+function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChange, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, qualityTier, onQualityTierChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, garment, print = null, notice, onNotice, imported, restored, onEditorChange, avatarGLBUrl, onSimulate }) {
   const ar = lang === 'ar', text = (en, arabic) => ar ? arabic : en
   const rawPieces = imported ? imported.rawPieces : []
   const roles = imported ? imported.roles : {}
@@ -454,7 +454,7 @@ function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChan
           <SceneBoundary key={`${view}-${garment?.pieces?.length}`} lang={lang} onRecover={() => onStep('sew')}>
             <div className="cl-canvas">
               <Canvas key={restartVersion} shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
-                <Scene dims={dims} lang={lang} debugView={bodyOnly ? 'off' : view} fabricId={fabricId} qualityTier={qualityTier} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} controlsRef={controlsRef} paused={paused} />
+                <Scene dims={dims} lang={lang} debugView={bodyOnly ? 'off' : view} fabricId={fabricId} qualityTier={qualityTier} print={print} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} controlsRef={controlsRef} paused={paused} />
               </Canvas>
             </div>
           </SceneBoundary>

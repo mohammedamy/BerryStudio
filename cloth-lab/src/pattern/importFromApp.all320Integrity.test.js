@@ -4,6 +4,7 @@ import '../../../js/girls-leotards.js'
 import '../../../js/fancy-patterns.js'
 import '../../../js/underwear-library.js'
 import '../../../js/reference-patterns.js'
+import '../../../js/abaya-collection.js'
 import { PATTERNS, computeMeasurements } from '../../../js/data.js'
 import { convertAppPattern } from './importFromApp.js'
 import { createDraftPiece, addEdge, finalizeDraftPiece } from './seamAuthoring.js'
@@ -71,8 +72,8 @@ function chainLen(positions, chain) {
 
 const ALL_IDS = Object.keys(PATTERNS)
 
-test('library contains all 320 patterns and convertAppPattern accepts all 13 fabrics including velvet & lace', () => {
-  expect(ALL_IDS).toHaveLength(320)
+test('library contains all 340 patterns and convertAppPattern accepts all 13 fabrics including velvet & lace', () => {
+  expect(ALL_IDS).toHaveLength(340)
   expect(FABRIC_IDS).toContain('velvet')
   expect(FABRIC_IDS).toContain('lace')
   const m = makeMeasurements('women')
@@ -83,7 +84,7 @@ test('library contains all 320 patterns and convertAppPattern accepts all 13 fab
   }
 })
 
-describe('all 320 patterns assemble cleanly without crashes, skips, NaNs, unpinned islands, or misplaced roles', () => {
+describe('all 340 patterns assemble cleanly without crashes, skips, NaNs, unpinned islands, or misplaced roles', () => {
   test('sweeps every pattern across all categories', () => {
     const crashes = []
     const skips = []
@@ -211,7 +212,7 @@ test('all 7 4-gore skirts, mf04 wrap coat, wb09/gb07 sport bras, and thobe sleev
   expect(ratio).toBeLessThanOrEqual(1.8)
 }, 15000)
 
-test('all 320 patterns have zero twisted structural seams, zero unsewn target panels, and accurate underbust routing', () => {
+test('all 340 patterns have zero twisted structural seams, zero unsewn target panels, and accurate underbust routing', () => {
   const TWIST_ROLES = new Set(['frontPanel', 'backPanel', 'hipPanelFront', 'hipPanelBack', 'legFront', 'legBack', 'goreFront', 'goreBack', 'goreSideLeft', 'goreSideRight', 'sleeve'])
   const STRUCTURAL_ROLES = new Set([...TWIST_ROLES])
   const TARGET_SEWN_IDS = ['abaya', 'girls_dress', 'wf01', 'wf02', 'mf05', 'mf15', 'bf07', 'bf10', 'bf13', 'gf15', 'ref_m_shirt', 'm04']

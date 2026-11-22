@@ -5,6 +5,7 @@ import '../js/library.js';
 import '../js/girls-leotards.js';
 import { FancyGen } from '../js/fancy-patterns.js';
 import '../js/underwear-library.js';
+import '../js/abaya-collection.js';
 
 void FancyGen; // side-effect import only
 

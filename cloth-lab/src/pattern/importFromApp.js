@@ -1636,6 +1636,17 @@ export function convertAppPattern(payload) {
       if (placement === 'attachNeck') {
         placementHints[p.id] = { ...(placementHints[p.id] || {}), neckKind: schemaRole }
       }
+      if (schemaRole === 'tier') {
+        const tierIds = activePieces.filter((ap) => resolveSchemaRole(ap.role)?.role === 'tier').map((ap) => ap.id)
+        const tierIdx = Math.max(0, tierIds.indexOf(p.id))
+        placementHints[p.id] = {
+          ...(placementHints[p.id] || {}),
+          isSkirtTier: true,
+          tierIndex: tierIdx,
+          tierCount: tierIds.length,
+          hasUpperBodice: hasUpperPanels,
+        }
+      }
       if (schemaRole === 'peplum-front') peplumFronts.push({ id: p.id, outline })
       else if (schemaRole === 'peplum-back') peplumBacks.push({ id: p.id, outline })
       recognized.push({ id: p.id, label })
@@ -2290,10 +2301,11 @@ export function convertAppPattern(payload) {
     }
     const rPc = rawPieces.find((rp) => rp.id === rId)
     const lPc = rawPieces.find((rp) => rp.id === lId)
-    const designTitle = `${payload.designId || payload.patternId || ''} ${payload.designName || ''} ${rPc?.label?.en || rPc?.label || ''}`
+    const designTitle = `${payload.patternId || ''} ${payload.designId || ''} ${payload.designName || ''} ${rPc?.label?.en || rPc?.label || ''}`
+    const isModestAbaya = /^wa(?:0[1-9]|1\d|20)\b|\babaya\b|عباية/i.test(designTitle)
     if (
       rPc && lPc && rPc.outline.length >= 8 && lPc.outline.length === rPc.outline.length &&
-      !/open|cardigan|kimono|coat|jacket|blazer|vest|cape|sherwani|كارديجان|كيمونو|معطف|جاكيت|بليزر/i.test(designTitle)
+      (isModestAbaya || !/open|cardigan|kimono|coat|jacket|blazer|vest|cape|sherwani|كارديجان|كيمونو|معطف|جاكيت|بليزر/i.test(designTitle))
     ) {
       const rn = rPc.outline.length
       const cfM = mirrorEdgeIndices([{ name: 'centerFront', fromIdx: rn - 1, toIdx: 0 }], rn)[0]

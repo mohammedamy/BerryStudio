@@ -6,6 +6,7 @@ import '../js/girls-leotards.js';
 import { FancyGen } from '../js/fancy-patterns.js';
 import '../js/underwear-library.js';
 import '../js/reference-patterns.js';
+import '../js/abaya-collection.js';
 import { _renderUncached } from '../js/pattern-flat.js';
 
 void FancyGen; // side-effect import only
@@ -18,8 +19,8 @@ void FancyGen; // side-effect import only
 // module's own header comment) — that's an honest "can't compose yet,"
 // not a bug, and it's asserted as a floor here, not silently ignored.
 //
-// Sweeps the full 320-pattern catalogue (including js/underwear-library.js
-// and js/reference-patterns.js).
+// Sweeps the full 340-pattern catalogue (including js/underwear-library.js,
+// js/reference-patterns.js, and js/abaya-collection.js).
 test('every pattern in the library renders a distinct thumbnail, or honestly declines', () => {
   const ids = Object.keys(PATTERNS);
   const seenSvg = new Map(); // svg string -> id
@@ -46,7 +47,7 @@ test('every pattern in the library renders a distinct thumbnail, or honestly dec
   if (crashed > 0) throw new Error(`renderPatternFlat threw on ${crashed} pattern(s) — it must always degrade to null, never throw`);
   if (duplicates.length > 0) throw new Error(`identical thumbnail SVG produced for different patterns:\n  ${duplicates.join('\n  ')}`);
 
-  assert.ok(composed >= 319, `thumbnail composition regressed: ${composed} composed, expected at least 319`);
+  assert.ok(composed >= 339, `thumbnail composition regressed: ${composed} composed, expected at least 339`);
 });
 
 // A stricter unit-level check on a single well-formed pattern: rendering

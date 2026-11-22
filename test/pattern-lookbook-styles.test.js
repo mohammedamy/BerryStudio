@@ -6,6 +6,7 @@ import '../js/girls-leotards.js';
 import '../js/fancy-patterns.js';
 import '../js/underwear-library.js';
 import '../js/reference-patterns.js';
+import '../js/abaya-collection.js';
 import {
   PATTERN_LOOKBOOK_STYLES,
   getPatternLookbookStyle,
@@ -50,10 +51,10 @@ function makeMeasurements(category) {
   });
 }
 
-test('PATTERN_LOOKBOOK_STYLES has exact 1:1 coverage across all 320 PATTERNS with valid fabrics and hex colors', () => {
+test('PATTERN_LOOKBOOK_STYLES has exact 1:1 coverage across all 340 PATTERNS with valid fabrics and hex colors', () => {
   const patIds = new Set(Object.keys(PATTERNS));
   const styleIds = new Set(Object.keys(PATTERN_LOOKBOOK_STYLES));
-  assert.equal(patIds.size, 320, 'expected 320 PATTERNS');
+  assert.equal(patIds.size, 340, 'expected 340 PATTERNS');
   const missing = [...patIds].filter((id) => !styleIds.has(id));
   const extra = [...styleIds].filter((id) => !patIds.has(id));
   assert.deepEqual(missing, [], `missing lookbook styles: ${missing.join(', ')}`);
@@ -189,7 +190,7 @@ test('computePatternMetrics3D emits specialized lookbook descriptors for leotard
   }
 });
 
-test('all 320 patterns avoid sleeve-only 3D classification, keep sleeveless/sleeve-named bodices valid, and preserve g02/g19 inner shirt colors', () => {
+test('all 340 patterns avoid sleeve-only 3D classification, keep sleeveless/sleeve-named bodices valid, and preserve g02/g19 inner shirt colors', () => {
   const sleeveOnly = [];
   for (const [id, pat] of Object.entries(PATTERNS)) {
     const m = makeMeasurements(pat.category);
@@ -228,5 +229,24 @@ test('all 320 patterns avoid sleeve-only 3D classification, keep sleeveless/slee
       colorToInt: parseHex,
     });
     assert.notEqual(parts.bodice.front.color, lb.silhouette.outerLayer.innerColor, `${id} outer pinafore and inner shirt keep distinct colors`);
+  }
+
+  for (let i = 1; i <= 20; i++) {
+    const id = 'wa' + String(i).padStart(2, '0');
+    const pat = PATTERNS[id];
+    const m = makeMeasurements('women');
+    const lb = getPatternLookbookStyle(id, pat);
+    assert.ok(lb.print?.preset && lb.print.preset !== 'none', `${id} must declare embroidery print preset`);
+    const pieces = applyLookbookPieceColors(pat.pieces(m).map((p) => ({ ...p, visible: true })), id, pat);
+    const metrics = computePatternMetrics3D(pieces, m, 'women', pat, lb);
+    if (id === 'wa13') {
+      assert.equal(metrics.bodice.style, 'waist', 'wa13 tiered abaya waist bodice');
+      assert.equal(metrics.present.skirt, true, 'wa13 tiered skirt present');
+      assert.equal(metrics.skirt.tiers, 2, 'wa13 2-tier skirt');
+    } else {
+      assert.equal(metrics.bodice.style, 'robe', `${id} must classify as robe in 3D metrics`);
+    }
+    assert.equal(metrics.present.bodice, true, `${id} bodice present`);
+    assert.equal(metrics.present.sleeve, true, `${id} sleeve present`);
   }
 });

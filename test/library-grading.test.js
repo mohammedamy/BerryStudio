@@ -4,6 +4,7 @@ import { PATTERNS, SIZES, KIDS_AGES, STANDARDS, computeMeasurements } from '../j
 import '../js/library.js';
 import '../js/girls-leotards.js';
 import { FancyGen } from '../js/fancy-patterns.js';
+import '../js/abaya-collection.js';
 import { run } from '../js/validate.js';
 
 void FancyGen; // side-effect import only

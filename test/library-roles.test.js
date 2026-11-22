@@ -5,6 +5,7 @@ import '../js/library.js';
 import '../js/girls-leotards.js';
 import { FancyGen } from '../js/fancy-patterns.js';
 import '../js/underwear-library.js';
+import '../js/abaya-collection.js';
 
 void FancyGen; // side-effect import only
 
@@ -85,7 +86,8 @@ const KNOWN_INVALID_ROLE_COUNTS = { 'cape-sleeve': 2 };
 // Fitting gy012 to lookbook thumbnail adds keyhole back binding as photographed (+1 piece).
 // v85: womens_dress adds matched skirt_back (+1 piece) for full 5-piece Fit & Flare dress.
 // v86: men/boys tops (b10, b17, m10) use tailored darted panels instead of female bust princess seams (-6 pieces).
-const BASELINE = { total: 2167, valid: 2163, none: 2, roleslessPatterns: 1 };
+// v90: 20 embroidered modest/hijab abayas in js/abaya-collection.js (+101 pieces, all valid roles).
+const BASELINE = { total: 2268, valid: 2264, none: 2, roleslessPatterns: 1 };
 
 test('every declared piece role is in the 53-value vocabulary, except the two documented pre-existing exceptions', () => {
   const ids = Object.keys(PATTERNS);

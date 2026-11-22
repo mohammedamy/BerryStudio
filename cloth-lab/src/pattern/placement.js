@@ -785,15 +785,25 @@ export function placeAttachNeck(positions2D, dims, side = 0, neckKind = null) {
   const torsoZScale = dims.female ? 0.80 : 0.82
   const cx = 0.5 * (minX + maxX)
 
-  // Vertical lapel/placket facings drape inside the front lapels rather than sticking above the throat
+  // Vertical lapel/placket facings drape cleanly along the front opening border
   if (neckKind === 'lapel-facing' || neckKind === 'placket-facing') {
     const s = side === 0 ? 1 : side
     return positions2D.map(([xCm, yCm]) => {
       const worldY = (dims.shoulderY - dims.span * 0.045) - cm(yCm - minY) * 0.68
-      const torsoR = radiusAtHeight(dims, worldY) * 1.08
-      const u = clamp((xCm - minX) / width, 0, 1)
-      const phi = s * lerp(0.18 * Math.PI, 0.34 * Math.PI, u)
+      const isPlacket = neckKind === 'placket-facing'
+      const torsoR = radiusAtHeight(dims, worldY) * (isPlacket ? 1.135 : 1.08) + (isPlacket ? 0.005 : 0)
+      const u = s > 0 ? clamp((xCm - minX) / width, 0, 1) : clamp((maxX - xCm) / width, 0, 1)
+      const phi = s * (isPlacket ? lerp(0.01 * Math.PI, 0.075 * Math.PI, u) : lerp(0.18 * Math.PI, 0.34 * Math.PI, u))
       const rOut = Math.max(dims.neckR * 1.30 / torsoZScale, torsoR)
+      return [rOut * Math.sin(phi), worldY, rOut * torsoZScale * Math.cos(phi)]
+    })
+  }
+  if (neckKind === 'yoke' && side === 0) {
+    return positions2D.map(([xCm, yCm]) => {
+      const worldY = (dims.shoulderY - dims.span * 0.048) - cm(yCm - minY) * 0.82
+      const u = clamp((xCm - cx) / Math.max(1e-4, 0.5 * width), -1, 1)
+      const phi = u * 0.42 * Math.PI
+      const rOut = Math.max(dims.neckR * 1.35 / torsoZScale, radiusAtHeight(dims, worldY) * 1.145 + 0.006)
       return [rOut * Math.sin(phi), worldY, rOut * torsoZScale * Math.cos(phi)]
     })
   }
@@ -908,8 +918,8 @@ export function placeAttachWaist(positions2D, dims, zSign = 1, pose = 'standing'
       z = rOut * effZScale * Math.cos(phi)
     } else {
       const rEff = baseR * (1 + effZScale) * 0.5
-      const phi = cm(xCm - cx) / rEff
-      const rOut = baseR + 0.003 * (Math.abs(phi) / Math.PI)
+      const phi = clamp(cm(xCm - cx) / rEff, -Math.PI * 0.96, Math.PI * 0.96)
+      const rOut = baseR + 0.006 + 0.003 * (Math.abs(phi) / Math.PI)
       x = rOut * Math.sin(phi)
       z = zSign * rOut * effZScale * Math.cos(phi)
     }
@@ -991,7 +1001,8 @@ export function placeAttachHem(positions2D, dims, side = 0, pose = 'standing', h
     const heightCm = Math.max(4, maxY - minY)
     const tierIdx = hint.tierIndex ?? 0
     const tierHWorld = cm(heightCm) * 0.88
-    const tierTopY = (dims.hipY + dims.span * 0.44) - tierIdx * tierHWorld * 0.84
+    const baseTopY = (dims.hipY + dims.span * 0.44) + (hint.hasUpperBodice ? 0.025 : 0)
+    const tierTopY = baseTopY - tierIdx * tierHWorld * 0.78
     const zScale = dims.female ? 0.78 : 0.82
     return positions2D.map(([xCm, yCm]) => {
       const uX = clamp((xCm - minX) / widthCm, 0, 1)
@@ -1066,8 +1077,12 @@ export function placeAttachCrotch(positions2D, dims, hint = null) {
 export function placeAttachWrist(positions2D, dims, side = 1, pose = 'standing') {
   const s = side === 0 ? 1 : side
   const cx = bboxCenterX(positions2D)
-  let minY = Infinity, maxY = -Infinity
-  for (const [, y] of positions2D) { if (y < minY) minY = y; if (y > maxY) maxY = y }
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const [x, y] of positions2D) {
+    if (x < minX) minX = x; if (x > maxX) maxX = x
+    if (y < minY) minY = y; if (y > maxY) maxY = y
+  }
+  const widthCm = Math.max(12, maxX - minX)
   const bandH = cm(maxY - minY)
   const joints = computeMannequinPoseJoints(dims, pose)
   const arm = joints.arms[s]
@@ -1080,13 +1095,13 @@ export function placeAttachWrist(positions2D, dims, side = 1, pose = 'standing')
   let ox = s * (fy * dir[2] - fz * dir[1]), oy = s * (fz * dir[0] - fx * dir[2]), oz = s * (fx * dir[1] - fy * dir[0])
   const ol = Math.hypot(ox, oy, oz) || 1
   ox /= ol; oy /= ol; oz /= ol
-  const cuffR = dims.upperR * 0.64 + 0.008
+  const cuffR = dims.upperR * 0.68 + 0.014
   return positions2D.map(([xCm, yCm]) => {
-    const uFromBot = bandH - cm(yCm - minY)
+    const uFromBot = bandH * 0.78 - cm(yCm - minY)
     const cxPt = arm.wrist[0] - dir[0] * uFromBot
     const cyPt = arm.wrist[1] - dir[1] * uFromBot
     const czPt = arm.wrist[2] - dir[2] * uFromBot
-    const alpha = clamp(cm(xCm - cx) / Math.max(0.02, cuffR), -Math.PI, Math.PI)
+    const alpha = clamp((xCm - cx) / Math.max(1e-4, 0.5 * widthCm), -1, 1) * Math.PI * 0.98
     const cOut = cuffR * Math.cos(alpha)
     const cFront = -s * cuffR * Math.sin(alpha)
     return [cxPt + cOut * ox + cFront * fx, cyPt + cOut * oy + cFront * fy, czPt + cOut * oz + cFront * fz]

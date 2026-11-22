@@ -6,18 +6,19 @@ import '../js/girls-leotards.js'; // side effect: adds the 100-pattern Girls' Gy
 import { FancyGen } from '../js/fancy-patterns.js'; // side effect: adds the 64 Fancy Collection entries
 import '../js/underwear-library.js'; // side effect: adds the 44-pattern Underwear & Bra Library
 import '../js/reference-patterns.js'; // side effect: adds the 12-pattern Reference Collection
+import '../js/abaya-collection.js'; // side effect: adds the 20-pattern Embroidered Abayas Collection
 import { run } from '../js/validate.js';
 import { offsetPoly } from '../js/geometry.js';
 
 void FancyGen; // imported for its module side effect, not used directly here
 
-// Sweeps the complete 320-pattern library (6 base + 94 catalogue + 100
+// Sweeps the complete 340-pattern library (6 base + 94 catalogue + 100
 // Girls' Gymnastics Leotards + 64 Fancy Collection + 44 Underwear & Bra +
-// 12 Reference Collection) with offsetPoly and bodyChestCm supplied so
+// 12 Reference Collection + 20 Embroidered Hijab Abayas) with offsetPoly and bodyChestCm supplied so
 // every single-piece and cross-piece check runs with full fidelity.
 test('validator runs cleanly over every pattern in the library, reports what it finds', () => {
   const ids = Object.keys(PATTERNS);
-  assert.equal(ids.length, 320, 'expected all 320 library patterns to be registered');
+  assert.equal(ids.length, 340, 'expected all 340 library patterns to be registered');
   console.log(`\n  Sweeping ${ids.length} patterns...`);
 
   const totals = { pass: 0, warn: 0, fail: 0, deferred: 0 };
@@ -67,8 +68,8 @@ test('validator runs cleanly over every pattern in the library, reports what it 
   if (closedOutlineFails.length > 0) {
     throw new Error(`closedOutline found ${closedOutlineFails.length} duplicate-point or notch failure(s):\n  ${closedOutlineFails.join('\n  ')}`);
   }
-  assert.equal(totals.fail, 0, `expected 0 validation failures across all 320 patterns, found ${totals.fail}`);
-  assert.equal(totals.warn, 0, `expected 0 validation warnings across all 320 patterns, found ${totals.warn}`);
+  assert.equal(totals.fail, 0, `expected 0 validation failures across all 340 patterns, found ${totals.fail}`);
+  assert.equal(totals.warn, 0, `expected 0 validation warnings across all 340 patterns, found ${totals.warn}`);
 });
 
 test('front/back pairs with a declared role are reported "Verified", not "Heuristic"', () => {
@@ -116,7 +117,7 @@ test('front/back pairs with a declared role are reported "Verified", not "Heuris
   }
 });
 
-test('every cubic Bézier curve segment and every notch across all 320 patterns matches its piece outline within 0.1 mm', () => {
+test('every cubic Bézier curve segment and every notch across all 340 patterns matches its piece outline within 0.1 mm', () => {
   let totalCurves = 0, totalNotches = 0;
   const curveIssues = [], notchIssues = [];
 
@@ -191,7 +192,7 @@ test('every cubic Bézier curve segment and every notch across all 320 patterns 
   assert.ok(totalNotches >= 3400, `expected at least 3400 notches, got ${totalNotches}`);
 });
 
-test('all 320 patterns validate with zero failures and zero warnings across all 8,040 graded instances (intl/egypt/saudi × all sizes/ages)', () => {
+test('all 340 patterns validate with zero failures and zero warnings across all 8,700 graded instances (intl/egypt/saudi × all sizes/ages)', () => {
   let instances = 0, fails = 0, warns = 0;
   const issues = [];
   for (const std of Object.keys(STANDARDS)) {
@@ -213,7 +214,7 @@ test('all 320 patterns validate with zero failures and zero warnings across all 
     }
   }
   console.log(`  multi-standard grading sweep: ${instances} instances checked, ${fails} fails, ${warns} warnings`);
-  assert.equal(instances, 8040);
+  assert.equal(instances, 8700);
   assert.deepEqual(issues, [], `grading validation issues:\n  ${issues.join('\n  ')}`);
 });
 

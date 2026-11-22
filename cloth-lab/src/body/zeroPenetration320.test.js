@@ -5,6 +5,7 @@ import '../../../js/girls-leotards.js'
 import '../../../js/fancy-patterns.js'
 import '../../../js/underwear-library.js'
 import '../../../js/reference-patterns.js'
+import '../../../js/abaya-collection.js'
 import { PATTERNS, computeMeasurements } from '../../../js/data.js'
 import { buildHumanMannequin } from '../../../js/human-mannequin.js'
 import { convertAppPattern } from '../pattern/importFromApp.js'
@@ -67,10 +68,10 @@ function toPayloadPiece(p, i) {
   }
 }
 
-describe('320-pattern zero-penetration and seam integrity sweep', () => {
-  test('all 320 patterns assemble with finite coordinates, zero capsule penetration, and no stretched cross-body seams', () => {
+describe('340-pattern zero-penetration and seam integrity sweep', () => {
+  test('all 340 patterns assemble with finite coordinates, zero capsule penetration, and no stretched cross-body seams', () => {
     const ids = Object.keys(PATTERNS)
-    expect(ids.length).toBeGreaterThanOrEqual(320)
+    expect(ids.length).toBeGreaterThanOrEqual(340)
 
     const failures = []
     for (const id of ids) {

@@ -10,6 +10,7 @@ import { deriveCollisionRig, deriveGarmentPinMask } from '../body/collisionRig'
 import { getAssetBase } from '../assetBase'
 import { updateExportGeometry } from '../export/prepareScene'
 import { SAFE_CLOTH_NORMAL_GLSL } from './surfaceShader'
+import { createEmptyPrintTexture, createPrintOverlayTexture } from './printTextures'
 
 // A single real (CC0, see public/textures/fabric-weave/README.md) fabric-
 // weave texture set, shared across every fabric preset — color/roughness/
@@ -158,11 +159,18 @@ function loadFabricTextures() {
 // about the steady-state render loop — grab-and-drag below does a ONE-TIME
 // readback per pointerdown, which is a rare, user-paced event, not a
 // per-frame cost).
-export default function ClothMesh({ paused = false, dims, pose = 'standing', fabricId = DEFAULT_FABRIC, qualityTier = QUALITY_TIER_DEFAULT, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef, bodyColliderRef }) {
+export default function ClothMesh({ paused = false, dims, pose = 'standing', fabricId = DEFAULT_FABRIC, qualityTier = QUALITY_TIER_DEFAULT, print = null, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef, bodyColliderRef }) {
   const gl = useThree((s) => s.gl)
   const camera = useThree((s) => s.camera)
   // Keep the current texture bound across first compile and fabric-map recompiles.
   const positionUniform = useRef({ value: null })
+  const emptyPrintTex = useMemo(() => createEmptyPrintTexture(), [])
+  const printUniforms = useRef({
+    tex: { value: emptyPrintTex },
+    hasPrint: { value: 0.0 },
+    repeat: { value: 3.0 / 32.0 },
+  })
+  useEffect(() => () => emptyPrintTex.dispose(), [emptyPrintTex])
 
   const assembled = useMemo(() => {
     const triangulated = triangulateAll(pieces, seams, adaptiveSpacingCm(pieces))
@@ -247,9 +255,9 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
       // micro-weave, elastic ribbing, and seam-finishing detail.
       color: '#ffffff', vertexColors: true,
       roughness: effRough, metalness: Math.min(0.06, fabric.metal),
-      sheen: fabric.sheen,
+      sheen: Math.min(fabric.sheen, 0.52),
       sheenRoughness: fabric.sheenRough ?? 0.58,
-      sheenColor: new THREE.Color(fabric.sheen > 0.7 ? '#f7f2ec' : '#ece7e2'),
+      sheenColor: new THREE.Color(fabric.sheen > 0.7 ? '#d8d2cb' : '#cfc9c2'),
       clearcoat: Math.min(0.12, fabric.clear), clearcoatRoughness: 0.52,
       normalScale: new THREE.Vector2(normStrength, normStrength),
       envMapIntensity: fabric.rough < 0.35 ? 0.72 : 0.48,
@@ -262,6 +270,9 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uSimPositionTex = positionUniform.current
       shader.uniforms.uWeaveScale = { value: fabric.weaveScale ?? 1.2 }
+      shader.uniforms.uPrintTex = printUniforms.current.tex
+      shader.uniforms.uHasPrint = printUniforms.current.hasPrint
+      shader.uniforms.uPrintRepeat = printUniforms.current.repeat
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
@@ -273,6 +284,7 @@ uniform sampler2D uSimPositionTex;
 uniform float uWeaveScale;
 varying vec4 vPieceStyle;
 varying vec2 vFabricUV;
+varying vec2 vRawUV;
 #include <common>
 ` + SAFE_CLOTH_NORMAL_GLSL
         )
@@ -287,13 +299,18 @@ varying vec2 vFabricUV;
           vNormal = clothSafeNormal(normalMatrix * clothSafeNormal(smoothNormal, normal), vec3(0.0, 0.0, 1.0));
           vPieceStyle = aPieceStyle;
           vFabricUV = uv * uWeaveScale;
+          vRawUV = uv;
           vec3 transformed = selfPos;`
         )
       shader.fragmentShader = shader.fragmentShader
         .replace(
           '#include <common>',
-          `varying vec4 vPieceStyle;
+          `uniform sampler2D uPrintTex;
+uniform float uHasPrint;
+uniform float uPrintRepeat;
+varying vec4 vPieceStyle;
 varying vec2 vFabricUV;
+varying vec2 vRawUV;
 #include <common>`
         )
         .replace(
@@ -310,14 +327,21 @@ varying vec2 vFabricUV;
             float wale = sin(vFabricUV.x * 64.0) * 0.015;
             diffuseColor.rgb *= (1.0 + wale * knitMask);
           }
-          diffuseColor.rgb *= (1.0 - 0.075 * seamAO - 0.038 * hemEdge * (1.0 - elasticMask * 0.5));`
+          diffuseColor.rgb *= (1.0 - 0.075 * seamAO - 0.038 * hemEdge * (1.0 - elasticMask * 0.5));
+          vec4 printSample = (uHasPrint > 0.5) ? texture2D(uPrintTex, vRawUV * uPrintRepeat) : vec4(0.0);
+          if (printSample.a > 0.01) {
+            diffuseColor.rgb = mix(diffuseColor.rgb, printSample.rgb, clamp(printSample.a, 0.0, 1.0) * 0.92);
+          }`
         )
         .replace(
           '#include <roughnessmap_fragment>',
           `#include <roughnessmap_fragment>
           float elRough = clamp(vPieceStyle.x, 0.0, 1.0);
           float sRough = smoothstep(0.62, 1.0, vPieceStyle.y);
-          roughnessFactor = clamp(roughnessFactor + 0.14 * elRough + 0.06 * sRough, 0.18, 0.98);`
+          roughnessFactor = clamp(roughnessFactor + 0.14 * elRough + 0.06 * sRough, 0.18, 0.98);
+          if (printSample.a > 0.01) {
+            roughnessFactor = mix(roughnessFactor, 0.26, clamp(printSample.a, 0.0, 1.0) * 0.65);
+          }`
         )
         .replace(
           '#include <dithering_fragment>',
@@ -349,6 +373,21 @@ varying vec2 vFabricUV;
     })
     return () => { live = false }
   }, [material])
+
+  const printKey = print ? JSON.stringify(print) : ''
+  useEffect(() => {
+    const parsedPrint = printKey ? JSON.parse(printKey) : null
+    const overlay = createPrintOverlayTexture(parsedPrint)
+    const tileCm = Math.max(18, Math.min(48, 160 / Math.max(2, Number(parsedPrint?.repeat) || 5)))
+    printUniforms.current.tex.value = overlay || emptyPrintTex
+    printUniforms.current.hasPrint.value = overlay ? 1.0 : 0.0
+    printUniforms.current.repeat.value = 3.0 / tileCm
+    return () => {
+      printUniforms.current.tex.value = emptyPrintTex
+      printUniforms.current.hasPrint.value = 0.0
+      overlay?.dispose?.()
+    }
+  }, [printKey, emptyPrintTex])
 
   const simRef = useRef(null)
   useEffect(() => {

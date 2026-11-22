@@ -23,6 +23,7 @@ import './girls-leotards.js'; // side-effect only — adds the 100-pattern Girls
 import './underwear-library.js'; // side-effect only — adds the 44-pattern Underwear & Bra collection
 import { FancyGen } from './fancy-patterns.js';
 import './reference-patterns.js'; // side-effect only — adds the 12-pattern Phase 2 reference set (docs/plan 4.md)
+import './abaya-collection.js'; // side-effect only — adds the 20-pattern Embroidered Hijab Abayas collection (wa01–wa20)
 import { PatternValidator } from './validate.js';
 import { renderPatternFlat } from './pattern-flat.js';
 import { getPatternThumbnail } from './thumbnails.js';
@@ -1230,9 +1231,18 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const grid = el("div","lib-grid");
     const draw = (filter="") => {
       grid.innerHTML="";
+      const qStr = filter.trim().toLowerCase();
       LIBRARY.filter(x=>{
         if(libCat!=="all" && x.cat!==libCat) return false;
-        const p=PATTERNS[x.id]; return L(p.name).toLowerCase().includes(filter.toLowerCase());
+        if(!qStr) return true;
+        const p=PATTERNS[x.id];
+        const hay = [
+          p?.name?.en, p?.name?.ar,
+          p?.desc?.en, p?.desc?.ar,
+          x.tag?.en, x.tag?.ar,
+          x.id,
+        ].filter(Boolean).join(" ").toLowerCase();
+        return hay.includes(qStr);
       }).forEach(x=>{
           const p=PATTERNS[x.id];
           const card=el("div","lib-card");
@@ -4791,14 +4801,19 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // half-piece/role/seam conversion happens entirely on the cloth-lab side.
   function buildClothLabPayload(){
     const pieces = ensureClothPieceIds(Canvas.getPieces());
+    const loadedMeta = state.loaded ? PATTERNS[state.loaded] : null;
+    const lbStyle = state.loaded ? getPatternLookbookStyle(state.loaded, loadedMeta, pieces) : null;
+    const lookbookPrint = (lbStyle?.print && pieces.some(p => p.lookbookColor)) ? lbStyle.print : null;
     return {
       designId: String(state.activeProjectId || "current"),
+      patternId: state.loaded || null,
       designName: activeProject()?.title || T("untitledProject"),
       clothLabSetup: pieces[0]?.clothLabSetup,
       type: "berrystudio:pattern",
       measurements: currentMeas(),
       category: state.category,
       fabricId: dominantFabricId(),
+      lookbookPrint,
       avatarGLB: state.avatarGLB || {},
       // cloth-lab was English-only regardless of this app's own language
       // setting — the bridge already carried bilingual {en,ar} piece labels

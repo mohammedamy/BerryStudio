@@ -7,6 +7,7 @@ import '../js/girls-leotards.js';
 import { FancyGen } from '../js/fancy-patterns.js';
 import '../js/underwear-library.js';
 import '../js/reference-patterns.js';
+import '../js/abaya-collection.js';
 import { AIGen } from '../js/ai.js';
 import {
   buildSystemPrompt,
@@ -112,9 +113,9 @@ function assertCosineSleeveCap(piece, ctxLabel, cubicTol = 1e-6) {
   }
 }
 
-test('entire 320-pattern library drafts every set-in/puff/cap/two-piece sleeve with a true -cos S-curve cap', () => {
+test('entire 340-pattern library drafts every set-in/puff/cap/two-piece sleeve with a true -cos S-curve cap', () => {
   const ids = Object.keys(PATTERNS);
-  assert.ok(ids.length >= 320, `expected all >=320 patterns loaded, got ${ids.length}`);
+  assert.ok(ids.length >= 340, `expected all >=340 patterns loaded, got ${ids.length}`);
 
   let checkedSleeves = 0;
   let skippedRaglan = 0;

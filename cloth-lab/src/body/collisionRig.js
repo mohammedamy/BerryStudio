@@ -815,13 +815,17 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
           )
           if (topBand || compactStitch) mask[sp] = 1
         } else if (BODY_OR_BUST_ATTACH_ROLES.has(role)) {
-          const topBand = yCm <= minY + Math.max(2.0, heightCm * 0.22)
-          const compactStitch = heightCm <= 28 && (
-            yCm >= maxY - Math.max(1.8, heightCm * 0.20) ||
-            xCm <= minX + Math.max(1.8, widthCm * 0.14) ||
-            xCm >= maxX - Math.max(1.8, widthCm * 0.14)
-          )
-          if (topBand || compactStitch) mask[sp] = 1
+          if (role === 'attachWrist') {
+            if (yCm <= minY + Math.max(1.4, heightCm * 0.18)) mask[sp] = 1
+          } else {
+            const topBand = yCm <= minY + Math.max(2.0, heightCm * 0.22)
+            const compactStitch = heightCm <= 28 && (
+              yCm >= maxY - Math.max(1.8, heightCm * 0.20) ||
+              xCm <= minX + Math.max(1.8, widthCm * 0.14) ||
+              xCm >= maxX - Math.max(1.8, widthCm * 0.14)
+            )
+            if (topBand || compactStitch) mask[sp] = 1
+          }
         } else if (WAIST_OR_HEM_ATTACH_ROLES.has(role)) {
           const topBand = yCm <= minY + Math.max(2.0, heightCm * 0.16)
           const narrowBand = heightCm <= 12 && yCm >= maxY - Math.max(1.6, heightCm * 0.22)
