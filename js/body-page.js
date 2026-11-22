@@ -9,6 +9,7 @@
    ============================================================ */
 import { I18N } from './i18n.js';
 import { SIZES, KIDS_AGES, computeMeasurements } from './data.js';
+import { getMannequinsByCategory, getMannequinFor, isActiveMannequinSize, resolveMannequinMeasurements } from './mannequin-catalog.js';
 import { renderMeasureFields } from './measure-form.js';
 import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
 
@@ -43,7 +44,12 @@ import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
   let category = "women", standard = "intl", size = "M", kids = null, custom = {};
   let showDiagram = false;
 
-  function currentMeas() { return computeMeasurements({ category, size, standard, kids, custom }); }
+  function currentMeas() {
+    if (!kids && isActiveMannequinSize(size)) {
+      return resolveMannequinMeasurements(category, size, { standard, custom });
+    }
+    return computeMeasurements({ category, size, standard, kids, custom });
+  }
 
   function renderCatSeg() {
     $$("#catSeg button").forEach((b) => b.classList.toggle("active", b.dataset.cat === category));
@@ -53,6 +59,18 @@ import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
     sel.innerHTML = "";
     [["intl", T("std_intl")], ["egypt", T("std_egypt")], ["saudi", T("std_saudi")]].forEach(([v, n]) => {
       const o = el("option", null, n); o.value = v; if (standard === v) o.selected = true; sel.appendChild(o);
+    });
+  }
+  function renderMannequinGrid() {
+    const g = $("#mannequinGrid");
+    if (!g) return;
+    g.innerHTML = "";
+    getMannequinsByCategory(category).forEach((mq) => {
+      const active = size === mq.size && !kids;
+      const b = el("button", "size-btn" + (active ? " active" : ""), `${mq.size} · ${mq.measurements.height}`);
+      b.title = `${L(mq.name)} (${L(mq.buildLabel)}, ${mq.measurements.height} cm)`;
+      b.onclick = () => { size = mq.size; kids = null; custom = {}; refreshAll(); };
+      g.appendChild(b);
     });
   }
   function renderSizeGrid() {
@@ -80,7 +98,7 @@ import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
     });
   }
   function refreshAll() {
-    renderCatSeg(); renderStandardSel(); renderSizeGrid(); renderKidsGrid(); renderMeasure();
+    renderCatSeg(); renderStandardSel(); renderMannequinGrid(); renderSizeGrid(); renderKidsGrid(); renderMeasure();
     mountOrUpdateAvatar();
   }
 
@@ -88,7 +106,12 @@ import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
   $("#standardSel").onchange = () => { standard = $("#standardSel").value; refreshAll(); };
   $("#generateBtn").onclick = () => { mountOrUpdateAvatar(); };
   $("#openFitBtn").onclick = () => {
-    saveBodyFormHandoff({ category, measurements: currentMeas() });
+    saveBodyFormHandoff({
+      category,
+      size,
+      mannequinSize: isActiveMannequinSize(size) ? size : null,
+      measurements: currentMeas(),
+    });
     location.href = `index.html?${HANDOFF_URL_FLAG}=1`;
   };
 
@@ -99,6 +122,17 @@ import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
   // a GitHub Pages subpath (production), not location.origin.
   let clothLabEmbedModule = null;
   let clothLabEmbedLoadPromise = null;
+  function buildBodyPayload() {
+    const mqSize = isActiveMannequinSize(size) ? size : "M";
+    const mq = getMannequinFor(category, mqSize);
+    return {
+      category,
+      mannequinSize: mq.size,
+      mannequin: { id: mq.id, category: mq.category, size: mq.size, skinHex: mq.skinHex, hairHex: mq.hairHex, hairStyle: mq.hairStyle, morph: mq.morph },
+      measurements: currentMeas(),
+      pieces: [],
+    };
+  }
   function mountClothLabEmbedded() {
     if (clothLabEmbedLoadPromise) return clothLabEmbedLoadPromise;
     const container = $("#clothLabEmbed");
@@ -107,7 +141,7 @@ import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
     clothLabEmbedLoadPromise = import(/* @vite-ignore */ embedUrl).then((mod) => {
       clothLabEmbedModule = mod.mount(container, {
         assetBase, bodyOnly: true,
-        pattern: { category, measurements: currentMeas(), pieces: [] },
+        pattern: buildBodyPayload(),
       });
     }).catch((err) => {
       console.error("BodyForm: Cloth Lab embed failed to load:", err);
@@ -122,7 +156,7 @@ import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
   // paint, and update() is a no-op if called before mount() resolves.
   let lastPayloadJSON = null;
   function mountOrUpdateAvatar() {
-    const payload = { category, measurements: currentMeas(), pieces: [] };
+    const payload = buildBodyPayload();
     const json = JSON.stringify(payload);
     if (json === lastPayloadJSON) return;
     lastPayloadJSON = json;

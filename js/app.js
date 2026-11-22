@@ -8,6 +8,14 @@ import { mountCommandReview, patternPreview } from './project-review.js';
 import { designKey as clothDesignKey, ensureClothPieceIds } from './cloth-workflow-contract.js';
 import { I18N } from './i18n.js';
 import { PATTERNS, LIBRARY, computeMeasurements, SIZES, SIZE_STEP, KIDS_AGES } from './data.js';
+import {
+  ACTIVE_MANNEQUIN_SIZES,
+  MANNEQUIN_CATALOG,
+  getMannequinsByCategory,
+  getMannequinFor,
+  isActiveMannequinSize,
+  resolveMannequinMeasurements,
+} from './mannequin-catalog.js';
 import { Canvas } from './canvas.js';
 import { View3D } from './three-view.js';
 import { AIGen } from './ai.js';
@@ -91,7 +99,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // not just an intensity — waistIntensity/sleeveIntensity (light/full)
     // apply to whichever technique is selected. "none" on either keeps
     // AIGen.build()'s output byte-identical to before this option existed.
-    builderOpts: { length:"medium", flare:"regular", fit:"regular", sleeve:"short", waistTech:"none", waistIntensity:"light", sleeveTech:"none", sleeveIntensity:"light" }, builderCustom: {},
+    builderOpts: { length: "medium", flare: "regular", fit: "regular", sleeve: "short", waistTech: "none", waistIntensity: "light", sleeveTech: "none", sleeveIntensity: "light" }, builderCustom: {},
     // Guided Prompt Builder (AI pane): structured fields that assemble into
     // a precise, unambiguous free-text prompt instead of asking the user to
     // write one from scratch — the concrete fix for "the AI prompt is too
@@ -100,10 +108,11 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // sentence) — everything defaults to "any" except garment type, which
     // needs some starting value; a user who touches nothing gets exactly
     // today's plain-text-prompt behaviour.
-    aiGuided: { type:"dress", fit:"any", flare:"any", length:"any", neckline:"any", sleeve:"any", hem:"any", closure:"none", notes:"" },
+    aiGuided: { type: "dress", fit: "any", flare: "any", length: "any", neckline: "any", sleeve: "any", hem: "any", closure: "none", notes: "" },
     // Default to the new high-fidelity articulated walking mannequins for all categories
     avatarGLB: { women: null, men: null, girls: null, boys: null },
     avatarCategory: null, avatarCategoryExplicit: false,
+    avatarSize: "M", avatarSizeExplicit: false,
     // BerryStudio-Upgrade-Plan WP-5: "iframe" (cross-document, the original
     // engine) or "embedded" (cloth-lab's lib build mounted directly into
     // this page, sharing React/three.js via the import map — see
@@ -159,8 +168,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   let savedRaw = {};
   try {
     const stored = JSON.parse(localStorage.getItem("pps") || "{}");
-    if(stored && typeof stored === "object" && !Array.isArray(stored)) savedRaw = stored;
-  } catch(e) { console.warn('[project] Saved settings could not be read', e); }
+    if (stored && typeof stored === "object" && !Array.isArray(stored)) savedRaw = stored;
+  } catch (e) { console.warn('[project] Saved settings could not be read', e); }
   const state = Object.assign({}, DEF, savedRaw);
   // V6-13: preserve a user's explicit custom URL or "None", but upgrade
   // known bundled static URLs in saved projects to their pose-capable
@@ -188,10 +197,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       catch { /* The normal save path will surface quota errors later. */ }
     }
   }
-  if(!Array.isArray(state.projects)) state.projects = [];
+  if (!Array.isArray(state.projects)) state.projects = [];
   try { state.measurementProfiles = parseMeasurementProfiles(state.measurementProfiles); }
   catch { state.measurementProfiles = []; state.selectedMeasurementProfileId = null; }
-  if(!state.measurementProfiles.some(profile=>profile.id===state.selectedMeasurementProfileId)) state.selectedMeasurementProfileId=null;
+  if (!state.measurementProfiles.some(profile => profile.id === state.selectedMeasurementProfileId)) state.selectedMeasurementProfileId = null;
   let projectsReady = false;
   let storageWarningShown = false;
   // WP-17: honour the OS-level reduced-motion preference by default, but only
@@ -209,12 +218,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // its own. A no-op before initProjectTabs() has ever run (activeProject()
   // finds nothing yet) — safe to call from anywhere, at any point in boot.
   const save = () => {
-    if(!projectsReady) return;
+    if (!projectsReady) return;
     syncActiveProjectSnapshot();
-    if(state.view==="clothlab") syncClothLab();
+    if (state.view === "clothlab") syncClothLab();
     try { localStorage.setItem("pps", JSON.stringify(state)); storageWarningShown = false; return true; }
-    catch(e) {
-      if(!storageWarningShown) toast(T("projectStorageFailed"));
+    catch (e) {
+      if (!storageWarningShown) toast(T("projectStorageFailed"));
       storageWarningShown = true; return false;
     }
   };
@@ -309,18 +318,18 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // one is already open updates it live, without the user having to click
   // away and back. Cloth Lab's own tab is re-synced the same way if it's
   // the active view.
-  function refreshGatedUI(){
+  function refreshGatedUI() {
     renderLibraryPane(); renderAIPane(); renderBuilderPane(); renderExportPane();
-    if(!gateAllowed()) teardownClothLab();
-    if(state.view==="clothlab") setView("clothlab");
+    if (!gateAllowed()) teardownClothLab();
+    if (state.view === "clothlab") setView("clothlab");
   }
-  async function refreshEntitlement(session){
+  async function refreshEntitlement(session) {
     const request = ++entitlementRequest;
     const userId = session?.user?.id || null;
-    if(userId !== entitlementUserId) currentEntitlement = null;
+    if (userId !== entitlementUserId) currentEntitlement = null;
     entitlementUserId = userId;
-    if(!userId){ currentEntitlement = null; return; }
-    try{
+    if (!userId) { currentEntitlement = null; return; }
+    try {
       // Pass session.user.id straight through — js/auth.js's getProfile()
       // skips its own client.auth.getUser() round trip when given one
       // (code-review efficiency fix; we already have the id from the
@@ -335,33 +344,33 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       // the catch block below and preserves currentEntitlement, instead of
       // that catch being unreachable dead code for the exact scenario its
       // own comment described.
-      if(request === entitlementRequest) currentEntitlement = computeEntitlement(profile, Date.now());
-    } catch(e){
+      if (request === entitlementRequest) currentEntitlement = computeEntitlement(profile, Date.now());
+    } catch (e) {
       console.error('[entitlement] refresh failed, keeping previous state', e);
       // Deliberately do NOT overwrite currentEntitlement here — see the
       // field's own comment above.
     }
   }
-  function gateAllowed(){
-    if(currentEntitlement?.status === "trial" && Date.now() >= currentEntitlement.trialEndsAt)
-      currentEntitlement = {...currentEntitlement, status:"expired", allowed:false, daysRemaining:0};
+  function gateAllowed() {
+    if (currentEntitlement?.status === "trial" && Date.now() >= currentEntitlement.trialEndsAt)
+      currentEntitlement = { ...currentEntitlement, status: "expired", allowed: false, daysRemaining: 0 };
     return !!currentSession?.user && isAllowed(currentEntitlement);
   }
   // Shared upsell block every gated pane/action renders — one visual
   // language for "sign in to start your trial" vs "your trial ended",
   // rather than four panes each inventing their own copy. `T(...)` keys
   // are new WP-42 Stage B strings, added to js/i18n.js alongside Stage A's.
-  function renderGateUpsell(container, surfaceTitleKey){
+  function renderGateUpsell(container, surfaceTitleKey) {
     container.innerHTML = "";
-    container.appendChild(el("div","section-title",T(surfaceTitleKey)));
+    container.appendChild(el("div", "section-title", T(surfaceTitleKey)));
     const signedIn = !!(currentSession && currentSession.user);
-    container.appendChild(el("div","help-note", signedIn ? T("gateExpiredNote") : T("gateSignedOutNote")));
-    const btn = el("button","big-btn", signedIn ? T("gateUpgradeBtn") : T("gateSignInBtn"));
-    btn.style.marginTop="12px";
+    container.appendChild(el("div", "help-note", signedIn ? T("gateExpiredNote") : T("gateSignedOutNote")));
+    const btn = el("button", "big-btn", signedIn ? T("gateUpgradeBtn") : T("gateSignInBtn"));
+    btn.style.marginTop = "12px";
     btn.onclick = signedIn ? openUpgradePrompt : openAccount;
     container.appendChild(btn);
-    if(!isAuthConfigured()){
-      container.appendChild(el("div","help-note", T("accountNotConfigured")));
+    if (!isAuthConfigured()) {
+      container.appendChild(el("div", "help-note", T("accountNotConfigured")));
     }
   }
   // Called by every gated ACTION function (not just the pane renderers) —
@@ -370,88 +379,88 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // functions). Returns true and does nothing when allowed; returns false
   // and opens the sign-in/upgrade modal when gated, so the caller can
   // `if(!requireEntitlement()) return;` as its very first line.
-  function requireEntitlement(){
-    if(gateAllowed()) return true;
-    if(currentSession && currentSession.user) openUpgradePrompt(); else openAccount();
+  function requireEntitlement() {
+    if (gateAllowed()) return true;
+    if (currentSession && currentSession.user) openUpgradePrompt(); else openAccount();
     return false;
   }
   // Stage B has no real payment flow yet (Stage C/PayPal, plan v3.2 §6) —
   // this is an honest placeholder, not a fake "Upgrade" button that
   // silently does nothing. Reuses the generic modal, same pattern as
   // openAccount().
-  function openUpgradePrompt(){
+  function openUpgradePrompt() {
     openModal(T("upgradeTitle"), "");
-    const body=$("#genericModal .modal-body"); body.innerHTML="";
-    body.appendChild(el("div","help-note",T("upgradeNotAvailableYet")));
+    const body = $("#genericModal .modal-body"); body.innerHTML = "";
+    body.appendChild(el("div", "help-note", T("upgradeNotAvailableYet")));
   }
 
   // ---------------- ICONS (inline SVG) ----------------
   const IC = {
-    logo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l4-3 5 4 5-4 4 3-3 5v10H6V11z"/></svg>',
-    select:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3l7 17 2-7 7-2z"/></svg>',
-    pen:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18"/><path d="M2 2l7.5 7.5"/></svg>',
-    line:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 19L19 5"/><circle cx="5" cy="19" r="1.6"/><circle cx="19" cy="5" r="1.6"/></svg>',
-    arc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 19a15 15 0 0 1 16-14"/></svg>',
-    free:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3 1 4-4 7-4s3 4 6 2 4-6 5-6"/></svg>',
-    symmetry:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18"/><path d="M8 7l-4 5 4 5"/><path d="M16 7l4 5-4 5"/></svg>',
-    knife:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l7-7"/><path d="M14 4l6 6-4 1-3-3z"/></svg>',
-    move:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3"/></svg>',
-    rotate:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>',
-    scale:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7"/><path d="M3 3l7 7"/><rect x="10" y="10" width="11" height="11" rx="1"/></svg>',
-    measure:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16L16 2l6 6L8 22z"/><path d="M7 11l2 2M11 7l2 2M15 11l2 2"/></svg>',
-    seam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1" stroke-dasharray="2 2"/></svg>',
-    notch:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l4 8H8z"/><path d="M4 21h16"/></svg>',
-    addpoint:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18L18 6"/><circle cx="11" cy="12" r="3.4"/><path d="M11 10.2v3.6M9.2 12h3.6"/></svg>',
-    grain:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M8 6l4-3 4 3M8 18l4 3 4-3"/></svg>',
-    undo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>',
-    redo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 1-3-7.7L21 8"/></svg>',
-    grid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>',
-    magnet:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 3v8a6 6 0 0 0 12 0V3"/><path d="M6 3h4v4H6zM14 3h4v4h-4z"/></svg>',
-    cube:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 22V12M3 7l9 5 9-5"/></svg>',
-    cloudUp:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1-1-7.9A5 5 0 0 1 16 8a4.5 4.5 0 0 1 1 8.9"/><path d="M12 21v-7M9 17l3-3 3 3"/></svg>',
-    cloudDown:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1-1-7.9A5 5 0 0 1 16 8a4.5 4.5 0 0 1 1 8.9"/><path d="M12 13v7M9 17l3 3 3-3"/></svg>',
-    layers:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2l10 6-10 6L2 8z"/><path d="M2 12l10 6 10-6M2 16l10 6 10-6"/></svg>',
-    cmd:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/></svg>',
-    palette:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-1 1-2s0-2 1-2h2a4 4 0 0 0 4-4c0-5-4-8-8-8z"/><circle cx="7.5" cy="11.5" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="16" cy="11" r="1"/></svg>',
-    globe:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>',
-    sun:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>',
-    moon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>',
-    gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5c.1-.3.1-.6.1-1z"/></svg>',
-    download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>',
-    newdoc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v6M9 15h6"/></svg>',
-    importf:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M12 3v12M8 11l4 4 4-4"/></svg>',
-    pdf:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 13h1a1 1 0 0 1 0 2h-1zM8.5 13v4"/></svg>',
-    printer:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="6" y="13" width="12" height="8" rx="1"/></svg>',
-    image:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>',
-    folder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
-    lock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
-    unlock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>',
-    drop:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>',
-    text:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg>',
-    polyfill:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M12 2l8 6-3 10H7L4 8z" fill-opacity="0.28"/></svg>',
-    trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
-    edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
-    dots:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
-    question:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.8 2.8 0 1 1 4.3 2.4c-.9.6-1.5 1.1-1.5 2.1"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg>',
-    ruler:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18"/></svg>',
-    spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>',
-    eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
-    eyeoff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M9.9 4.2A10 10 0 0 1 12 4c6 0 10 8 10 8a18 18 0 0 1-3 3.9M6.6 6.6A18 18 0 0 0 2 12s4 8 10 8a10 10 0 0 0 3-.5"/></svg>',
-    check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
-    search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>',
-    shirt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2l4 3 4-3 5 4-3 4v11H6V10L3 6z"/></svg>',
-    dress:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 2l3 3 3-3 2 5-3 3 4 12H6l4-12-3-3z"/></svg>',
-    skirtIcon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 3h6l1 4h-8z"/><path d="M8 7h8l3 13H5z"/></svg>',
-    trousersIcon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M7 2h10l1 8-1 2 1 10h-4l-1-11-1 11H8L9 12l-1-2z"/></svg>',
-    point:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/></svg>',
-    conline:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 18L18 6"/><circle cx="6" cy="18" r="2.2" fill="currentColor" stroke="none"/><circle cx="18" cy="6" r="2.2" fill="currentColor" stroke="none"/></svg>',
-    conarc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 19a15 15 0 0 1 15-15"/><circle cx="5" cy="19" r="2.1" fill="currentColor" stroke="none"/><circle cx="20" cy="4" r="2.1" fill="currentColor" stroke="none"/></svg>',
-    circleTool:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
-    promote:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 9l4-4 8 1 4 6-2 9H7z" stroke-dasharray="2.5 2"/><path d="M8.5 12.5l2.2 2.2 4.8-4.8"/></svg>',
-    calib:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h16M4 12v-3M20 12v-3M9 12v-3M15 12v-3"/></svg>',
-    lasso:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3C7 3 3 6.5 3 11c0 3 2.5 5 6 5 1.8 0 3-1 3-2.3S10.8 12 9.5 12" stroke-dasharray="2.4 2.2"/><circle cx="17" cy="15" r="3.4"/></svg>',
-    curve:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 18C4 10 20 14 20 6"/><path d="M4 18l4.5-4.5M20 6l-4.5 4.5" stroke-dasharray="1.6 1.6"/><circle cx="4" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.7" fill="currentColor" stroke="none"/></svg>',
-    dart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h6M15 6h6"/><path d="M9 6l3 12 3-12"/></svg>',
+    logo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l4-3 5 4 5-4 4 3-3 5v10H6V11z"/></svg>',
+    select: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3l7 17 2-7 7-2z"/></svg>',
+    pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18"/><path d="M2 2l7.5 7.5"/></svg>',
+    line: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 19L19 5"/><circle cx="5" cy="19" r="1.6"/><circle cx="19" cy="5" r="1.6"/></svg>',
+    arc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 19a15 15 0 0 1 16-14"/></svg>',
+    free: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3 1 4-4 7-4s3 4 6 2 4-6 5-6"/></svg>',
+    symmetry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18"/><path d="M8 7l-4 5 4 5"/><path d="M16 7l4 5-4 5"/></svg>',
+    knife: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l7-7"/><path d="M14 4l6 6-4 1-3-3z"/></svg>',
+    move: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3"/></svg>',
+    rotate: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>',
+    scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h7v7"/><path d="M3 3l7 7"/><rect x="10" y="10" width="11" height="11" rx="1"/></svg>',
+    measure: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16L16 2l6 6L8 22z"/><path d="M7 11l2 2M11 7l2 2M15 11l2 2"/></svg>',
+    seam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1" stroke-dasharray="2 2"/></svg>',
+    notch: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l4 8H8z"/><path d="M4 21h16"/></svg>',
+    addpoint: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18L18 6"/><circle cx="11" cy="12" r="3.4"/><path d="M11 10.2v3.6M9.2 12h3.6"/></svg>',
+    grain: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M8 6l4-3 4 3M8 18l4 3 4-3"/></svg>',
+    undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>',
+    redo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 1-3-7.7L21 8"/></svg>',
+    grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>',
+    magnet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 3v8a6 6 0 0 0 12 0V3"/><path d="M6 3h4v4H6zM14 3h4v4h-4z"/></svg>',
+    cube: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 22V12M3 7l9 5 9-5"/></svg>',
+    cloudUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1-1-7.9A5 5 0 0 1 16 8a4.5 4.5 0 0 1 1 8.9"/><path d="M12 21v-7M9 17l3-3 3 3"/></svg>',
+    cloudDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1-1-7.9A5 5 0 0 1 16 8a4.5 4.5 0 0 1 1 8.9"/><path d="M12 13v7M9 17l3 3 3-3"/></svg>',
+    layers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2l10 6-10 6L2 8z"/><path d="M2 12l10 6 10-6M2 16l10 6 10-6"/></svg>',
+    cmd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/></svg>',
+    palette: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-1 1-2s0-2 1-2h2a4 4 0 0 0 4-4c0-5-4-8-8-8z"/><circle cx="7.5" cy="11.5" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="16" cy="11" r="1"/></svg>',
+    globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>',
+    sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>',
+    moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5c.1-.3.1-.6.1-1z"/></svg>',
+    download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>',
+    newdoc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v6M9 15h6"/></svg>',
+    importf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M12 3v12M8 11l4 4 4-4"/></svg>',
+    pdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M8.5 13h1a1 1 0 0 1 0 2h-1zM8.5 13v4"/></svg>',
+    printer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="6" y="13" width="12" height="8" rx="1"/></svg>',
+    image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+    unlock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>',
+    drop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>',
+    text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg>',
+    polyfill: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M12 2l8 6-3 10H7L4 8z" fill-opacity="0.28"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+    dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
+    question: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.8 2.8 0 1 1 4.3 2.4c-.9.6-1.5 1.1-1.5 2.1"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg>',
+    ruler: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18"/></svg>',
+    spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>',
+    eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
+    eyeoff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M9.9 4.2A10 10 0 0 1 12 4c6 0 10 8 10 8a18 18 0 0 1-3 3.9M6.6 6.6A18 18 0 0 0 2 12s4 8 10 8a10 10 0 0 0 3-.5"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>',
+    shirt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 2l4 3 4-3 5 4-3 4v11H6V10L3 6z"/></svg>',
+    dress: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 2l3 3 3-3 2 5-3 3 4 12H6l4-12-3-3z"/></svg>',
+    skirtIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M9 3h6l1 4h-8z"/><path d="M8 7h8l3 13H5z"/></svg>',
+    trousersIcon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M7 2h10l1 8-1 2 1 10h-4l-1-11-1 11H8L9 12l-1-2z"/></svg>',
+    point: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/></svg>',
+    conline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 18L18 6"/><circle cx="6" cy="18" r="2.2" fill="currentColor" stroke="none"/><circle cx="18" cy="6" r="2.2" fill="currentColor" stroke="none"/></svg>',
+    conarc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 19a15 15 0 0 1 15-15"/><circle cx="5" cy="19" r="2.1" fill="currentColor" stroke="none"/><circle cx="20" cy="4" r="2.1" fill="currentColor" stroke="none"/></svg>',
+    circleTool: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
+    promote: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 9l4-4 8 1 4 6-2 9H7z" stroke-dasharray="2.5 2"/><path d="M8.5 12.5l2.2 2.2 4.8-4.8"/></svg>',
+    calib: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h16M4 12v-3M20 12v-3M9 12v-3M15 12v-3"/></svg>',
+    lasso: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3C7 3 3 6.5 3 11c0 3 2.5 5 6 5 1.8 0 3-1 3-2.3S10.8 12 9.5 12" stroke-dasharray="2.4 2.2"/><circle cx="17" cy="15" r="3.4"/></svg>',
+    curve: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 18C4 10 20 14 20 6"/><path d="M4 18l4.5-4.5M20 6l-4.5 4.5" stroke-dasharray="1.6 1.6"/><circle cx="4" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.7" fill="currentColor" stroke="none"/></svg>',
+    dart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h6M15 6h6"/><path d="M9 6l3 12 3-12"/></svg>',
   };
 
   // Library thumbnails: real, full-colour illustrations (not currentColor-themed
@@ -459,44 +468,44 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // No <defs>/gradients — many copies of the same SVG string land in the DOM at
   // once and duplicate ids would collide, so depth comes from flat layered fills.
   const LIB_ICONS = {
-    shirt:'<svg viewBox="0 0 24 24"><path d="M8 2l4 3 4-3 5 4-3 4v11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V10L3 6z" fill="#4d7fc4"/><path d="M8 2l1.6 3.6L12 8l2.4-2.4L16 2l-1 2.2-3 2.4-3-2.4z" fill="#eef3fb"/><circle cx="12" cy="10" r=".7" fill="#254170"/><circle cx="12" cy="13.4" r=".7" fill="#254170"/><circle cx="12" cy="16.8" r=".7" fill="#254170"/></svg>',
-    top:'<svg viewBox="0 0 24 24"><path d="M8.4 3l3.6 2.4L15.6 3l4.4 3.6-2.6 3-1 12.4H7.6l-1-12.4-2.6-3z" fill="#3f9b8c"/><path d="M8.4 3l3.6 2.4L15.6 3l1 1.6-4.6 3.4-4.6-3.4z" fill="#d9f0ec"/></svg>',
-    dress:'<svg viewBox="0 0 24 24"><path d="M9 2l3 3 3-3 2 5-3 3 4 12H7l4-12-3-3z" fill="#ea6f93"/><path d="M9 2l3 3 3-3 1 2.4-4 3.6-4-3.6z" fill="#fbdce6"/><path d="M8.6 13h6.8" stroke="#c1436a" stroke-width="1.1" stroke-linecap="round"/></svg>',
-    gown:'<svg viewBox="0 0 24 24"><path d="M9 2l3 2.6 3-2.6 2 4.6-2.6 2.6 5 13.8H6.6l5-13.8L9 6.6z" fill="#7a4aa8"/><path d="M9 2l3 2.6 3-2.6 1 2.4-4 3.4-4-3.4z" fill="#e7d6f5"/><path d="M8 15.4h8" stroke="#d8b23e" stroke-width="1.1"/><path d="M12 15.4v9" stroke="#5e3583" stroke-width=".8" stroke-dasharray="1.4 1.4"/></svg>',
-    robe:'<svg viewBox="0 0 24 24"><path d="M9 2h6l1.6 3-2.6 2 1 15H8l1-15-2.6-2z" fill="#cf9a3e"/><path d="M9 2h6l.8 1.6H8.2z" fill="#f2ddb0"/><path d="M6 8l2-3M18 8l-2-3" stroke="#b07f2e" stroke-width="1.2" stroke-linecap="round" fill="none"/><path d="M12 6v16" stroke="#a9781f" stroke-width=".8"/></svg>',
-    jacket:'<svg viewBox="0 0 24 24"><path d="M9 2L6 4 4 8l2 2v11a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10l2-2-2-4-3-2-3 2.6z" fill="#2e3d5c"/><path d="M9 2l3 2.6L15 2l1.4 1-4.4 6-4.4-6z" fill="#4a5d82"/><circle cx="10.6" cy="14" r=".6" fill="#d9b54c"/><circle cx="10.6" cy="17" r=".6" fill="#d9b54c"/></svg>',
-    coat:'<svg viewBox="0 0 24 24"><path d="M9 2L6 4 4 8l2 2v13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10l2-2-2-4-3-2-3 2.6z" fill="#a9662f"/><path d="M9 2l3 2.6L15 2l1.4 1-4.4 6-4.4-6z" fill="#c98a4c"/><path d="M6 15h12" stroke="#7a4c22" stroke-width="1.2"/><circle cx="10" cy="12" r=".55" fill="#5c3a1e"/><circle cx="14" cy="12" r=".55" fill="#5c3a1e"/><circle cx="10" cy="19" r=".55" fill="#5c3a1e"/><circle cx="14" cy="19" r=".55" fill="#5c3a1e"/></svg>',
-    suit:'<svg viewBox="0 0 24 24"><path d="M9 2L6 4 4 8l2 2v11a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10l2-2-2-4-3-2-3 2.6z" fill="#3c3f46"/><path d="M9 2l1.6 2.4L9.4 20H8V10L6 8l1-3z" fill="#f2f2f2"/><path d="M15 2l-1.6 2.4L14.6 20H16V10l2-2-1-3z" fill="#f2f2f2"/><path d="M11 4.6l1 2 1-2-1-1.6z" fill="#7c2432"/><path d="M11.4 6.2h1.2l-.4 6-.4 0z" fill="#7c2432"/></svg>',
-    trousers:'<svg viewBox="0 0 24 24"><path d="M6 2h12l.6 8-1 2 .8 12h-4l-1-11-1 11H8l.8-12-1-2z" fill="#3c5f95"/><path d="M6 2h12l.3 3.6H5.7z" fill="#294570"/><path d="M12 4v6" stroke="#294570" stroke-width="1"/></svg>',
-    skirt:'<svg viewBox="0 0 24 24"><path d="M9 3h6l1 4h-8z" fill="#3c5f95"/><path d="M8 7h8l3 13H5z" fill="#e8a33e"/><path d="M12 7v13" stroke="#c1811f" stroke-width=".8" stroke-dasharray="1.4 1.4"/></svg>',
-    leotard:'<svg viewBox="0 0 24 24"><path d="M9 2l3 2 3-2 2 4-2 2v6l2 8h-4l-1-7-1 7H7l2-8V8L7 6z" fill="#b23e78"/><path d="M9 2l3 2 3-2 .8 1.8L12 6.4 8.2 3.8z" fill="#f6d4e3"/><path d="M8.6 12.4h6.8" stroke="#7c2a54" stroke-width="1" stroke-linecap="round"/></svg>',
-    underwear:'<svg viewBox="0 0 24 24"><path d="M4 5h16l-1 6-2.5 2 1 8h-5l-1-6.5L10 21H5l1-8-2.5-2z" fill="#c47a9e"/><path d="M4 5h16l.4 2.6H3.6z" fill="#8a4f6b"/></svg>',
-    bra:'<svg viewBox="0 0 24 24"><path d="M4.5 6.5c.8-2 3.6-2.3 4.8-.2 1 1.8 1.2 5.2 1.2 8.2H5.4c-1.1-3-2.5-6-.9-8z" fill="#c47a9e"/><path d="M19.5 6.5c-.8-2-3.6-2.3-4.8-.2-1 1.8-1.2 5.2-1.2 8.2h5.1c1.1-3 2.5-6 .9-8z" fill="#c47a9e"/><path d="M9.5 4.6L6 3M14.5 4.6L18 3" stroke="#8a4f6b" stroke-width="1" fill="none" stroke-linecap="round"/><path d="M10.5 14.5h3" stroke="#8a4f6b" stroke-width="1" stroke-linecap="round"/></svg>',
+    shirt: '<svg viewBox="0 0 24 24"><path d="M8 2l4 3 4-3 5 4-3 4v11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V10L3 6z" fill="#4d7fc4"/><path d="M8 2l1.6 3.6L12 8l2.4-2.4L16 2l-1 2.2-3 2.4-3-2.4z" fill="#eef3fb"/><circle cx="12" cy="10" r=".7" fill="#254170"/><circle cx="12" cy="13.4" r=".7" fill="#254170"/><circle cx="12" cy="16.8" r=".7" fill="#254170"/></svg>',
+    top: '<svg viewBox="0 0 24 24"><path d="M8.4 3l3.6 2.4L15.6 3l4.4 3.6-2.6 3-1 12.4H7.6l-1-12.4-2.6-3z" fill="#3f9b8c"/><path d="M8.4 3l3.6 2.4L15.6 3l1 1.6-4.6 3.4-4.6-3.4z" fill="#d9f0ec"/></svg>',
+    dress: '<svg viewBox="0 0 24 24"><path d="M9 2l3 3 3-3 2 5-3 3 4 12H7l4-12-3-3z" fill="#ea6f93"/><path d="M9 2l3 3 3-3 1 2.4-4 3.6-4-3.6z" fill="#fbdce6"/><path d="M8.6 13h6.8" stroke="#c1436a" stroke-width="1.1" stroke-linecap="round"/></svg>',
+    gown: '<svg viewBox="0 0 24 24"><path d="M9 2l3 2.6 3-2.6 2 4.6-2.6 2.6 5 13.8H6.6l5-13.8L9 6.6z" fill="#7a4aa8"/><path d="M9 2l3 2.6 3-2.6 1 2.4-4 3.4-4-3.4z" fill="#e7d6f5"/><path d="M8 15.4h8" stroke="#d8b23e" stroke-width="1.1"/><path d="M12 15.4v9" stroke="#5e3583" stroke-width=".8" stroke-dasharray="1.4 1.4"/></svg>',
+    robe: '<svg viewBox="0 0 24 24"><path d="M9 2h6l1.6 3-2.6 2 1 15H8l1-15-2.6-2z" fill="#cf9a3e"/><path d="M9 2h6l.8 1.6H8.2z" fill="#f2ddb0"/><path d="M6 8l2-3M18 8l-2-3" stroke="#b07f2e" stroke-width="1.2" stroke-linecap="round" fill="none"/><path d="M12 6v16" stroke="#a9781f" stroke-width=".8"/></svg>',
+    jacket: '<svg viewBox="0 0 24 24"><path d="M9 2L6 4 4 8l2 2v11a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10l2-2-2-4-3-2-3 2.6z" fill="#2e3d5c"/><path d="M9 2l3 2.6L15 2l1.4 1-4.4 6-4.4-6z" fill="#4a5d82"/><circle cx="10.6" cy="14" r=".6" fill="#d9b54c"/><circle cx="10.6" cy="17" r=".6" fill="#d9b54c"/></svg>',
+    coat: '<svg viewBox="0 0 24 24"><path d="M9 2L6 4 4 8l2 2v13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10l2-2-2-4-3-2-3 2.6z" fill="#a9662f"/><path d="M9 2l3 2.6L15 2l1.4 1-4.4 6-4.4-6z" fill="#c98a4c"/><path d="M6 15h12" stroke="#7a4c22" stroke-width="1.2"/><circle cx="10" cy="12" r=".55" fill="#5c3a1e"/><circle cx="14" cy="12" r=".55" fill="#5c3a1e"/><circle cx="10" cy="19" r=".55" fill="#5c3a1e"/><circle cx="14" cy="19" r=".55" fill="#5c3a1e"/></svg>',
+    suit: '<svg viewBox="0 0 24 24"><path d="M9 2L6 4 4 8l2 2v11a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10l2-2-2-4-3-2-3 2.6z" fill="#3c3f46"/><path d="M9 2l1.6 2.4L9.4 20H8V10L6 8l1-3z" fill="#f2f2f2"/><path d="M15 2l-1.6 2.4L14.6 20H16V10l2-2-1-3z" fill="#f2f2f2"/><path d="M11 4.6l1 2 1-2-1-1.6z" fill="#7c2432"/><path d="M11.4 6.2h1.2l-.4 6-.4 0z" fill="#7c2432"/></svg>',
+    trousers: '<svg viewBox="0 0 24 24"><path d="M6 2h12l.6 8-1 2 .8 12h-4l-1-11-1 11H8l.8-12-1-2z" fill="#3c5f95"/><path d="M6 2h12l.3 3.6H5.7z" fill="#294570"/><path d="M12 4v6" stroke="#294570" stroke-width="1"/></svg>',
+    skirt: '<svg viewBox="0 0 24 24"><path d="M9 3h6l1 4h-8z" fill="#3c5f95"/><path d="M8 7h8l3 13H5z" fill="#e8a33e"/><path d="M12 7v13" stroke="#c1811f" stroke-width=".8" stroke-dasharray="1.4 1.4"/></svg>',
+    leotard: '<svg viewBox="0 0 24 24"><path d="M9 2l3 2 3-2 2 4-2 2v6l2 8h-4l-1-7-1 7H7l2-8V8L7 6z" fill="#b23e78"/><path d="M9 2l3 2 3-2 .8 1.8L12 6.4 8.2 3.8z" fill="#f6d4e3"/><path d="M8.6 12.4h6.8" stroke="#7c2a54" stroke-width="1" stroke-linecap="round"/></svg>',
+    underwear: '<svg viewBox="0 0 24 24"><path d="M4 5h16l-1 6-2.5 2 1 8h-5l-1-6.5L10 21H5l1-8-2.5-2z" fill="#c47a9e"/><path d="M4 5h16l.4 2.6H3.6z" fill="#8a4f6b"/></svg>',
+    bra: '<svg viewBox="0 0 24 24"><path d="M4.5 6.5c.8-2 3.6-2.3 4.8-.2 1 1.8 1.2 5.2 1.2 8.2H5.4c-1.1-3-2.5-6-.9-8z" fill="#c47a9e"/><path d="M19.5 6.5c-.8-2-3.6-2.3-4.8-.2-1 1.8-1.2 5.2-1.2 8.2h5.1c1.1-3 2.5-6 .9-8z" fill="#c47a9e"/><path d="M9.5 4.6L6 3M14.5 4.6L18 3" stroke="#8a4f6b" stroke-width="1" fill="none" stroke-linecap="round"/><path d="M10.5 14.5h3" stroke="#8a4f6b" stroke-width="1" stroke-linecap="round"/></svg>',
   };
 
   // ---------------- TOOLS ----------------
   const TOOLS = [
-    { id:"select", i:"select" }, { id:"lasso", i:"lasso" }, { id:"pen", i:"pen" }, { id:"line", i:"line" },
-    { id:"arc", i:"arc" }, { id:"free", i:"free" }, { id:"polygon", i:"polyfill" }, { id:"symmetry", i:"symmetry" },
-    { id:"knife", i:"knife" }, "sep",
-    { id:"point", i:"point" }, { id:"conline", i:"conline" }, { id:"conarc", i:"conarc" },
-    { id:"circle", i:"circleTool" }, { id:"promote", i:"promote" }, "sep",
-    { id:"move", i:"move" }, { id:"rotate", i:"rotate" },
-    { id:"scale", i:"scale" }, { id:"measure", i:"measure" }, { id:"text", i:"text" }, "sep",
-    { id:"seam", i:"seam", toggle:"seam" }, { id:"notch", i:"notch" }, { id:"addpoint", i:"addpoint" }, { id:"curve", i:"curve" }, { id:"dart", i:"dart" }, { id:"grain", i:"grain" },
+    { id: "select", i: "select" }, { id: "lasso", i: "lasso" }, { id: "pen", i: "pen" }, { id: "line", i: "line" },
+    { id: "arc", i: "arc" }, { id: "free", i: "free" }, { id: "polygon", i: "polyfill" }, { id: "symmetry", i: "symmetry" },
+    { id: "knife", i: "knife" }, "sep",
+    { id: "point", i: "point" }, { id: "conline", i: "conline" }, { id: "conarc", i: "conarc" },
+    { id: "circle", i: "circleTool" }, { id: "promote", i: "promote" }, "sep",
+    { id: "move", i: "move" }, { id: "rotate", i: "rotate" },
+    { id: "scale", i: "scale" }, { id: "measure", i: "measure" }, { id: "text", i: "text" }, "sep",
+    { id: "seam", i: "seam", toggle: "seam" }, { id: "notch", i: "notch" }, { id: "addpoint", i: "addpoint" }, { id: "curve", i: "curve" }, { id: "dart", i: "dart" }, { id: "grain", i: "grain" },
   ];
 
   // ================= RENDER SHELL =================
   function buildToolRail() {
     const rail = $("#toolrail"); rail.innerHTML = "";
     TOOLS.forEach(tl => {
-      if (tl === "sep") { rail.appendChild(el("div","tool-sep")); return; }
+      if (tl === "sep") { rail.appendChild(el("div", "tool-sep")); return; }
       const b = el("button", "tool", IC[tl.i]);
       b.dataset.tool = tl.id;
-      b.setAttribute("aria-label", T("t_"+tl.id));
-      tip(b, T("t_"+tl.id), T("tt_"+tl.id));
+      b.setAttribute("aria-label", T("t_" + tl.id));
+      tip(b, T("t_" + tl.id), T("tt_" + tl.id));
       b.onclick = () => {
-        if (tl.toggle) { const v = !Canvas.getOpt(tl.toggle); Canvas.setOpt(tl.toggle, v); b.classList.toggle("active", v); toast(T("t_"+tl.id)); return; }
+        if (tl.toggle) { const v = !Canvas.getOpt(tl.toggle); Canvas.setOpt(tl.toggle, v); b.classList.toggle("active", v); toast(T("t_" + tl.id)); return; }
         setTool(tl.id);
       };
       if (tl.id === state.tool) b.classList.add("active");
@@ -506,18 +515,18 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
   function setTool(id) {
     state.tool = id; Canvas.setTool(id);
-    $$("#toolrail .tool").forEach(b => b.classList.toggle("active", b.dataset.tool === id && !TOOLS.find(t=>t!=="sep"&&t.id===b.dataset.tool)?.toggle));
-    toast(T("t_"+id));
+    $$("#toolrail .tool").forEach(b => b.classList.toggle("active", b.dataset.tool === id && !TOOLS.find(t => t !== "sep" && t.id === b.dataset.tool)?.toggle));
+    toast(T("t_" + id));
   }
 
   // ---- right rail panes ----
   // Rail panes in a task-flow order: get a base → fit it → edit → output.
-  const PANES = ["library","ai","builder","size","measure","layers","export"];
-  const PANE_ICON = { size:IC.scale, measure:IC.measure, layers:IC.layers, library:IC.shirt, ai:IC.spark, builder:IC.ruler, export:IC.download };
+  const PANES = ["library", "ai", "builder", "size", "measure", "layers", "export"];
+  const PANE_ICON = { size: IC.scale, measure: IC.measure, layers: IC.layers, library: IC.shirt, ai: IC.spark, builder: IC.ruler, export: IC.download };
   function buildRail() {
     const tabs = $("#railTabs"); tabs.innerHTML = "";
     PANES.forEach(p => {
-      const b = el("button", state.pane===p?"active":"", `${PANE_ICON[p]||""}<span>${T("tab_"+p)}</span>`);
+      const b = el("button", state.pane === p ? "active" : "", `${PANE_ICON[p] || ""}<span>${T("tab_" + p)}</span>`);
       b.dataset.pane = p; b.onclick = () => showPane(p);
       tabs.appendChild(b);
     });
@@ -534,103 +543,103 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // SIZE PANE
   function renderSizePane() {
     const c = $(".rail-pane[data-pane=size]"); c.innerHTML = "";
-    c.appendChild(el("div","section-title",IC.ruler+T("sizeGrading")));
+    c.appendChild(el("div", "section-title", IC.ruler + T("sizeGrading")));
     // standard select
-    const f1 = el("div","field",`<label>${T("standard")}</label>`);
-    const sel = el("select","select");
-    [["intl",T("std_intl")],["egypt",T("std_egypt")],["saudi",T("std_saudi")]].forEach(([v,n])=>{const o=el("option",null,n);o.value=v;if(state.standard===v)o.selected=true;sel.appendChild(o);});
-    sel.onchange=()=>{state.standard=sel.value;grade();}; f1.appendChild(sel); c.appendChild(f1);
+    const f1 = el("div", "field", `<label>${T("standard")}</label>`);
+    const sel = el("select", "select");
+    [["intl", T("std_intl")], ["egypt", T("std_egypt")], ["saudi", T("std_saudi")]].forEach(([v, n]) => { const o = el("option", null, n); o.value = v; if (state.standard === v) o.selected = true; sel.appendChild(o); });
+    sel.onchange = () => { state.standard = sel.value; grade(); }; f1.appendChild(sel); c.appendChild(f1);
     // size grid
     c.appendChild(el("div","section-title",null)).textContent=T("sizeRange");
     const grid = el("div","size-grid");
-    SIZES.forEach(s=>{const b=el("button","size-btn"+(state.size===s&&!state.kids?" active":""),s);b.onclick=()=>{state.size=s;state.kids=null;grade();renderSizePane();};grid.appendChild(b);});
+    SIZES.forEach(s=>{const b=el("button","size-btn"+(state.size===s&&!state.kids?" active":""),s);b.onclick=()=>{state.size=s;state.kids=null;if(isActiveMannequinSize(s))state.avatarSize=s;state.avatarSizeExplicit=false;grade();renderSizePane();syncMannequinSelectorsUI();};grid.appendChild(b);});
     c.appendChild(grid);
     // kids
     c.appendChild(el("div","section-title",null)).textContent=T("kidsMode");
     const kg = el("div","size-grid");
-    KIDS_AGES.forEach(a=>{const b=el("button","size-btn"+(state.kids===a.id?" active":""),L(a.label));b.onclick=()=>{state.kids=state.kids===a.id?null:a.id;grade();renderSizePane();};kg.appendChild(b);});
+    KIDS_AGES.forEach(a=>{const b=el("button","size-btn"+(state.kids===a.id?" active":""),L(a.label));b.onclick=()=>{state.kids=state.kids===a.id?null:a.id;grade();renderSizePane();syncMannequinSelectorsUI();};kg.appendChild(b);});
     c.appendChild(kg);
     // auto grade
-    const bg = el("button","big-btn",IC.spark+T("autoGrade")); bg.style.marginTop="16px"; bg.onclick=()=>{grade();toast(T("graded")+" · "+(state.kids?L(KIDS_AGES.find(a=>a.id===state.kids).label):state.size));}; c.appendChild(bg);
-    c.appendChild(el("div","help-note",`${T("gradedTo")}: <b id="gradeLbl"></b>`)).style.marginTop="12px";
+    const bg = el("button", "big-btn", IC.spark + T("autoGrade")); bg.style.marginTop = "16px"; bg.onclick = () => { grade(); toast(T("graded") + " · " + (state.kids ? L(KIDS_AGES.find(a => a.id === state.kids).label) : state.size)); }; c.appendChild(bg);
+    c.appendChild(el("div", "help-note", `${T("gradedTo")}: <b id="gradeLbl"></b>`)).style.marginTop = "12px";
     updateGradeLbl();
     renderGradeRulesSection(c);
   }
-  function updateGradeLbl(){ const l=$("#gradeLbl"); if(l) l.textContent = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids).label) : state.size; }
+  function updateGradeLbl() { const l = $("#gradeLbl"); if (l) l.textContent = state.kids ? L(KIDS_AGES.find(a => a.id === state.kids).label) : state.size; }
 
   // WP-13: industrial per-point grading — an optional override table on
   // top of the uniform formula grade above. See js/grading.js for the
   // resolution rule (base-at-M + dx/dy*step for a ruled point, formula
   // otherwise). Scoped to the currently loaded pattern's pieces; kids
   // mode has no step to grade against, so the section hides there.
-  function renderGradeRulesSection(c){
-    if(!state.loaded || state.kids) return;
-    const pieces = Canvas.getPieces(); if(!pieces.length) return;
+  function renderGradeRulesSection(c) {
+    if (!state.loaded || state.kids) return;
+    const pieces = Canvas.getPieces(); if (!pieces.length) return;
     const patternId = state.loaded, pattern = PATTERNS[patternId];
-    c.appendChild(el("div","section-title",IC.layers+T("gradeRulesTitle")));
-    c.appendChild(el("div","help-note",T("gradeRulesHint")));
+    c.appendChild(el("div", "section-title", IC.layers + T("gradeRulesTitle")));
+    c.appendChild(el("div", "help-note", T("gradeRulesHint")));
 
-    const selKey = pieces.some(p=>p.key===state.gradeRulesPiece) ? state.gradeRulesPiece : pieces[0].key;
+    const selKey = pieces.some(p => p.key === state.gradeRulesPiece) ? state.gradeRulesPiece : pieces[0].key;
     state.gradeRulesPiece = selKey;
-    const pf = el("div","field"); pf.style.marginTop="10px"; pf.innerHTML=`<label>${T("gradeRulesPiece")}</label>`;
-    const pSel = el("select","select");
-    pieces.forEach(p=>{ const o=el("option",null,L(p.name)); o.value=p.key; if(p.key===selKey) o.selected=true; pSel.appendChild(o); });
-    pSel.onchange=()=>{ state.gradeRulesPiece=pSel.value; save(); renderSizePane(); };
+    const pf = el("div", "field"); pf.style.marginTop = "10px"; pf.innerHTML = `<label>${T("gradeRulesPiece")}</label>`;
+    const pSel = el("select", "select");
+    pieces.forEach(p => { const o = el("option", null, L(p.name)); o.value = p.key; if (p.key === selKey) o.selected = true; pSel.appendChild(o); });
+    pSel.onchange = () => { state.gradeRulesPiece = pSel.value; save(); renderSizePane(); };
     pf.appendChild(pSel); c.appendChild(pf);
 
-    const baseOpts = {category:state.category,size:"M",standard:state.standard,kids:null,custom:state.custom};
-    const basePiece = pattern.pieces(computeMeasurements(baseOpts)).find(p=>p.key===selKey);
-    if(!basePiece) return;
+    const baseOpts = { category: state.category, size: "M", standard: state.standard, kids: null, custom: state.custom };
+    const basePiece = pattern.pieces(computeMeasurements(baseOpts)).find(p => p.key === selKey);
+    if (!basePiece) return;
     const rulesForPattern = state.gradeRules[patternId] || {};
     const rulesForPiece = rulesForPattern[selKey] || {};
 
-    const head = el("div","row"); head.style.cssText="display:flex;gap:6px;padding:4px 0;font-size:11px;font-weight:700;color:var(--ink-2)";
-    head.appendChild(el("span",null,T("gradeRulesPoint"))).style.flex="0 0 30%";
-    head.appendChild(el("span",null,T("gradeRulesDx"))).style.flex="1";
-    head.appendChild(el("span",null,T("gradeRulesDy"))).style.flex="1";
+    const head = el("div", "row"); head.style.cssText = "display:flex;gap:6px;padding:4px 0;font-size:11px;font-weight:700;color:var(--ink-2)";
+    head.appendChild(el("span", null, T("gradeRulesPoint"))).style.flex = "0 0 30%";
+    head.appendChild(el("span", null, T("gradeRulesDx"))).style.flex = "1";
+    head.appendChild(el("span", null, T("gradeRulesDy"))).style.flex = "1";
     c.appendChild(head);
 
-    const table = el("div"); table.style.cssText="max-height:240px;overflow:auto";
-    basePiece.outline.forEach((pt,i)=>{
+    const table = el("div"); table.style.cssText = "max-height:240px;overflow:auto";
+    basePiece.outline.forEach((pt, i) => {
       const r = rulesForPiece[i] || {};
-      const row = el("div","row"); row.style.cssText="display:flex;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line-2)";
-      const lbl = el("span",null,`${i} <small style="color:var(--ink-2)">(${pt[0].toFixed(1)},${pt[1].toFixed(1)})</small>`);
-      lbl.style.cssText="flex:0 0 30%;font-size:11.5px"; lbl.innerHTML=`${i} <small style="color:var(--ink-2)">(${pt[0].toFixed(1)},${pt[1].toFixed(1)})</small>`;
-      const dxI = el("input","input"); dxI.type="number"; dxI.step="0.1"; dxI.value=r.dx||0; dxI.style.flex="1";
-      const dyI = el("input","input"); dyI.type="number"; dyI.step="0.1"; dyI.value=r.dy||0; dyI.style.flex="1";
-      const commit=()=>{
-        const dx=+dxI.value||0, dy=+dyI.value||0;
-        if(!state.gradeRules[patternId]) state.gradeRules[patternId]={};
-        if(!state.gradeRules[patternId][selKey]) state.gradeRules[patternId][selKey]={};
-        if(dx===0 && dy===0) delete state.gradeRules[patternId][selKey][i];
-        else state.gradeRules[patternId][selKey][i]={dx,dy};
-        if(!Object.keys(state.gradeRules[patternId][selKey]).length) delete state.gradeRules[patternId][selKey];
+      const row = el("div", "row"); row.style.cssText = "display:flex;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line-2)";
+      const lbl = el("span", null, `${i} <small style="color:var(--ink-2)">(${pt[0].toFixed(1)},${pt[1].toFixed(1)})</small>`);
+      lbl.style.cssText = "flex:0 0 30%;font-size:11.5px"; lbl.innerHTML = `${i} <small style="color:var(--ink-2)">(${pt[0].toFixed(1)},${pt[1].toFixed(1)})</small>`;
+      const dxI = el("input", "input"); dxI.type = "number"; dxI.step = "0.1"; dxI.value = r.dx || 0; dxI.style.flex = "1";
+      const dyI = el("input", "input"); dyI.type = "number"; dyI.step = "0.1"; dyI.value = r.dy || 0; dyI.style.flex = "1";
+      const commit = () => {
+        const dx = +dxI.value || 0, dy = +dyI.value || 0;
+        if (!state.gradeRules[patternId]) state.gradeRules[patternId] = {};
+        if (!state.gradeRules[patternId][selKey]) state.gradeRules[patternId][selKey] = {};
+        if (dx === 0 && dy === 0) delete state.gradeRules[patternId][selKey][i];
+        else state.gradeRules[patternId][selKey][i] = { dx, dy };
+        if (!Object.keys(state.gradeRules[patternId][selKey]).length) delete state.gradeRules[patternId][selKey];
         grade();
       };
-      dxI.onchange=commit; dyI.onchange=commit;
+      dxI.onchange = commit; dyI.onchange = commit;
       row.appendChild(lbl); row.appendChild(dxI); row.appendChild(dyI);
       table.appendChild(row);
     });
     c.appendChild(table);
 
-    const nestBtn = el("button","big-btn ghost",IC.layers+T("gradeNestPreview")); nestBtn.style.marginTop="10px";
-    nestBtn.onclick=()=>openGradeNestModal(selKey);
+    const nestBtn = el("button", "big-btn ghost", IC.layers + T("gradeNestPreview")); nestBtn.style.marginTop = "10px";
+    nestBtn.onclick = () => openGradeNestModal(selKey);
     c.appendChild(nestBtn);
 
-    const expBtn = el("button","big-btn ghost",T("gradeRulesExport")); expBtn.style.marginTop="8px";
-    expBtn.onclick=()=>download(`berrystudio-grade-rules-${patternId}.json`,"application/json",JSON.stringify(state.gradeRules[patternId]||{},null,2));
+    const expBtn = el("button", "big-btn ghost", T("gradeRulesExport")); expBtn.style.marginTop = "8px";
+    expBtn.onclick = () => download(`berrystudio-grade-rules-${patternId}.json`, "application/json", JSON.stringify(state.gradeRules[patternId] || {}, null, 2));
     c.appendChild(expBtn);
-    const impInput = el("input"); impInput.type="file"; impInput.accept="application/json"; impInput.style.display="none";
-    impInput.onchange=()=>{
-      const f=impInput.files[0]; if(!f) return;
-      const r=new FileReader();
-      r.onload=()=>{
-        try{ state.gradeRules[patternId]=JSON.parse(r.result); grade(); renderSizePane(); toast(T("gradeRulesImported")); }
-        catch(e){ toast(T("invalidFormula")); }
+    const impInput = el("input"); impInput.type = "file"; impInput.accept = "application/json"; impInput.style.display = "none";
+    impInput.onchange = () => {
+      const f = impInput.files[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
+        try { state.gradeRules[patternId] = JSON.parse(r.result); grade(); renderSizePane(); toast(T("gradeRulesImported")); }
+        catch (e) { toast(T("invalidFormula")); }
       };
       r.readAsText(f);
     };
-    const impBtn = el("button","big-btn ghost",T("gradeRulesImport")); impBtn.style.marginTop="8px"; impBtn.onclick=()=>impInput.click();
+    const impBtn = el("button", "big-btn ghost", T("gradeRulesImport")); impBtn.style.marginTop = "8px"; impBtn.onclick = () => impInput.click();
     c.appendChild(impBtn); c.appendChild(impInput);
   }
 
@@ -638,221 +647,223 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // point (outline[0]) with a distinct color per size — the standard
   // "grade nest" visual every patternmaker expects, letting authored
   // gradeRules be checked visually for a plausible size progression.
-  function drawGradeNest(canvas, outlinesBySize){
-    const ctx = canvas.getContext("2d"); const W=canvas.width, H=canvas.height;
-    ctx.clearRect(0,0,W,H);
-    const aligned = outlinesBySize.map(({size,outline})=>{
-      if(!outline || !outline.length) return {size, outline:[]};
-      const [ax,ay]=outline[0];
-      return {size, outline: outline.map(([x,y])=>[x-ax,y-ay])};
+  function drawGradeNest(canvas, outlinesBySize) {
+    const ctx = canvas.getContext("2d"); const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    const aligned = outlinesBySize.map(({ size, outline }) => {
+      if (!outline || !outline.length) return { size, outline: [] };
+      const [ax, ay] = outline[0];
+      return { size, outline: outline.map(([x, y]) => [x - ax, y - ay]) };
     });
-    const allPts = aligned.flatMap(a=>a.outline);
-    if(!allPts.length) return;
-    const xs=allPts.map(p=>p[0]), ys=allPts.map(p=>p[1]);
-    const minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
-    const w=Math.max(maxX-minX,1), h=Math.max(maxY-minY,1);
-    const scale = Math.min((W-40)/w, (H-40)/h);
-    ctx.save(); ctx.translate(20-minX*scale, 20-minY*scale);
-    aligned.forEach((a,i)=>{
-      if(!a.outline.length) return;
-      const c = PALETTE[i%PALETTE.length];
-      ctx.strokeStyle=c; ctx.fillStyle=c+"1f"; ctx.lineWidth=1.6;
+    const allPts = aligned.flatMap(a => a.outline);
+    if (!allPts.length) return;
+    const xs = allPts.map(p => p[0]), ys = allPts.map(p => p[1]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const w = Math.max(maxX - minX, 1), h = Math.max(maxY - minY, 1);
+    const scale = Math.min((W - 40) / w, (H - 40) / h);
+    ctx.save(); ctx.translate(20 - minX * scale, 20 - minY * scale);
+    aligned.forEach((a, i) => {
+      if (!a.outline.length) return;
+      const c = PALETTE[i % PALETTE.length];
+      ctx.strokeStyle = c; ctx.fillStyle = c + "1f"; ctx.lineWidth = 1.6;
       ctx.beginPath();
-      a.outline.forEach(([x,y],j)=>{ const px=x*scale, py=y*scale; j===0?ctx.moveTo(px,py):ctx.lineTo(px,py); });
+      a.outline.forEach(([x, y], j) => { const px = x * scale, py = y * scale; j === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); });
       ctx.closePath(); ctx.fill(); ctx.stroke();
     });
     ctx.restore();
-    ctx.font="11px Inter, sans-serif"; ctx.textBaseline="top";
-    aligned.forEach((a,i)=>{
-      const c = PALETTE[i%PALETTE.length];
-      ctx.fillStyle=c; ctx.fillRect(10, 10+i*16, 10,10);
-      ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--ink").trim()||"#1a1a1a";
-      ctx.fillText(a.size, 24, 9+i*16);
+    ctx.font = "11px Inter, sans-serif"; ctx.textBaseline = "top";
+    aligned.forEach((a, i) => {
+      const c = PALETTE[i % PALETTE.length];
+      ctx.fillStyle = c; ctx.fillRect(10, 10 + i * 16, 10, 10);
+      ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--ink").trim() || "#1a1a1a";
+      ctx.fillText(a.size, 24, 9 + i * 16);
     });
   }
-  function openGradeNestModal(pieceKey){
-    if(!state.loaded) return;
+  function openGradeNestModal(pieceKey) {
+    if (!state.loaded) return;
     const pattern = PATTERNS[state.loaded];
-    const sizesToShow = ["S","M","L","XL"];
-    const opts = {category:state.category,standard:state.standard,kids:null,custom:state.custom};
-    const outlinesBySize = sizesToShow.map(size=>{
-      const ps = resolveGradedPieces(pattern, {...opts,size}, computeMeasurements, state.gradeRules[state.loaded]);
-      const piece = ps.find(p=>p.key===pieceKey);
-      return {size, outline: piece ? piece.outline : []};
+    const sizesToShow = ["S", "M", "L", "XL"];
+    const opts = { category: state.category, standard: state.standard, kids: null, custom: state.custom };
+    const outlinesBySize = sizesToShow.map(size => {
+      const ps = resolveGradedPieces(pattern, { ...opts, size }, computeMeasurements, state.gradeRules[state.loaded]);
+      const piece = ps.find(p => p.key === pieceKey);
+      return { size, outline: piece ? piece.outline : [] };
     });
     openModal(T("gradeNestTitle"), "", true);
-    const body = $("#genericModal .modal-body"); body.innerHTML="";
-    body.appendChild(el("div","help-note",T("gradeNestHint")));
-    const canvas = el("canvas"); canvas.width=560; canvas.height=420;
-    canvas.style.cssText="width:100%;height:auto;margin-top:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)";
+    const body = $("#genericModal .modal-body"); body.innerHTML = "";
+    body.appendChild(el("div", "help-note", T("gradeNestHint")));
+    const canvas = el("canvas"); canvas.width = 560; canvas.height = 420;
+    canvas.style.cssText = "width:100%;height:auto;margin-top:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)";
     body.appendChild(canvas);
     drawGradeNest(canvas, outlinesBySize);
   }
 
-  function workingMeasurementSnapshot(name=T("workingMeasurements")){
+  function workingMeasurementSnapshot(name = T("workingMeasurements")) {
     return createWorkingMeasurementSnapshot({
-      name, category:state.category, units:state.unitsCm?"cm":"inch", measurements:currentMeas(),
+      name, category: state.category, units: state.unitsCm ? "cm" : "inch", measurements: currentMeas(),
     });
   }
-  function isWorkingMeasurementSnapshot(snapshot){ return !snapshot || String(snapshot.id||"").startsWith("working-"); }
-  function currentWorkingMeasurementSnapshot(snapshot){
-    const measurements=currentMeas(), units=state.unitsCm?"cm":"inch";
-    const unchanged=snapshot && isWorkingMeasurementSnapshot(snapshot) && snapshot.category===state.category && snapshot.units===units &&
-      MEAS_KEYS.every(key=>snapshot.measurements?.[key]===measurements[key]);
-    return unchanged?snapshot:createWorkingMeasurementSnapshot({name:T("workingMeasurements"),category:state.category,units,measurements});
+  function isWorkingMeasurementSnapshot(snapshot) { return !snapshot || String(snapshot.id || "").startsWith("working-"); }
+  function currentWorkingMeasurementSnapshot(snapshot) {
+    const measurements = currentMeas(), units = state.unitsCm ? "cm" : "inch";
+    const unchanged = snapshot && isWorkingMeasurementSnapshot(snapshot) && snapshot.category === state.category && snapshot.units === units &&
+      MEAS_KEYS.every(key => snapshot.measurements?.[key] === measurements[key]);
+    return unchanged ? snapshot : createWorkingMeasurementSnapshot({ name: T("workingMeasurements"), category: state.category, units, measurements });
   }
-  function selectedMeasurementProfile(){ return state.measurementProfiles.find(profile=>profile.id===state.selectedMeasurementProfileId)||null; }
-  function applyMeasurementSnapshotToState(snapshot){
-    if(!snapshot?.measurements) return false;
-    state.category=snapshot.category||state.category;
-    state.unitsCm=snapshot.units!=="inch";
-    state.custom={...snapshot.measurements};
-    syncCategoryUI(); Canvas.setOpt("unitsCm",state.unitsCm); updateUnitsPill();
+  function selectedMeasurementProfile() { return state.measurementProfiles.find(profile => profile.id === state.selectedMeasurementProfileId) || null; }
+  function applyMeasurementSnapshotToState(snapshot) {
+    if (!snapshot?.measurements) return false;
+    state.category = snapshot.category || state.category;
+    state.unitsCm = snapshot.units !== "inch";
+    state.custom = { ...snapshot.measurements };
+    syncCategoryUI(); Canvas.setOpt("unitsCm", state.unitsCm); updateUnitsPill();
     return true;
   }
-  function applySelectedMeasurementProfile(){
-    const profile=selectedMeasurementProfile(); if(!profile) return;
-    const snapshot=snapshotMeasurementProfile(profile);
+  function applySelectedMeasurementProfile() {
+    const profile = selectedMeasurementProfile(); if (!profile) return;
+    const snapshot = snapshotMeasurementProfile(profile);
     applyMeasurementSnapshotToState(snapshot);
-    const project=activeProject(); if(project) project.measurementProfileSnapshot=snapshot;
+    const project = activeProject(); if (project) project.measurementProfileSnapshot = snapshot;
     grade(); renderMeasurePane(); toast(T("measurementProfileApplied"));
   }
-  function detachMeasurementProfile(){
-    state.selectedMeasurementProfileId=null;
-    const project=activeProject(); if(project) project.measurementProfileSnapshot=null;
+  function detachMeasurementProfile() {
+    state.selectedMeasurementProfileId = null;
+    const project = activeProject(); if (project) project.measurementProfileSnapshot = null;
   }
-  function openMeasurementProfileEditor(profile=null){
-    openModal(profile?T("measurementProfileEdit"):T("measurementProfileNew"),"",true);
-    const body=$("#genericModal .modal-body"); body.innerHTML="";
-    let fieldSeq=0;
-    const addField=(text,node)=>{ const wrap=el("div","field"); const label=el("label",null,text); node.id=`measurementProfileField${fieldSeq++}`; label.htmlFor=node.id; wrap.appendChild(label); wrap.appendChild(node); body.appendChild(wrap); };
-    const input=(value="",type="text")=>{ const node=el("input","input"); node.type=type; node.value=value; return node; };
-    const name=input(profile?.name||""); addField(T("measurementProfileName"),name);
-    const source=el("select","select");
-    [["measured",T("profileSourceMeasured")],["size-chart",T("profileSourceChart")],["estimated",T("profileSourceEstimated")],["imported",T("profileSourceImported")]].forEach(([value,label])=>{const option=el("option",null,label);option.value=value;option.selected=(profile?.source||"measured")===value;source.appendChild(option);});
-    addField(T("measurementProfileSource"),source);
-    const notes=el("textarea","input"); notes.rows=3; notes.value=profile?.notes||""; addField(T("measurementProfileNotes"),notes);
-    const ease=input(profile?.easeCm??0,"number"); ease.step="0.1"; addField(T("measurementProfileEase"),ease);
-    const stretch=input(profile?.stretchPercent??0,"number"); stretch.step="0.1"; addField(T("measurementProfileStretch"),stretch);
-    const fit=el("select","select");
-    [["fitted",T("opt_fitted")],["regular",T("opt_regular")],["relaxed",T("opt_relaxed")]].forEach(([value,label])=>{const option=el("option",null,label);option.value=value;option.selected=(profile?.fitPreference||"regular")===value;fit.appendChild(option);});
-    addField(T("measurementProfileFit"),fit);
-    const shape=input(profile?.bodyShape||""); addField(T("measurementProfileBodyShape"),shape);
-    body.appendChild(el("div","help-note",T("measurementProfileCaptureHint")));
-    const saveBtn=el("button","big-btn",T("measurementProfileSave")); saveBtn.style.marginTop="12px";
-    saveBtn.onclick=()=>{ try{
-      const values={ name:name.value, units:state.unitsCm?"cm":"inch", category:state.category, source:source.value, notes:notes.value, easeCm:+ease.value||0, stretchPercent:+stretch.value||0, fitPreference:fit.value, bodyShape:shape.value, measurements:currentMeas() };
-      const saved=profile?updateMeasurementProfile(profile,values):createMeasurementProfile(values);
-      const index=state.measurementProfiles.findIndex(item=>item.id===saved.id);
-      if(index>=0) state.measurementProfiles[index]=saved; else state.measurementProfiles.push(saved);
-      state.selectedMeasurementProfileId=saved.id;
-      const snapshot=snapshotMeasurementProfile(saved); const project=activeProject(); if(project) project.measurementProfileSnapshot=snapshot;
-      save(); closeModal("#genericModal"); renderMeasurePane(); toast(T("measurementProfileSaved"));
-    } catch { toast(T("measurementProfileInvalid")); } };
+  function openMeasurementProfileEditor(profile = null) {
+    openModal(profile ? T("measurementProfileEdit") : T("measurementProfileNew"), "", true);
+    const body = $("#genericModal .modal-body"); body.innerHTML = "";
+    let fieldSeq = 0;
+    const addField = (text, node) => { const wrap = el("div", "field"); const label = el("label", null, text); node.id = `measurementProfileField${fieldSeq++}`; label.htmlFor = node.id; wrap.appendChild(label); wrap.appendChild(node); body.appendChild(wrap); };
+    const input = (value = "", type = "text") => { const node = el("input", "input"); node.type = type; node.value = value; return node; };
+    const name = input(profile?.name || ""); addField(T("measurementProfileName"), name);
+    const source = el("select", "select");
+    [["measured", T("profileSourceMeasured")], ["size-chart", T("profileSourceChart")], ["estimated", T("profileSourceEstimated")], ["imported", T("profileSourceImported")]].forEach(([value, label]) => { const option = el("option", null, label); option.value = value; option.selected = (profile?.source || "measured") === value; source.appendChild(option); });
+    addField(T("measurementProfileSource"), source);
+    const notes = el("textarea", "input"); notes.rows = 3; notes.value = profile?.notes || ""; addField(T("measurementProfileNotes"), notes);
+    const ease = input(profile?.easeCm ?? 0, "number"); ease.step = "0.1"; addField(T("measurementProfileEase"), ease);
+    const stretch = input(profile?.stretchPercent ?? 0, "number"); stretch.step = "0.1"; addField(T("measurementProfileStretch"), stretch);
+    const fit = el("select", "select");
+    [["fitted", T("opt_fitted")], ["regular", T("opt_regular")], ["relaxed", T("opt_relaxed")]].forEach(([value, label]) => { const option = el("option", null, label); option.value = value; option.selected = (profile?.fitPreference || "regular") === value; fit.appendChild(option); });
+    addField(T("measurementProfileFit"), fit);
+    const shape = input(profile?.bodyShape || ""); addField(T("measurementProfileBodyShape"), shape);
+    body.appendChild(el("div", "help-note", T("measurementProfileCaptureHint")));
+    const saveBtn = el("button", "big-btn", T("measurementProfileSave")); saveBtn.style.marginTop = "12px";
+    saveBtn.onclick = () => {
+      try {
+        const values = { name: name.value, units: state.unitsCm ? "cm" : "inch", category: state.category, source: source.value, notes: notes.value, easeCm: +ease.value || 0, stretchPercent: +stretch.value || 0, fitPreference: fit.value, bodyShape: shape.value, measurements: currentMeas() };
+        const saved = profile ? updateMeasurementProfile(profile, values) : createMeasurementProfile(values);
+        const index = state.measurementProfiles.findIndex(item => item.id === saved.id);
+        if (index >= 0) state.measurementProfiles[index] = saved; else state.measurementProfiles.push(saved);
+        state.selectedMeasurementProfileId = saved.id;
+        const snapshot = snapshotMeasurementProfile(saved); const project = activeProject(); if (project) project.measurementProfileSnapshot = snapshot;
+        save(); closeModal("#genericModal"); renderMeasurePane(); toast(T("measurementProfileSaved"));
+      } catch { toast(T("measurementProfileInvalid")); }
+    };
     body.appendChild(saveBtn);
   }
-  function previewMeasurementProfile(profile){
-    if(!profile) return;
-    openModal(T("measurementProfilePreview"),"",true);
-    const body=$("#genericModal .modal-body"); body.innerHTML="";
-    const summary=el("div","help-note"); summary.textContent=`${profile.name} · ${profile.units} · ${profile.category} · ${profile.source}`; body.appendChild(summary);
-    const table=el("div");
-    MEAS_KEYS.forEach(key=>{ const row=el("div","meas-row"); const label=el("label"); label.textContent=T("m_"+key); const value=el("strong"); value.textContent=`${profile.measurements[key]} cm`; row.append(label,value); table.appendChild(row); });
+  function previewMeasurementProfile(profile) {
+    if (!profile) return;
+    openModal(T("measurementProfilePreview"), "", true);
+    const body = $("#genericModal .modal-body"); body.innerHTML = "";
+    const summary = el("div", "help-note"); summary.textContent = `${profile.name} · ${profile.units} · ${profile.category} · ${profile.source}`; body.appendChild(summary);
+    const table = el("div");
+    MEAS_KEYS.forEach(key => { const row = el("div", "meas-row"); const label = el("label"); label.textContent = T("m_" + key); const value = el("strong"); value.textContent = `${profile.measurements[key]} cm`; row.append(label, value); table.appendChild(row); });
     body.appendChild(table);
-    const context=el("div","help-note"); context.textContent=`${T("measurementProfileEase")}: ${profile.easeCm} cm · ${T("measurementProfileStretch")}: ${profile.stretchPercent}% · ${T("measurementProfileFit")}: ${T("opt_"+profile.fitPreference)}`; body.appendChild(context);
-    if(profile.notes){ const notes=el("p"); notes.textContent=profile.notes; body.appendChild(notes); }
+    const context = el("div", "help-note"); context.textContent = `${T("measurementProfileEase")}: ${profile.easeCm} cm · ${T("measurementProfileStretch")}: ${profile.stretchPercent}% · ${T("measurementProfileFit")}: ${T("opt_" + profile.fitPreference)}`; body.appendChild(context);
+    if (profile.notes) { const notes = el("p"); notes.textContent = profile.notes; body.appendChild(notes); }
   }
 
   // MEASURE PANE — the numeric fields + reference diagram themselves live in
   // js/measure-form.js (shared with the standalone BodyForm page, WP-10).
   function renderMeasurePane() {
-    const c = $(".rail-pane[data-pane=measure]"); c.innerHTML="";
-    c.appendChild(el("div","section-title",IC.measure+T("measurementProfiles")));
-    c.appendChild(el("div","help-note",T("measurementProfilesHint")));
-    const profileSelect=el("select","select"); profileSelect.style.marginTop="10px";
-    const emptyOption=el("option",null,T("measurementProfileNone")); emptyOption.value=""; profileSelect.appendChild(emptyOption);
-    state.measurementProfiles.forEach(profile=>{ const option=el("option"); option.textContent=profile.name; option.value=profile.id; option.selected=profile.id===state.selectedMeasurementProfileId; profileSelect.appendChild(option); });
-    profileSelect.onchange=()=>{ state.selectedMeasurementProfileId=profileSelect.value||null; save(); renderMeasurePane(); };
+    const c = $(".rail-pane[data-pane=measure]"); c.innerHTML = "";
+    c.appendChild(el("div", "section-title", IC.measure + T("measurementProfiles")));
+    c.appendChild(el("div", "help-note", T("measurementProfilesHint")));
+    const profileSelect = el("select", "select"); profileSelect.style.marginTop = "10px";
+    const emptyOption = el("option", null, T("measurementProfileNone")); emptyOption.value = ""; profileSelect.appendChild(emptyOption);
+    state.measurementProfiles.forEach(profile => { const option = el("option"); option.textContent = profile.name; option.value = profile.id; option.selected = profile.id === state.selectedMeasurementProfileId; profileSelect.appendChild(option); });
+    profileSelect.onchange = () => { state.selectedMeasurementProfileId = profileSelect.value || null; save(); renderMeasurePane(); };
     c.appendChild(profileSelect);
-    const profileActions=el("div"); profileActions.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px";
-    const newProfile=el("button","big-btn ghost",T("measurementProfileNew")); newProfile.onclick=()=>openMeasurementProfileEditor();
-    const editProfile=el("button","big-btn ghost",T("measurementProfileEdit")); editProfile.disabled=!selectedMeasurementProfile(); editProfile.onclick=()=>openMeasurementProfileEditor(selectedMeasurementProfile());
-    const applyProfile=el("button","big-btn",T("measurementProfileApply")); applyProfile.disabled=!selectedMeasurementProfile(); applyProfile.onclick=applySelectedMeasurementProfile;
-    const previewProfile=el("button","big-btn ghost",T("measurementProfilePreview")); previewProfile.disabled=!selectedMeasurementProfile(); previewProfile.onclick=()=>previewMeasurementProfile(selectedMeasurementProfile());
-    profileActions.append(newProfile,editProfile,applyProfile,previewProfile); c.appendChild(profileActions);
-    const transferActions=el("div"); transferActions.style.cssText="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px";
-    const exportProfiles=el("button","big-btn ghost",T("measurementProfileExport")); exportProfiles.disabled=!state.measurementProfiles.length; exportProfiles.onclick=()=>download("berrystudio-measurement-profiles.json","application/json",serializeMeasurementProfiles(state.measurementProfiles));
-    const importInput=el("input"); importInput.type="file"; importInput.accept=".json,application/json"; importInput.style.display="none";
-    importInput.onchange=()=>{ const file=importInput.files?.[0]; if(!file) return; const reader=new FileReader(); reader.onload=()=>{ try{ const imported=parseMeasurementProfiles(reader.result); const byId=new Map(state.measurementProfiles.map(profile=>[profile.id,profile])); imported.forEach(profile=>byId.set(profile.id,profile)); state.measurementProfiles=[...byId.values()]; save(); renderMeasurePane(); toast(T("measurementProfileImported")); } catch { toast(T("measurementProfileInvalid")); } }; reader.readAsText(file); };
-    const importProfiles=el("button","big-btn ghost",T("measurementProfileImport")); importProfiles.onclick=()=>importInput.click();
-    transferActions.append(exportProfiles,importProfiles); c.append(transferActions,importInput);
-    c.appendChild(el("div","section-title",IC.measure+T("customMeas")));
-    c.appendChild(el("div","help-note",T("liveUpdate")));
+    const profileActions = el("div"); profileActions.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px";
+    const newProfile = el("button", "big-btn ghost", T("measurementProfileNew")); newProfile.onclick = () => openMeasurementProfileEditor();
+    const editProfile = el("button", "big-btn ghost", T("measurementProfileEdit")); editProfile.disabled = !selectedMeasurementProfile(); editProfile.onclick = () => openMeasurementProfileEditor(selectedMeasurementProfile());
+    const applyProfile = el("button", "big-btn", T("measurementProfileApply")); applyProfile.disabled = !selectedMeasurementProfile(); applyProfile.onclick = applySelectedMeasurementProfile;
+    const previewProfile = el("button", "big-btn ghost", T("measurementProfilePreview")); previewProfile.disabled = !selectedMeasurementProfile(); previewProfile.onclick = () => previewMeasurementProfile(selectedMeasurementProfile());
+    profileActions.append(newProfile, editProfile, applyProfile, previewProfile); c.appendChild(profileActions);
+    const transferActions = el("div"); transferActions.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px";
+    const exportProfiles = el("button", "big-btn ghost", T("measurementProfileExport")); exportProfiles.disabled = !state.measurementProfiles.length; exportProfiles.onclick = () => download("berrystudio-measurement-profiles.json", "application/json", serializeMeasurementProfiles(state.measurementProfiles));
+    const importInput = el("input"); importInput.type = "file"; importInput.accept = ".json,application/json"; importInput.style.display = "none";
+    importInput.onchange = () => { const file = importInput.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const imported = parseMeasurementProfiles(reader.result); const byId = new Map(state.measurementProfiles.map(profile => [profile.id, profile])); imported.forEach(profile => byId.set(profile.id, profile)); state.measurementProfiles = [...byId.values()]; save(); renderMeasurePane(); toast(T("measurementProfileImported")); } catch { toast(T("measurementProfileInvalid")); } }; reader.readAsText(file); };
+    const importProfiles = el("button", "big-btn ghost", T("measurementProfileImport")); importProfiles.onclick = () => importInput.click();
+    transferActions.append(exportProfiles, importProfiles); c.append(transferActions, importInput);
+    c.appendChild(el("div", "section-title", IC.measure + T("customMeas")));
+    c.appendChild(el("div", "help-note", T("liveUpdate")));
 
     const fieldsWrap = el("div"); c.appendChild(fieldsWrap);
     renderMeasureFields(fieldsWrap, {
       measurements: currentMeas(), T, icon: IC.measure,
       showDiagram: state.showMeasDiagram,
-      onToggleDiagram: (v)=>{ state.showMeasDiagram=v; save(); },
-      onFieldChange: (k,v)=>{ detachMeasurementProfile(); state.custom[k]=v; grade(); },
+      onToggleDiagram: (v) => { state.showMeasDiagram = v; save(); },
+      onFieldChange: (k, v) => { detachMeasurementProfile(); state.custom[k] = v; grade(); },
     });
 
-    const b=el("button","big-btn",IC.check+T("applyMeas")); b.style.marginTop="14px"; b.onclick=()=>{grade();toast(T("measurementsRecalculated"));}; c.appendChild(b);
-    const r=el("button","big-btn ghost",T("cancel")); r.style.marginTop="8px"; r.onclick=()=>{detachMeasurementProfile();state.custom={};grade();renderMeasurePane();}; c.appendChild(r);
+    const b = el("button", "big-btn", IC.check + T("applyMeas")); b.style.marginTop = "14px"; b.onclick = () => { grade(); toast(T("measurementsRecalculated")); }; c.appendChild(b);
+    const r = el("button", "big-btn ghost", T("cancel")); r.style.marginTop = "8px"; r.onclick = () => { detachMeasurementProfile(); state.custom = {}; grade(); renderMeasurePane(); }; c.appendChild(r);
 
     // Custom Variables — named formulas usable in any construction point's X/Y.
-    c.appendChild(el("div","section-title",IC.measure+T("varsTitle")));
-    c.appendChild(el("div","help-note",T("varsHint")));
-    const vbox = el("div"); vbox.style.marginTop="10px";
+    c.appendChild(el("div", "section-title", IC.measure + T("varsTitle")));
+    c.appendChild(el("div", "help-note", T("varsHint")));
+    const vbox = el("div"); vbox.style.marginTop = "10px";
     const vars = Canvas.getVariables();
     const names = Object.keys(vars);
-    if (!names.length) vbox.appendChild(el("div","help-note",T("varsNone")));
-    names.forEach(name=>{
-      const row = el("div","row",`<label style="flex:0 0 34%;font-size:12.5px;font-weight:600">${escAttr(name)}</label>`);
-      row.style.cssText="display:flex;gap:6px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line-2)";
-      const inp = el("input","input"); inp.type="text"; inp.value=vars[name]; inp.style.flex="1";
-      inp.onchange=()=>{ try{ Canvas.setVariable(name, inp.value.trim()); } catch(e){ toast(T("invalidFormula")); inp.value=vars[name]; } };
-      const del = el("button","tbtn",IC.trash); del.style.cssText="width:30px;height:30px;flex:0 0 auto";
-      del.onclick=()=>{ Canvas.removeVariable(name); renderMeasurePane(); };
+    if (!names.length) vbox.appendChild(el("div", "help-note", T("varsNone")));
+    names.forEach(name => {
+      const row = el("div", "row", `<label style="flex:0 0 34%;font-size:12.5px;font-weight:600">${escAttr(name)}</label>`);
+      row.style.cssText = "display:flex;gap:6px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line-2)";
+      const inp = el("input", "input"); inp.type = "text"; inp.value = vars[name]; inp.style.flex = "1";
+      inp.onchange = () => { try { Canvas.setVariable(name, inp.value.trim()); } catch (e) { toast(T("invalidFormula")); inp.value = vars[name]; } };
+      const del = el("button", "tbtn", IC.trash); del.style.cssText = "width:30px;height:30px;flex:0 0 auto";
+      del.onclick = () => { Canvas.removeVariable(name); renderMeasurePane(); };
       row.appendChild(inp); row.appendChild(del); vbox.appendChild(row);
     });
     c.appendChild(vbox);
-    const vAdd = el("div","row"); vAdd.style.cssText="display:flex;margin-top:8px;gap:6px";
-    const vName = el("input","input"); vName.placeholder=T("varName"); vName.style.flex="1";
-    const vForm = el("input","input"); vForm.placeholder=T("varFormula"); vForm.style.flex="1";
+    const vAdd = el("div", "row"); vAdd.style.cssText = "display:flex;margin-top:8px;gap:6px";
+    const vName = el("input", "input"); vName.placeholder = T("varName"); vName.style.flex = "1";
+    const vForm = el("input", "input"); vForm.placeholder = T("varFormula"); vForm.style.flex = "1";
     vAdd.appendChild(vName); vAdd.appendChild(vForm); c.appendChild(vAdd);
-    const vBtn = el("button","big-btn ghost",T("varAdd")); vBtn.style.marginTop="8px";
-    vBtn.onclick=()=>{
-      const name=vName.value.trim(); if(!name) return;
-      try{ Canvas.setVariable(name, vForm.value.trim()); renderMeasurePane(); }
-      catch(e){ toast(T("invalidFormula")); }
+    const vBtn = el("button", "big-btn ghost", T("varAdd")); vBtn.style.marginTop = "8px";
+    vBtn.onclick = () => {
+      const name = vName.value.trim(); if (!name) return;
+      try { Canvas.setVariable(name, vForm.value.trim()); renderMeasurePane(); }
+      catch (e) { toast(T("invalidFormula")); }
     };
     c.appendChild(vBtn);
   }
 
   // LAYERS PANE
   const FABRICS = [
-    { key:"cotton",  color:"#e7dcc4" }, { key:"denim",   color:"#3f5f86" },
-    { key:"silk",    color:"#e6a8bd" }, { key:"linen",   color:"#cbbb98" },
-    { key:"wool",    color:"#8a7a63" }, { key:"satin",   color:"#a878d6" },
-    { key:"leather", color:"#6f4526" }, { key:"chiffon", color:"#bfe0da" },
-    { key:"jersey",  color:"#64748b" }, { key:"scuba",   color:"#475569" },
-    { key:"tulle",   color:"#e2c6df" }, { key:"velvet",  color:"#5b2149" },
-    { key:"lace",    color:"#efe7da" },
+    { key: "cotton", color: "#e7dcc4" }, { key: "denim", color: "#3f5f86" },
+    { key: "silk", color: "#e6a8bd" }, { key: "linen", color: "#cbbb98" },
+    { key: "wool", color: "#8a7a63" }, { key: "satin", color: "#a878d6" },
+    { key: "leather", color: "#6f4526" }, { key: "chiffon", color: "#bfe0da" },
+    { key: "jersey", color: "#64748b" }, { key: "scuba", color: "#475569" },
+    { key: "tulle", color: "#e2c6df" }, { key: "velvet", color: "#5b2149" },
+    { key: "lace", color: "#efe7da" },
   ];
   const rgbToHex = (c) => {
-    if(!c) return "#6d5efc";
-    if(c[0]==="#") return c.length===4 ? "#"+[...c.slice(1)].map(x=>x+x).join("") : c;
-    const m=/(\d+)\D+(\d+)\D+(\d+)/.exec(c);
-    return m ? "#"+[m[1],m[2],m[3]].map(v=>(+v).toString(16).padStart(2,"0")).join("") : "#6d5efc";
+    if (!c) return "#6d5efc";
+    if (c[0] === "#") return c.length === 4 ? "#" + [...c.slice(1)].map(x => x + x).join("") : c;
+    const m = /(\d+)\D+(\d+)\D+(\d+)/.exec(c);
+    return m ? "#" + [m[1], m[2], m[3]].map(v => (+v).toString(16).padStart(2, "0")).join("") : "#6d5efc";
   };
-  function applyFabric(color, matKey){
-    const pieces=Canvas.getPieces(); if(!pieces.length){ toast(T("empty2d")); return; }
-    const sel=Canvas.getSelected();
-    if(sel>=0){ Canvas.setColor(sel,color,true); if(matKey) Canvas.setMaterial(sel,matKey); }
-    else{
-      pieces.forEach((_,i)=>{ Canvas.setColor(i,color,false); if(matKey) Canvas.setMaterial(i,null); });
-      if(matKey){ state.fabric3d=matKey; const fs=$("#v3dFabricSelect"); if(fs) fs.value=matKey; save(); }
+  function applyFabric(color, matKey) {
+    const pieces = Canvas.getPieces(); if (!pieces.length) { toast(T("empty2d")); return; }
+    const sel = Canvas.getSelected();
+    if (sel >= 0) { Canvas.setColor(sel, color, true); if (matKey) Canvas.setMaterial(sel, matKey); }
+    else {
+      pieces.forEach((_, i) => { Canvas.setColor(i, color, false); if (matKey) Canvas.setMaterial(i, null); });
+      if (matKey) { state.fabric3d = matKey; const fs = $("#v3dFabricSelect"); if (fs) fs.value = matKey; save(); }
     }
     sync3DFabric();
     renderLayersPane();
@@ -861,43 +872,43 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // same selected-piece-vs-all-pieces scoping applyFabric() already uses.
   // `state.fabricTexture3d` is the "applied to everything" global the 3D
   // view's partsFabric() falls back to, mirroring state.fabric3d exactly.
-  function applyFabricTexture(dataURL){
-    const pieces=Canvas.getPieces(); if(!pieces.length){ toast(T("empty2d")); return; }
-    const sel=Canvas.getSelected();
-    if(sel>=0){ Canvas.setTexture(sel,dataURL); }
-    else{ pieces.forEach((_,i)=>Canvas.setTexture(i,dataURL)); state.fabricTexture3d=dataURL; save(); }
+  function applyFabricTexture(dataURL) {
+    const pieces = Canvas.getPieces(); if (!pieces.length) { toast(T("empty2d")); return; }
+    const sel = Canvas.getSelected();
+    if (sel >= 0) { Canvas.setTexture(sel, dataURL); }
+    else { pieces.forEach((_, i) => Canvas.setTexture(i, dataURL)); state.fabricTexture3d = dataURL; save(); }
     sync3DFabric();
     renderLayersPane();
   }
-  function removeFabricTexture(){
-    const pieces=Canvas.getPieces(); const sel=Canvas.getSelected();
-    if(sel>=0){ Canvas.setTexture(sel,null); }
-    else{ pieces.forEach((_,i)=>Canvas.setTexture(i,null)); state.fabricTexture3d=null; save(); }
+  function removeFabricTexture() {
+    const pieces = Canvas.getPieces(); const sel = Canvas.getSelected();
+    if (sel >= 0) { Canvas.setTexture(sel, null); }
+    else { pieces.forEach((_, i) => Canvas.setTexture(i, null)); state.fabricTexture3d = null; save(); }
     sync3DFabric();
     renderLayersPane();
   }
   // Per-layer properties popover: rename (EN/AR), colour, own opacity, delete.
-  function openLayerProps(i, anchor){
+  function openLayerProps(i, anchor) {
     closeAnyMenu();
-    const p = Canvas.getPieces()[i]; if(!p) return;
-    const m = el("div","menu layer-props");
-    const curOp = Math.round((p.opacity!=null ? p.opacity : Canvas.getOpt("fillOpacity"))*100);
+    const p = Canvas.getPieces()[i]; if (!p) return;
+    const m = el("div", "menu layer-props");
+    const curOp = Math.round((p.opacity != null ? p.opacity : Canvas.getOpt("fillOpacity")) * 100);
     m.innerHTML = `
       <div class="field"><label>${T("nameEn")}</label><input class="input lp-en" dir="ltr" value="${escAttr(p.name.en)}"></div>
       <div class="field"><label>${T("nameAr")}</label><input class="input lp-ar" dir="rtl" value="${escAttr(p.name.ar)}"></div>
       <div class="field"><label>${T("pieceColor")}</label><input class="lp-col" type="color" value="${rgbToHex(p.color)}" style="width:100%;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)"></div>
       <div class="field"><label>${T("bodyZone")}</label>
         <div class="seg lp-zone" style="width:100%">
-          <button data-zone="" ${!p.bodyZone?'class="active"':''}>${T("bodyZoneAuto")}</button>
-          <button data-zone="upper" ${p.bodyZone==="upper"?'class="active"':''}>${T("bodyZoneUpper")}</button>
-          <button data-zone="lower" ${p.bodyZone==="lower"?'class="active"':''}>${T("bodyZoneLower")}</button>
+          <button data-zone="" ${!p.bodyZone ? 'class="active"' : ''}>${T("bodyZoneAuto")}</button>
+          <button data-zone="upper" ${p.bodyZone === "upper" ? 'class="active"' : ''}>${T("bodyZoneUpper")}</button>
+          <button data-zone="lower" ${p.bodyZone === "lower" ? 'class="active"' : ''}>${T("bodyZoneLower")}</button>
         </div>
         <small style="display:block;margin-top:4px;color:var(--ink-2);font-size:11px;line-height:1.4">${T("bodyZoneD")}</small>
       </div>
       <div class="field"><label>${T("pieceMaterial")}</label>
         <select class="lp-mat" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2)">
           <option value="">${T("pieceMaterialDefault")}</option>
-          ${FABRICS.map(f=>`<option value="${f.key}"${p.material===f.key?" selected":""}>${T("fab_"+f.key)}</option>`).join("")}
+          ${FABRICS.map(f => `<option value="${f.key}"${p.material === f.key ? " selected" : ""}>${T("fab_" + f.key)}</option>`).join("")}
         </select>
       </div>
       <div class="field"><label>${T("opacityLbl")} · <b class="lp-opv">${curOp}%</b></label><input class="range lp-op" type="range" min="4" max="90" value="${curOp}"></div>
@@ -907,34 +918,34 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       <button class="menu-item lp-del" style="color:var(--danger)">${IC.trash}<span>${T("removeLayer")}</span></button>`;
     document.body.appendChild(m);
     const r = anchor.getBoundingClientRect(), mr = m.getBoundingClientRect();
-    m.style.top = Math.min(r.bottom+6, innerHeight-mr.height-8)+"px";
-    if(document.documentElement.dir==="rtl") m.style.left = Math.max(8, r.left-mr.width+r.width)+"px";
-    else m.style.left = Math.max(8, Math.min(r.left, innerWidth-mr.width-8))+"px";
-    requestAnimationFrame(()=>m.classList.add("show"));
+    m.style.top = Math.min(r.bottom + 6, innerHeight - mr.height - 8) + "px";
+    if (document.documentElement.dir === "rtl") m.style.left = Math.max(8, r.left - mr.width + r.width) + "px";
+    else m.style.left = Math.max(8, Math.min(r.left, innerWidth - mr.width - 8)) + "px";
+    requestAnimationFrame(() => m.classList.add("show"));
     const q = s => m.querySelector(s);
-    q(".lp-en").onchange = () => { Canvas.renamePiece(i,{en:q(".lp-en").value.trim()||p.name.en}); renderLayersPane(); if(is3DActive()) build3D(); };
-    q(".lp-ar").onchange = () => { Canvas.renamePiece(i,{ar:q(".lp-ar").value.trim()||p.name.ar}); renderLayersPane(); if(is3DActive()) build3D(); };
-    q(".lp-col").oninput = () => { Canvas.setColor(i,q(".lp-col").value,true); sync3DFabric(); renderLayersPane(); };
+    q(".lp-en").onchange = () => { Canvas.renamePiece(i, { en: q(".lp-en").value.trim() || p.name.en }); renderLayersPane(); if (is3DActive()) build3D(); };
+    q(".lp-ar").onchange = () => { Canvas.renamePiece(i, { ar: q(".lp-ar").value.trim() || p.name.ar }); renderLayersPane(); if (is3DActive()) build3D(); };
+    q(".lp-col").oninput = () => { Canvas.setColor(i, q(".lp-col").value, true); sync3DFabric(); renderLayersPane(); };
     // WP-49: explicit upper/lower-body override — the single control that
     // makes "determine explicitly which body region this piece is" real.
     // Re-syncs BOTH 3D consumers immediately (not just re-rendering this
     // popover), same as color/material do above — this is exactly the
     // "link firmly to all views" half of the request, not just a saved
     // field nothing reads until the next unrelated sync.
-    m.querySelectorAll(".lp-zone button").forEach(b=>{
+    m.querySelectorAll(".lp-zone button").forEach(b => {
       b.onclick = () => {
         Canvas.setPieceProps(i, { bodyZone: b.dataset.zone || null });
-        m.querySelectorAll(".lp-zone button").forEach(x=>x.classList.toggle("active", x===b));
-        if(is3DActive()) build3D(); else sync3DVisibility();
+        m.querySelectorAll(".lp-zone button").forEach(x => x.classList.toggle("active", x === b));
+        if (is3DActive()) build3D(); else sync3DVisibility();
         syncClothLab(true);
       };
     });
-    q(".lp-mat").onchange = () => { Canvas.setMaterial(i,q(".lp-mat").value||null); sync3DFabric(); };
-    q(".lp-op").oninput = () => { const v=+q(".lp-op").value; q(".lp-opv").textContent=v+"%"; Canvas.setPieceProps(i,{opacity:v/100}); };
-    q(".lp-del").onclick = () => { Canvas.removePiece(i); closeAnyMenu(); if(is3DActive()) build3D(); else sync3DVisibility(); renderLayersPane(); toast("✓ "+T("removeLayer")); };
-    if(q(".lp-darts")) q(".lp-darts").onclick = () => { closeAnyMenu(); openDartEditorModal(i); };
+    q(".lp-mat").onchange = () => { Canvas.setMaterial(i, q(".lp-mat").value || null); sync3DFabric(); };
+    q(".lp-op").oninput = () => { const v = +q(".lp-op").value; q(".lp-opv").textContent = v + "%"; Canvas.setPieceProps(i, { opacity: v / 100 }); };
+    q(".lp-del").onclick = () => { Canvas.removePiece(i); closeAnyMenu(); if (is3DActive()) build3D(); else sync3DVisibility(); renderLayersPane(); toast("✓ " + T("removeLayer")); };
+    if (q(".lp-darts")) q(".lp-darts").onclick = () => { closeAnyMenu(); openDartEditorModal(i); };
     q(".lp-outline").onclick = () => { closeAnyMenu(); openOutlineEditorModal(i); };
-    setTimeout(()=>document.addEventListener("pointerdown",onDocDown),0);
+    setTimeout(() => document.addEventListener("pointerdown", onDocDown), 0);
   }
 
   // WP-46: per-piece outline editor — set any point's exact X/Y or give it
@@ -944,50 +955,50 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // placket/hook-and-eye). Same modal shape as openDartEditorModal above —
   // reopens itself after each Apply so the fields always reflect the
   // just-committed piece state.
-  function openOutlineEditorModal(pieceIdx){
-    const p = Canvas.getPieces()[pieceIdx]; if(!p || !p.outline || !p.outline.length) return;
+  function openOutlineEditorModal(pieceIdx) {
+    const p = Canvas.getPieces()[pieceIdx]; if (!p || !p.outline || !p.outline.length) return;
     openModal(T("editOutline"), "", true);
-    const body = $("#genericModal .modal-body"); body.innerHTML="";
-    body.appendChild(el("div","help-note",T("editOutlineHint")));
+    const body = $("#genericModal .modal-body"); body.innerHTML = "";
+    body.appendChild(el("div", "help-note", T("editOutlineHint")));
 
     const n = p.outline.length;
     const reopen = () => openOutlineEditorModal(pieceIdx);
 
-    body.appendChild(el("div","section-title",T("outlinePointsSection")));
-    p.outline.forEach((pt,idx)=>{
-      const sec = el("div","field"); sec.style.marginTop="10px";
-      sec.innerHTML = `<label>${T("outlinePointLabel").replace("{n}",idx+1)}</label>`;
+    body.appendChild(el("div", "section-title", T("outlinePointsSection")));
+    p.outline.forEach((pt, idx) => {
+      const sec = el("div", "field"); sec.style.marginTop = "10px";
+      sec.innerHTML = `<label>${T("outlinePointLabel").replace("{n}", idx + 1)}</label>`;
       body.appendChild(sec);
-      const row = el("div","row"); row.style.cssText="display:flex;gap:8px;align-items:center;flex-wrap:wrap";
-      const xInp = el("input","input"); xInp.type="number"; xInp.step="0.1"; xInp.value=pt[0].toFixed(1); xInp.style.cssText="flex:1;min-width:70px";
-      const yInp = el("input","input"); yInp.type="number"; yInp.step="0.1"; yInp.value=pt[1].toFixed(1); yInp.style.cssText="flex:1;min-width:70px";
-      const nameInp = el("input","input"); nameInp.placeholder=T("outlinePointName"); nameInp.value=Canvas.getOutlinePointName(pieceIdx,idx)||""; nameInp.style.cssText="flex:1.4;min-width:100px";
-      const applyBtn = el("button","big-btn ghost",T("outlinePointApply")); applyBtn.style.flex="0 0 auto"; applyBtn.type="button";
-      const delBtn = el("button","big-btn ghost",IC.trash); delBtn.style.cssText="flex:0 0 auto;color:var(--danger)"; delBtn.type="button"; delBtn.title=T("objDelete");
+      const row = el("div", "row"); row.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap";
+      const xInp = el("input", "input"); xInp.type = "number"; xInp.step = "0.1"; xInp.value = pt[0].toFixed(1); xInp.style.cssText = "flex:1;min-width:70px";
+      const yInp = el("input", "input"); yInp.type = "number"; yInp.step = "0.1"; yInp.value = pt[1].toFixed(1); yInp.style.cssText = "flex:1;min-width:70px";
+      const nameInp = el("input", "input"); nameInp.placeholder = T("outlinePointName"); nameInp.value = Canvas.getOutlinePointName(pieceIdx, idx) || ""; nameInp.style.cssText = "flex:1.4;min-width:100px";
+      const applyBtn = el("button", "big-btn ghost", T("outlinePointApply")); applyBtn.style.flex = "0 0 auto"; applyBtn.type = "button";
+      const delBtn = el("button", "big-btn ghost", IC.trash); delBtn.style.cssText = "flex:0 0 auto;color:var(--danger)"; delBtn.type = "button"; delBtn.title = T("objDelete");
       row.appendChild(xInp); row.appendChild(yInp); row.appendChild(nameInp); row.appendChild(applyBtn);
-      if (n>3) row.appendChild(delBtn); // same 3-point floor as canvas Delete (removeOutlinePoint)
+      if (n > 3) row.appendChild(delBtn); // same 3-point floor as canvas Delete (removeOutlinePoint)
       body.appendChild(row);
       applyBtn.onclick = () => {
-        const x=+xInp.value, y=+yInp.value;
+        const x = +xInp.value, y = +yInp.value;
         if (!Number.isFinite(x) || !Number.isFinite(y)) return;
         Canvas.setOutlinePointXY(pieceIdx, idx, x, y);
         Canvas.setOutlinePointName(pieceIdx, idx, nameInp.value);
-        if(is3DActive()) build3D();
+        if (is3DActive()) build3D();
         toast(T("outlinePointUpdated")); reopen();
       };
-      delBtn.onclick = () => { Canvas.removeOutlinePoint(pieceIdx, idx); if(is3DActive()) build3D(); toast(T("outlinePointDeleted")); reopen(); };
+      delBtn.onclick = () => { Canvas.removeOutlinePoint(pieceIdx, idx); if (is3DActive()) build3D(); toast(T("outlinePointDeleted")); reopen(); };
     });
 
-    body.appendChild(el("div","section-title",T("outlineEdgesSection"))).style.marginTop="18px";
-    for (let i=0;i<n;i++){
-      const a=p.outline[i], b=p.outline[(i+1)%n];
-      const len = Math.hypot(b[0]-a[0], b[1]-a[1]).toFixed(1);
-      const row = el("div","field"); row.style.cssText="margin-top:8px;display:flex;align-items:center;gap:8px";
-      const cb = el("input"); cb.type="checkbox"; cb.checked = Canvas.isClosingEdge(p, i); cb.id="lp-edge-"+i;
-      const lbl = el("label", null, T("outlineEdgeLabel").replace("{a}",i+1).replace("{b}",((i+1)%n)+1).replace("{len}",len));
-      lbl.htmlFor = cb.id; lbl.style.cssText="flex:1";
+    body.appendChild(el("div", "section-title", T("outlineEdgesSection"))).style.marginTop = "18px";
+    for (let i = 0; i < n; i++) {
+      const a = p.outline[i], b = p.outline[(i + 1) % n];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]).toFixed(1);
+      const row = el("div", "field"); row.style.cssText = "margin-top:8px;display:flex;align-items:center;gap:8px";
+      const cb = el("input"); cb.type = "checkbox"; cb.checked = Canvas.isClosingEdge(p, i); cb.id = "lp-edge-" + i;
+      const lbl = el("label", null, T("outlineEdgeLabel").replace("{a}", i + 1).replace("{b}", ((i + 1) % n) + 1).replace("{len}", len));
+      lbl.htmlFor = cb.id; lbl.style.cssText = "flex:1";
       row.appendChild(cb);
-      const cbLbl = el("label", null, T("outlineClosingEdge")); cbLbl.htmlFor=cb.id; cbLbl.style.cssText="font-weight:600;white-space:nowrap";
+      const cbLbl = el("label", null, T("outlineClosingEdge")); cbLbl.htmlFor = cb.id; cbLbl.style.cssText = "font-weight:600;white-space:nowrap";
       row.appendChild(lbl); row.appendChild(cbLbl);
       body.appendChild(row);
       cb.onchange = () => { Canvas.toggleClosingEdge(pieceIdx, i); };
@@ -1010,17 +1021,17 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // inputs — plus a per-dart Delete, the one thing this modal couldn't do
   // at all before (new darts come from the canvas's own Add Dart tool;
   // this is the only place to remove one short of Undo).
-  function openDartEditorModal(pieceIdx, presetPivot){
+  function openDartEditorModal(pieceIdx, presetPivot) {
     Canvas.cancelPick(); // modal is (re)open — any still-armed pick from a previous call is stale
-    const p = Canvas.getPieces()[pieceIdx]; if(!p || !p.darts || !p.darts.length) return;
+    const p = Canvas.getPieces()[pieceIdx]; if (!p || !p.darts || !p.darts.length) return;
     openModal(T("editDarts"), "", true);
-    const body = $("#genericModal .modal-body"); body.innerHTML="";
-    body.appendChild(el("div","help-note",T("editDartsHint")));
+    const body = $("#genericModal .modal-body"); body.innerHTML = "";
+    body.appendChild(el("div", "help-note", T("editDartsHint")));
 
     p.darts.forEach((dart, di) => {
-      const card = el("div","dart-card");
-      card.innerHTML = `<div class="dart-card-head"><span class="dart-card-title">${T("dart")} ${di+1}</span></div>`;
-      const delBtn = el("button","dart-del",IC.trash); delBtn.type="button"; delBtn.title=T("dartDelete");
+      const card = el("div", "dart-card");
+      card.innerHTML = `<div class="dart-card-head"><span class="dart-card-title">${T("dart")} ${di + 1}</span></div>`;
+      const delBtn = el("button", "dart-del", IC.trash); delBtn.type = "button"; delBtn.title = T("dartDelete");
       card.querySelector(".dart-card-head").appendChild(delBtn);
       body.appendChild(card);
       delBtn.onclick = () => {
@@ -1032,32 +1043,32 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       };
 
       // ---- Pivot: rotate this dart's legs around its own apex ----
-      const opPivot = el("div","dart-op");
-      opPivot.appendChild(el("div","dart-op-title",T("dartPivotDeg")));
-      const pivotRow = el("div","dart-op-row");
-      const pivotInp = el("input","input"); pivotInp.type="number"; pivotInp.step="1"; pivotInp.value="0";
-      const pivotBtn = el("button","big-btn ghost",T("dartPivotApply")); pivotBtn.type="button";
+      const opPivot = el("div", "dart-op");
+      opPivot.appendChild(el("div", "dart-op-title", T("dartPivotDeg")));
+      const pivotRow = el("div", "dart-op-row");
+      const pivotInp = el("input", "input"); pivotInp.type = "number"; pivotInp.step = "1"; pivotInp.value = "0";
+      const pivotBtn = el("button", "big-btn ghost", T("dartPivotApply")); pivotBtn.type = "button";
       pivotRow.appendChild(pivotInp); pivotRow.appendChild(pivotBtn);
       opPivot.appendChild(pivotRow); card.appendChild(opPivot);
       pivotBtn.onclick = () => {
         const deg = +pivotInp.value || 0;
-        const newDarts = p.darts.map((d,i)=> i===di ? pivotDart(d, deg*Math.PI/180) : d);
-        Canvas.setPieceProps(pieceIdx, {darts:newDarts});
+        const newDarts = p.darts.map((d, i) => i === di ? pivotDart(d, deg * Math.PI / 180) : d);
+        Canvas.setPieceProps(pieceIdx, { darts: newDarts });
         toast(T("dartUpdated")); openDartEditorModal(pieceIdx);
       };
 
       // ---- Spread: widen this dart's own mouth, symmetrically ----
-      const opSpread = el("div","dart-op");
-      opSpread.appendChild(el("div","dart-op-title",T("dartSpreadCm")));
-      const spreadRow = el("div","dart-op-row");
-      const spreadInp = el("input","input"); spreadInp.type="number"; spreadInp.step="0.5"; spreadInp.value="0";
-      const spreadBtn = el("button","big-btn ghost",T("dartSpreadApply")); spreadBtn.type="button";
+      const opSpread = el("div", "dart-op");
+      opSpread.appendChild(el("div", "dart-op-title", T("dartSpreadCm")));
+      const spreadRow = el("div", "dart-op-row");
+      const spreadInp = el("input", "input"); spreadInp.type = "number"; spreadInp.step = "0.5"; spreadInp.value = "0";
+      const spreadBtn = el("button", "big-btn ghost", T("dartSpreadApply")); spreadBtn.type = "button";
       spreadRow.appendChild(spreadInp); spreadRow.appendChild(spreadBtn);
       opSpread.appendChild(spreadRow); card.appendChild(opSpread);
       spreadBtn.onclick = () => {
         const cm = +spreadInp.value || 0;
-        const newDarts = p.darts.map((d,i)=> i===di ? slashAndSpread(d, cm) : d);
-        Canvas.setPieceProps(pieceIdx, {darts:newDarts});
+        const newDarts = p.darts.map((d, i) => i === di ? slashAndSpread(d, cm) : d);
+        Canvas.setPieceProps(pieceIdx, { darts: newDarts });
         toast(T("dartUpdated")); openDartEditorModal(pieceIdx);
       };
 
@@ -1070,40 +1081,40 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       // sub-label (X / Y / angle) rather than one shared prefix, so it's
       // clear at a glance which number is which. ----
       const [apex] = dart;
-      const preset = (presetPivot && presetPivot.dartIndex===di) ? presetPivot : null;
-      const opTransfer = el("div","dart-op");
-      opTransfer.appendChild(el("div","dart-op-title",T("dartTransferPivot")));
-      const pivotRow2 = el("div","dart-op-row");
-      const pivotX = el("input","input"); pivotX.type="number"; pivotX.step="0.1"; pivotX.value=(preset?preset.x:apex[0]).toFixed(1); pivotX.placeholder="X";
-      const pivotY = el("input","input"); pivotY.type="number"; pivotY.step="0.1"; pivotY.value=(preset?preset.y:apex[1]).toFixed(1); pivotY.placeholder="Y";
+      const preset = (presetPivot && presetPivot.dartIndex === di) ? presetPivot : null;
+      const opTransfer = el("div", "dart-op");
+      opTransfer.appendChild(el("div", "dart-op-title", T("dartTransferPivot")));
+      const pivotRow2 = el("div", "dart-op-row");
+      const pivotX = el("input", "input"); pivotX.type = "number"; pivotX.step = "0.1"; pivotX.value = (preset ? preset.x : apex[0]).toFixed(1); pivotX.placeholder = "X";
+      const pivotY = el("input", "input"); pivotY.type = "number"; pivotY.step = "0.1"; pivotY.value = (preset ? preset.y : apex[1]).toFixed(1); pivotY.placeholder = "Y";
       // WP-19: pick the pivot on canvas instead of typing coordinates
       // you'd have to already know — the whole point of transferring
       // around an external pivot is usually a point you can SEE (e.g.
       // the bust point), not one you've measured. Closes the modal so the
       // real canvas underneath is clickable, arms a one-shot pick, then
       // reopens this same modal with that dart's pivot fields pre-filled.
-      const pickBtn = el("button","big-btn ghost",T("dartPivotPick")); pickBtn.type="button";
+      const pickBtn = el("button", "big-btn ghost", T("dartPivotPick")); pickBtn.type = "button";
       pivotRow2.appendChild(pivotX); pivotRow2.appendChild(pivotY); pivotRow2.appendChild(pickBtn);
       opTransfer.appendChild(pivotRow2);
-      const degTitle = el("div","dart-op-title",T("dartPivotDeg")); degTitle.style.marginTop="10px";
+      const degTitle = el("div", "dart-op-title", T("dartPivotDeg")); degTitle.style.marginTop = "10px";
       opTransfer.appendChild(degTitle);
-      const degRow = el("div","dart-op-row");
-      const transferDeg = el("input","input"); transferDeg.type="number"; transferDeg.step="1"; transferDeg.value=String((preset&&preset.deg!=null)?preset.deg:0);
-      const transferBtn = el("button","big-btn ghost",T("dartTransferApply")); transferBtn.type="button";
+      const degRow = el("div", "dart-op-row");
+      const transferDeg = el("input", "input"); transferDeg.type = "number"; transferDeg.step = "1"; transferDeg.value = String((preset && preset.deg != null) ? preset.deg : 0);
+      const transferBtn = el("button", "big-btn ghost", T("dartTransferApply")); transferBtn.type = "button";
       degRow.appendChild(transferDeg); degRow.appendChild(transferBtn);
       opTransfer.appendChild(degRow); card.appendChild(opTransfer);
       pickBtn.onclick = () => {
         const deg = +transferDeg.value || 0;
         closeModal("#genericModal");
         toast(T("dartPivotPickHint"));
-        Canvas.armPick(({x,y}) => openDartEditorModal(pieceIdx, {dartIndex:di, x, y, deg}));
+        Canvas.armPick(({ x, y }) => openDartEditorModal(pieceIdx, { dartIndex: di, x, y, deg }));
       };
       transferBtn.onclick = () => {
         const px = +pivotX.value, py = +pivotY.value;
         const deg = +transferDeg.value || 0;
         if (!isFinite(px) || !isFinite(py)) return;
-        const newDarts = p.darts.map((d,i)=> i===di ? transferDart(d, [px,py], deg*Math.PI/180) : d);
-        Canvas.setPieceProps(pieceIdx, {darts:newDarts});
+        const newDarts = p.darts.map((d, i) => i === di ? transferDart(d, [px, py], deg * Math.PI / 180) : d);
+        Canvas.setPieceProps(pieceIdx, { darts: newDarts });
         toast(T("dartUpdated")); openDartEditorModal(pieceIdx);
       };
     });
@@ -1113,89 +1124,93 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     refreshDesignBrief?.();
     refreshImageStudio?.();
     refreshPatternProgram?.();
-    const c = $(".rail-pane[data-pane=layers]"); c.innerHTML="";
-    c.appendChild(el("div","section-title",IC.layers+T("layersPanel")));
+    const c = $(".rail-pane[data-pane=layers]"); c.innerHTML = "";
+    c.appendChild(el("div", "section-title", IC.layers + T("layersPanel")));
     // add-layer is always available (even on an empty canvas)
-    const addB = el("button","big-btn ghost",IC.layers+T("addLayer"));
-    addB.style.marginBottom="10px";
-    addB.onclick=()=>{ Canvas.addPiece({ en:I18N.en.newLayer, ar:I18N.ar.newLayer }); hideEmpty(); renderLayersPane(); if(is3DActive()) build3D(); toast("✓ "+T("newLayer")); };
+    const addB = el("button", "big-btn ghost", IC.layers + T("addLayer"));
+    addB.style.marginBottom = "10px";
+    addB.onclick = () => { Canvas.addPiece({ en: I18N.en.newLayer, ar: I18N.ar.newLayer }); hideEmpty(); renderLayersPane(); if (is3DActive()) build3D(); toast("✓ " + T("newLayer")); };
     c.appendChild(addB);
     const pieces = Canvas.getPieces();
-    if(!pieces.length){ c.appendChild(el("div","help-note",T("empty2d"))); return; }
+    if (!pieces.length) { c.appendChild(el("div", "help-note", T("empty2d"))); return; }
     const sel = Canvas.getSelected();
     const multiSel = Canvas.getMultiSelection();  // Shift+click / Lasso group — highlighted the same as a plain single selection
-    pieces.forEach((p,i)=>{
-      const row = el("div","layer"+(p.locked?" locked":"")+((i===sel||multiSel.includes(i))?" active":""));
+    pieces.forEach((p, i) => {
+      const row = el("div", "layer" + (p.locked ? " locked" : "") + ((i === sel || multiSel.includes(i)) ? " active" : ""));
       // colour swatch — opens a native colour picker
-      const sw = el("label","swatch"); sw.style.background=p.color; sw.title=T("pieceColor");
-      const ci = el("input"); ci.type="color"; ci.value=rgbToHex(p.color);
-      ci.style.cssText="position:absolute;width:0;height:0;opacity:0;pointer-events:none";
-      ci.oninput=()=>{ Canvas.setColor(i,ci.value,true); sw.style.background=ci.value; sync3DFabric(); };
+      const sw = el("label", "swatch"); sw.style.background = p.color; sw.title = T("pieceColor");
+      const ci = el("input"); ci.type = "color"; ci.value = rgbToHex(p.color);
+      ci.style.cssText = "position:absolute;width:0;height:0;opacity:0;pointer-events:none";
+      ci.oninput = () => { Canvas.setColor(i, ci.value, true); sw.style.background = ci.value; sync3DFabric(); };
       sw.appendChild(ci); row.appendChild(sw);
-      const nameEl = el("span","lname"); nameEl.dir=state.lang==="ar"?"rtl":"ltr"; nameEl.textContent=L(p.name);
-      const otherName=el("small"); otherName.dir=state.lang==="ar"?"ltr":"rtl"; otherName.textContent=p.name[state.lang==="ar"?"en":"ar"]; nameEl.append(otherName);
-      nameEl.ondblclick=(e)=>{ e.stopPropagation(); openLayerProps(i, row); };
+      const nameEl = el("span", "lname"); nameEl.dir = state.lang === "ar" ? "rtl" : "ltr"; nameEl.textContent = L(p.name);
+      const otherName = el("small"); otherName.dir = state.lang === "ar" ? "ltr" : "rtl"; otherName.textContent = p.name[state.lang === "ar" ? "en" : "ar"]; nameEl.append(otherName);
+      nameEl.ondblclick = (e) => { e.stopPropagation(); openLayerProps(i, row); };
       row.appendChild(nameEl);
-      const props = el("button", null, IC.dots); props.title=T("layerProps");
-      props.onclick=(e)=>{ e.stopPropagation(); openLayerProps(i, props); };
+      const props = el("button", null, IC.dots); props.title = T("layerProps");
+      props.onclick = (e) => { e.stopPropagation(); openLayerProps(i, props); };
       row.appendChild(props);
-      const lock = el("button", null, p.locked?IC.lock:IC.unlock); lock.title=T(p.locked?"unlock":"lock");
-      if(p.locked) lock.style.color="var(--brand)";
-      lock.onclick=(e)=>{ e.stopPropagation(); Canvas.toggleLock(i); renderLayersPane(); };
+      const lock = el("button", null, p.locked ? IC.lock : IC.unlock); lock.title = T(p.locked ? "unlock" : "lock");
+      if (p.locked) lock.style.color = "var(--brand)";
+      lock.onclick = (e) => { e.stopPropagation(); Canvas.toggleLock(i); renderLayersPane(); };
       row.appendChild(lock);
-      const eye = el("button", null, p.visible?IC.eye:IC.eyeoff);
-      eye.onclick=(e)=>{ e.stopPropagation(); Canvas.toggleVisible(i); sync3DVisibility(); renderLayersPane(); };
+      const eye = el("button", null, p.visible ? IC.eye : IC.eyeoff);
+      eye.onclick = (e) => { e.stopPropagation(); Canvas.toggleVisible(i); sync3DVisibility(); renderLayersPane(); };
       row.appendChild(eye);
-      row.onclick=(e)=>{ if(e.target.closest("button")||e.target.closest(".swatch"))return;
-        if(!p.locked){ Canvas.selectPiece(i); showPieceInfo(p); renderLayersPane(); } };
+      row.onclick = (e) => {
+        if (e.target.closest("button") || e.target.closest(".swatch")) return;
+        if (!p.locked) { Canvas.selectPiece(i); showPieceInfo(p); renderLayersPane(); }
+      };
       c.appendChild(row);
     });
 
     // Fabric & material
-    c.appendChild(el("div","section-title",IC.drop+T("fabricSection")));
-    c.appendChild(el("div","help-note", sel>=0 ? L(pieces[sel].name) : T("applyAll")));
-    const grid=el("div","mat-grid"); grid.style.marginTop="8px";
-    FABRICS.forEach(f=>{ const m=el("button","mat"+(state.fabric3d===f.key?" active":""),`<span>${T("fab_"+f.key)}</span>`);
-      m.style.background=f.color; m.onclick=()=>applyFabric(f.color, f.key); grid.appendChild(m); });
+    c.appendChild(el("div", "section-title", IC.drop + T("fabricSection")));
+    c.appendChild(el("div", "help-note", sel >= 0 ? L(pieces[sel].name) : T("applyAll")));
+    const grid = el("div", "mat-grid"); grid.style.marginTop = "8px";
+    FABRICS.forEach(f => {
+      const m = el("button", "mat" + (state.fabric3d === f.key ? " active" : ""), `<span>${T("fab_" + f.key)}</span>`);
+      m.style.background = f.color; m.onclick = () => applyFabric(f.color, f.key); grid.appendChild(m);
+    });
     c.appendChild(grid);
 
     // WP-39 (Tailornova feature study): upload a real fabric-swatch photo —
     // fills the piece as an actual tiled texture in both the 2D canvas and
     // the 3D preview/Cloth Lab, not just a flat preset colour.
-    const texField = el("div","field"); texField.style.marginTop="12px";
-    const currentTex = sel>=0 ? pieces[sel].textureDataURL : state.fabricTexture3d;
+    const texField = el("div", "field"); texField.style.marginTop = "12px";
+    const currentTex = sel >= 0 ? pieces[sel].textureDataURL : state.fabricTexture3d;
     texField.innerHTML = `<label>${T("fabricTexture")}</label>`;
-    const texRow = el("div","row"); texRow.style.cssText="display:flex;gap:8px;margin-top:6px";
-    const texBtn = el("button","big-btn ghost",T("fabricTextureUpload")); texBtn.style.cssText="flex:1;width:auto;padding:8px 12px";
+    const texRow = el("div", "row"); texRow.style.cssText = "display:flex;gap:8px;margin-top:6px";
+    const texBtn = el("button", "big-btn ghost", T("fabricTextureUpload")); texBtn.style.cssText = "flex:1;width:auto;padding:8px 12px";
     texRow.appendChild(texBtn);
-    if (currentTex){
-      const texRemove = el("button","big-btn ghost",IC.trash||"×"); texRemove.style.cssText="width:auto;padding:8px 12px;color:var(--danger)";
+    if (currentTex) {
+      const texRemove = el("button", "big-btn ghost", IC.trash || "×"); texRemove.style.cssText = "width:auto;padding:8px 12px;color:var(--danger)";
       texRemove.title = T("fabricTextureRemove"); texRemove.onclick = removeFabricTexture;
       texRow.appendChild(texRemove);
     }
     texField.appendChild(texRow);
-    if (currentTex){
-      const preview = el("div"); preview.style.cssText=`margin-top:8px;width:100%;height:60px;border-radius:8px;border:1px solid var(--line);background-image:url(${currentTex});background-size:cover;background-position:center`;
+    if (currentTex) {
+      const preview = el("div"); preview.style.cssText = `margin-top:8px;width:100%;height:60px;border-radius:8px;border:1px solid var(--line);background-image:url(${currentTex});background-size:cover;background-position:center`;
       texField.appendChild(preview);
     }
     c.appendChild(texField);
-    c.appendChild(el("div","help-note",T("fabricTextureD"))).style.marginTop="6px";
-    const texFile = el("input"); texFile.type="file"; texFile.accept="image/*"; texFile.style.display="none";
+    c.appendChild(el("div", "help-note", T("fabricTextureD"))).style.marginTop = "6px";
+    const texFile = el("input"); texFile.type = "file"; texFile.accept = "image/*"; texFile.style.display = "none";
     texFile.onchange = () => {
-      const f = texFile.files && texFile.files[0]; if(!f) return;
+      const f = texFile.files && texFile.files[0]; if (!f) return;
       const r = new FileReader();
       r.onload = () => applyFabricTexture(r.result);
       r.readAsDataURL(f);
-      texFile.value="";
+      texFile.value = "";
     };
     c.appendChild(texFile);
     texBtn.onclick = () => texFile.click();
 
     // Fabric transparency
-    const tr=el("div","field"); tr.style.marginTop="14px";
-    tr.innerHTML=`<label>${T("transparency")} · <b id="opVal">${Math.round(Canvas.getOpt("fillOpacity")*100)}%</b></label>`;
-    const sl=el("input","range"); sl.type="range"; sl.min="4"; sl.max="70"; sl.value=Math.round(Canvas.getOpt("fillOpacity")*100);
-    sl.oninput=()=>{ Canvas.setOpt("fillOpacity",+sl.value/100); const v=$("#opVal"); if(v)v.textContent=sl.value+"%"; sync3DFabric(); };
+    const tr = el("div", "field"); tr.style.marginTop = "14px";
+    tr.innerHTML = `<label>${T("transparency")} · <b id="opVal">${Math.round(Canvas.getOpt("fillOpacity") * 100)}%</b></label>`;
+    const sl = el("input", "range"); sl.type = "range"; sl.min = "4"; sl.max = "70"; sl.value = Math.round(Canvas.getOpt("fillOpacity") * 100);
+    sl.oninput = () => { Canvas.setOpt("fillOpacity", +sl.value / 100); const v = $("#opVal"); if (v) v.textContent = sl.value + "%"; sync3DFabric(); };
     tr.appendChild(sl); c.appendChild(tr);
   }
 
@@ -1206,36 +1221,36 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // pattern on first boot, the AI-SVG-import handoff) stays a direct,
   // ungated call: those aren't the gated "browse the 264-pattern catalog"
   // feature, they're how the app has always started up.
-  function loadLibraryPattern(id){
-    if(!requireEntitlement()) return;
+  function loadLibraryPattern(id) {
+    if (!requireEntitlement()) return;
     loadPattern(id);
   }
   function renderLibraryPane() {
-    const c = $(".rail-pane[data-pane=library]"); c.innerHTML="";
+    const c = $(".rail-pane[data-pane=library]"); c.innerHTML = "";
     // WP-42 Stage B: gates the WHOLE pane, including the "My Patterns"
     // quick-list below — not just the 264 bundled patterns plan v3.2 §6
     // literally names. Simpler and more honest than splitting one pane
     // into two different gate states; the user's own saved patterns
     // (state.mine) aren't lost, just this particular UI to browse them is
     // deferred until signed in/subscribed, same as everything else here.
-    if(!gateAllowed()){ renderGateUpsell(c, "libraryTitle"); return; }
-    c.appendChild(el("div","section-title",IC.shirt+T("libraryTitle")+` <small style="font-weight:600;color:var(--ink-2);margin-inline-start:4px">(${LIBRARY.length})</small>`));
-    const sb = el("div","field",`<div style="position:relative"><span style="position:absolute;inset-inline-start:10px;top:9px;color:var(--ink-2)">${IC.search}</span></div>`);
-    const inp = el("input","input"); inp.placeholder=T("searchLib"); inp.style.paddingInlineStart="34px"; sb.firstChild.appendChild(inp); c.appendChild(sb);
+    if (!gateAllowed()) { renderGateUpsell(c, "libraryTitle"); return; }
+    c.appendChild(el("div", "section-title", IC.shirt + T("libraryTitle") + ` <small style="font-weight:600;color:var(--ink-2);margin-inline-start:4px">(${LIBRARY.length})</small>`));
+    const sb = el("div", "field", `<div style="position:relative"><span style="position:absolute;inset-inline-start:10px;top:9px;color:var(--ink-2)">${IC.search}</span></div>`);
+    const inp = el("input", "input"); inp.placeholder = T("searchLib"); inp.style.paddingInlineStart = "34px"; sb.firstChild.appendChild(inp); c.appendChild(sb);
     // category quick-filter — defaults to the active working category, with an "All" option
     let libCat = state.category;
-    const catSeg = el("div","seg"); catSeg.style.cssText="margin-bottom:10px;flex-wrap:wrap";
-    const catOpts = [["all",T("allCat")],["women",T("women")],["men",T("men")],["girls",T("girls")],["boys",T("boys")]];
-    catOpts.forEach(([val,label])=>{ const b=el("button",val===libCat?"active":"",label); b.onclick=()=>{ libCat=val; [...catSeg.children].forEach(x=>x.classList.toggle("active",x===b)); draw(inp.value); }; catSeg.appendChild(b); });
+    const catSeg = el("div", "seg"); catSeg.style.cssText = "margin-bottom:10px;flex-wrap:wrap";
+    const catOpts = [["all", T("allCat")], ["women", T("women")], ["men", T("men")], ["girls", T("girls")], ["boys", T("boys")]];
+    catOpts.forEach(([val, label]) => { const b = el("button", val === libCat ? "active" : "", label); b.onclick = () => { libCat = val;[...catSeg.children].forEach(x => x.classList.toggle("active", x === b)); draw(inp.value); }; catSeg.appendChild(b); });
     c.appendChild(catSeg);
-    const grid = el("div","lib-grid");
-    const draw = (filter="") => {
-      grid.innerHTML="";
+    const grid = el("div", "lib-grid");
+    const draw = (filter = "") => {
+      grid.innerHTML = "";
       const qStr = filter.trim().toLowerCase();
-      LIBRARY.filter(x=>{
-        if(libCat!=="all" && x.cat!==libCat) return false;
-        if(!qStr) return true;
-        const p=PATTERNS[x.id];
+      LIBRARY.filter(x => {
+        if (libCat !== "all" && x.cat !== libCat) return false;
+        if (!qStr) return true;
+        const p = PATTERNS[x.id];
         const hay = [
           p?.name?.en, p?.name?.ar,
           p?.desc?.en, p?.desc?.ar,
@@ -1243,44 +1258,44 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
           x.id,
         ].filter(Boolean).join(" ").toLowerCase();
         return hay.includes(qStr);
-      }).forEach(x=>{
-          const p=PATTERNS[x.id];
-          const card=el("div","lib-card");
-          // docs/plan 4.md §7.3: a real technical flat derived from this
-          // pattern's own geometry, when composePattern can recognize a
-          // front-facing role to build one from; LIB_ICONS (13 generic
-          // glyphs) stays the fallback for whatever it can't yet — same
-          // as it always has been for state.mine below.
-          const flatSvg = renderPatternFlat(x.id, x);
-          const fallbackSvg = flatSvg || LIB_ICONS[x.type] || (x.cat==="men"?LIB_ICONS.shirt:LIB_ICONS.dress);
-          const thumbSrc = getPatternThumbnail(x, p);
-          const thumbEl = el("div", "lib-thumb");
-          if (thumbSrc) {
-            const img = el("img", "lib-thumb-img");
-            img.src = thumbSrc;
-            img.alt = L(p.name);
-            img.loading = "lazy";
-            img.onerror = () => {
-              img.onerror = null;
-              thumbEl.innerHTML = fallbackSvg;
-            };
-            thumbEl.appendChild(img);
-          } else {
+      }).forEach(x => {
+        const p = PATTERNS[x.id];
+        const card = el("div", "lib-card");
+        // docs/plan 4.md §7.3: a real technical flat derived from this
+        // pattern's own geometry, when composePattern can recognize a
+        // front-facing role to build one from; LIB_ICONS (13 generic
+        // glyphs) stays the fallback for whatever it can't yet — same
+        // as it always has been for state.mine below.
+        const flatSvg = renderPatternFlat(x.id, x);
+        const fallbackSvg = flatSvg || LIB_ICONS[x.type] || (x.cat === "men" ? LIB_ICONS.shirt : LIB_ICONS.dress);
+        const thumbSrc = getPatternThumbnail(x, p);
+        const thumbEl = el("div", "lib-thumb");
+        if (thumbSrc) {
+          const img = el("img", "lib-thumb-img");
+          img.src = thumbSrc;
+          img.alt = L(p.name);
+          img.loading = "lazy";
+          img.onerror = () => {
+            img.onerror = null;
             thumbEl.innerHTML = fallbackSvg;
-          }
-          card.appendChild(thumbEl);
-          card.appendChild(el("div","lib-meta",`<div class="t">${L(p.name)}</div><div class="s">${L(x.tag)} · ${T(x.cat)}</div>`));
-          card.onclick=()=>loadLibraryPattern(x.id);
-          grid.appendChild(card);
-        });
+          };
+          thumbEl.appendChild(img);
+        } else {
+          thumbEl.innerHTML = fallbackSvg;
+        }
+        card.appendChild(thumbEl);
+        card.appendChild(el("div", "lib-meta", `<div class="t">${L(p.name)}</div><div class="s">${L(x.tag)} · ${T(x.cat)}</div>`));
+        card.onclick = () => loadLibraryPattern(x.id);
+        grid.appendChild(card);
+      });
       // my patterns
-      state.mine.forEach((mp,idx)=>{ const card=el("div","lib-card"); card.appendChild(el("div","lib-thumb",LIB_ICONS.dress)); card.appendChild(el("div","lib-meta",`<div class="t">${mp.name}</div><div class="s">★ ${T("saveMine").split(" ")[0]}</div>`)); card.onclick=()=>{Canvas.setPattern(mp.pieces,PALETTE);afterLoad(mp.name);}; grid.appendChild(card); });
-      if(!grid.children.length) grid.appendChild(el("div","help-note",T("noResults")));
+      state.mine.forEach((mp, idx) => { const card = el("div", "lib-card"); card.appendChild(el("div", "lib-thumb", LIB_ICONS.dress)); card.appendChild(el("div", "lib-meta", `<div class="t">${mp.name}</div><div class="s">★ ${T("saveMine").split(" ")[0]}</div>`)); card.onclick = () => { Canvas.setPattern(mp.pieces, PALETTE); afterLoad(mp.name); }; grid.appendChild(card); });
+      if (!grid.children.length) grid.appendChild(el("div", "help-note", T("noResults")));
     };
-    inp.oninput=()=>draw(inp.value); draw();
+    inp.oninput = () => draw(inp.value); draw();
     c.appendChild(grid);
-    const b=el("button","big-btn ghost",T("saveMine")); b.style.marginTop="14px";
-    b.onclick=()=>{ const pieces=Canvas.getPieces(); if(!pieces.length){toast(T("empty2d"));return;} state.mine.push({name:(state.loaded?L(PATTERNS[state.loaded].name):"Custom")+" ✎",pieces:JSON.parse(JSON.stringify(pieces))}); save(); renderLibraryPane(); toast(T("saved")); };
+    const b = el("button", "big-btn ghost", T("saveMine")); b.style.marginTop = "14px";
+    b.onclick = () => { const pieces = Canvas.getPieces(); if (!pieces.length) { toast(T("empty2d")); return; } state.mine.push({ name: (state.loaded ? L(PATTERNS[state.loaded].name) : "Custom") + " ✎", pieces: JSON.parse(JSON.stringify(pieces)) }); save(); renderLibraryPane(); toast(T("saved")); };
     c.appendChild(b);
   }
 
@@ -1302,71 +1317,71 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // Arabic prompts equally well either way. Only the FORM LABELS the user
   // sees are localized (T()/i18n), not the text this produces.
   const AI_GUIDED_WORDS = {
-    fit:      { fitted:"fitted", regular:"regular fit", relaxed:"relaxed" },
-    flare:    { slim:"pencil silhouette", regular:"regular silhouette", full:"a-line silhouette" },
-    length:   { short:"mini length", medium:"regular length", long:"maxi length" },
-    neckline: { v:"v-neck", round:"round neck", boat:"boat neck", offshoulder:"off-shoulder neckline", halter:"halter neckline", collar:"collar", mock:"mock neck", sweetheart:"sweetheart neckline", square:"square neckline" },
-    sleeve:   { sleeveless:"sleeveless", short:"short sleeves", threeQuarter:"three-quarter sleeves", long:"long sleeves" },
-    hem:      { straight:"straight hem", curved:"curved hem", highlow:"high-low hem", asymmetric:"asymmetric hem" },
-    closure:  { wrap:"wrap closure", zip:"zip closure", button:"button closure", tie:"tie closure" },
+    fit: { fitted: "fitted", regular: "regular fit", relaxed: "relaxed" },
+    flare: { slim: "pencil silhouette", regular: "regular silhouette", full: "a-line silhouette" },
+    length: { short: "mini length", medium: "regular length", long: "maxi length" },
+    neckline: { v: "v-neck", round: "round neck", boat: "boat neck", offshoulder: "off-shoulder neckline", halter: "halter neckline", collar: "collar", mock: "mock neck", sweetheart: "sweetheart neckline", square: "square neckline" },
+    sleeve: { sleeveless: "sleeveless", short: "short sleeves", threeQuarter: "three-quarter sleeves", long: "long sleeves" },
+    hem: { straight: "straight hem", curved: "curved hem", highlow: "high-low hem", asymmetric: "asymmetric hem" },
+    closure: { wrap: "wrap closure", zip: "zip closure", button: "button closure", tie: "tie closure" },
   };
-  const AI_GUIDED_KINDS = ["dress","gown","top","shirt","jacket","coat","suit","vest","hoodie","jumpsuit","romper","skirt","trousers","shorts","robe"];
-  function buildGuidedPrompt(o){
+  const AI_GUIDED_KINDS = ["dress", "gown", "top", "shirt", "jacket", "coat", "suit", "vest", "hoodie", "jumpsuit", "romper", "skirt", "trousers", "shorts", "robe"];
+  function buildGuidedPrompt(o) {
     const type = o.type || "dress";
     const fitW = AI_GUIDED_WORDS.fit[o.fit], flareW = AI_GUIDED_WORDS.flare[o.flare];
     const lead = ["a", fitW, flareW, type].filter(Boolean).join(" ");
     const bits = [lead, AI_GUIDED_WORDS.length[o.length], AI_GUIDED_WORDS.neckline[o.neckline],
       AI_GUIDED_WORDS.sleeve[o.sleeve], AI_GUIDED_WORDS.hem[o.hem], AI_GUIDED_WORDS.closure[o.closure]].filter(Boolean);
     let sentence = bits.join(", ") + ".";
-    if(o.notes && o.notes.trim()) sentence += " " + o.notes.trim();
+    if (o.notes && o.notes.trim()) sentence += " " + o.notes.trim();
     return sentence;
   }
-  function guidedSegRow(container, label, key, opts, labelFn){
-    const wrap=el("div","set-row"); wrap.style.marginTop="10px"; wrap.style.flexWrap="wrap"; wrap.style.alignItems="flex-start";
-    wrap.innerHTML=`<span class="sl">${label}</span>`;
-    const seg=el("div","seg"); seg.style.flexWrap="wrap"; seg.style.rowGap="4px";
-    opts.forEach(o=>{
-      const b=el("button", state.aiGuided[key]===o?"active":"", labelFn(o));
-      b.onclick=()=>{ state.aiGuided[key]=o; save(); renderAIPane(); };
+  function guidedSegRow(container, label, key, opts, labelFn) {
+    const wrap = el("div", "set-row"); wrap.style.marginTop = "10px"; wrap.style.flexWrap = "wrap"; wrap.style.alignItems = "flex-start";
+    wrap.innerHTML = `<span class="sl">${label}</span>`;
+    const seg = el("div", "seg"); seg.style.flexWrap = "wrap"; seg.style.rowGap = "4px";
+    opts.forEach(o => {
+      const b = el("button", state.aiGuided[key] === o ? "active" : "", labelFn(o));
+      b.onclick = () => { state.aiGuided[key] = o; save(); renderAIPane(); };
       seg.appendChild(b);
     });
     wrap.appendChild(seg); container.appendChild(wrap);
   }
-  function renderGuidedPromptBuilder(ta){
-    const box=el("div","field"); box.style.marginTop="4px";
-    box.appendChild(el("div","help-note",T("aiGuidedDesc")));
+  function renderGuidedPromptBuilder(ta) {
+    const box = el("div", "field"); box.style.marginTop = "4px";
+    box.appendChild(el("div", "help-note", T("aiGuidedDesc")));
 
     const g = state.aiGuided;
 
-    const typeGrid=el("div","opt-grid"); typeGrid.style.margin="8px 0 4px";
-    AI_GUIDED_KINDS.forEach(k=>{
-      const o=el("div","opt"+(g.type===k?" active":""), T("kind_"+k));
-      o.onclick=()=>{ g.type=k; save(); renderAIPane(); };
+    const typeGrid = el("div", "opt-grid"); typeGrid.style.margin = "8px 0 4px";
+    AI_GUIDED_KINDS.forEach(k => {
+      const o = el("div", "opt" + (g.type === k ? " active" : ""), T("kind_" + k));
+      o.onclick = () => { g.type = k; save(); renderAIPane(); };
       typeGrid.appendChild(o);
     });
     box.appendChild(typeGrid);
 
-    guidedSegRow(box, T("builderFit"), "fit", ["any","fitted","regular","relaxed"], o=>o==="any"?T("opt_any"):T("opt_"+o));
-    guidedSegRow(box, T("builderFlare"), "flare", ["any","slim","regular","full"], o=>o==="any"?T("opt_any"):T("opt_"+o));
-    guidedSegRow(box, T("builderLength"), "length", ["any","short","medium","long"], o=>o==="any"?T("opt_any"):T("opt_"+o));
+    guidedSegRow(box, T("builderFit"), "fit", ["any", "fitted", "regular", "relaxed"], o => o === "any" ? T("opt_any") : T("opt_" + o));
+    guidedSegRow(box, T("builderFlare"), "flare", ["any", "slim", "regular", "full"], o => o === "any" ? T("opt_any") : T("opt_" + o));
+    guidedSegRow(box, T("builderLength"), "length", ["any", "short", "medium", "long"], o => o === "any" ? T("opt_any") : T("opt_" + o));
     guidedSegRow(box, T("aiGuidedNeckline"), "neckline",
-      ["any","v","round","sweetheart","square","boat","offshoulder","halter","collar","mock"],
-      o=>o==="any"?T("opt_any"):T("opt_neck"+o[0].toUpperCase()+o.slice(1)));
-    guidedSegRow(box, T("builderSleeve"), "sleeve", ["any","sleeveless","short","threeQuarter","long"],
-      o=>o==="any"?T("opt_any"):o==="threeQuarter"?T("opt_threeQuarter"):T("opt_"+o));
-    guidedSegRow(box, T("aiGuidedHem"), "hem", ["any","straight","curved","highlow","asymmetric"],
-      o=>o==="any"?T("opt_any"):T("opt_hem"+o[0].toUpperCase()+o.slice(1)));
-    guidedSegRow(box, T("aiGuidedClosure"), "closure", ["none","wrap","zip","button","tie"],
-      o=>o==="none"?T("opt_none"):T("opt_closure"+o[0].toUpperCase()+o.slice(1)));
+      ["any", "v", "round", "sweetheart", "square", "boat", "offshoulder", "halter", "collar", "mock"],
+      o => o === "any" ? T("opt_any") : T("opt_neck" + o[0].toUpperCase() + o.slice(1)));
+    guidedSegRow(box, T("builderSleeve"), "sleeve", ["any", "sleeveless", "short", "threeQuarter", "long"],
+      o => o === "any" ? T("opt_any") : o === "threeQuarter" ? T("opt_threeQuarter") : T("opt_" + o));
+    guidedSegRow(box, T("aiGuidedHem"), "hem", ["any", "straight", "curved", "highlow", "asymmetric"],
+      o => o === "any" ? T("opt_any") : T("opt_hem" + o[0].toUpperCase() + o.slice(1)));
+    guidedSegRow(box, T("aiGuidedClosure"), "closure", ["none", "wrap", "zip", "button", "tie"],
+      o => o === "none" ? T("opt_none") : T("opt_closure" + o[0].toUpperCase() + o.slice(1)));
 
-    const notesF=el("div","field"); notesF.style.marginTop="10px";
-    notesF.innerHTML=`<label>${T("aiGuidedNotes")}</label>`;
-    const notesIn=el("input","input"); notesIn.value=g.notes||""; notesIn.placeholder=T("aiGuidedNotesPh");
-    notesIn.oninput=()=>{ g.notes=notesIn.value; save(); };
+    const notesF = el("div", "field"); notesF.style.marginTop = "10px";
+    notesF.innerHTML = `<label>${T("aiGuidedNotes")}</label>`;
+    const notesIn = el("input", "input"); notesIn.value = g.notes || ""; notesIn.placeholder = T("aiGuidedNotesPh");
+    notesIn.oninput = () => { g.notes = notesIn.value; save(); };
     notesF.appendChild(notesIn); box.appendChild(notesF);
 
-    const buildBtn=el("button","big-btn ghost",IC.check+T("aiGuidedBuild")); buildBtn.style.marginTop="12px";
-    buildBtn.onclick=()=>{
+    const buildBtn = el("button", "big-btn ghost", IC.check + T("aiGuidedBuild")); buildBtn.style.marginTop = "12px";
+    buildBtn.onclick = () => {
       const builtTxt = buildGuidedPrompt(g);
       aiDraftText = builtTxt;
       if (ta) ta.value = builtTxt;
@@ -1699,7 +1714,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
 
   // AI PANE — Reorganized Master Couture Atelier AI Studio
-  const AI_STAGES = ["analyzing","silhouette","drafting"];
+  const AI_STAGES = ["analyzing", "silhouette", "drafting"];
   function renderAIPane() {
     const c = $(".rail-pane[data-pane=ai]"); if (!c) return;
     // Preserve live textarea content if re-rendering mid-typing
@@ -1707,18 +1722,18 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if (prevPromptEl) aiDraftText = prevPromptEl.value;
     const prevEditEl = c.querySelector("#aiEditPrompt");
     if (prevEditEl) aiEditText = prevEditEl.value;
-    c.innerHTML="";
+    c.innerHTML = "";
 
     // Guests can exercise non-generative brief controls. Provider calls still
     // require an active trial through their own action handlers.
-    if(!gateAllowed() && currentSession?.user){ renderGateUpsell(c, "aiTitle"); return; }
+    if (!gateAllowed() && currentSession?.user) { renderGateUpsell(c, "aiTitle"); return; }
 
     const headRow = el("div", "ai-studio-header");
-    headRow.appendChild(el("div","section-title",IC.spark+T("aiTitle")));
-    headRow.appendChild(el("span","ai-atelier-pill",T("aiStudioBadge")));
+    headRow.appendChild(el("div", "section-title", IC.spark + T("aiTitle")));
+    headRow.appendChild(el("span", "ai-atelier-pill", T("aiStudioBadge")));
     c.appendChild(headRow);
-    c.appendChild(el("div","help-note",T("aiDesc")));
-    if(!gateAllowed()) c.appendChild(el("div","help-note",T("aiGuestScope")));
+    c.appendChild(el("div", "help-note", T("aiDesc")));
+    if (!gateAllowed()) c.appendChild(el("div", "help-note", T("aiGuestScope")));
 
     // 3-Mode Workflow Switcher: Create Pattern | Edit & Complete | CAD & Studio
     const pieceCount = Canvas.getPieces().length;
@@ -1737,9 +1752,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     c.appendChild(modeBar);
 
     // CRITICAL E2E CONTRACT: `.ai-preview` MUST remain a direct child (`:scope > .ai-preview`) of `.rail-pane[data-pane=ai]`
-    const preview=el("div","ai-preview"+(aiImage?" show":""));
-    if(aiImage) preview.innerHTML=`<img src="${aiImage}" alt=""><button class="ai-x" title="${T('removeImg')}">×</button>`;
-    const bindRemove=()=>{ const x=preview.querySelector(".ai-x"); if(x) x.onclick=()=>{ aiImage=null; aiConsultMetrics=null; preview.classList.remove("show"); preview.innerHTML=""; }; };
+    const preview = el("div", "ai-preview" + (aiImage ? " show" : ""));
+    if (aiImage) preview.innerHTML = `<img src="${aiImage}" alt=""><button class="ai-x" title="${T('removeImg')}">×</button>`;
+    const bindRemove = () => { const x = preview.querySelector(".ai-x"); if (x) x.onclick = () => { aiImage = null; aiConsultMetrics = null; preview.classList.remove("show"); preview.innerHTML = ""; }; };
     bindRemove();
     c.appendChild(preview);
 
@@ -1765,37 +1780,38 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       createWrap.appendChild(presetWrap);
     }
 
-    const f=el("div","field"); f.style.marginTop="10px";
-    const ta=el("textarea","textarea"); ta.placeholder=T("aiPlaceholder"); ta.id="aiPrompt"; ta.value=aiDraftText;
-    ta.oninput=()=>{ aiDraftText = ta.value; };
+    const f = el("div", "field"); f.style.marginTop = "10px";
+    const ta = el("textarea", "textarea"); ta.placeholder = T("aiPlaceholder"); ta.id = "aiPrompt"; ta.value = aiDraftText;
+    ta.oninput = () => { aiDraftText = ta.value; };
     f.appendChild(ta);
 
     // hidden file input — the upload button opens a real image picker
-    const file=el("input"); file.type="file"; file.accept="image/*"; file.style.display="none";
-    file.onchange=()=>{ const im=file.files&&file.files[0]; if(!im) return;
-      const r=new FileReader();
-      r.onload=async()=>{
-        aiImage=r.result;
-        aiConsultMetrics=null;
-        preview.innerHTML=`<img src="${aiImage}" alt=""><button class="ai-x" title="${T('removeImg')}">×</button>`;
+    const file = el("input"); file.type = "file"; file.accept = "image/*"; file.style.display = "none";
+    file.onchange = () => {
+      const im = file.files && file.files[0]; if (!im) return;
+      const r = new FileReader();
+      r.onload = async () => {
+        aiImage = r.result;
+        aiConsultMetrics = null;
+        preview.innerHTML = `<img src="${aiImage}" alt=""><button class="ai-x" title="${T('removeImg')}">×</button>`;
         preview.classList.add("show"); bindRemove(); toast(T("aiImageAdded"));
         if (aiConsultOpen) {
-          try { aiConsultMetrics = await AIGen.analyzeImage(aiImage, { segment: getSegmentFn() }); } catch {}
+          try { aiConsultMetrics = await AIGen.analyzeImage(aiImage, { segment: getSegmentFn() }); } catch { }
           renderAIPane();
         }
       };
       r.readAsDataURL(im);
     };
-    const up=el("button","big-btn ghost",IC.image+T("aiUpload"));
+    const up = el("button", "big-btn ghost", IC.image + T("aiUpload"));
     up.type = "button";
-    up.onclick=()=>file.click();
+    up.onclick = () => file.click();
 
     const askBtn = el("button", "big-btn ghost" + (aiConsultOpen ? " active" : ""), IC.question + T("aiConsultBtn"));
     askBtn.type = "button";
     askBtn.onclick = async () => {
       aiConsultOpen = !aiConsultOpen;
       if (aiConsultOpen && aiImage && !aiConsultMetrics) {
-        try { aiConsultMetrics = await AIGen.analyzeImage(aiImage, { segment: getSegmentFn() }); } catch {}
+        try { aiConsultMetrics = await AIGen.analyzeImage(aiImage, { segment: getSegmentFn() }); } catch { }
       }
       renderAIPane();
     };
@@ -1804,14 +1820,14 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     upAskRow.style.marginBottom = "8px";
     upAskRow.append(up, askBtn);
 
-    const gen=el("button","big-btn",IC.spark+T("generate"));
+    const gen = el("button", "big-btn", IC.spark + T("generate"));
     gen.type = "button";
-    gen.onclick=()=>runAI(ta.value,gen);
+    gen.onclick = () => runAI(ta.value, gen);
 
     createWrap.append(f, file, upAskRow, gen);
 
-    const statusBox=el("div","ai-status"); statusBox.id="aiStatus";
-    const attrsBox=el("div","ai-attrs"); attrsBox.id="aiAttrs"; attrsBox.style.display="none";
+    const statusBox = el("div", "ai-status"); statusBox.id = "aiStatus";
+    const attrsBox = el("div", "ai-attrs"); attrsBox.id = "aiAttrs"; attrsBox.style.display = "none";
 
     // Order focal sections cleanly based on selected mode while keeping DOM contracts intact
     if (aiStudioMode === "edit") {
@@ -1850,240 +1866,241 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
 
     if (lastAIResult) renderAIAttrs(lastAIResult);
 
-    refreshDesignBrief=mountDesignBrief(c,{
-      t:T,language:state.lang,getBrief:()=>Canvas.snapshotState().brief || null,
-      saveBrief:brief=>{Canvas.setDesignBrief(brief);save();refreshPatternProgram?.();},measurements:currentMeas,
-      generate:(prepared,brief,button)=>{
-        if(!requireEntitlement()) return;
-        return generatePatternFrom(prepared.prompt,null,button,'generated',{measurements:prepared.measurements,brief:{...brief,draftInputs:{measurements:prepared.measurements,provenance:prepared.provenance,category:state.category}}});
+    refreshDesignBrief = mountDesignBrief(c, {
+      t: T, language: state.lang, getBrief: () => Canvas.snapshotState().brief || null,
+      saveBrief: brief => { Canvas.setDesignBrief(brief); save(); refreshPatternProgram?.(); }, measurements: currentMeas,
+      generate: (prepared, brief, button) => {
+        if (!requireEntitlement()) return;
+        return generatePatternFrom(prepared.prompt, null, button, 'generated', { measurements: prepared.measurements, brief: { ...brief, draftInputs: { measurements: prepared.measurements, provenance: prepared.provenance, category: state.category } } });
       },
     });
-    refreshImageStudio=mountImageStudio(c,{
-      t:T,projectKey:()=>state.activeProjectId,
-      getStudio:()=>Canvas.snapshotState().imageStudio || null,
-      saveStudio:studio=>{
-        const before=Canvas.snapshotState(), history=Canvas.getHistory();
+    refreshImageStudio = mountImageStudio(c, {
+      t: T, projectKey: () => state.activeProjectId,
+      getStudio: () => Canvas.snapshotState().imageStudio || null,
+      saveStudio: studio => {
+        const before = Canvas.snapshotState(), history = Canvas.getHistory();
         Canvas.setImageStudio(studio);
-        if(!save()) { Canvas.restoreState(before); Canvas.setHistory(history); syncActiveProjectSnapshot(); throw new Error('projectStorageFailed'); }
+        if (!save()) { Canvas.restoreState(before); Canvas.setHistory(history); syncActiveProjectSnapshot(); throw new Error('projectStorageFailed'); }
       },
-      provider:()=>{
-        ensureAIState(); const id=state.aiImageProvider || 'proxy'; const adapter=ImageProviders[id];
-        return adapter ? {id,capabilities:adapter.capabilities} : null;
+      provider: () => {
+        ensureAIState(); const id = state.aiImageProvider || 'proxy'; const adapter = ImageProviders[id];
+        return adapter ? { id, capabilities: adapter.capabilities } : null;
       },
-      generate:async({prompt,images,providerId})=>{
-        if(!requireEntitlement()) throw new Error('imageStudioProviderMissing');
-        const adapter=ImageProviders[providerId]; const cfg=await resolveAICfg(providerId,aiCfgFor(providerId,true));
-        const unconfigured=providerId==='proxy' ? !cfg.baseUrl : adapter.needsKey && !cfg.apiKey;
-        if(unconfigured) throw new Error('imageStudioProviderMissing');
-        const result=await adapter.generate(cfg,{prompt,images,model:cfg.model});
-        if(!result.ok) throw new Error(result.error || 'imageStudioFailed');
+      generate: async ({ prompt, images, providerId }) => {
+        if (!requireEntitlement()) throw new Error('imageStudioProviderMissing');
+        const adapter = ImageProviders[providerId]; const cfg = await resolveAICfg(providerId, aiCfgFor(providerId, true));
+        const unconfigured = providerId === 'proxy' ? !cfg.baseUrl : adapter.needsKey && !cfg.apiKey;
+        if (unconfigured) throw new Error('imageStudioProviderMissing');
+        const result = await adapter.generate(cfg, { prompt, images, model: cfg.model });
+        if (!result.ok) throw new Error(result.error || 'imageStudioFailed');
         return result.image;
       },
-      useSelected:concept=>{ aiImage=concept.image; save(); toast(T('imageStudioSelectedForPattern')); },
+      useSelected: concept => { aiImage = concept.image; save(); toast(T('imageStudioSelectedForPattern')); },
     });
-    refreshPatternProgram=mountPatternProgram(c,{
-      t:T,getBrief:()=>Canvas.snapshotState().brief || null,getStudio:()=>Canvas.snapshotState().imageStudio || null,category:()=>state.category,measurements:currentMeas,measurementProfileId:()=>state.selectedMeasurementProfileId,language:()=>state.lang,
-      validate:(pieces,measurements)=>PatternValidator.run(pieces,{bodyChestCm:measurements.chest,seamAllowanceCm:state.seamCm||1,offsetPoly:Canvas.offsetPoly}),
-      review:res=>{if(requireEntitlement()) reviewGeneratedPattern(res,'programDone');},
+    refreshPatternProgram = mountPatternProgram(c, {
+      t: T, getBrief: () => Canvas.snapshotState().brief || null, getStudio: () => Canvas.snapshotState().imageStudio || null, category: () => state.category, measurements: currentMeas, measurementProfileId: () => state.selectedMeasurementProfileId, language: () => state.lang,
+      validate: (pieces, measurements) => PatternValidator.run(pieces, { bodyChestCm: measurements.chest, seamAllowanceCm: state.seamCm || 1, offsetPoly: Canvas.offsetPoly }),
+      review: res => { if (requireEntitlement()) reviewGeneratedPattern(res, 'programDone'); },
     });
 
     // ---- Direct SVG Pattern Import ----
-    c.appendChild(el("div","section-title",IC.importf+T("aiSvgTitle"))).style.marginTop="22px";
-    c.appendChild(el("div","help-note",T("aiSvgDesc")));
-    const svgBtn=el("button","big-btn ghost",IC.importf+T("aiSvgGenerate")); svgBtn.style.marginTop="8px";
-    svgBtn.onclick=()=>runAISVGImport(svgBtn);
+    c.appendChild(el("div", "section-title", IC.importf + T("aiSvgTitle"))).style.marginTop = "22px";
+    c.appendChild(el("div", "help-note", T("aiSvgDesc")));
+    const svgBtn = el("button", "big-btn ghost", IC.importf + T("aiSvgGenerate")); svgBtn.style.marginTop = "8px";
+    svgBtn.onclick = () => runAISVGImport(svgBtn);
     c.appendChild(svgBtn);
-    const svgStatus=el("div","ai-status"); svgStatus.id="aiSvgStatus"; c.appendChild(svgStatus);
+    const svgStatus = el("div", "ai-status"); svgStatus.id = "aiSvgStatus"; c.appendChild(svgStatus);
 
     // ---- AI Fashion Billboard ----
-    c.appendChild(el("div","section-title",IC.image+T("billboardTitle"))).style.marginTop="22px";
-    c.appendChild(el("div","help-note",T("billboardDesc")));
+    c.appendChild(el("div", "section-title", IC.image + T("billboardTitle"))).style.marginTop = "22px";
+    c.appendChild(el("div", "help-note", T("billboardDesc")));
 
-    const slots=el("div","bb-slots");
-    slots.appendChild(makeBBSlot(0,T("billboardUpload1")));
-    slots.appendChild(makeBBSlot(1,T("billboardUpload2")));
+    const slots = el("div", "bb-slots");
+    slots.appendChild(makeBBSlot(0, T("billboardUpload1")));
+    slots.appendChild(makeBBSlot(1, T("billboardUpload2")));
     c.appendChild(slots);
 
-    const bbGen=el("button","big-btn",IC.spark+T("billboardGenerate")); bbGen.style.marginTop="10px";
-    bbGen.onclick=()=>runBillboard(bbGen);
+    const bbGen = el("button", "big-btn", IC.spark + T("billboardGenerate")); bbGen.style.marginTop = "10px";
+    bbGen.onclick = () => runBillboard(bbGen);
     c.appendChild(bbGen);
 
-    const bbStatus=el("div","ai-status"); bbStatus.id="bbStatus"; c.appendChild(bbStatus);
-    const bbResult=el("div","bb-result"); bbResult.id="bbResult"; c.appendChild(bbResult);
+    const bbStatus = el("div", "ai-status"); bbStatus.id = "bbStatus"; c.appendChild(bbStatus);
+    const bbResult = el("div", "bb-result"); bbResult.id = "bbResult"; c.appendChild(bbResult);
     paintBBResult();
   }
   // One upload slot for the Fashion Billboard's source clothing photos —
   // mirrors the single-image AI-inspiration uploader above (preview + hidden
   // file input + upload button), just parametrised over bbImages[i].
-  function makeBBSlot(i, label){
-    const wrap=el("div","bb-slot");
-    const preview=el("div","ai-preview"+(bbImages[i]?" show":""));
-    const paint=()=>{
-      if(bbImages[i]){
-        preview.innerHTML=`<img src="${bbImages[i]}" alt=""><button class="ai-x" title="${T('removeImg')}">×</button>`;
+  function makeBBSlot(i, label) {
+    const wrap = el("div", "bb-slot");
+    const preview = el("div", "ai-preview" + (bbImages[i] ? " show" : ""));
+    const paint = () => {
+      if (bbImages[i]) {
+        preview.innerHTML = `<img src="${bbImages[i]}" alt=""><button class="ai-x" title="${T('removeImg')}">×</button>`;
         preview.classList.add("show");
-        preview.querySelector(".ai-x").onclick=()=>{ bbImages[i]=null; paint(); };
-      } else { preview.classList.remove("show"); preview.innerHTML=""; }
+        preview.querySelector(".ai-x").onclick = () => { bbImages[i] = null; paint(); };
+      } else { preview.classList.remove("show"); preview.innerHTML = ""; }
     };
-    const file=el("input"); file.type="file"; file.accept="image/*"; file.style.display="none";
-    file.onchange=()=>{ const im=file.files&&file.files[0]; if(!im) return;
-      const r=new FileReader();
-      r.onload=()=>{ bbImages[i]=r.result; paint(); };
+    const file = el("input"); file.type = "file"; file.accept = "image/*"; file.style.display = "none";
+    file.onchange = () => {
+      const im = file.files && file.files[0]; if (!im) return;
+      const r = new FileReader();
+      r.onload = () => { bbImages[i] = r.result; paint(); };
       r.readAsDataURL(im);
     };
-    const up=el("button","big-btn ghost",IC.image+label); up.style.marginTop="8px";
-    up.onclick=()=>file.click();
+    const up = el("button", "big-btn ghost", IC.image + label); up.style.marginTop = "8px";
+    up.onclick = () => file.click();
     wrap.appendChild(preview); wrap.appendChild(file); wrap.appendChild(up);
     return wrap;
   }
-  function beginBBThinking(stage2Key){
-    const box=$("#bbStatus"); if(!box) return ()=>{};
-    box.innerHTML="";
-    ["billboardStageSending",stage2Key].forEach((k,i)=>{ const row=el("div","ai-stage"); row.dataset.i=i; row.innerHTML=`<span class="dot"></span><span>${T(k)}</span>`; box.appendChild(row); });
+  function beginBBThinking(stage2Key) {
+    const box = $("#bbStatus"); if (!box) return () => { };
+    box.innerHTML = "";
+    ["billboardStageSending", stage2Key].forEach((k, i) => { const row = el("div", "ai-stage"); row.dataset.i = i; row.innerHTML = `<span class="dot"></span><span>${T(k)}</span>`; box.appendChild(row); });
     box.classList.add("show");
-    return (idx)=>{
-      [...box.children].forEach((row,i)=>{
-        row.classList.toggle("done", idx==="done" || i<idx);
-        row.classList.toggle("active", idx!=="done" && i===idx);
+    return (idx) => {
+      [...box.children].forEach((row, i) => {
+        row.classList.toggle("done", idx === "done" || i < idx);
+        row.classList.toggle("active", idx !== "done" && i === idx);
       });
-      if(idx==="done") setTimeout(()=>box.classList.remove("show"),260);
+      if (idx === "done") setTimeout(() => box.classList.remove("show"), 260);
     };
   }
-  function downloadDataURL(dataURL,name){ const a=el("a"); a.href=dataURL; a.download=name; a.click(); }
-  function paintBBResult(){
-    const box=$("#bbResult"); if(!box) return;
-    box.innerHTML="";
+  function downloadDataURL(dataURL, name) { const a = el("a"); a.href = dataURL; a.download = name; a.click(); }
+  function paintBBResult() {
+    const box = $("#bbResult"); if (!box) return;
+    box.innerHTML = "";
     box.classList.toggle("show", !!bbBillboard);
-    if(!bbBillboard) return;
+    if (!bbBillboard) return;
 
-    const card1=el("div","bb-card");
-    card1.appendChild(el("img")).src=bbBillboard;
-    const row1=el("div","bb-card-actions");
-    const dl1=el("button","tbtn",IC.download); dl1.title=T("billboardDownload");
-    dl1.onclick=()=>downloadDataURL(bbBillboard,"berrystudio-billboard.png");
+    const card1 = el("div", "bb-card");
+    card1.appendChild(el("img")).src = bbBillboard;
+    const row1 = el("div", "bb-card-actions");
+    const dl1 = el("button", "tbtn", IC.download); dl1.title = T("billboardDownload");
+    dl1.onclick = () => downloadDataURL(bbBillboard, "berrystudio-billboard.png");
     row1.appendChild(dl1); card1.appendChild(row1);
-    const drawBtn=el("button","big-btn ghost",IC.ruler+T("billboardDrawPattern"));
-    drawBtn.onclick=()=>runPattern(drawBtn);
+    const drawBtn = el("button", "big-btn ghost", IC.ruler + T("billboardDrawPattern"));
+    drawBtn.onclick = () => runPattern(drawBtn);
     card1.appendChild(drawBtn);
-    const piecesBtn=el("button","big-btn",IC.spark+T("billboardGeneratePieces")); piecesBtn.style.marginTop="8px";
-    piecesBtn.onclick=()=>runPatternPieces(piecesBtn);
+    const piecesBtn = el("button", "big-btn", IC.spark + T("billboardGeneratePieces")); piecesBtn.style.marginTop = "8px";
+    piecesBtn.onclick = () => runPatternPieces(piecesBtn);
     card1.appendChild(piecesBtn);
-    card1.appendChild(el("div","help-note",T("billboardGeneratePiecesHint"))).style.marginTop="6px";
+    card1.appendChild(el("div", "help-note", T("billboardGeneratePiecesHint"))).style.marginTop = "6px";
     box.appendChild(card1);
 
-    if(bbPattern){
-      const card2=el("div","bb-card");
-      card2.appendChild(el("img")).src=bbPattern;
-      const row2=el("div","bb-card-actions");
-      const dl2=el("button","tbtn",IC.download); dl2.title=T("billboardDownload");
-      dl2.onclick=()=>downloadDataURL(bbPattern,"berrystudio-pattern-drawing.png");
+    if (bbPattern) {
+      const card2 = el("div", "bb-card");
+      card2.appendChild(el("img")).src = bbPattern;
+      const row2 = el("div", "bb-card-actions");
+      const dl2 = el("button", "tbtn", IC.download); dl2.title = T("billboardDownload");
+      dl2.onclick = () => downloadDataURL(bbPattern, "berrystudio-pattern-drawing.png");
       row2.appendChild(dl2); card2.appendChild(row2);
-      const traceBtn=el("button","big-btn ghost",IC.image+T("billboardUseTrace"));
-      traceBtn.onclick=async()=>{
-        const ok=await Canvas.setBackgroundImage(bbPattern);
-        if(ok){ bgVisible=true; $("#bgBtn").classList.add("active"); setView("2d"); openBgPanel(); toast(T("billboardTraceReady")); }
+      const traceBtn = el("button", "big-btn ghost", IC.image + T("billboardUseTrace"));
+      traceBtn.onclick = async () => {
+        const ok = await Canvas.setBackgroundImage(bbPattern);
+        if (ok) { bgVisible = true; $("#bgBtn").classList.add("active"); setView("2d"); openBgPanel(); toast(T("billboardTraceReady")); }
         else toast(T("importFail"));
       };
       card2.appendChild(traceBtn);
-      const techPackBtn=el("button","big-btn",IC.spark+T("billboardReadTechPack")); techPackBtn.style.marginTop="8px";
-      techPackBtn.onclick=()=>runTechPackPieces(techPackBtn);
+      const techPackBtn = el("button", "big-btn", IC.spark + T("billboardReadTechPack")); techPackBtn.style.marginTop = "8px";
+      techPackBtn.onclick = () => runTechPackPieces(techPackBtn);
       card2.appendChild(techPackBtn);
-      card2.appendChild(el("div","help-note",T("billboardReadTechPackHint"))).style.marginTop="6px";
+      card2.appendChild(el("div", "help-note", T("billboardReadTechPackHint"))).style.marginTop = "6px";
       box.appendChild(card2);
     }
   }
-  async function resolveImageAdapter(){
+  async function resolveImageAdapter() {
     ensureAIState();
     const providerId = state.aiImageProvider || "proxy";
     const adapter = ImageProviders[providerId];
     const cfg = await resolveAICfg(providerId, aiCfgFor(providerId, true));
-    const notConfigured = providerId==="proxy" ? !cfg.baseUrl : (adapter.needsKey && !cfg.apiKey);
-    if(notConfigured){ toast(T("billboardNoEndpoint")); return null; }
+    const notConfigured = providerId === "proxy" ? !cfg.baseUrl : (adapter.needsKey && !cfg.apiKey);
+    if (notConfigured) { toast(T("billboardNoEndpoint")); return null; }
     return { adapter, cfg };
   }
-  async function runBillboard(btn){
+  async function runBillboard(btn) {
     const resolved = await resolveImageAdapter();
-    if(!resolved) return;
-    const imgs=bbImages.filter(Boolean);
-    if(!imgs.length){ toast(T("billboardNeedImages")); return; }
-    const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("billboardGenerating"); btn.style.opacity=".7"; btn.disabled=true;
-    const setStage=beginBBThinking("billboardStageRendering");
-    try{
-      setStage(0); await new Promise(r=>setTimeout(r,350));
+    if (!resolved) return;
+    const imgs = bbImages.filter(Boolean);
+    if (!imgs.length) { toast(T("billboardNeedImages")); return; }
+    const orig = btn.innerHTML; btn.innerHTML = IC.spark + T("billboardGenerating"); btn.style.opacity = ".7"; btn.disabled = true;
+    const setStage = beginBBThinking("billboardStageRendering");
+    try {
+      setStage(0); await new Promise(r => setTimeout(r, 350));
       setStage(1);
-      bbPattern=null;
-      bbBillboard=await Billboard.generateBillboard({ adapter:resolved.adapter, cfg:resolved.cfg, images:imgs });
+      bbPattern = null;
+      bbBillboard = await Billboard.generateBillboard({ adapter: resolved.adapter, cfg: resolved.cfg, images: imgs });
       setStage("done"); paintBBResult(); toast(T("billboardDone"));
-    } catch(e){ setStage("done"); toast(T("billboardFail")); }
-    finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
+    } catch (e) { setStage("done"); toast(T("billboardFail")); }
+    finally { btn.innerHTML = orig; btn.style.opacity = "1"; btn.disabled = false; }
   }
-  async function runPattern(btn){
+  async function runPattern(btn) {
     const resolved = await resolveImageAdapter();
-    if(!resolved) return;
-    if(!bbBillboard) return;
-    const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("billboardGenerating"); btn.style.opacity=".7"; btn.disabled=true;
-    const setStage=beginBBThinking("billboardStageDrafting");
-    const sizeLabel = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids).label) : state.size;
-    try{
-      setStage(0); await new Promise(r=>setTimeout(r,350));
+    if (!resolved) return;
+    if (!bbBillboard) return;
+    const orig = btn.innerHTML; btn.innerHTML = IC.spark + T("billboardGenerating"); btn.style.opacity = ".7"; btn.disabled = true;
+    const setStage = beginBBThinking("billboardStageDrafting");
+    const sizeLabel = state.kids ? L(KIDS_AGES.find(a => a.id === state.kids).label) : state.size;
+    try {
+      setStage(0); await new Promise(r => setTimeout(r, 350));
       setStage(1);
-      bbPattern=await Billboard.generatePattern({ adapter:resolved.adapter, cfg:resolved.cfg, image:bbBillboard, sizeLabel });
+      bbPattern = await Billboard.generatePattern({ adapter: resolved.adapter, cfg: resolved.cfg, image: bbBillboard, sizeLabel });
       setStage("done"); paintBBResult(); toast(T("billboardDone"));
-    } catch(e){ setStage("done"); toast(T("billboardFail")); }
-    finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
+    } catch (e) { setStage("done"); toast(T("billboardFail")); }
+    finally { btn.innerHTML = orig; btn.style.opacity = "1"; btn.disabled = false; }
   }
-  function beginAIThinking(hasImage){
-    const box=$("#aiStatus"); if(!box) return ()=>{};
-    box.innerHTML="";
-    const labelFor = k => k==="analyzing" ? T(hasImage?"aiStageAnalyzing":"aiStageReadingText")
-      : k==="silhouette" ? T("aiStageSilhouette") : T("aiStageDrafting");
-    AI_STAGES.forEach(k=>{ const row=el("div","ai-stage"); row.dataset.stage=k; row.innerHTML=`<span class="dot"></span><span>${labelFor(k)}</span>`; box.appendChild(row); });
+  function beginAIThinking(hasImage) {
+    const box = $("#aiStatus"); if (!box) return () => { };
+    box.innerHTML = "";
+    const labelFor = k => k === "analyzing" ? T(hasImage ? "aiStageAnalyzing" : "aiStageReadingText")
+      : k === "silhouette" ? T("aiStageSilhouette") : T("aiStageDrafting");
+    AI_STAGES.forEach(k => { const row = el("div", "ai-stage"); row.dataset.stage = k; row.innerHTML = `<span class="dot"></span><span>${labelFor(k)}</span>`; box.appendChild(row); });
     box.classList.add("show");
     const attrsEl = $("#aiAttrs");
-    if (attrsEl) attrsEl.style.display="none";
-    return (key)=>{
+    if (attrsEl) attrsEl.style.display = "none";
+    return (key) => {
       const idx = AI_STAGES.indexOf(key);
-      [...box.children].forEach((row,i)=>{
-        row.classList.toggle("done", key==="done" || i<idx);
-        row.classList.toggle("active", key!=="done" && i===idx);
+      [...box.children].forEach((row, i) => {
+        row.classList.toggle("done", key === "done" || i < idx);
+        row.classList.toggle("active", key !== "done" && i === idx);
       });
-      if(key==="done") setTimeout(()=>box.classList.remove("show"), 260);
+      if (key === "done") setTimeout(() => box.classList.remove("show"), 260);
     };
   }
   let lastAIResult = null;
   const OVERRIDE_ENUMS = {
-    type: ["dress","gown","top","shirt","jacket","coat","suit","vest","hoodie","jumpsuit","romper","skirt","trousers","shorts","robe","bodice","leotard"],
-    neckline: ["v","round","sweetheart","square","boat","offshoulder","halter","collar","mock"],
-    hem: ["straight","curved","highlow","asymmetric"],
+    type: ["dress", "gown", "top", "shirt", "jacket", "coat", "suit", "vest", "hoodie", "jumpsuit", "romper", "skirt", "trousers", "shorts", "robe", "bodice", "leotard"],
+    neckline: ["v", "round", "sweetheart", "square", "boat", "offshoulder", "halter", "collar", "mock"],
+    hem: ["straight", "curved", "highlow", "asymmetric"],
   };
-  const OVERRIDE_FACTOR_FIELD = { length:"lengthF", flare:"flareF", sleeve:"sleeveLenF" };
-  const OVERRIDE_FACTOR_RANGE = { lengthF:[0.45,1.7], flareF:[0.82,1.9], sleeveLenF:[0,1.5] };
-  function overrideAIAttribute(key){
-    if(!lastAIResult || !lastAIResult.style) return;
+  const OVERRIDE_FACTOR_FIELD = { length: "lengthF", flare: "flareF", sleeve: "sleeveLenF" };
+  const OVERRIDE_FACTOR_RANGE = { lengthF: [0.45, 1.7], flareF: [0.82, 1.9], sleeveLenF: [0, 1.5] };
+  function overrideAIAttribute(key) {
+    if (!lastAIResult || !lastAIResult.style) return;
     const style = { ...lastAIResult.style };
-    if(OVERRIDE_ENUMS[key]){
-      const field = key==="hem" ? "hemShape" : key;
+    if (OVERRIDE_ENUMS[key]) {
+      const field = key === "hem" ? "hemShape" : key;
       const opts = OVERRIDE_ENUMS[key];
-      const input = window.prompt(`${T("attrOverridePrompt")} (${opts.join(", ")})`, style[field]||"");
-      if(input==null) return;
+      const input = window.prompt(`${T("attrOverridePrompt")} (${opts.join(", ")})`, style[field] || "");
+      if (input == null) return;
       const val = input.trim().toLowerCase();
-      if(!opts.includes(val)){ toast(T("attrOverrideInvalid")); return; }
+      if (!opts.includes(val)) { toast(T("attrOverrideInvalid")); return; }
       style[field] = val;
-    } else if(OVERRIDE_FACTOR_FIELD[key]){
+    } else if (OVERRIDE_FACTOR_FIELD[key]) {
       const field = OVERRIDE_FACTOR_FIELD[key];
-      const [lo,hi] = OVERRIDE_FACTOR_RANGE[field];
+      const [lo, hi] = OVERRIDE_FACTOR_RANGE[field];
       const input = window.prompt(`${T("attrOverridePromptNum")} (${lo}–${hi})`, String(style[field]));
-      if(input==null) return;
+      if (input == null) return;
       const num = parseFloat(input);
-      if(Number.isNaN(num)){ toast(T("attrOverrideInvalid")); return; }
+      if (Number.isNaN(num)) { toast(T("attrOverrideInvalid")); return; }
       style[field] = Math.max(lo, Math.min(hi, num));
-    } else if(key==="closure"){
-      const input = window.prompt(T("attrOverridePromptYN"), style.wrap?"yes":"no");
-      if(input==null) return;
+    } else if (key === "closure") {
+      const input = window.prompt(T("attrOverridePromptYN"), style.wrap ? "yes" : "no");
+      if (input == null) return;
       style.wrap = /^y/i.test(input.trim());
-    } else if(key==="color"){
-      const input = window.prompt(T("attrOverridePromptColor"), style.color||"");
-      if(input==null || !input.trim()) return;
+    } else if (key === "color") {
+      const input = window.prompt(T("attrOverridePromptColor"), style.color || "");
+      if (input == null || !input.trim()) return;
       style.color = input.trim();
     } else return;
 
@@ -2094,8 +2111,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       seamAllowanceCm: state.seamCm || 1,
       lang: state.lang,
     });
-    const provenance = (lastAIResult.attributes||[]).reduce((m,a)=>{ if(a.source) m[a.k]={source:a.source,confidence:a.confidence}; return m; },{});
-    provenance[key] = { source:"user-override", confidence:1 };
+    const provenance = (lastAIResult.attributes || []).reduce((m, a) => { if (a.source) m[a.k] = { source: a.source, confidence: a.confidence }; return m; }, {});
+    provenance[key] = { source: "user-override", confidence: 1 };
     const newRes = {
       ...synth,
       attributes: AIGen.attributes(synth.style, state.lang, provenance),
@@ -2103,107 +2120,107 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     };
     reviewGeneratedPattern(newRes, "generated");
   }
-  const SOURCE_LABEL_KEY = { vision:"provenanceVision", pixel:"provenancePixel", prompt:"provenancePrompt", heuristic:"provenanceHeuristic", spec:"provenanceSpec", "user-override":"provenanceUserOverride" };
-  function renderAIAttrs(res){
+  const SOURCE_LABEL_KEY = { vision: "provenanceVision", pixel: "provenancePixel", prompt: "provenancePrompt", heuristic: "provenanceHeuristic", spec: "provenanceSpec", "user-override": "provenanceUserOverride" };
+  function renderAIAttrs(res) {
     lastAIResult = res;
-    const box=$("#aiAttrs"); if(!box) return;
-    box.style.display=""; box.innerHTML="";
+    const box = $("#aiAttrs"); if (!box) return;
+    box.style.display = ""; box.innerHTML = "";
     const imageUnreadable = !res.usedImage && res.imageSupplied;
-    const src = res.source==="remote" ? "Claude" : res.source==="spec" ? T("provenanceSpec") : res.source==="fused" ? T("provenanceVision")
+    const src = res.source === "remote" ? "Claude" : res.source === "spec" ? T("provenanceSpec") : res.source === "fused" ? T("provenanceVision")
       : res.usedImage ? T("usedImageNote") : imageUnreadable ? T("imageUnreadableNote") : "";
     const srcStyle = imageUnreadable ? ` style="color:var(--warn)"` : "";
-    box.appendChild(el("div","aa-head",`<span>${T("detected")}</span>${src?`<span${srcStyle}>${src}</span>`:""}`));
-    (res.attributes||[]).forEach(a=>{
-      const row=el("div","aa-row");
+    box.appendChild(el("div", "aa-head", `<span>${T("detected")}</span>${src ? `<span${srcStyle}>${src}</span>` : ""}`));
+    (res.attributes || []).forEach(a => {
+      const row = el("div", "aa-row");
       const val = a.swatch ? `<span class="aa-swatch" style="background:${a.value}"></span>${a.value}` : a.value;
-      const srcLabel = a.source ? T(SOURCE_LABEL_KEY[a.source]||a.source) : "";
-      const srcTxt = srcLabel ? ` <small class="aa-src">· ${srcLabel}${a.confidence!=null?` · ${a.confidence.toFixed(2)}`:""}</small>` : "";
-      row.innerHTML=`<b>${a.label}</b><span class="aa-val">${val}${srcTxt}</span>`;
-      const overridable = OVERRIDE_ENUMS[a.k] || OVERRIDE_FACTOR_FIELD[a.k] || a.k==="closure" || a.k==="color";
-      if(overridable){ row.style.cursor="pointer"; row.title=T("attrOverrideTitle"); row.onclick=()=>overrideAIAttribute(a.k); }
+      const srcLabel = a.source ? T(SOURCE_LABEL_KEY[a.source] || a.source) : "";
+      const srcTxt = srcLabel ? ` <small class="aa-src">· ${srcLabel}${a.confidence != null ? ` · ${a.confidence.toFixed(2)}` : ""}</small>` : "";
+      row.innerHTML = `<b>${a.label}</b><span class="aa-val">${val}${srcTxt}</span>`;
+      const overridable = OVERRIDE_ENUMS[a.k] || OVERRIDE_FACTOR_FIELD[a.k] || a.k === "closure" || a.k === "color";
+      if (overridable) { row.style.cursor = "pointer"; row.title = T("attrOverrideTitle"); row.onclick = () => overrideAIAttribute(a.k); }
       box.appendChild(row);
     });
   }
   let cachedSpecSchema = null;
-  async function loadSpecSchema(){
-    if(!cachedSpecSchema) cachedSpecSchema = await (await fetch("./schema/pattern-spec.v1.json")).json();
+  async function loadSpecSchema() {
+    if (!cachedSpecSchema) cachedSpecSchema = await (await fetch("./schema/pattern-spec.v1.json")).json();
     return cachedSpecSchema;
   }
 
-  function classifyAIFallbackReason(reason){
-    const r = String(reason||"");
-    if(/\b401\b|\b403\b|unauthor|invalid.{0,12}key|api.?key/i.test(r)) return "specFallbackAuth";
-    if(/\b429\b|rate.?limit/i.test(r)) return "specFallbackRateLimit";
-    if(/fetch|network|timeout|abort|dns|offline/i.test(r)) return "specFallbackNetwork";
+  function classifyAIFallbackReason(reason) {
+    const r = String(reason || "");
+    if (/\b401\b|\b403\b|unauthor|invalid.{0,12}key|api.?key/i.test(r)) return "specFallbackAuth";
+    if (/\b429\b|rate.?limit/i.test(r)) return "specFallbackRateLimit";
+    if (/fetch|network|timeout|abort|dns|offline/i.test(r)) return "specFallbackNetwork";
     return "specValidationFallback";
   }
-  function classifySVGFailReason(reason){
-    const r = String(reason||"");
-    if(r==="no-image") return "aiSvgNeedImage";
-    if(r==="no-svg-in-reply") return "aiSvgFailNoSvg";
-    if(r==="no-shapes") return "aiSvgFailNoShapes";
-    if(r==="validation-failed") return "aiSvgFailValidation";
-    if(/\b401\b|\b403\b|unauthor|invalid.{0,12}key|api.?key/i.test(r)) return "aiSvgFailAuth";
-    if(/\b429\b|rate.?limit/i.test(r)) return "aiSvgFailRateLimit";
-    if(/fetch|network|timeout|abort|dns|offline/i.test(r)) return "aiSvgFailNetwork";
+  function classifySVGFailReason(reason) {
+    const r = String(reason || "");
+    if (r === "no-image") return "aiSvgNeedImage";
+    if (r === "no-svg-in-reply") return "aiSvgFailNoSvg";
+    if (r === "no-shapes") return "aiSvgFailNoShapes";
+    if (r === "validation-failed") return "aiSvgFailValidation";
+    if (/\b401\b|\b403\b|unauthor|invalid.{0,12}key|api.?key/i.test(r)) return "aiSvgFailAuth";
+    if (/\b429\b|rate.?limit/i.test(r)) return "aiSvgFailRateLimit";
+    if (/fetch|network|timeout|abort|dns|offline/i.test(r)) return "aiSvgFailNetwork";
     return "aiSvgFailGeneric";
   }
-  async function runAISVGImport(btn){
-    if(!requireEntitlement()) return;
-    if(!aiImage){ toast(T("aiSvgNeedImage")); return; }
+  async function runAISVGImport(btn) {
+    if (!requireEntitlement()) return;
+    if (!aiImage) { toast(T("aiSvgNeedImage")); return; }
     ensureAIState();
     const providerId = state.aiProvider || "proxy";
     const adapter = AIProviders[providerId];
     const cfg = await resolveAICfg(providerId, aiCfgFor(providerId, false));
-    const missingKey = providerId!=="proxy" && adapter.needsKey && !cfg.apiKey;
-    if(missingKey){ toast(T("specFallbackNoKey")); return; }
-    if(providerId==="proxy" && !cfg.baseUrl){ toast(T("aiSvgNeedProvider")); return; }
-    const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7"; btn.disabled=true;
-    const box=$("#aiSvgStatus");
-    if(box){ box.innerHTML=`<div class="ai-stage active"><span class="dot"></span><span>${T("aiSvgStageSending")}</span></div>`; box.classList.add("show"); }
-    try{
+    const missingKey = providerId !== "proxy" && adapter.needsKey && !cfg.apiKey;
+    if (missingKey) { toast(T("specFallbackNoKey")); return; }
+    if (providerId === "proxy" && !cfg.baseUrl) { toast(T("aiSvgNeedProvider")); return; }
+    const orig = btn.innerHTML; btn.innerHTML = IC.spark + T("generating"); btn.style.opacity = ".7"; btn.disabled = true;
+    const box = $("#aiSvgStatus");
+    if (box) { box.innerHTML = `<div class="ai-stage active"><span class="dot"></span><span>${T("aiSvgStageSending")}</span></div>`; box.classList.add("show"); }
+    try {
       const res = await generateSVGPatternFromImage({ adapter, cfg, imageDataURL: aiImage, measurements: currentMeas() });
-      if(!res.ok){ toast(T(classifySVGFailReason(res.reason))); return; }
-      const n = Canvas.importPieces(res.pieces, {kind:'ai-svg-image', validation:res.validation.summary});
+      if (!res.ok) { toast(T(classifySVGFailReason(res.reason))); return; }
+      const n = Canvas.importPieces(res.pieces, { kind: 'ai-svg-image', validation: res.validation.summary });
       hideEmpty(); renderLayersPane(); renderAIPane();
-      if(is3DActive()) build3D();
+      if (is3DActive()) build3D();
       save();
       const hasWarnings = res.warnings && res.warnings.length;
-      toast((hasWarnings ? T("importPatternPartial") : T("importPatternDone")).replace("{n}",n) + (hasWarnings ? " — "+res.warnings.join(" ") : ""));
-    } catch(e){ toast(T("aiSvgFailGeneric")); }
-    finally{ btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; if(box) box.classList.remove("show"); }
+      toast((hasWarnings ? T("importPatternPartial") : T("importPatternDone")).replace("{n}", n) + (hasWarnings ? " — " + res.warnings.join(" ") : ""));
+    } catch (e) { toast(T("aiSvgFailGeneric")); }
+    finally { btn.innerHTML = orig; btn.style.opacity = "1"; btn.disabled = false; if (box) box.classList.remove("show"); }
   }
-  async function generatePatternFrom(prompt, imageDataURL, btn, doneToastKey, options={}){
-    const sourceProject=state.activeProjectId, sourceBrief=JSON.stringify(Canvas.snapshotState().brief);
-    const measurements=options.measurements || currentMeas();
-    const category=state.category, lang=state.lang;
+  async function generatePatternFrom(prompt, imageDataURL, btn, doneToastKey, options = {}) {
+    const sourceProject = state.activeProjectId, sourceBrief = JSON.stringify(Canvas.snapshotState().brief);
+    const measurements = options.measurements || currentMeas();
+    const category = state.category, lang = state.lang;
     const isBriefFlow = !!options.brief;
     const activeAnswers = isBriefFlow ? {} : aiConsultAnswers;
     const activeCustomNote = isBriefFlow ? "" : aiConsultCustomNote;
     const { enrichedPrompt } = applyClarificationAnswers({ prompt: prompt || "", answers: activeAnswers, customNote: activeCustomNote });
     const effectivePrompt = isBriefFlow ? prompt : (enrichedPrompt || prompt);
 
-    const orig=btn.innerHTML; btn.innerHTML=IC.spark+T("generating"); btn.style.opacity=".7"; btn.disabled=true;
+    const orig = btn.innerHTML; btn.innerHTML = IC.spark + T("generating"); btn.style.opacity = ".7"; btn.disabled = true;
     const setStage = beginAIThinking(!!imageDataURL);
     try {
       ensureAIState();
       const providerId = state.aiProvider || "proxy";
       const adapter = AIProviders[providerId];
       const cfg = await resolveAICfg(providerId, aiCfgFor(providerId, false));
-      const missingKey = providerId!=="proxy" && adapter.needsKey && !cfg.apiKey;
-      const hasRealProvider = providerId!=="proxy" ? !missingKey : !!cfg.baseUrl;
+      const missingKey = providerId !== "proxy" && adapter.needsKey && !cfg.apiKey;
+      const hasRealProvider = providerId !== "proxy" ? !missingKey : !!cfg.baseUrl;
       const seamAllowanceCm = state.seamCm || 1;
       let res = null;
-      if(missingKey) toast(T("specFallbackNoKey"));
-      else if(hasRealProvider){
+      if (missingKey) toast(T("specFallbackNoKey"));
+      else if (hasRealProvider) {
         setStage("analyzing");
         const schema = await loadSpecSchema();
         const specResult = await generateFromSpec({
           adapter, cfg, prompt: effectivePrompt, measurements, category, lang,
           schema, images: imageDataURL ? [imageDataURL] : undefined,
         });
-        if(!specResult.fellBack){
-          if(imageDataURL && specResult.source==="spec"){
+        if (!specResult.fellBack) {
+          if (imageDataURL && specResult.source === "spec") {
             const pixelMetrics = await AIGen.analyzeImage(imageDataURL, { segment: getSegmentFn() });
             const promptStyle = AIGen.deriveStyle({ metrics: pixelMetrics, prompt: effectivePrompt, category, imageDataURL });
             const { style: fusedRaw, sourceMap } = fuseStyle({ specStyle: specResult.style, promptStyle });
@@ -2227,13 +2244,13 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
             };
           } else {
             res = specResult;
-            if(res.style && res.source==="spec"){
+            if (res.style && res.source === "spec") {
               let style = { ...res.style };
-              if(!style.neckline){
+              if (!style.neckline) {
                 style.neckline = AIGen.pick(`${effectivePrompt}|${category}|neck`,
-                  style.type==="shirt" ? ["collar","round","v"] : ["v","round","boat","offshoulder","halter"]);
+                  style.type === "shirt" ? ["collar", "round", "v"] : ["v", "round", "boat", "offshoulder", "halter"]);
               }
-              if(!isBriefFlow){
+              if (!isBriefFlow) {
                 style = applyClarificationAnswers({ prompt: effectivePrompt, baseStyle: style, answers: activeAnswers, customNote: activeCustomNote }).style;
               }
               const synth = synthesizeCouturePattern({
@@ -2249,7 +2266,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
                 ...synth,
                 attributes: AIGen.attributes(synth.style, lang, provenanceMapFromSpec(res.spec)),
               };
-            } else if(res.pieces?.length){
+            } else if (res.pieces?.length) {
               const healed = ensureValidPieces(res.pieces, measurements, seamAllowanceCm);
               res = { ...res, pieces: healed.pieces, validation: healed.validation };
             }
@@ -2257,8 +2274,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
           setStage("done");
         } else toast(T(classifyAIFallbackReason(specResult.fallbackReason)));
       }
-      if(!res){
-        if(isBriefFlow){
+      if (!res) {
+        if (isBriefFlow) {
           res = await AIGen.generate({
             prompt: effectivePrompt, imageDataURL, category,
             measurements, endpoint: "", lang,
@@ -2267,15 +2284,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         } else {
           setStage("analyzing");
           let metrics = null;
-          if(imageDataURL){
+          if (imageDataURL) {
             metrics = await AIGen.analyzeImage(imageDataURL, { segment: getSegmentFn() });
-            if(!metrics || !metrics.ok){
+            if (!metrics || !metrics.ok) {
               res = { decision: "clarify", reason: "image-unreadable", usedImage: false, imageSupplied: true, pieces: [] };
             }
           } else {
             await new Promise(r => setTimeout(r, 120));
           }
-          if(!res){
+          if (!res) {
             setStage("silhouette");
             await new Promise(r => setTimeout(r, 90));
             setStage("drafting");
@@ -2292,8 +2309,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
             });
             const provSource = (metrics && metrics.ok) ? "pixel" : "prompt";
             const provMap = {};
-            ["type","length","flare","sleeve","neckline","hem","closure","color"].forEach(k => {
-              provMap[k] = { source: activeAnswers[k] || (k==="type" && activeAnswers.garmentType) ? "user-override" : provSource, confidence: (metrics && metrics.ok) ? 0.92 : 0.95 };
+            ["type", "length", "flare", "sleeve", "neckline", "hem", "closure", "color"].forEach(k => {
+              provMap[k] = { source: activeAnswers[k] || (k === "type" && activeAnswers.garmentType) ? "user-override" : provSource, confidence: (metrics && metrics.ok) ? 0.92 : 0.95 };
             });
             res = {
               ...synth,
@@ -2306,71 +2323,71 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
           }
         }
       }
-      if(res.decision === "clarify"){
+      if (res.decision === "clarify") {
         $("#aiStatus")?.classList.remove("show");
         openModal(T("aiReferenceNeeded"), "", true);
-        const message=el("p"); message.textContent=T("aiReferenceUnreadable");
+        const message = el("p"); message.textContent = T("aiReferenceUnreadable");
         $("#genericModal .modal-body").appendChild(message);
         return;
       }
-      if(options.brief){
-        if(sourceProject!==state.activeProjectId || sourceBrief!==JSON.stringify(Canvas.snapshotState().brief)) { toast(T('commandStale')); return; }
-        if(!briefMatchesStyle(options.brief,res.style)){
-          openModal(T('briefValidationTitle'),'',true);
-          const message=el('p');message.textContent=T('briefIntentFailed');
+      if (options.brief) {
+        if (sourceProject !== state.activeProjectId || sourceBrief !== JSON.stringify(Canvas.snapshotState().brief)) { toast(T('commandStale')); return; }
+        if (!briefMatchesStyle(options.brief, res.style)) {
+          openModal(T('briefValidationTitle'), '', true);
+          const message = el('p'); message.textContent = T('briefIntentFailed');
           $('#genericModal .modal-body').appendChild(message);
           return;
         }
-        const report=PatternValidator.run(res.pieces,{bodyChestCm:measurements.chest,seamAllowanceCm:state.seamCm||1,offsetPoly:Canvas.offsetPoly});
-        if(report.summary.fail){
-          openModal(T('briefValidationTitle'),'',true);
-          const message=el('p');message.textContent=T('briefValidationFailed');
+        const report = PatternValidator.run(res.pieces, { bodyChestCm: measurements.chest, seamAllowanceCm: state.seamCm || 1, offsetPoly: Canvas.offsetPoly });
+        if (report.summary.fail) {
+          openModal(T('briefValidationTitle'), '', true);
+          const message = el('p'); message.textContent = T('briefValidationFailed');
           $('#genericModal .modal-body').appendChild(message);
           return;
         }
-        res.brief={...options.brief,validation:report};
+        res.brief = { ...options.brief, validation: report };
       }
       reviewGeneratedPattern(res, doneToastKey);
-    } catch(e){ toast(T("importFail")); }
-    finally { btn.innerHTML=orig; btn.style.opacity="1"; btn.disabled=false; }
+    } catch (e) { toast(T("importFail")); }
+    finally { btn.innerHTML = orig; btn.style.opacity = "1"; btn.disabled = false; }
   }
-  async function runAI(txt, btn){
-    if(!requireEntitlement()) return; // WP-42 Stage B: AI surface gate
-    const prompt=(txt||"").trim();
-    if(!prompt && !aiImage && !Object.keys(aiConsultAnswers).length && !aiConsultCustomNote.trim()){
+  async function runAI(txt, btn) {
+    if (!requireEntitlement()) return; // WP-42 Stage B: AI surface gate
+    const prompt = (txt || "").trim();
+    if (!prompt && !aiImage && !Object.keys(aiConsultAnswers).length && !aiConsultCustomNote.trim()) {
       toast(T("aiNeedInput"));
       return;
     }
     await generatePatternFrom(prompt, aiImage, btn, "generated");
   }
-  async function runPatternPieces(btn){
-    if(!requireEntitlement()) return;
-    if(!bbBillboard) return;
+  async function runPatternPieces(btn) {
+    if (!requireEntitlement()) return;
+    if (!bbBillboard) return;
     const prompt = "The attached image is a photorealistic photo of a professional fashion model wearing the exact garment(s) the user dressed them in with the AI Fashion Billboard tool above — read it as a real worn-garment photo (mode 1), not a technical tech-pack drawing. Identify this garment's actual construction as precisely as the photo allows: garment type, neckline, sleeve length and width, overall silhouette (fitted vs. flared), hem shape, and closure — a confident, specific read, not a generic default.";
     await generatePatternFrom(prompt, bbBillboard, btn, "billboardPiecesReady");
   }
-  async function runTechPackPieces(btn){
-    if(!requireEntitlement()) return;
-    if(!bbPattern) return;
+  async function runTechPackPieces(btn) {
+    if (!requireEntitlement()) return;
+    if (!bbPattern) return;
     const prompt = "The attached image is a technical flat-sketch / tech-pack drawing: individual pattern piece diagrams with printed dimensions, and possibly its own body-measurement table. Read the actual piece shapes and printed numbers directly off the image — do not guess relative style factors for pieces you can trace exactly.";
     await generatePatternFrom(prompt, bbPattern, btn, "billboardTechPackReady");
   }
 
   // ================= QUICK DRAFT BUILDER =================
-  const BUILDER_KINDS = ["dress","top","shirt","skirt","trousers","romper","robe","gown","jacket","coat","suit"];
-  const AIGEN_KINDS = ["dress","top","shirt","skirt","trousers","robe","romper"];
+  const BUILDER_KINDS = ["dress", "top", "shirt", "skirt", "trousers", "romper", "robe", "gown", "jacket", "coat", "suit"];
+  const AIGEN_KINDS = ["dress", "top", "shirt", "skirt", "trousers", "robe", "romper"];
   const KIND_MEAS = {
-    dress:["chest","waist","hips","backLen","sleeve","bicep","height"],
-    top:["chest","waist","hips","backLen","sleeve","bicep"],
-    shirt:["chest","waist","hips","backLen","neck","sleeve","bicep"],
-    skirt:["waist","hips","inseam"],
-    trousers:["waist","hips","thigh","inseam"],
-    romper:["chest","waist","hips","backLen","neck","sleeve","bicep","thigh","inseam"],
-    robe:["chest","waist","hips","backLen","neck","sleeve","bicep","height"],
-    gown:["chest","waist","hips","backLen","sleeve","bicep","height"],
-    jacket:["chest","waist","hips","backLen","neck","sleeve","bicep"],
-    coat:["chest","waist","hips","shoulder","backLen","neck","sleeve","bicep"],
-    suit:["chest","waist","hips","backLen","neck","sleeve","bicep","thigh","inseam"],
+    dress: ["chest", "waist", "hips", "backLen", "sleeve", "bicep", "height"],
+    top: ["chest", "waist", "hips", "backLen", "sleeve", "bicep"],
+    shirt: ["chest", "waist", "hips", "backLen", "neck", "sleeve", "bicep"],
+    skirt: ["waist", "hips", "inseam"],
+    trousers: ["waist", "hips", "thigh", "inseam"],
+    romper: ["chest", "waist", "hips", "backLen", "neck", "sleeve", "bicep", "thigh", "inseam"],
+    robe: ["chest", "waist", "hips", "backLen", "neck", "sleeve", "bicep", "height"],
+    gown: ["chest", "waist", "hips", "backLen", "sleeve", "bicep", "height"],
+    jacket: ["chest", "waist", "hips", "backLen", "neck", "sleeve", "bicep"],
+    coat: ["chest", "waist", "hips", "shoulder", "backLen", "neck", "sleeve", "bicep"],
+    suit: ["chest", "waist", "hips", "backLen", "neck", "sleeve", "bicep", "thigh", "inseam"],
   };
   // `sleeveCap` (WP-20): only the AIGen (not FancyGen) kinds with a real
   // sleeve — style.sleeveGatherRatio/sleevePleatCount/sleeveTuckCount only
@@ -2378,12 +2395,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // length picker but is drafted by FancyGen.build(), which never reads
   // those fields, so it deliberately does NOT get `sleeveCap`.
   const KIND_STYLE = {
-    dress:{length:1,flare:1,fit:1,sleeve:1,sleeveCap:1}, top:{length:1,flare:1,fit:1,sleeve:1,sleeveCap:1}, shirt:{length:1,flare:1,fit:1,sleeve:1,sleeveCap:1},
-    skirt:{length:1,flare:1,fit:1,pleats:1}, trousers:{length:1,flare:1,fit:1}, romper:{length:1,fit:1,sleeve:1,sleeveCap:1},
-    robe:{length:1,flare:1,fit:1,sleeve:1,sleeveCap:1},
-    gown:{length:1,sleeve:1}, jacket:{length:1}, coat:{length:1}, suit:{},
+    dress: { length: 1, flare: 1, fit: 1, sleeve: 1, sleeveCap: 1 }, top: { length: 1, flare: 1, fit: 1, sleeve: 1, sleeveCap: 1 }, shirt: { length: 1, flare: 1, fit: 1, sleeve: 1, sleeveCap: 1 },
+    skirt: { length: 1, flare: 1, fit: 1, pleats: 1 }, trousers: { length: 1, flare: 1, fit: 1 }, romper: { length: 1, fit: 1, sleeve: 1, sleeveCap: 1 },
+    robe: { length: 1, flare: 1, fit: 1, sleeve: 1, sleeveCap: 1 },
+    gown: { length: 1, sleeve: 1 }, jacket: { length: 1 }, coat: { length: 1 }, suit: {},
   };
-  const LEN_MAP = {mini:0.35, short:0.65, aboveKnee:0.82, medium:1.0, midi:1.18, long:1.35, ankle:1.55, maxi:1.78};
+  const LEN_MAP = { mini: 0.35, short: 0.65, aboveKnee: 0.82, medium: 1.0, midi: 1.18, long: 1.35, ankle: 1.55, maxi: 1.78 };
   // Tailornova feature study (WP-37): "Lengthen Patterns with One Click" —
   // up to 10 preset lengths, single click, real result. LEN_MAP above is a
   // continuous factor (any key here already redrafts for real, no fallback
@@ -2396,51 +2413,51 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // hemline) are real 3-bucket recipes, so adding more presets there would
   // silently collapse onto one of the existing 3 results instead of a truly
   // distinct one.
-  const HEMLINE_LENGTH_KINDS = ["dress","skirt","robe","romper"];
-  const HEMLINE_LENGTH_OPTS = ["mini","short","aboveKnee","medium","midi","long","ankle","maxi"];
-  const FLARE_MAP = {slim:0.9, regular:1.15, full:1.5};
-  const FIT_MAP = {fitted:0.85, regular:1.0, relaxed:1.15};
-  const SLEEVE_MAP = {sleeveless:0, short:0.45, long:1.3};
+  const HEMLINE_LENGTH_KINDS = ["dress", "skirt", "robe", "romper"];
+  const HEMLINE_LENGTH_OPTS = ["mini", "short", "aboveKnee", "medium", "midi", "long", "ankle", "maxi"];
+  const FLARE_MAP = { slim: 0.9, regular: 1.15, full: 1.5 };
+  const FIT_MAP = { fitted: 0.85, regular: 1.0, relaxed: 1.15 };
+  const SLEEVE_MAP = { sleeveless: 0, short: 0.45, long: 1.3 };
   // WP-14: knife-pleat/tuck count per waist or sleeve-cap edge; each
   // technique's depth is fixed inside buildSkirt/sleevePiece (js/ai.js) —
   // this maps the UI's Light/Full intensity to a pleat/tuck COUNT, same
   // count scale reused for both since they share computePleats' math
   // (see js/pleats.js's computeTucks). "none" keeps AIGen.build()'s
   // output byte-identical to before this option existed.
-  const PLEAT_MAP = {none:0, light:3, full:6};
+  const PLEAT_MAP = { none: 0, light: 3, full: 6 };
   // WP-20: gather is a continuous ease ratio (raw edge length ÷ finished
   // length), not a discrete count — computeGatherWidth(w, ratio) (js/pleats.js).
   // 1.3x/1.6x are realistic light/full shirring ratios.
-  const GATHER_MAP = {none:1, light:1.3, full:1.6};
+  const GATHER_MAP = { none: 1, light: 1.3, full: 1.6 };
 
   function renderBuilderPane() {
     const c = $(".rail-pane[data-pane=builder]"); c.innerHTML = "";
-    if(!gateAllowed()){ renderGateUpsell(c, "builderTitle"); return; }
-    c.appendChild(el("div","section-title",IC.ruler+T("builderTitle")));
-    c.appendChild(el("div","help-note",T("builderDesc")));
+    if (!gateAllowed()) { renderGateUpsell(c, "builderTitle"); return; }
+    c.appendChild(el("div", "section-title", IC.ruler + T("builderTitle")));
+    c.appendChild(el("div", "help-note", T("builderDesc")));
 
-    const kindGrid = el("div","opt-grid"); kindGrid.style.margin="10px 0 4px";
-    BUILDER_KINDS.forEach(k=>{
-      const o = el("div","opt"+(state.builderKind===k?" active":""), T("kind_"+k));
-      o.onclick = () => { state.builderKind=k; save(); renderBuilderPane(); };
+    const kindGrid = el("div", "opt-grid"); kindGrid.style.margin = "10px 0 4px";
+    BUILDER_KINDS.forEach(k => {
+      const o = el("div", "opt" + (state.builderKind === k ? " active" : ""), T("kind_" + k));
+      o.onclick = () => { state.builderKind = k; save(); renderBuilderPane(); };
       kindGrid.appendChild(o);
     });
     c.appendChild(kindGrid);
 
-    if (!state.builderKind) { c.appendChild(el("div","help-note",T("builderPick"))); return; }
+    if (!state.builderKind) { c.appendChild(el("div", "help-note", T("builderPick"))); return; }
     const kind = state.builderKind;
 
     // Required measurements — only the fields this kind's construction actually reads.
     // These are a local scratch override for this draft only — they don't touch the
     // shared working measurements (Measures pane / Auto Grade stay untouched).
-    c.appendChild(el("div","section-title",IC.measure+T("builderMeas"))).style.marginTop="16px";
-    c.appendChild(el("div","help-note",T("builderMeasHint")));
+    c.appendChild(el("div", "section-title", IC.measure + T("builderMeas"))).style.marginTop = "16px";
+    c.appendChild(el("div", "help-note", T("builderMeasHint")));
     const m = Object.assign({}, currentMeas(), state.builderCustom);
-    const box = el("div"); box.style.marginTop="6px";
-    KIND_MEAS[kind].forEach(k=>{
-      const row = el("div","meas-row",`<label>${T("m_"+k)}</label>`);
-      const inp = el("input"); inp.type="number"; inp.value=m[k]; inp.dataset.k=k;
-      inp.onchange=()=>{ state.builderCustom[k]=+inp.value; save(); };
+    const box = el("div"); box.style.marginTop = "6px";
+    KIND_MEAS[kind].forEach(k => {
+      const row = el("div", "meas-row", `<label>${T("m_" + k)}</label>`);
+      const inp = el("input"); inp.type = "number"; inp.value = m[k]; inp.dataset.k = k;
+      inp.onchange = () => { state.builderCustom[k] = +inp.value; save(); };
       row.appendChild(inp); box.appendChild(row);
     });
     c.appendChild(box);
@@ -2448,30 +2465,30 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // Style controls — only the ones that kind's builder actually honours.
     const st = KIND_STYLE[kind];
     const segRow = (label, key, opts, map) => {
-      const wrap = el("div","set-row"); wrap.style.marginTop="10px";
+      const wrap = el("div", "set-row"); wrap.style.marginTop = "10px";
       wrap.innerHTML = `<span class="sl">${label}</span>`;
-      const seg = el("div","seg");
-      opts.forEach(o=>{ const b=el("button", state.builderOpts[key]===o?"active":"", T("opt_"+o)); b.onclick=()=>{ state.builderOpts[key]=o; save(); renderBuilderPane(); }; seg.appendChild(b); });
+      const seg = el("div", "seg");
+      opts.forEach(o => { const b = el("button", state.builderOpts[key] === o ? "active" : "", T("opt_" + o)); b.onclick = () => { state.builderOpts[key] = o; save(); renderBuilderPane(); }; seg.appendChild(b); });
       wrap.appendChild(seg); c.appendChild(wrap);
     };
-    if (st.length) segRow(T("builderLength"), "length", HEMLINE_LENGTH_KINDS.includes(kind) ? HEMLINE_LENGTH_OPTS : ["short","medium","long"]);
-    if (st.flare) segRow(T("builderFlare"), "flare", ["slim","regular","full"]);
-    if (st.fit) segRow(T("builderFit"), "fit", ["fitted","regular","relaxed"]);
-    if (st.sleeve) segRow(T("builderSleeve"), "sleeve", ["sleeveless","short","long"]);
+    if (st.length) segRow(T("builderLength"), "length", HEMLINE_LENGTH_KINDS.includes(kind) ? HEMLINE_LENGTH_OPTS : ["short", "medium", "long"]);
+    if (st.flare) segRow(T("builderFlare"), "flare", ["slim", "regular", "full"]);
+    if (st.fit) segRow(T("builderFit"), "fit", ["fitted", "regular", "relaxed"]);
+    if (st.sleeve) segRow(T("builderSleeve"), "sleeve", ["sleeveless", "short", "long"]);
     // WP-20: waist/sleeve-cap fullness is a technique choice (Pleat/Gather/
     // Tuck), not just an intensity — the Intensity row only appears once a
     // real technique is picked, same "don't show a control with nothing to
     // control" pattern the rest of this pane already follows.
     if (st.pleats) {
-      segRow(T("builderWaistTech"), "waistTech", ["none","pleat","gather","tuck"]);
-      if ((state.builderOpts.waistTech||"none") !== "none") segRow(T("builderIntensity"), "waistIntensity", ["light","full"]);
+      segRow(T("builderWaistTech"), "waistTech", ["none", "pleat", "gather", "tuck"]);
+      if ((state.builderOpts.waistTech || "none") !== "none") segRow(T("builderIntensity"), "waistIntensity", ["light", "full"]);
     }
     if (st.sleeveCap) {
-      segRow(T("builderSleeveTech"), "sleeveTech", ["none","pleat","gather","tuck"]);
-      if ((state.builderOpts.sleeveTech||"none") !== "none") segRow(T("builderIntensity"), "sleeveIntensity", ["light","full"]);
+      segRow(T("builderSleeveTech"), "sleeveTech", ["none", "pleat", "gather", "tuck"]);
+      if ((state.builderOpts.sleeveTech || "none") !== "none") segRow(T("builderIntensity"), "sleeveIntensity", ["light", "full"]);
     }
 
-    const genBtn = el("button","big-btn",IC.check+T("builderGenerate")); genBtn.style.marginTop="16px";
+    const genBtn = el("button", "big-btn", IC.check + T("builderGenerate")); genBtn.style.marginTop = "16px";
     genBtn.onclick = () => generateBuilderPattern(kind);
     c.appendChild(genBtn);
   }
@@ -2483,15 +2500,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // `keys` is [pleatCountKey, tuckCountKey, gatherRatioKey] — pass the
   // skirt/waist names for the waist row, the sleeve-prefixed names for the
   // sleeve-cap row.
-  function fullnessStyle(tech, intensity, [pleatKey, tuckKey, gatherKey]){
-    const n = { [pleatKey]:0, [tuckKey]:0, [gatherKey]:1 };
+  function fullnessStyle(tech, intensity, [pleatKey, tuckKey, gatherKey]) {
+    const n = { [pleatKey]: 0, [tuckKey]: 0, [gatherKey]: 1 };
     if (tech === "pleat") n[pleatKey] = PLEAT_MAP[intensity] ?? 0;
     else if (tech === "tuck") n[tuckKey] = PLEAT_MAP[intensity] ?? 0;
     else if (tech === "gather") n[gatherKey] = GATHER_MAP[intensity] ?? 1;
     return n;
   }
   function generateBuilderPattern(kind) {
-    if(!requireEntitlement()) return; // WP-42 Stage B: Quick Draft/Auto Pattern surface gate
+    if (!requireEntitlement()) return; // WP-42 Stage B: Quick Draft/Auto Pattern surface gate
     const m = Object.assign({}, currentMeas(), state.builderCustom);
     const o = state.builderOpts;
     let pieces;
@@ -2503,12 +2520,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         fitF: FIT_MAP[o.fit] ?? 1,
         sleeveLenF: KIND_STYLE[kind].sleeve ? (SLEEVE_MAP[o.sleeve] ?? 0.45) : 0,
         sleeveWideF: 1,
-        ...(KIND_STYLE[kind].pleats ? fullnessStyle(o.waistTech, o.waistIntensity, ["pleatCount","tuckCount","gatherRatio"]) : {}),
-        ...(KIND_STYLE[kind].sleeveCap ? fullnessStyle(o.sleeveTech, o.sleeveIntensity, ["sleevePleatCount","sleeveTuckCount","sleeveGatherRatio"]) : {}),
+        ...(KIND_STYLE[kind].pleats ? fullnessStyle(o.waistTech, o.waistIntensity, ["pleatCount", "tuckCount", "gatherRatio"]) : {}),
+        ...(KIND_STYLE[kind].sleeveCap ? fullnessStyle(o.sleeveTech, o.sleeveIntensity, ["sleevePleatCount", "sleeveTuckCount", "sleeveGatherRatio"]) : {}),
       };
       pieces = AIGen.build(style, m).pieces;
     } else {
-      pieces = FancyGen.build(kind, m, { length:o.length, sleeveless:o.sleeve==="sleeveless", sleeveLong:o.sleeve==="long" });
+      pieces = FancyGen.build(kind, m, { length: o.length, sleeveless: o.sleeve === "sleeveless", sleeveLong: o.sleeve === "long" });
     }
     if (!pieces || !pieces.length) { toast(T("importFail")); return; }
     state.loaded = null;
@@ -2518,15 +2535,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if (is3DActive()) build3D(null, { resetPrints: true });
     if (state.view === "clothlab") syncClothLab();
     update3DStatusPill();
-    toast(T("generated")+" · "+T("kind_"+kind));
+    toast(T("generated") + " · " + T("kind_" + kind));
     save();
   }
 
   // EXPORT PANE
-  const PAPERS=["A0","A1","A2","A3","A4","Letter","Plotter","Custom"];
-  const FORMATS=["PDF","DXF","SVG","PLT","EPS","AI","PNG","JPEG","HPGL","CSV","HTML","MD","OBJ","JSON"];
+  const PAPERS = ["A0", "A1", "A2", "A3", "A4", "Letter", "Plotter", "Custom"];
+  const FORMATS = ["PDF", "DXF", "SVG", "PLT", "EPS", "AI", "PNG", "JPEG", "HPGL", "CSV", "HTML", "MD", "OBJ", "JSON"];
   function renderExportPane() {
-    const c = $(".rail-pane[data-pane=export]"); c.innerHTML="";
+    const c = $(".rail-pane[data-pane=export]"); c.innerHTML = "";
     // WP-42 Stage B: NOT a blanket pane gate, unlike Library/AI/Quick Draft
     // — plan v3.2 §6 names specific formats/artifacts as gated (file-format
     // export, Tech Pack, BOM) while explicitly listing Fit Chart, Sewing
@@ -2537,74 +2554,74 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // "Export"), techPack, exportSummary, exportBom) call requireEntitlement()
     // themselves below. This help-note is purely informational — it never
     // blocks anything, the functions do that.
-    c.appendChild(el("div","section-title",IC.download+T("exportTitle")));
-    if(!gateAllowed()) c.appendChild(el("div","help-note",T("exportPartialGateNote")));
-    c.appendChild(el("div",null,`<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("paperSize")}</label>`));
-    const pg=el("div","opt-grid"); pg.style.margin="8px 0 4px";
-    PAPERS.forEach((p,i)=>{const o=el("div","opt"+(i===4?" active":""),p);o.onclick=()=>{$$("#pg .opt").forEach(x=>x.classList.remove("active"));o.classList.add("active");};pg.appendChild(o);}); pg.id="pg"; c.appendChild(pg);
-    c.appendChild(el("div",null,`<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("format")}</label>`)).style.marginTop="12px";
-    const fg=el("div","opt-grid"); fg.style.margin="8px 0";
-    FORMATS.forEach((p,i)=>{const o=el("div","opt"+(i===2?" active":""),p);o.dataset.fmt=p;o.onclick=()=>{$$("#fg .opt").forEach(x=>x.classList.remove("active"));o.classList.add("active");};fg.appendChild(o);}); fg.id="fg"; c.appendChild(fg);
+    c.appendChild(el("div", "section-title", IC.download + T("exportTitle")));
+    if (!gateAllowed()) c.appendChild(el("div", "help-note", T("exportPartialGateNote")));
+    c.appendChild(el("div", null, `<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("paperSize")}</label>`));
+    const pg = el("div", "opt-grid"); pg.style.margin = "8px 0 4px";
+    PAPERS.forEach((p, i) => { const o = el("div", "opt" + (i === 4 ? " active" : ""), p); o.onclick = () => { $$("#pg .opt").forEach(x => x.classList.remove("active")); o.classList.add("active"); }; pg.appendChild(o); }); pg.id = "pg"; c.appendChild(pg);
+    c.appendChild(el("div", null, `<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("format")}</label>`)).style.marginTop = "12px";
+    const fg = el("div", "opt-grid"); fg.style.margin = "8px 0";
+    FORMATS.forEach((p, i) => { const o = el("div", "opt" + (i === 2 ? " active" : ""), p); o.dataset.fmt = p; o.onclick = () => { $$("#fg .opt").forEach(x => x.classList.remove("active")); o.classList.add("active"); }; fg.appendChild(o); }); fg.id = "fg"; c.appendChild(fg);
     // toggles
-    [["tiled","exportTiled"],["regMarks","exportRegMarks"]].forEach(([k,sk])=>{
-      const v = state[sk]!==false; // default on
-      const r=el("label","set-row"); r.innerHTML=`<span class="sl">${T(k)}</span>`;
-      const sw=el("span","switch",`<input type="checkbox" ${v?"checked":""}><span class="track"></span>`); r.appendChild(sw);
-      sw.querySelector("input").onchange=(e)=>{ state[sk]=e.target.checked; save(); };
+    [["tiled", "exportTiled"], ["regMarks", "exportRegMarks"]].forEach(([k, sk]) => {
+      const v = state[sk] !== false; // default on
+      const r = el("label", "set-row"); r.innerHTML = `<span class="sl">${T(k)}</span>`;
+      const sw = el("span", "switch", `<input type="checkbox" ${v ? "checked" : ""}><span class="track"></span>`); r.appendChild(sw);
+      sw.querySelector("input").onchange = (e) => { state[sk] = e.target.checked; save(); };
       c.appendChild(r);
     });
-    c.appendChild(el("div",null,`<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("dpi")}</label>`)).style.marginTop="10px";
-    const dpiRow=el("div","opt-grid"); dpiRow.style.margin="8px 0";
-    [150,300,600].forEach(d=>{
-      const o=el("div","opt"+((state.exportDpi||300)===d?" active":""),String(d));
-      o.onclick=()=>{ $$("#dpiRow .opt").forEach(x=>x.classList.remove("active")); o.classList.add("active"); state.exportDpi=d; save(); };
+    c.appendChild(el("div", null, `<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("dpi")}</label>`)).style.marginTop = "10px";
+    const dpiRow = el("div", "opt-grid"); dpiRow.style.margin = "8px 0";
+    [150, 300, 600].forEach(d => {
+      const o = el("div", "opt" + ((state.exportDpi || 300) === d ? " active" : ""), String(d));
+      o.onclick = () => { $$("#dpiRow .opt").forEach(x => x.classList.remove("active")); o.classList.add("active"); state.exportDpi = d; save(); };
       dpiRow.appendChild(o);
-    }); dpiRow.id="dpiRow"; c.appendChild(dpiRow);
-    c.appendChild(el("div","help-note",T("dpiNote")));
+    }); dpiRow.id = "dpiRow"; c.appendChild(dpiRow);
+    c.appendChild(el("div", "help-note", T("dpiNote")));
     // fabric + cost
-    c.appendChild(el("div","section-title",null)).textContent=T("fabricCalc");
-    const meas=currentMeas();
-    const yards = state.lastMarkerYards!=null
+    c.appendChild(el("div", "section-title", null)).textContent = T("fabricCalc");
+    const meas = currentMeas();
+    const yards = state.lastMarkerYards != null
       ? state.lastMarkerYards.toFixed(2)
-      : ((meas.height/100)* (state.category==="women"?1.8:1.5)).toFixed(2);
-    c.appendChild(el("div","help-note",
-      state.lastMarkerYards!=null
-        ? `${T("fabric")}: <b>${yards} m</b> @ ${state.lastMarkerWidth||160}cm — ${T("markerYardageSrc")}`
+      : ((meas.height / 100) * (state.category === "women" ? 1.8 : 1.5)).toFixed(2);
+    c.appendChild(el("div", "help-note",
+      state.lastMarkerYards != null
+        ? `${T("fabric")}: <b>${yards} m</b> @ ${state.lastMarkerWidth || 160}cm — ${T("markerYardageSrc")}`
         : `${T("fabric")}: <b>${yards} m</b> @ 150cm`));
-    const mkBtn=el("button","big-btn ghost",IC.cube+T("createMarker")); mkBtn.style.marginTop="8px"; mkBtn.onclick=openMarkerModal; c.appendChild(mkBtn);
-    c.appendChild(el("div","section-title",null)).textContent=T("costEst");
-    c.appendChild(el("div",null,`<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("costCurrency")}</label>`)).style.marginTop="4px";
-    const curRow=el("div","opt-grid"); curRow.style.margin="8px 0";
-    Object.keys(CURRENCIES).forEach(code=>{
-      const o=el("div","opt"+((state.costCurrency||"USD")===code?" active":""), CURRENCIES[code].label);
-      o.onclick=()=>{ state.costCurrency=code; save(); renderExportPane(); };
+    const mkBtn = el("button", "big-btn ghost", IC.cube + T("createMarker")); mkBtn.style.marginTop = "8px"; mkBtn.onclick = openMarkerModal; c.appendChild(mkBtn);
+    c.appendChild(el("div", "section-title", null)).textContent = T("costEst");
+    c.appendChild(el("div", null, `<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("costCurrency")}</label>`)).style.marginTop = "4px";
+    const curRow = el("div", "opt-grid"); curRow.style.margin = "8px 0";
+    Object.keys(CURRENCIES).forEach(code => {
+      const o = el("div", "opt" + ((state.costCurrency || "USD") === code ? " active" : ""), CURRENCIES[code].label);
+      o.onclick = () => { state.costCurrency = code; save(); renderExportPane(); };
       curRow.appendChild(o);
     });
     c.appendChild(curRow);
-    const cur = CURRENCIES[state.costCurrency||"USD"];
-    const fmt = usd => `${cur.symbol}${(usd*cur.rate).toFixed(2)}`;
-    const fabricCostUsd=+(yards*8).toFixed(2), trimsUsd=6.5, laborUsd=15;
-    const cost=el("div");
-    cost.appendChild(el("div","cost-row",`<span>${T("fabric")}</span><b>${fmt(fabricCostUsd)}</b>`));
-    cost.appendChild(el("div","cost-row",`<span>${T("trims")}</span><b>${fmt(trimsUsd)}</b>`));
-    cost.appendChild(el("div","cost-row",`<span>${T("labor")}</span><b>${fmt(laborUsd)}</b>`));
-    cost.appendChild(el("div","cost-row total",`<span>${T("total")}</span><b>${fmt(fabricCostUsd+trimsUsd+laborUsd)}</b>`));
+    const cur = CURRENCIES[state.costCurrency || "USD"];
+    const fmt = usd => `${cur.symbol}${(usd * cur.rate).toFixed(2)}`;
+    const fabricCostUsd = +(yards * 8).toFixed(2), trimsUsd = 6.5, laborUsd = 15;
+    const cost = el("div");
+    cost.appendChild(el("div", "cost-row", `<span>${T("fabric")}</span><b>${fmt(fabricCostUsd)}</b>`));
+    cost.appendChild(el("div", "cost-row", `<span>${T("trims")}</span><b>${fmt(trimsUsd)}</b>`));
+    cost.appendChild(el("div", "cost-row", `<span>${T("labor")}</span><b>${fmt(laborUsd)}</b>`));
+    cost.appendChild(el("div", "cost-row total", `<span>${T("total")}</span><b>${fmt(fabricCostUsd + trimsUsd + laborUsd)}</b>`));
     c.appendChild(cost);
-    if((state.costCurrency||"USD")!=="USD") c.appendChild(el("div","help-note",T("costRateNote")));
-    const ex=el("button","big-btn",IC.download+T("exportNow")); ex.style.marginTop="14px"; ex.onclick=doExport; c.appendChild(ex);
-    const tp=el("button","big-btn ghost",T("techPack")); tp.style.marginTop="8px"; tp.onclick=()=>techPack(); c.appendChild(tp);
-    const ps=el("button","big-btn ghost",IC.printer+T("patternSummary")); ps.style.marginTop="8px"; ps.onclick=()=>exportSummary(); c.appendChild(ps);
-    c.appendChild(el("div","help-note",T("patternSummaryD"))).style.marginTop="6px";
-    const bo=el("button","big-btn ghost",T("bom")); bo.style.marginTop="10px"; bo.onclick=()=>exportBom(); c.appendChild(bo);
-    const si=el("button","big-btn ghost",T("sewInstrTitle")); si.style.marginTop="8px"; si.onclick=()=>exportSewingInstructions(); c.appendChild(si);
-    c.appendChild(el("div","help-note",T("sewInstrD"))).style.marginTop="6px";
-    const fc=el("button","big-btn ghost",T("fitChartTitle")); fc.style.marginTop="8px"; fc.onclick=()=>openFitChartModal(); c.appendChild(fc);
-    c.appendChild(el("div","help-note",T("fitChartD"))).style.marginTop="6px";
-    const cp=el("button","big-btn ghost",T("checkPattern")); cp.style.marginTop="8px"; cp.onclick=()=>runCheckPattern(); c.appendChild(cp);
-    const ws=el("button","big-btn ghost",T("walkSeam")); ws.style.marginTop="8px"; ws.onclick=()=>openWalkSeamModal(); c.appendChild(ws);
-    const reviewEvidence=el("button","big-btn ghost",T("constructionEvidenceReview")); reviewEvidence.style.marginTop="8px"; reviewEvidence.onclick=openConstructionEvidenceModal; c.appendChild(reviewEvidence);
-    const evidence=el("button","big-btn ghost",T("constructionEvidenceExport")); evidence.style.marginTop="8px"; evidence.onclick=exportConstructionEvidence; c.appendChild(evidence);
-    c.appendChild(el("div","help-note",T("constructionEvidenceExportHint"))).style.marginTop="6px";
+    if ((state.costCurrency || "USD") !== "USD") c.appendChild(el("div", "help-note", T("costRateNote")));
+    const ex = el("button", "big-btn", IC.download + T("exportNow")); ex.style.marginTop = "14px"; ex.onclick = doExport; c.appendChild(ex);
+    const tp = el("button", "big-btn ghost", T("techPack")); tp.style.marginTop = "8px"; tp.onclick = () => techPack(); c.appendChild(tp);
+    const ps = el("button", "big-btn ghost", IC.printer + T("patternSummary")); ps.style.marginTop = "8px"; ps.onclick = () => exportSummary(); c.appendChild(ps);
+    c.appendChild(el("div", "help-note", T("patternSummaryD"))).style.marginTop = "6px";
+    const bo = el("button", "big-btn ghost", T("bom")); bo.style.marginTop = "10px"; bo.onclick = () => exportBom(); c.appendChild(bo);
+    const si = el("button", "big-btn ghost", T("sewInstrTitle")); si.style.marginTop = "8px"; si.onclick = () => exportSewingInstructions(); c.appendChild(si);
+    c.appendChild(el("div", "help-note", T("sewInstrD"))).style.marginTop = "6px";
+    const fc = el("button", "big-btn ghost", T("fitChartTitle")); fc.style.marginTop = "8px"; fc.onclick = () => openFitChartModal(); c.appendChild(fc);
+    c.appendChild(el("div", "help-note", T("fitChartD"))).style.marginTop = "6px";
+    const cp = el("button", "big-btn ghost", T("checkPattern")); cp.style.marginTop = "8px"; cp.onclick = () => runCheckPattern(); c.appendChild(cp);
+    const ws = el("button", "big-btn ghost", T("walkSeam")); ws.style.marginTop = "8px"; ws.onclick = () => openWalkSeamModal(); c.appendChild(ws);
+    const reviewEvidence = el("button", "big-btn ghost", T("constructionEvidenceReview")); reviewEvidence.style.marginTop = "8px"; reviewEvidence.onclick = openConstructionEvidenceModal; c.appendChild(reviewEvidence);
+    const evidence = el("button", "big-btn ghost", T("constructionEvidenceExport")); evidence.style.marginTop = "8px"; evidence.onclick = exportConstructionEvidence; c.appendChild(evidence);
+    c.appendChild(el("div", "help-note", T("constructionEvidenceExportHint"))).style.marginTop = "6px";
   }
 
   // WP-14: "walk the seam" — scans currently loaded pieces for a pair
@@ -2614,18 +2631,18 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // position highlighted on BOTH edges at once — the visual, interactive
   // front-end over js/geometry.js's seamPointAtFraction (itself the same
   // arc-length technique js/validate.js's notch-alignment check uses).
-  function findSeamPairs(pieces){
+  function findSeamPairs(pieces) {
     const bySeam = {};
-    pieces.forEach((p,i)=>{ (p.edges||[]).forEach(e=>{ (bySeam[e.seamId] ||= []).push({pieceIdx:i, edge:e}); }); });
+    pieces.forEach((p, i) => { (p.edges || []).forEach(e => { (bySeam[e.seamId] ||= []).push({ pieceIdx: i, edge: e }); }); });
     const pairs = [];
-    const dist=(p,q)=>Math.hypot(p[0]-q[0],p[1]-q[1]);
-    Object.entries(bySeam).forEach(([seamId, entries])=>{
-      for(let a=0; a<entries.length; a++) for(let b=a+1; b<entries.length; b++){
-        if(entries[a].pieceIdx===entries[b].pieceIdx) continue;
-        const A=entries[a], B=entries[b];
-        const outlineA=pieces[A.pieceIdx].outline, outlineB=pieces[B.pieceIdx].outline;
-        const startA=outlineA[A.edge.fromIdx], endA=outlineA[A.edge.toIdx];
-        const startB=outlineB[B.edge.fromIdx], endB=outlineB[B.edge.toIdx];
+    const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+    Object.entries(bySeam).forEach(([seamId, entries]) => {
+      for (let a = 0; a < entries.length; a++) for (let b = a + 1; b < entries.length; b++) {
+        if (entries[a].pieceIdx === entries[b].pieceIdx) continue;
+        const A = entries[a], B = entries[b];
+        const outlineA = pieces[A.pieceIdx].outline, outlineB = pieces[B.pieceIdx].outline;
+        const startA = outlineA[A.edge.fromIdx], endA = outlineA[A.edge.toIdx];
+        const startB = outlineB[B.edge.fromIdx], endB = outlineB[B.edge.toIdx];
         // Two edges declaring the same seamId aren't guaranteed to be
         // walked in the same direction (frontCenter's princess curve runs
         // top->hem in its own natural point order; frontSide splices the
@@ -2633,17 +2650,17 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         // endpoint positions rather than trusting fromIdx/toIdx order, and
         // flip B's fraction at draw time so "50%" means the same physical
         // point on both edges regardless of how each was declared.
-        const sameDir = dist(startA,startB)+dist(endA,endB);
-        const oppDir = dist(startA,endB)+dist(startB,endA);
-        pairs.push({seamId, a:A, b:B, bReversed: oppDir < sameDir});
+        const sameDir = dist(startA, startB) + dist(endA, endB);
+        const oppDir = dist(startA, endB) + dist(startB, endA);
+        pairs.push({ seamId, a: A, b: B, bReversed: oppDir < sameDir });
       }
     });
     return pairs;
   }
-  function openWalkSeamModal(){
+  function openWalkSeamModal() {
     const pieces = Canvas.getPieces();
     const pairs = findSeamPairs(pieces);
-    if(!pairs.length){ toast(T("walkSeamNone")); return; }
+    if (!pairs.length) { toast(T("walkSeamNone")); return; }
     const pair = pairs[0];
     const pieceA = pieces[pair.a.pieceIdx], pieceB = pieces[pair.b.pieceIdx];
     // Pieces are drawn at their own independent layoutPieces() position
@@ -2656,75 +2673,75 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // data is never mutated.
     const a0 = seamPointAtFraction(pieceA.outline, pair.a.edge.fromIdx, pair.a.edge.toIdx, 0);
     const b0 = seamPointAtFraction(pieceB.outline, pair.b.edge.fromIdx, pair.b.edge.toIdx, pair.bReversed ? 1 : 0);
-    const alignOffset = [a0[0]-b0[0], a0[1]-b0[1]];
-    const pieceBOutlineAligned = pieceB.outline.map(([x,y])=>[x+alignOffset[0], y+alignOffset[1]]);
+    const alignOffset = [a0[0] - b0[0], a0[1] - b0[1]];
+    const pieceBOutlineAligned = pieceB.outline.map(([x, y]) => [x + alignOffset[0], y + alignOffset[1]]);
     openModal(T("walkSeam"), "", true);
-    const body = $("#genericModal .modal-body"); body.innerHTML="";
-    body.appendChild(el("div","help-note",T("walkSeamHint")+` (${pair.seamId})`));
-    const canvas = el("canvas"); canvas.width=560; canvas.height=420;
-    canvas.style.cssText="width:100%;height:auto;margin-top:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)";
+    const body = $("#genericModal .modal-body"); body.innerHTML = "";
+    body.appendChild(el("div", "help-note", T("walkSeamHint") + ` (${pair.seamId})`));
+    const canvas = el("canvas"); canvas.width = 560; canvas.height = 420;
+    canvas.style.cssText = "width:100%;height:auto;margin-top:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)";
     body.appendChild(canvas);
-    const sliderRow = el("div","row"); sliderRow.style.cssText="display:flex;align-items:center;gap:10px;margin-top:12px";
-    const slider = el("input"); slider.type="range"; slider.min="0"; slider.max="100"; slider.value="50"; slider.style.flex="1";
-    const pctLbl = el("span",null,"50%"); pctLbl.style.cssText="min-width:3em;text-align:right;font-weight:600";
+    const sliderRow = el("div", "row"); sliderRow.style.cssText = "display:flex;align-items:center;gap:10px;margin-top:12px";
+    const slider = el("input"); slider.type = "range"; slider.min = "0"; slider.max = "100"; slider.value = "50"; slider.style.flex = "1";
+    const pctLbl = el("span", null, "50%"); pctLbl.style.cssText = "min-width:3em;text-align:right;font-weight:600";
     sliderRow.appendChild(slider); sliderRow.appendChild(pctLbl); body.appendChild(sliderRow);
 
     const draw = () => {
-      const frac = (+slider.value)/100; pctLbl.textContent = slider.value+"%";
+      const frac = (+slider.value) / 100; pctLbl.textContent = slider.value + "%";
       const ptA = seamPointAtFraction(pieceA.outline, pair.a.edge.fromIdx, pair.a.edge.toIdx, frac);
-      const ptBraw = seamPointAtFraction(pieceB.outline, pair.b.edge.fromIdx, pair.b.edge.toIdx, pair.bReversed ? 1-frac : frac);
-      const ptB = [ptBraw[0]+alignOffset[0], ptBraw[1]+alignOffset[1]];
-      const ctx = canvas.getContext("2d"); const W=canvas.width, H=canvas.height;
-      ctx.clearRect(0,0,W,H);
+      const ptBraw = seamPointAtFraction(pieceB.outline, pair.b.edge.fromIdx, pair.b.edge.toIdx, pair.bReversed ? 1 - frac : frac);
+      const ptB = [ptBraw[0] + alignOffset[0], ptBraw[1] + alignOffset[1]];
+      const ctx = canvas.getContext("2d"); const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
       const allPts = [...pieceA.outline, ...pieceBOutlineAligned];
-      const xs=allPts.map(p=>p[0]), ys=allPts.map(p=>p[1]);
-      const minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
-      const scale = Math.min((W-40)/Math.max(maxX-minX,1), (H-40)/Math.max(maxY-minY,1));
-      ctx.save(); ctx.translate(20-minX*scale, 20-minY*scale);
-      [ [pieceA.outline,"#6d5efc"], [pieceBOutlineAligned,"#00c2a8"] ].forEach(([outline,color])=>{
-        ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.beginPath();
-        outline.forEach(([x,y],j)=>{ const px=x*scale, py=y*scale; j===0?ctx.moveTo(px,py):ctx.lineTo(px,py); });
+      const xs = allPts.map(p => p[0]), ys = allPts.map(p => p[1]);
+      const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+      const scale = Math.min((W - 40) / Math.max(maxX - minX, 1), (H - 40) / Math.max(maxY - minY, 1));
+      ctx.save(); ctx.translate(20 - minX * scale, 20 - minY * scale);
+      [[pieceA.outline, "#6d5efc"], [pieceBOutlineAligned, "#00c2a8"]].forEach(([outline, color]) => {
+        ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.beginPath();
+        outline.forEach(([x, y], j) => { const px = x * scale, py = y * scale; j === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); });
         ctx.closePath(); ctx.stroke();
       });
-      [ [ptA,"#6d5efc"], [ptB,"#00c2a8"] ].forEach(([pt,color])=>{
-        ctx.beginPath(); ctx.arc(pt[0]*scale, pt[1]*scale, 6, 0, Math.PI*2);
-        ctx.fillStyle=color; ctx.fill(); ctx.strokeStyle="#1a1a1a"; ctx.lineWidth=1.5; ctx.stroke();
+      [[ptA, "#6d5efc"], [ptB, "#00c2a8"]].forEach(([pt, color]) => {
+        ctx.beginPath(); ctx.arc(pt[0] * scale, pt[1] * scale, 6, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill(); ctx.strokeStyle = "#1a1a1a"; ctx.lineWidth = 1.5; ctx.stroke();
       });
       ctx.restore();
     };
     slider.oninput = draw; draw();
   }
 
-  function doExport(){
-    const fmt=($("#fg .opt.active")||{}).dataset?.fmt||"SVG";
+  function doExport() {
+    const fmt = ($("#fg .opt.active") || {}).dataset?.fmt || "SVG";
     exportAs(fmt);
   }
   // Paper sizes that are actual home-printer page formats — tiling only
   // makes sense for these; A0-A3/Plotter/Custom are already large-format.
   const TILEABLE_PAPER_TO_PAGESIZE = { A4: "a4", Letter: "letter" };
-  function currentExportPdfOpts(){
-    const paper = ($("#pg .opt.active")||{}).textContent || "A4";
+  function currentExportPdfOpts() {
+    const paper = ($("#pg .opt.active") || {}).textContent || "A4";
     const pageSize = TILEABLE_PAPER_TO_PAGESIZE[paper];
-    const tiled = !!(state.exportTiled!==false && pageSize);
-    return { tiled, pageSize: pageSize||"a4", overlapMm: 10, includeGuides: state.exportRegMarks!==false };
+    const tiled = !!(state.exportTiled !== false && pageSize);
+    return { tiled, pageSize: pageSize || "a4", overlapMm: 10, includeGuides: state.exportRegMarks !== false };
   }
   // Fallback Wavefront .obj exporter from 2D pattern panels (in meters) when
   // 3D WebGL scene has not yet been initialized, ensuring .OBJ export works 100%.
-  function buildFlatOBJFromPieces(pieces){
+  function buildFlatOBJFromPieces(pieces) {
     let obj = "# BerryStudio Pattern Panel Mesh (.OBJ, units: meters)\n";
     let vOff = 1;
-    pieces.forEach((p, idx)=>{
+    pieces.forEach((p, idx) => {
       const o = p.outline || [];
-      if(o.length < 3) return;
-      const safeName = String((p.name&&p.name.en)||p.key||`piece_${idx+1}`).replace(/[^A-Za-z0-9_-]+/g,"_");
+      if (o.length < 3) return;
+      const safeName = String((p.name && p.name.en) || p.key || `piece_${idx + 1}`).replace(/[^A-Za-z0-9_-]+/g, "_");
       obj += `o ${safeName}\n`;
-      const cx = o.reduce((s,pt)=>s+pt[0],0)/o.length;
-      const cy = o.reduce((s,pt)=>s+pt[1],0)/o.length;
-      obj += `v ${(cx*0.01).toFixed(5)} ${(-cy*0.01).toFixed(5)} 0.00000\n`;
-      o.forEach(([x,y])=>{ obj += `v ${(x*0.01).toFixed(5)} ${(-y*0.01).toFixed(5)} 0.00000\n`; });
-      for(let i=0; i<o.length; i++){
+      const cx = o.reduce((s, pt) => s + pt[0], 0) / o.length;
+      const cy = o.reduce((s, pt) => s + pt[1], 0) / o.length;
+      obj += `v ${(cx * 0.01).toFixed(5)} ${(-cy * 0.01).toFixed(5)} 0.00000\n`;
+      o.forEach(([x, y]) => { obj += `v ${(x * 0.01).toFixed(5)} ${(-y * 0.01).toFixed(5)} 0.00000\n`; });
+      for (let i = 0; i < o.length; i++) {
         const a = vOff + 1 + i;
-        const b = vOff + 1 + ((i+1)%o.length);
+        const b = vOff + 1 + ((i + 1) % o.length);
         obj += `f ${vOff} ${a} ${b}\n`;
       }
       vOff += o.length + 1;
@@ -2733,16 +2750,16 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     return obj;
   }
   // Central exporter used by Export pane, AI Atelier Deliverables Hub, and Project menu.
-  function exportAs(fmt){
-    const F=(fmt||"SVG").toUpperCase();
+  function exportAs(fmt) {
+    const F = (fmt || "SVG").toUpperCase();
     // WP-42 Stage B: every real export format is gated except "JSON" (the
     // Project menu's "Save Project" — local pattern persistence, not the
     // "Export" surface plan v3.2 §6 names). Checked before the empty-canvas
     // guard below so a gated user sees the sign-in/upgrade prompt rather
     // than a misleading "nothing to export" toast.
-    if(F!=="JSON" && !requireEntitlement()) return;
+    if (F !== "JSON" && !requireEntitlement()) return;
     const pieces = Canvas.getPieces();
-    if(!pieces.length){ toast(T("empty2d")); return; }
+    if (!pieces.length) { toast(T("empty2d")); return; }
     const meta = {
       title: activeProject()?.title || "BerryStudio Pattern",
       category: state.category,
@@ -2752,97 +2769,97 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       measurements: currentMeas(),
       lang: state.lang,
     };
-    if(F==="SVG"){
+    if (F === "SVG") {
       const svg = buildSVG(pieces, {
         preservePositions: true,
-        seamAllowanceCm: Canvas.getOpt("seam")!==false ? (state.seamCm||1) : 0,
+        seamAllowanceCm: Canvas.getOpt("seam") !== false ? (state.seamCm || 1) : 0,
         lang: state.lang,
         title: meta.title,
       });
-      download("berrystudio-pattern.svg","image/svg+xml", svg || Canvas.exportSVG());
+      download("berrystudio-pattern.svg", "image/svg+xml", svg || Canvas.exportSVG());
     }
-    else if(F==="DXF") download("berrystudio-pattern.dxf","application/dxf",Canvas.exportDXF());
-    else if(F==="HPGL")download("berrystudio-pattern.hpgl","application/vnd.hp-hpgl",Canvas.exportHPGL());
-    else if(F==="PLT") download("berrystudio-pattern.plt","application/PLT",Canvas.exportHPGL());
-    else if(F==="PDF"){ const p=Canvas.exportPDF(currentExportPdfOpts()); if(!p){toast(T("empty2d"));return;} download("berrystudio-pattern.pdf","application/pdf",p); }
-    else if(F==="PDF_1TO1"){ const p=Canvas.exportPDF({ tiled:false, includeGuides:state.exportRegMarks!==false }); if(!p){toast(T("empty2d"));return;} download("berrystudio-pattern-1to1.pdf","application/pdf",p); }
-    else if(F==="EPS") download("berrystudio-pattern.eps","application/postscript",buildEPS(pieces,{ preservePositions:true, title:meta.title, lang:state.lang }));
-    else if(F==="AI"){
-      const p=Canvas.exportPDF({ tiled:false, includeGuides:false }); if(!p){toast(T("empty2d"));return;}
-      const ai=`%!PS-Adobe-3.0\n%%Creator: Adobe Illustrator(R) 24.0\n%%AI8_CreatorVersion: 24.0\n%%For: BerryStudio\n${p}`;
-      download("berrystudio-pattern.ai","application/postscript",ai);
+    else if (F === "DXF") download("berrystudio-pattern.dxf", "application/dxf", Canvas.exportDXF());
+    else if (F === "HPGL") download("berrystudio-pattern.hpgl", "application/vnd.hp-hpgl", Canvas.exportHPGL());
+    else if (F === "PLT") download("berrystudio-pattern.plt", "application/PLT", Canvas.exportHPGL());
+    else if (F === "PDF") { const p = Canvas.exportPDF(currentExportPdfOpts()); if (!p) { toast(T("empty2d")); return; } download("berrystudio-pattern.pdf", "application/pdf", p); }
+    else if (F === "PDF_1TO1") { const p = Canvas.exportPDF({ tiled: false, includeGuides: state.exportRegMarks !== false }); if (!p) { toast(T("empty2d")); return; } download("berrystudio-pattern-1to1.pdf", "application/pdf", p); }
+    else if (F === "EPS") download("berrystudio-pattern.eps", "application/postscript", buildEPS(pieces, { preservePositions: true, title: meta.title, lang: state.lang }));
+    else if (F === "AI") {
+      const p = Canvas.exportPDF({ tiled: false, includeGuides: false }); if (!p) { toast(T("empty2d")); return; }
+      const ai = `%!PS-Adobe-3.0\n%%Creator: Adobe Illustrator(R) 24.0\n%%AI8_CreatorVersion: 24.0\n%%For: BerryStudio\n${p}`;
+      download("berrystudio-pattern.ai", "application/postscript", ai);
     }
-    else if(F==="PNG"||F==="JPEG"||F==="JPG"){
-      const rFmt = F==="JPG" ? "jpeg" : F.toLowerCase();
-      Canvas.exportRaster(rFmt, state.exportDpi||300).then(res=>{
-        if(!res){toast(T("empty2d"));return;}
-        const u=URL.createObjectURL(res.blob); const a=el("a");a.href=u;a.download=`berrystudio-pattern.${rFmt==="jpeg"?"jpg":rFmt}`;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
-        toast(res.clamped ? T("exported")+" · "+F+" ("+Math.round(res.dpi)+" "+T("dpiClamped")+")" : T("exported")+" · "+F);
-      }).catch(()=>toast(T("rasterFailed")));
+    else if (F === "PNG" || F === "JPEG" || F === "JPG") {
+      const rFmt = F === "JPG" ? "jpeg" : F.toLowerCase();
+      Canvas.exportRaster(rFmt, state.exportDpi || 300).then(res => {
+        if (!res) { toast(T("empty2d")); return; }
+        const u = URL.createObjectURL(res.blob); const a = el("a"); a.href = u; a.download = `berrystudio-pattern.${rFmt === "jpeg" ? "jpg" : rFmt}`; a.click(); setTimeout(() => URL.revokeObjectURL(u), 1000);
+        toast(res.clamped ? T("exported") + " · " + F + " (" + Math.round(res.dpi) + " " + T("dpiClamped") + ")" : T("exported") + " · " + F);
+      }).catch(() => toast(T("rasterFailed")));
       return;
     }
-    else if(F==="CSV") download("berrystudio-cut-spec.csv","text/csv;charset=utf-8",buildSpecCSV(pieces,meta));
-    else if(F==="HTML"||F==="TECHPACK_HTML") download("berrystudio-techpack.html","text/html;charset=utf-8",buildTechPackHTML(pieces,meta));
-    else if(F==="MD"||F==="TECHPACK_MD") download("berrystudio-techpack.md","text/markdown;charset=utf-8",buildTechPackMarkdown(pieces,meta));
-    else if(F==="OBJ"){
-      if(View3D.isReady()){
+    else if (F === "CSV") download("berrystudio-cut-spec.csv", "text/csv;charset=utf-8", buildSpecCSV(pieces, meta));
+    else if (F === "HTML" || F === "TECHPACK_HTML") download("berrystudio-techpack.html", "text/html;charset=utf-8", buildTechPackHTML(pieces, meta));
+    else if (F === "MD" || F === "TECHPACK_MD") download("berrystudio-techpack.md", "text/markdown;charset=utf-8", buildTechPackMarkdown(pieces, meta));
+    else if (F === "OBJ") {
+      if (View3D.isReady()) {
         build3D();
         const exported = View3D.exportOBJ("berrystudio-garment.obj");
-        if(exported){ toast(T("exported")+" · OBJ"); return; }
+        if (exported) { toast(T("exported") + " · OBJ"); return; }
       }
-      download("berrystudio-garment.obj","model/obj",buildFlatOBJFromPieces(pieces));
+      download("berrystudio-garment.obj", "model/obj", buildFlatOBJFromPieces(pieces));
     }
-    else if(F==="JSON")download("berrystudio-project.json","application/json",JSON.stringify(projectPayload(),null,2));
-    else               download(`berrystudio-pattern.${F.toLowerCase()}`,"image/svg+xml",Canvas.exportSVG());
-    toast(T("exported")+" · "+F);
+    else if (F === "JSON") download("berrystudio-project.json", "application/json", JSON.stringify(projectPayload(), null, 2));
+    else download(`berrystudio-pattern.${F.toLowerCase()}`, "image/svg+xml", Canvas.exportSVG());
+    toast(T("exported") + " · " + F);
   }
-  function download(name,type,data){ const b=new Blob([data],{type}); const u=URL.createObjectURL(b); const a=el("a");a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000); }
-  function exportConstructionEvidence(){
-    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
-    const report=createConstructionEvidenceRecord(projectPayload());
-    download("berrystudio-construction-evidence.json","application/json",JSON.stringify(report,null,2));
+  function download(name, type, data) { const b = new Blob([data], { type }); const u = URL.createObjectURL(b); const a = el("a"); a.href = u; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(u), 1000); }
+  function exportConstructionEvidence() {
+    if (!Canvas.getPieces().length) { toast(T("empty2d")); return; }
+    const report = createConstructionEvidenceRecord(projectPayload());
+    download("berrystudio-construction-evidence.json", "application/json", JSON.stringify(report, null, 2));
     toast(T("constructionEvidenceExported"));
   }
-  function openConstructionEvidenceModal(){
-    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
-    const report=createConstructionEvidenceRecord(projectPayload());
+  function openConstructionEvidenceModal() {
+    if (!Canvas.getPieces().length) { toast(T("empty2d")); return; }
+    const report = createConstructionEvidenceRecord(projectPayload());
     openModal(T("constructionEvidenceTitle"), "", true);
-    const body=$("#genericModal .modal-body");
-    const decisionKey={
-      'side-seam-checked':'constructionEvidenceChecked',
-      'needs-construction-evidence':'constructionEvidenceMissing',
-      'not-applicable':'constructionEvidenceUnavailable',
+    const body = $("#genericModal .modal-body");
+    const decisionKey = {
+      'side-seam-checked': 'constructionEvidenceChecked',
+      'needs-construction-evidence': 'constructionEvidenceMissing',
+      'not-applicable': 'constructionEvidenceUnavailable',
     }[report.assessment.decision] || 'constructionEvidenceMissing';
-    body.appendChild(el("p","help-note",T(decisionKey)));
-    if(report.assessment.checks.length){
-      body.appendChild(el("h3",null,T("constructionEvidenceChecks")));
-      const list=el("ul");
-      for(const check of report.assessment.checks){
-        const [first,second]=check.lengthsCm.map(value=>value.toFixed(1));
-        list.appendChild(el("li",null,`${T("constructionEvidenceSeam")} ${check.seamId}: ${first} cm / ${second} cm · ${check.differenceMm.toFixed(1)} mm`));
+    body.appendChild(el("p", "help-note", T(decisionKey)));
+    if (report.assessment.checks.length) {
+      body.appendChild(el("h3", null, T("constructionEvidenceChecks")));
+      const list = el("ul");
+      for (const check of report.assessment.checks) {
+        const [first, second] = check.lengthsCm.map(value => value.toFixed(1));
+        list.appendChild(el("li", null, `${T("constructionEvidenceSeam")} ${check.seamId}: ${first} cm / ${second} cm · ${check.differenceMm.toFixed(1)} mm`));
       }
       body.appendChild(list);
     }
-    if(report.assessment.blockers.length){
-      body.appendChild(el("h3",null,T("constructionEvidenceBlockers")));
-      const list=el("ul");
-      for(const blocker of report.assessment.blockers) list.appendChild(el("li",null,T(blocker)));
+    if (report.assessment.blockers.length) {
+      body.appendChild(el("h3", null, T("constructionEvidenceBlockers")));
+      const list = el("ul");
+      for (const blocker of report.assessment.blockers) list.appendChild(el("li", null, T(blocker)));
       body.appendChild(list);
     }
     body.append(
-      el("p",null,`${T("constructionEvidenceMaker")}: ${T("constructionEvidenceNotRecorded")}`),
-      el("p",null,`${T("constructionEvidenceSample")}: ${T("constructionEvidenceNotRecorded")}`),
-      el("p",null,`${T("constructionEvidenceProduction")}: ${T("constructionEvidenceNotEligible")}`),
-      el("p","help-note",T("constructionEvidenceReviewHint")),
+      el("p", null, `${T("constructionEvidenceMaker")}: ${T("constructionEvidenceNotRecorded")}`),
+      el("p", null, `${T("constructionEvidenceSample")}: ${T("constructionEvidenceNotRecorded")}`),
+      el("p", null, `${T("constructionEvidenceProduction")}: ${T("constructionEvidenceNotEligible")}`),
+      el("p", "help-note", T("constructionEvidenceReviewHint")),
     );
-    const close=el("button","big-btn ghost",T("okLbl")); close.onclick=()=>closeModal("#genericModal"); body.appendChild(close);
+    const close = el("button", "big-btn ghost", T("okLbl")); close.onclick = () => closeModal("#genericModal"); body.appendChild(close);
   }
 
   // ---- Project menu actions ----
-  function newProject(){
-    Canvas.clearAll(); state.loaded=null; aiImage=null;
+  function newProject() {
+    Canvas.clearAll(); state.loaded = null; aiImage = null;
     showEmpty(); renderLayersPane(); renderAIPane();
-    if(is3DActive()) build3D();
+    if (is3DActive()) build3D();
     save(); toast(T("newDone"));
   }
 
@@ -2853,13 +2870,13 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // UNCHANGED — every one of them just edits "whatever the current active
   // tab's canvas is", and this file's own save() (already called after all
   // of those) keeps that tab's stored snapshot in sync automatically.
-  let projectSeq = Math.max(0, ...state.projects.map(p=>Number(p.id)||0)) + 1;
-  function activeProject(){ return state.projects.find(p=>p.id===state.activeProjectId) || null; }
+  let projectSeq = Math.max(0, ...state.projects.map(p => Number(p.id) || 0)) + 1;
+  function activeProject() { return state.projects.find(p => p.id === state.activeProjectId) || null; }
   // Refresh the active tab's stored snapshot from the live canvas — see
   // save()'s own comment for why this runs from there rather than at every
   // individual mutation site.
-  function syncActiveProjectSnapshot(){
-    const p = activeProject(); if(!p || !projectsReady) return;
+  function syncActiveProjectSnapshot() {
+    const p = activeProject(); if (!p || !projectsReady) return;
     p.snapshot = Canvas.snapshotState();
     p.history = Canvas.getHistory();
     p.loaded = state.loaded;
@@ -2868,27 +2885,29 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // Named-profile snapshots are immutable evidence. Working snapshots,
     // however, must follow every size/standard/category/manual edit so a
     // tab switch or JSON export can never retain stale measurements.
-    if(isWorkingMeasurementSnapshot(p.measurementProfileSnapshot)) {
-      p.measurementProfileSnapshot=currentWorkingMeasurementSnapshot(p.measurementProfileSnapshot);
+    if (isWorkingMeasurementSnapshot(p.measurementProfileSnapshot)) {
+      p.measurementProfileSnapshot = currentWorkingMeasurementSnapshot(p.measurementProfileSnapshot);
     }
     // Auto-title from the loaded library pattern's own name, like a
     // browser tab's title tracking the page — unless the user has
     // explicitly renamed this tab (double-click), which always wins.
-    if(!p.customTitle) p.title = p.loaded ? L((PATTERNS[p.loaded]||{}).name) || p.title : (p.title || T("untitledProject"));
+    if (!p.customTitle) p.title = p.loaded ? L((PATTERNS[p.loaded] || {}).name) || p.title : (p.title || T("untitledProject"));
   }
   // Called once at boot, after the initial pattern has finished loading
   // (see init()'s setTimeout). Seeds a single tab from whatever's already
   // in Canvas for a first-ever run or an existing user's pre-Project-Tabs
   // saved state (no `projects` in their "pps" blob) — either way, zero
   // data loss, zero required action from the user.
-  function initProjectTabs(){
-    if(!state.projects.length){
-      const p = { id: projectSeq++, title: state.loaded ? (L((PATTERNS[state.loaded]||{}).name)||T("untitledProject")) : T("untitledProject"), customTitle:false,
+  function initProjectTabs() {
+    if (!state.projects.length) {
+      const p = {
+        id: projectSeq++, title: state.loaded ? (L((PATTERNS[state.loaded] || {}).name) || T("untitledProject")) : T("untitledProject"), customTitle: false,
         snapshot: Canvas.snapshotState(), history: Canvas.getHistory(), loaded: state.loaded, category: state.category, aiImage,
-        measurementProfileSnapshot: workingMeasurementSnapshot() };
+        measurementProfileSnapshot: workingMeasurementSnapshot()
+      };
       state.projects.push(p);
       state.activeProjectId = p.id;
-    } else if(!activeProject()){
+    } else if (!activeProject()) {
       // stale/corrupted activeProjectId (e.g. edited storage) — fall back
       // to the first tab rather than showing a blank canvas with no tab
       // highlighted as active.
@@ -2898,199 +2917,204 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     }
     renderProjectTabs();
   }
-  function switchToProject(id){
-    if(id===state.activeProjectId) return;
+  function switchToProject(id) {
+    if (id === state.activeProjectId) return;
     syncActiveProjectSnapshot();
-    const target = state.projects.find(p=>p.id===id); if(!target) return;
+    const target = state.projects.find(p => p.id === id); if (!target) return;
     state.activeProjectId = id;
     Canvas.restoreState(target.snapshot);
     Canvas.setHistory(target.history);
-    state.loaded = target.loaded||null;
-    if(target.category && target.category!==state.category){
-      state.category=target.category; syncCategoryUI();
-      if(!state.avatarCategoryExplicit){
+    state.loaded = target.loaded || null;
+    if (target.category && target.category !== state.category) {
+      state.category = target.category; syncCategoryUI();
+      if (!state.avatarCategoryExplicit) {
         state.avatarCategory = target.category;
         const sel = $("#v3dModelSelect");
         if (sel) sel.value = target.category;
       }
     }
-    if(target.measurementProfileSnapshot){
+    if (target.measurementProfileSnapshot) {
       try {
-        target.measurementProfileSnapshot=snapshotMeasurementProfile(target.measurementProfileSnapshot,target.measurementProfileSnapshot.selectedAt);
+        target.measurementProfileSnapshot = snapshotMeasurementProfile(target.measurementProfileSnapshot, target.measurementProfileSnapshot.selectedAt);
         applyMeasurementSnapshotToState(target.measurementProfileSnapshot);
-        state.selectedMeasurementProfileId=state.measurementProfiles.some(profile=>profile.id===target.measurementProfileSnapshot.id)?target.measurementProfileSnapshot.id:null;
-      } catch { target.measurementProfileSnapshot=workingMeasurementSnapshot(); state.selectedMeasurementProfileId=null; }
-    } else { target.measurementProfileSnapshot=workingMeasurementSnapshot(); state.selectedMeasurementProfileId=null; }
+        state.selectedMeasurementProfileId = state.measurementProfiles.some(profile => profile.id === target.measurementProfileSnapshot.id) ? target.measurementProfileSnapshot.id : null;
+      } catch { target.measurementProfileSnapshot = workingMeasurementSnapshot(); state.selectedMeasurementProfileId = null; }
+    } else { target.measurementProfileSnapshot = workingMeasurementSnapshot(); state.selectedMeasurementProfileId = null; }
     lastGradedMeas = { ...currentMeas() };
-    aiImage = target.aiImage||null;
-    if(Canvas.getPieces().length) hideEmpty(); else showEmpty();
+    aiImage = target.aiImage || null;
+    if (Canvas.getPieces().length) hideEmpty(); else showEmpty();
     renderLayersPane(); renderAIPane(); renderSizePane(); renderMeasurePane();
-    if(is3DActive()) build3D();
+    if (is3DActive()) build3D();
     update3DStatusPill();
     renderProjectTabs();
     save();
   }
-  function newProjectTab(){
+  function newProjectTab() {
     syncActiveProjectSnapshot();
     Canvas.clearAll();
-    Canvas.setHistory({undo:[],redo:[]});
-    state.loaded=null; aiImage=null;
+    Canvas.setHistory({ undo: [], redo: [] });
+    state.loaded = null; aiImage = null;
     lastGradedMeas = { ...currentMeas() };
-    const p = { id: projectSeq++, title: T("untitledProject"), customTitle:false,
-      snapshot: Canvas.snapshotState(), history: Canvas.getHistory(), loaded:null, category: state.category, aiImage:null,
-      measurementProfileSnapshot: workingMeasurementSnapshot() };
+    const p = {
+      id: projectSeq++, title: T("untitledProject"), customTitle: false,
+      snapshot: Canvas.snapshotState(), history: Canvas.getHistory(), loaded: null, category: state.category, aiImage: null,
+      measurementProfileSnapshot: workingMeasurementSnapshot()
+    };
     state.projects.push(p);
     state.activeProjectId = p.id;
     showEmpty(); renderLayersPane(); renderAIPane();
-    if(is3DActive()) build3D();
+    if (is3DActive()) build3D();
     update3DStatusPill();
     renderProjectTabs(); save();
     toast(T("newTabOpened"));
   }
-  function closeProjectTab(id){
-    const idx = state.projects.findIndex(p=>p.id===id); if(idx<0) return;
-    if(state.projects.length===1){ toast(T("lastTabCantClose")); return; }
-    const wasActive = state.activeProjectId===id;
-    state.projects.splice(idx,1);
-    if(wasActive){
-      const next = state.projects[Math.max(0, idx-1)];
+  function closeProjectTab(id) {
+    const idx = state.projects.findIndex(p => p.id === id); if (idx < 0) return;
+    if (state.projects.length === 1) { toast(T("lastTabCantClose")); return; }
+    const wasActive = state.activeProjectId === id;
+    state.projects.splice(idx, 1);
+    if (wasActive) {
+      const next = state.projects[Math.max(0, idx - 1)];
       state.activeProjectId = null; // so switchToProject's id===activeProjectId guard doesn't skip the restore
       switchToProject(next.id);
     } else { renderProjectTabs(); save(); }
   }
-  function renameProjectTab(id, title){
-    const p = state.projects.find(x=>x.id===id); if(!p) return;
-    const v=(title||"").trim(); if(!v) return;
-    p.title=v; p.customTitle=true;
+  function renameProjectTab(id, title) {
+    const p = state.projects.find(x => x.id === id); if (!p) return;
+    const v = (title || "").trim(); if (!v) return;
+    p.title = v; p.customTitle = true;
     renderProjectTabs(); update3DStatusPill(); save();
   }
-  function renderProjectTabs(){
-    const bar=$("#projectTabs"); if(!bar) return;
-    bar.innerHTML="";
-    state.projects.forEach(p=>{
-      const tab=el("div","project-tab"+(p.id===state.activeProjectId?" active":""));
-      const label=el("span","project-tab-label"); label.textContent=p.title||T("untitledProject"); label.title=label.textContent;
-      const closeBtn=el("button","project-tab-close","×"); closeBtn.type="button"; closeBtn.title=T("closeTab");
+  function renderProjectTabs() {
+    const bar = $("#projectTabs"); if (!bar) return;
+    bar.innerHTML = "";
+    state.projects.forEach(p => {
+      const tab = el("div", "project-tab" + (p.id === state.activeProjectId ? " active" : ""));
+      const label = el("span", "project-tab-label"); label.textContent = p.title || T("untitledProject"); label.title = label.textContent;
+      const closeBtn = el("button", "project-tab-close", "×"); closeBtn.type = "button"; closeBtn.title = T("closeTab");
       tab.appendChild(label); tab.appendChild(closeBtn);
-      tab.onclick=(e)=>{ if(e.target===closeBtn) return; switchToProject(p.id); };
-      closeBtn.onclick=(e)=>{ e.stopPropagation(); closeProjectTab(p.id); };
-      label.ondblclick=(e)=>{
+      tab.onclick = (e) => { if (e.target === closeBtn) return; switchToProject(p.id); };
+      closeBtn.onclick = (e) => { e.stopPropagation(); closeProjectTab(p.id); };
+      label.ondblclick = (e) => {
         e.stopPropagation();
-        const inp=el("input","project-tab-rename"); inp.value=p.title||"";
-        tab.replaceChild(inp,label); inp.focus(); inp.select();
-        const commit=()=>renameProjectTab(p.id, inp.value);
-        inp.onblur=commit;
-        inp.onkeydown=(ev)=>{ if(ev.key==="Enter") inp.blur(); else if(ev.key==="Escape"){ inp.value=p.title; inp.blur(); } };
+        const inp = el("input", "project-tab-rename"); inp.value = p.title || "";
+        tab.replaceChild(inp, label); inp.focus(); inp.select();
+        const commit = () => renameProjectTab(p.id, inp.value);
+        inp.onblur = commit;
+        inp.onkeydown = (ev) => { if (ev.key === "Enter") inp.blur(); else if (ev.key === "Escape") { inp.value = p.title; inp.blur(); } };
       };
       bar.appendChild(tab);
     });
-    const addBtn=el("button","project-tab-add","+"); addBtn.type="button"; addBtn.title=T("newTab");
-    addBtn.onclick=newProjectTab;
+    const addBtn = el("button", "project-tab-add", "+"); addBtn.type = "button"; addBtn.title = T("newTab");
+    addBtn.onclick = newProjectTab;
     bar.appendChild(addBtn);
   }
 
-  function projectPayload(){
+  function projectPayload() {
     const payload = migrateProject(Canvas.snapshotState());
     delete payload.view;
-    const project=activeProject(), snapshot=project?.measurementProfileSnapshot;
-    payload.measurementProfileSnapshot=isWorkingMeasurementSnapshot(snapshot)?currentWorkingMeasurementSnapshot(snapshot):snapshot;
-    if(project) project.measurementProfileSnapshot=payload.measurementProfileSnapshot;
+    const project = activeProject(), snapshot = project?.measurementProfileSnapshot;
+    payload.measurementProfileSnapshot = isWorkingMeasurementSnapshot(snapshot) ? currentWorkingMeasurementSnapshot(snapshot) : snapshot;
+    if (project) project.measurementProfileSnapshot = payload.measurementProfileSnapshot;
     return payload;
   }
-  function reviewProjectChange(){
-    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
+  function reviewProjectChange() {
+    if (!Canvas.getPieces().length) { toast(T("empty2d")); return; }
     const tabId = state.activeProjectId;
     openModal(T("reviewTitle"), "", true);
     mountCommandReview($("#genericModal .modal-body"), migrateProject(Canvas.snapshotState()), {
-      t:T, close:()=>closeModal("#genericModal"),
-      accept:proposal=>{
-        if(tabId !== state.activeProjectId) throw new Error('commandStale');
+      t: T, close: () => closeModal("#genericModal"),
+      accept: proposal => {
+        if (tabId !== state.activeProjectId) throw new Error('commandStale');
         Canvas.acceptProposal(proposal);
-        state.loaded=null; renderLayersPane(); renderAIPane(); if(is3DActive()) build3D(); update3DStatusPill(); save();
+        state.loaded = null; renderLayersPane(); renderAIPane(); if (is3DActive()) build3D(); update3DStatusPill(); save();
       },
     });
   }
-  function reviewGeneratedPattern(res, doneToastKey){
+  function reviewGeneratedPattern(res, doneToastKey) {
     // Generated geometry is a new draft, never an in-place replacement.
-    const draft = migrateProject({pieces:res.pieces,...(res.patternProgram?{patternProgram:res.patternProgram}:{}),...(res.patternConfiguration?{patternConfiguration:res.patternConfiguration}:{})});
+    const draft = migrateProject({ pieces: res.pieces, ...(res.patternProgram ? { patternProgram: res.patternProgram } : {}), ...(res.patternConfiguration ? { patternConfiguration: res.patternConfiguration } : {}) });
     openModal(T("reviewGeneratedTitle"), "", true);
-    const body=$("#genericModal .modal-body");
-    const hint=el("p"); hint.textContent=T("reviewGeneratedHint");
-    const summary=el("p"); summary.textContent=typeof res.summary==='string'?res.summary:'';
-    const acceptance=(res.style?.type==='skirt' || res.patternProgram?.family==='woven-a-line-skirt') ? assessWovenSkirtConstruction(draft.pieces) : null;
+    const body = $("#genericModal .modal-body");
+    const hint = el("p"); hint.textContent = T("reviewGeneratedHint");
+    const summary = el("p"); summary.textContent = typeof res.summary === 'string' ? res.summary : '';
+    const acceptance = (res.style?.type === 'skirt' || res.patternProgram?.family === 'woven-a-line-skirt') ? assessWovenSkirtConstruction(draft.pieces) : null;
     body.append(hint, summary);
-    if(res.patternConfiguration) {
-      const configuration=el('section','help-note');
-      const title=el('strong'); title.textContent=T('configurationReviewTitle'); configuration.append(title);
-      const changes=res.configurationDiff||[];
-      if(!changes.length) configuration.append(el('p','',T('configurationReviewBaseline')));
-      for(const change of changes) configuration.append(el('p','',`${T(`configurationField_${change.field}`)}: ${T(`programLength_${change.before}`)} → ${T(`programLength_${change.after}`)}`));
+    if (res.patternConfiguration) {
+      const configuration = el('section', 'help-note');
+      const title = el('strong'); title.textContent = T('configurationReviewTitle'); configuration.append(title);
+      const changes = res.configurationDiff || [];
+      if (!changes.length) configuration.append(el('p', '', T('configurationReviewBaseline')));
+      for (const change of changes) configuration.append(el('p', '', `${T(`configurationField_${change.field}`)}: ${T(`programLength_${change.before}`)} → ${T(`programLength_${change.after}`)}`));
       body.append(configuration);
     }
-    if(res.multimodalProposal?.reference) {
-      const evidence=el("section","help-note");
-      const title=el("strong"); title.textContent=T('multimodalEvidenceTitle'); evidence.append(title);
-      for(const issue of res.multimodalProposal.issues||[]) {
-        if(issue.field!=='reference') continue;
-        const line=el("p"); line.textContent=T(`multimodal_${issue.code}`); evidence.append(line);
+    if (res.multimodalProposal?.reference) {
+      const evidence = el("section", "help-note");
+      const title = el("strong"); title.textContent = T('multimodalEvidenceTitle'); evidence.append(title);
+      for (const issue of res.multimodalProposal.issues || []) {
+        if (issue.field !== 'reference') continue;
+        const line = el("p"); line.textContent = T(`multimodal_${issue.code}`); evidence.append(line);
       }
       body.append(evidence);
     }
-    if(acceptance) {
-      const evidence=el("p","help-note");
-      evidence.textContent=acceptance.decision==='side-seam-checked' ? T('constructionEvidenceReady') : `${T('constructionEvidenceMissing')}: ${acceptance.blockers.map(key=>T(key)).join(', ')}`;
+    if (acceptance) {
+      const evidence = el("p", "help-note");
+      evidence.textContent = acceptance.decision === 'side-seam-checked' ? T('constructionEvidenceReady') : `${T('constructionEvidenceMissing')}: ${acceptance.blockers.map(key => T(key)).join(', ')}`;
       body.append(evidence);
     }
     body.append(patternPreview(draft.pieces));
-    const accept=el("button","big-btn"); accept.textContent=T("reviewNewProject");
-    const reject=el("button","big-btn ghost"); reject.textContent=T("reviewReject");
-    reject.onclick=()=>closeModal("#genericModal");
-    accept.onclick=()=>{
-      if(!requireEntitlement()) return;
-      accept.disabled=true;
+    const accept = el("button", "big-btn"); accept.textContent = T("reviewNewProject");
+    const reject = el("button", "big-btn ghost"); reject.textContent = T("reviewReject");
+    reject.onclick = () => closeModal("#genericModal");
+    accept.onclick = () => {
+      if (!requireEntitlement()) return;
+      accept.disabled = true;
       newProjectTab();
-      if(res.colors?.length > 1) draft.pieces.forEach(p => { p.customColor = true; });
-      Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc'],{...(res.brief?{brief:res.brief}:{}),...(res.patternProgram?{patternProgram:res.patternProgram}:{}),...(res.patternConfiguration?{patternConfiguration:res.patternConfiguration}:{}),...(res.multimodalProposal?{multimodalProposal:res.multimodalProposal}:{})});
+      if (res.colors?.length > 1) draft.pieces.forEach(p => { p.customColor = true; });
+      Canvas.setPattern(draft.pieces, res.colors?.length ? res.colors : ['#6d5efc'], { ...(res.brief ? { brief: res.brief } : {}), ...(res.patternProgram ? { patternProgram: res.patternProgram } : {}), ...(res.patternConfiguration ? { patternConfiguration: res.patternConfiguration } : {}), ...(res.multimodalProposal ? { multimodalProposal: res.multimodalProposal } : {}) });
       lastGradedMeas = { ...currentMeas() };
       hideEmpty(); renderLayersPane();
-      if(res.attributes) lastAIResult = res;
+      if (res.attributes) lastAIResult = res;
       renderAIPane();
-      if(res.attributes) renderAIAttrs(res);
-      if(is3DActive()) build3D(res.colorInt, { resetPrints: true });
+      if (res.attributes) renderAIAttrs(res);
+      if (is3DActive()) build3D(res.colorInt, { resetPrints: true });
       update3DStatusPill();
       save(); closeModal("#genericModal"); toast(T(doneToastKey));
     };
-    const actions=el("div","project-review-actions"); actions.append(accept,reject); body.append(actions);
+    const actions = el("div", "project-review-actions"); actions.append(accept, reject); body.append(actions);
   }
   // Shared by file-based Import Project and cloud-sync Load — same payload
   // shape, same success/failure semantics, one place to keep them in sync.
-  function applyProjectPayload(data){
-    if(!data || typeof data !== "object") return false;
-    try { data=migrateProject(data); } catch { return false; }
+  function applyProjectPayload(data) {
+    if (!data || typeof data !== "object") return false;
+    try { data = migrateProject(data); } catch { return false; }
     let measurementSnapshot;
-    try { measurementSnapshot=data.measurementProfileSnapshot?snapshotMeasurementProfile(data.measurementProfileSnapshot,data.measurementProfileSnapshot.selectedAt):workingMeasurementSnapshot(); }
+    try { measurementSnapshot = data.measurementProfileSnapshot ? snapshotMeasurementProfile(data.measurementProfileSnapshot, data.measurementProfileSnapshot.selectedAt) : workingMeasurementSnapshot(); }
     catch { return false; }
     // Validate every project-domain field before replacing the live canvas;
     // a rejected measurement snapshot must leave current work untouched.
-    if(!Canvas.loadPieces(data.pieces, data.texts, data.points, data.cons, data)) return false;
-    const project=activeProject(); if(project) project.measurementProfileSnapshot=measurementSnapshot;
+    if (!Canvas.loadPieces(data.pieces, data.texts, data.points, data.cons, data)) return false;
+    const project = activeProject(); if (project) project.measurementProfileSnapshot = measurementSnapshot;
     applyMeasurementSnapshotToState(measurementSnapshot);
-    state.selectedMeasurementProfileId=state.measurementProfiles.some(profile=>profile.id===measurementSnapshot.id)?measurementSnapshot.id:null;
+    state.selectedMeasurementProfileId = state.measurementProfiles.some(profile => profile.id === measurementSnapshot.id) ? measurementSnapshot.id : null;
     lastGradedMeas = { ...currentMeas() };
-    state.loaded=null; hideEmpty(); renderLayersPane(); renderAIPane();
-    if(is3DActive()) build3D();
+    state.loaded = null; hideEmpty(); renderLayersPane(); renderAIPane();
+    if (is3DActive()) build3D();
     update3DStatusPill();
     save();
     return true;
   }
-  function importProject(){
-    const inp=el("input"); inp.type="file"; inp.accept=".json,application/json";
-    inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(!f) return;
-      const r=new FileReader();
-      r.onload=()=>{ try{
-        if(applyProjectPayload(JSON.parse(r.result))) toast(T("imported"));
-        else toast(T("importFail"));
-      }catch(e){ toast(T("importFail")); } };
+  function importProject() {
+    const inp = el("input"); inp.type = "file"; inp.accept = ".json,application/json";
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
+        try {
+          if (applyProjectPayload(JSON.parse(r.result))) toast(T("imported"));
+          else toast(T("importFail"));
+        } catch (e) { toast(T("importFail")); }
+      };
       r.readAsText(f);
     };
     inp.click();
@@ -3101,27 +3125,28 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // this brings in outlines drawn/exported by other software (or another
   // BerryStudio export / PatternSpecV1 JSON, re-imported as fresh editable
   // pieces that can also be edited/completed by the AI Studio).
-  function importPatternFile(){
-    const inp=el("input"); inp.type="file"; inp.accept=".svg,.dxf,.json,image/svg+xml,application/json"; inp.style.display="none";
-    inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(!f) return;
-      const r=new FileReader();
-      r.onload=()=>{
+  function importPatternFile() {
+    const inp = el("input"); inp.type = "file"; inp.accept = ".svg,.dxf,.json,image/svg+xml,application/json"; inp.style.display = "none";
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
         const isDXF = /\.dxf$/i.test(f.name);
         const isJSON = /\.json$/i.test(f.name);
         let result;
-        try{
+        try {
           result = isDXF ? parseDXFPattern(String(r.result))
             : isJSON ? parseJSONPattern(String(r.result))
-            : parseSVGPattern(String(r.result));
+              : parseSVGPattern(String(r.result));
         }
-        catch(e){ toast(T("importPatternFail")); return; }
+        catch (e) { toast(T("importPatternFail")); return; }
         const { pieces, warnings } = result || {};
-        if(!pieces || !pieces.length){ toast((warnings&&warnings[0]) || T("importPatternNone")); return; }
+        if (!pieces || !pieces.length) { toast((warnings && warnings[0]) || T("importPatternNone")); return; }
         const n = Canvas.importPieces(pieces);
         hideEmpty(); renderLayersPane(); renderAIPane();
-        if(is3DActive()) build3D();
+        if (is3DActive()) build3D();
         save();
-        toast((warnings&&warnings.length ? T("importPatternPartial") : T("importPatternDone")).replace("{n}",n) + (warnings&&warnings.length ? " — "+warnings.join(" ") : ""));
+        toast((warnings && warnings.length ? T("importPatternPartial") : T("importPatternDone")).replace("{n}", n) + (warnings && warnings.length ? " — " + warnings.join(" ") : ""));
       };
       r.readAsText(f);
     };
@@ -3130,118 +3155,120 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
 
   // ---- WP-18: cloud sync (opt-in, off unless Settings → Cloud Sync is on
   // AND a target is configured) ----
-  function syncTargetImpl(){
-    if(state.syncTarget==="googleDrive") return GoogleDriveSync;
-    if(state.syncTarget==="oneDrive") return OneDriveSync;
+  function syncTargetImpl() {
+    if (state.syncTarget === "googleDrive") return GoogleDriveSync;
+    if (state.syncTarget === "oneDrive") return OneDriveSync;
     return null; // "endpoint" handled separately — it takes an explicit URL, not a singleton connection
   }
-  async function cloudSyncSave(){
-    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
-    try{
-      if(state.syncTarget==="endpoint") await SelfHostedSync.save(state.syncEndpointUrl, projectPayload());
+  async function cloudSyncSave() {
+    if (!Canvas.getPieces().length) { toast(T("empty2d")); return; }
+    try {
+      if (state.syncTarget === "endpoint") await SelfHostedSync.save(state.syncEndpointUrl, projectPayload());
       else {
-        const impl=syncTargetImpl();
-        if(!impl.isConnected()) await cloudSyncConnect();
+        const impl = syncTargetImpl();
+        if (!impl.isConnected()) await cloudSyncConnect();
         await impl.save(projectPayload());
       }
       toast(T("syncSaved"));
-    }catch(e){ toast(T("syncFail")+": "+(e.message||e)); }
+    } catch (e) { toast(T("syncFail") + ": " + (e.message || e)); }
   }
-  async function cloudSyncLoad(){
-    try{
+  async function cloudSyncLoad() {
+    try {
       let data;
-      if(state.syncTarget==="endpoint") data=await SelfHostedSync.load(state.syncEndpointUrl);
+      if (state.syncTarget === "endpoint") data = await SelfHostedSync.load(state.syncEndpointUrl);
       else {
-        const impl=syncTargetImpl();
-        if(!impl.isConnected()) await cloudSyncConnect();
-        data=await impl.load();
+        const impl = syncTargetImpl();
+        if (!impl.isConnected()) await cloudSyncConnect();
+        data = await impl.load();
       }
-      if(applyProjectPayload(data)) toast(T("syncLoaded"));
+      if (applyProjectPayload(data)) toast(T("syncLoaded"));
       else toast(T("importFail"));
-    }catch(e){ toast(T("syncFail")+": "+(e.message||e)); }
+    } catch (e) { toast(T("syncFail") + ": " + (e.message || e)); }
   }
-  async function cloudSyncConnect(){
-    if(state.syncTarget==="googleDrive") return GoogleDriveSync.connect(state.syncGoogleClientId);
-    if(state.syncTarget==="oneDrive") return OneDriveSync.connect(state.syncMicrosoftClientId);
+  async function cloudSyncConnect() {
+    if (state.syncTarget === "googleDrive") return GoogleDriveSync.connect(state.syncGoogleClientId);
+    if (state.syncTarget === "oneDrive") return OneDriveSync.connect(state.syncMicrosoftClientId);
     return null;
   }
-  function printPattern(){
+  function printPattern() {
     // Code-review fix: Print (Project menu / ⌘K) opens the same full
     // pattern SVG the gated Export pane's SVG button does (and is directly
     // save-as-PDF-able from the browser's print dialog) — was missing the
     // Export gate every sibling export action already has.
-    if(!requireEntitlement()) return;
-    const svg=Canvas.exportSVG(); if(!svg){ toast(T("empty2d")); return; }
-    const w=window.open("","_blank");
-    if(!w){ toast(T("printProject")+": allow pop-ups"); return; }
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>BerryStudio — ${state.loaded?L(PATTERNS[state.loaded].name):"Pattern"}</title>
+    if (!requireEntitlement()) return;
+    const svg = Canvas.exportSVG(); if (!svg) { toast(T("empty2d")); return; }
+    const w = window.open("", "_blank");
+    if (!w) { toast(T("printProject") + ": allow pop-ups"); return; }
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>BerryStudio — ${state.loaded ? L(PATTERNS[state.loaded].name) : "Pattern"}</title>
       <style>@page{margin:12mm}body{margin:0;font-family:Inter,sans-serif}svg{width:100%;height:auto}h1{font-size:16px}</style></head>
       <body><h1>BerryStudio</h1>${svg}<script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`);
     w.document.close();
   }
   // ---- lightweight dropdown menu ----
-  function projectMenuItems(){ return [
-    { icon:IC.newdoc,  label:T("newProject"),    run:newProject },
-    { icon:IC.edit,    label:T("reviewTitle"),   run:reviewProjectChange },
-    { icon:IC.importf, label:T("importProject"), run:importProject },
-    { icon:IC.importf, label:T("importPattern"), run:importPatternFile },
-    "sep",
-    { icon:IC.download,label:T("exportSVG"),     run:()=>exportAs("SVG") },
-    { icon:IC.download,label:T("exportDXF"),     run:()=>exportAs("DXF") },
-    { icon:IC.pdf,     label:T("savePDF"),       run:()=>exportAs("PDF") },
-    { icon:IC.folder,  label:T("saveProject"),   run:()=>exportAs("JSON") },
-    { icon:IC.download,label:T("constructionEvidenceExport"), run:exportConstructionEvidence },
-    { icon:IC.printer, label:T("patternSummary"),run:exportSummary },
-    { icon:IC.printer, label:T("sewInstrTitle"), run:exportSewingInstructions },
-    { icon:IC.printer, label:T("fitChartTitle"), run:openFitChartModal },
-    { icon:IC.cube,    label:T("createMarker"),  run:openMarkerModal },
-    { icon:IC.magnet,  label:T("snapshotMenu"),  run:openSnapshotPanel },
-    ...(state.cloudSync ? [
+  function projectMenuItems() {
+    return [
+      { icon: IC.newdoc, label: T("newProject"), run: newProject },
+      { icon: IC.edit, label: T("reviewTitle"), run: reviewProjectChange },
+      { icon: IC.importf, label: T("importProject"), run: importProject },
+      { icon: IC.importf, label: T("importPattern"), run: importPatternFile },
       "sep",
-      { icon:IC.cloudUp,   label:T("syncSaveTo"),   run:cloudSyncSave },
-      { icon:IC.cloudDown, label:T("syncLoadFrom"), run:cloudSyncLoad },
-    ] : []),
-    "sep",
-    { icon:IC.printer, label:T("printProject"),  run:printPattern },
-  ]; }
-  function openMenu(btn, items){
+      { icon: IC.download, label: T("exportSVG"), run: () => exportAs("SVG") },
+      { icon: IC.download, label: T("exportDXF"), run: () => exportAs("DXF") },
+      { icon: IC.pdf, label: T("savePDF"), run: () => exportAs("PDF") },
+      { icon: IC.folder, label: T("saveProject"), run: () => exportAs("JSON") },
+      { icon: IC.download, label: T("constructionEvidenceExport"), run: exportConstructionEvidence },
+      { icon: IC.printer, label: T("patternSummary"), run: exportSummary },
+      { icon: IC.printer, label: T("sewInstrTitle"), run: exportSewingInstructions },
+      { icon: IC.printer, label: T("fitChartTitle"), run: openFitChartModal },
+      { icon: IC.cube, label: T("createMarker"), run: openMarkerModal },
+      { icon: IC.magnet, label: T("snapshotMenu"), run: openSnapshotPanel },
+      ...(state.cloudSync ? [
+        "sep",
+        { icon: IC.cloudUp, label: T("syncSaveTo"), run: cloudSyncSave },
+        { icon: IC.cloudDown, label: T("syncLoadFrom"), run: cloudSyncLoad },
+      ] : []),
+      "sep",
+      { icon: IC.printer, label: T("printProject"), run: printPattern },
+    ];
+  }
+  function openMenu(btn, items) {
     closeAnyMenu();
-    const m=el("div","menu");
-    items.forEach(it=>{
-      if(it==="sep"){ m.appendChild(el("div","menu-sep")); return; }
-      const mi=el("button","menu-item",`${it.icon||""}<span>${it.label}</span>`);
-      mi.onclick=()=>{ closeAnyMenu(); it.run(); };
+    const m = el("div", "menu");
+    items.forEach(it => {
+      if (it === "sep") { m.appendChild(el("div", "menu-sep")); return; }
+      const mi = el("button", "menu-item", `${it.icon || ""}<span>${it.label}</span>`);
+      mi.onclick = () => { closeAnyMenu(); it.run(); };
       m.appendChild(mi);
     });
     document.body.appendChild(m);
-    const r=btn.getBoundingClientRect();
-    m.style.top=(r.bottom+6)+"px";
-    if(document.documentElement.dir==="rtl") m.style.right=(innerWidth-r.right)+"px";
-    else m.style.left=r.left+"px";
-    requestAnimationFrame(()=>m.classList.add("show"));
-    setTimeout(()=>document.addEventListener("pointerdown",onDocDown),0);
+    const r = btn.getBoundingClientRect();
+    m.style.top = (r.bottom + 6) + "px";
+    if (document.documentElement.dir === "rtl") m.style.right = (innerWidth - r.right) + "px";
+    else m.style.left = r.left + "px";
+    requestAnimationFrame(() => m.classList.add("show"));
+    setTimeout(() => document.addEventListener("pointerdown", onDocDown), 0);
   }
-  function onDocDown(e){ if(!e.target.closest(".menu")&&!e.target.closest("#projectBtn")) closeAnyMenu(); }
-  function closeAnyMenu(){ $$(".menu").forEach(m=>m.remove()); document.removeEventListener("pointerdown",onDocDown); }
-  const escAttr = s => String(s??"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+  function onDocDown(e) { if (!e.target.closest(".menu") && !e.target.closest("#projectBtn")) closeAnyMenu(); }
+  function closeAnyMenu() { $$(".menu").forEach(m => m.remove()); document.removeEventListener("pointerdown", onDocDown); }
+  const escAttr = s => String(s ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
   // ================= TEXT TOOL EDITOR =================
   // Floating formatting panel opened by the canvas (new or edit mode).
-  function openTextEditor(req){
+  function openTextEditor(req) {
     closeTextEditor();
-    const it = req.item || { text:"", size:4, bold:false, italic:false, color:rgbToHex(getComputedStyle(document.body).getPropertyValue("--ink").trim()) };
-    const box = el("div","text-editor");
+    const it = req.item || { text: "", size: 4, bold: false, italic: false, color: rgbToHex(getComputedStyle(document.body).getPropertyValue("--ink").trim()) };
+    const box = el("div", "text-editor");
     box.innerHTML = `
       <input class="input te-text" placeholder="${T("typeText")}" value="${escAttr(it.text)}">
       <div class="row">
         <label style="font-size:11px;font-weight:700;color:var(--ink-2)">${T("fontSize")}</label>
-        <input class="input te-size" type="number" min="1" max="30" value="${it.size||4}" style="width:60px">
-        <button class="tbtn te-b ${it.bold?"active":""}" title="${T("boldLbl")}">B</button>
-        <button class="tbtn te-i ${it.italic?"active":""}" title="${T("italicLbl")}" style="font-style:italic">I</button>
+        <input class="input te-size" type="number" min="1" max="30" value="${it.size || 4}" style="width:60px">
+        <button class="tbtn te-b ${it.bold ? "active" : ""}" title="${T("boldLbl")}">B</button>
+        <button class="tbtn te-i ${it.italic ? "active" : ""}" title="${T("italicLbl")}" style="font-style:italic">I</button>
         <input class="te-col" type="color" value="${rgbToHex(it.color)}" title="${T("pieceColor")}">
       </div>
       <div class="row" style="justify-content:flex-end;gap:8px">
-        ${req.item?`<button class="tbtn te-del" title="${T("deleteLbl")}" style="width:auto;padding:0 10px;color:var(--danger)">${T("deleteLbl")}</button>`:""}
+        ${req.item ? `<button class="tbtn te-del" title="${T("deleteLbl")}" style="width:auto;padding:0 10px;color:var(--danger)">${T("deleteLbl")}</button>` : ""}
         <button class="tbtn te-cancel" style="width:auto;padding:0 10px">${T("cancel")}</button>
         <button class="tbtn te-ok active" style="width:auto;padding:0 14px">${T("okLbl")}</button>
       </div>`;
@@ -3249,7 +3276,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // position near the click, clamped to the viewport
     const r = box.getBoundingClientRect();
     box.style.left = Math.min(Math.max(8, req.cx), innerWidth - r.width - 8) + "px";
-    box.style.top  = Math.min(Math.max(8, req.cy + 10), innerHeight - r.height - 8) + "px";
+    box.style.top = Math.min(Math.max(8, req.cy + 10), innerHeight - r.height - 8) + "px";
     const q = s => box.querySelector(s);
     let bold = !!it.bold, italic = !!it.italic;
     q(".te-b").onclick = () => { bold = !bold; q(".te-b").classList.toggle("active", bold); };
@@ -3268,27 +3295,27 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     q(".te-text").addEventListener("keydown", e => { if (e.key === "Enter") commit(); if (e.key === "Escape") closeTextEditor(); });
     q(".te-text").focus(); q(".te-text").select();
   }
-  function closeTextEditor(){ $$(".text-editor").forEach(x=>x.remove()); }
+  function closeTextEditor() { $$(".text-editor").forEach(x => x.remove()); }
 
   // ================= CONSTRUCTION POPOVERS =================
   // Position any floating panel near a click point, clamped to the viewport.
-  function placeFloating(box, cx, cy){
+  function placeFloating(box, cx, cy) {
     document.body.appendChild(box);
     const r = box.getBoundingClientRect();
     box.style.left = Math.min(Math.max(8, cx), innerWidth - r.width - 8) + "px";
-    box.style.top  = Math.min(Math.max(8, cy + 10), innerHeight - r.height - 8) + "px";
+    box.style.top = Math.min(Math.max(8, cy + 10), innerHeight - r.height - 8) + "px";
   }
 
   // Rename a construction point and/or give it a live formula for X/Y.
-  function openPointEditor(req){
+  function openPointEditor(req) {
     closeTextEditor();
     const p = req.point;
-    const box = el("div","text-editor");
+    const box = el("div", "text-editor");
     box.innerHTML = `
       <input class="input pe-name" placeholder="${T("pointName")}" value="${escAttr(p.name)}">
       <div class="row">
-        <input class="input pe-x" placeholder="${T("pointX")}" value="${escAttr(p.xExpr||(+p.x.toFixed(2)))}" style="width:50%">
-        <input class="input pe-y" placeholder="${T("pointY")}" value="${escAttr(p.yExpr||(+p.y.toFixed(2)))}" style="width:50%">
+        <input class="input pe-x" placeholder="${T("pointX")}" value="${escAttr(p.xExpr || (+p.x.toFixed(2)))}" style="width:50%">
+        <input class="input pe-y" placeholder="${T("pointY")}" value="${escAttr(p.yExpr || (+p.y.toFixed(2)))}" style="width:50%">
       </div>
       <div class="help-note" style="margin:0">${T("formulaHint")}</div>
       <div class="row" style="justify-content:flex-end;gap:8px">
@@ -3302,21 +3329,21 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       const name = q(".pe-name").value.trim() || p.name;
       Canvas.setPointName(p.id, name);
       const r = Canvas.setPointFormula(p.id, q(".pe-x").value.trim(), q(".pe-y").value.trim());
-      if (!r.ok){ toast(T("invalidFormula")+": "+r.error); return; }
+      if (!r.ok) { toast(T("invalidFormula") + ": " + r.error); return; }
       closeTextEditor(); renderMeasurePane();
     };
     q(".pe-ok").onclick = commit;
     q(".pe-cancel").onclick = closeTextEditor;
     q(".pe-del").onclick = () => { Canvas.removePoint(p.id); closeTextEditor(); };
-    box.addEventListener("keydown", e => { if (e.key==="Enter") commit(); if (e.key==="Escape") closeTextEditor(); });
+    box.addEventListener("keydown", e => { if (e.key === "Enter") commit(); if (e.key === "Escape") closeTextEditor(); });
     q(".pe-name").focus(); q(".pe-name").select();
   }
 
   // Name prompt shown when a construction-point loop is closed with the
   // "Create Pattern Piece" tool — confirming snapshots it into a real piece.
-  function openPromotePrompt(outlinePts){
+  function openPromotePrompt(outlinePts) {
     closeTextEditor();
-    const box = el("div","text-editor");
+    const box = el("div", "text-editor");
     box.innerHTML = `
       <div class="help-note" style="margin:0">${T("promoteHint").replace("{n}", outlinePts.length)}</div>
       <input class="input pp-en" dir="ltr" placeholder="${T("nameEn")}">
@@ -3325,24 +3352,24 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         <button class="tbtn pp-cancel" style="width:auto;padding:0 10px">${T("cancel")}</button>
         <button class="tbtn pp-ok active" style="width:auto;padding:0 14px">${T("promoteBtn")}</button>
       </div>`;
-    placeFloating(box, innerWidth/2 - 130, innerHeight/3);
+    placeFloating(box, innerWidth / 2 - 130, innerHeight / 3);
     const q = s => box.querySelector(s);
     const cancel = () => { Canvas.cancelPromote(); closeTextEditor(); };
     const commit = () => {
       const en = q(".pp-en").value.trim() || "New Piece", ar = q(".pp-ar").value.trim() || "قطعة جديدة";
       Canvas.finishPromotePiece(en, ar); closeTextEditor(); hideEmpty(); renderLayersPane();
-      toast(T("promoted")+" · "+en);
+      toast(T("promoted") + " · " + en);
     };
     q(".pp-ok").onclick = commit; q(".pp-cancel").onclick = cancel;
-    box.addEventListener("keydown", e => { if (e.key==="Enter") commit(); if (e.key==="Escape") cancel(); });
+    box.addEventListener("keydown", e => { if (e.key === "Enter") commit(); if (e.key === "Escape") cancel(); });
     q(".pp-en").focus();
   }
 
   // Two-point calibration for the trace-over background image: asks for the
   // real-world distance (cm) between the two points the user just clicked.
-  function openCalibPrompt(measuredDist){
+  function openCalibPrompt(measuredDist) {
     closeTextEditor();
-    const box = el("div","text-editor");
+    const box = el("div", "text-editor");
     box.innerHTML = `
       <div class="help-note" style="margin:0">${T("calibHint")}</div>
       <input class="input cb-dist" type="number" min="0.1" step="0.1" placeholder="${T("realDistance")}">
@@ -3350,54 +3377,55 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         <button class="tbtn cb-cancel" style="width:auto;padding:0 10px">${T("cancel")}</button>
         <button class="tbtn cb-ok active" style="width:auto;padding:0 14px">${T("applyCalib")}</button>
       </div>`;
-    placeFloating(box, innerWidth/2 - 130, innerHeight/3);
+    placeFloating(box, innerWidth / 2 - 130, innerHeight / 3);
     const q = s => box.querySelector(s);
     const commit = () => {
       const cm = +q(".cb-dist").value;
-      if (cm>0){ Canvas.applyCalibration(cm, measuredDist); toast(T("calibDone")); }
+      if (cm > 0) { Canvas.applyCalibration(cm, measuredDist); toast(T("calibDone")); }
       closeTextEditor(); setTool("select");
     };
-    q(".cb-ok").onclick = commit; q(".cb-cancel").onclick = ()=>{ closeTextEditor(); setTool("select"); };
-    box.addEventListener("keydown", e => { if (e.key==="Enter") commit(); if (e.key==="Escape") closeTextEditor(); });
+    q(".cb-ok").onclick = commit; q(".cb-cancel").onclick = () => { closeTextEditor(); setTool("select"); };
+    box.addEventListener("keydown", e => { if (e.key === "Enter") commit(); if (e.key === "Escape") closeTextEditor(); });
     q(".cb-dist").focus();
   }
 
   // Trace-over background image: import / opacity / show-hide / calibrate / remove.
   let bgVisible = true;
-  function openBgPanel(){
+  function openBgPanel() {
     closeTextEditor();
     const has = Canvas.hasBackground();
-    const box = el("div","text-editor");
-    if (!has){
+    const box = el("div", "text-editor");
+    if (!has) {
       box.innerHTML = `
         <div class="help-note" style="margin:0">${T("bgImage")}</div>
         <button class="tbtn bg-import active" style="width:auto;padding:0 14px">${T("bgImport")}</button>
         <div class="row" style="justify-content:flex-end">
           <button class="tbtn bg-close" style="width:auto;padding:0 10px">${T("close")}</button>
         </div>`;
-      placeFloating(box, innerWidth/2 - 130, 90);
-      const file=el("input"); file.type="file"; file.accept="image/*"; file.style.display="none";
-      file.onchange=()=>{ const im=file.files&&file.files[0]; if(!im) return;
-        const r=new FileReader();
-        r.onload=async ()=>{ const ok=await Canvas.setBackgroundImage(r.result); if(ok){ bgVisible=true; $("#bgBtn").classList.add("active"); closeTextEditor(); openBgPanel(); } };
+      placeFloating(box, innerWidth / 2 - 130, 90);
+      const file = el("input"); file.type = "file"; file.accept = "image/*"; file.style.display = "none";
+      file.onchange = () => {
+        const im = file.files && file.files[0]; if (!im) return;
+        const r = new FileReader();
+        r.onload = async () => { const ok = await Canvas.setBackgroundImage(r.result); if (ok) { bgVisible = true; $("#bgBtn").classList.add("active"); closeTextEditor(); openBgPanel(); } };
         r.readAsDataURL(im);
       };
       box.appendChild(file);
-      box.querySelector(".bg-import").onclick=()=>file.click();
-      box.querySelector(".bg-close").onclick=closeTextEditor;
+      box.querySelector(".bg-import").onclick = () => file.click();
+      box.querySelector(".bg-close").onclick = closeTextEditor;
       return;
     }
     box.innerHTML = `
       <div class="row"><label style="flex:1">${T("bgOpacity")}</label><input class="range bg-op" type="range" min="0.1" max="1" step="0.05" value="${Canvas.getBgOpacity()}" style="flex:2"></div>
-      <div class="row"><label style="flex:1">${T("bgShow")}</label><input class="bg-show" type="checkbox" ${bgVisible?"checked":""}></div>
+      <div class="row"><label style="flex:1">${T("bgShow")}</label><input class="bg-show" type="checkbox" ${bgVisible ? "checked" : ""}></div>
       <div class="row" style="justify-content:flex-end;gap:8px">
         <button class="tbtn bg-remove" style="width:auto;padding:0 10px;color:var(--danger)">${T("bgRemove")}</button>
         <button class="tbtn bg-calib active" style="width:auto;padding:0 12px">${T("bgCalibrate")}</button>
         <button class="tbtn bg-close" style="width:auto;padding:0 10px">${T("close")}</button>
       </div>`;
-    placeFloating(box, innerWidth/2 - 130, 90);
+    placeFloating(box, innerWidth / 2 - 130, 90);
     box.querySelector(".bg-op").oninput = e => Canvas.setBgOpacity(+e.target.value);
-    box.querySelector(".bg-show").onchange = e => { bgVisible=e.target.checked; Canvas.setBgVisible(bgVisible); };
+    box.querySelector(".bg-show").onchange = e => { bgVisible = e.target.checked; Canvas.setBgVisible(bgVisible); };
     box.querySelector(".bg-remove").onclick = () => { Canvas.removeBackground(); $("#bgBtn").classList.remove("active"); closeTextEditor(); };
     box.querySelector(".bg-calib").onclick = () => { closeTextEditor(); setTool("calib"); toast(T("calibHint")); };
     box.querySelector(".bg-close").onclick = closeTextEditor;
@@ -3405,20 +3433,20 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
 
   // Frozen snapshot ghost overlay — a single translucent reference of the pattern's
   // current state to compare later edits against. Mirrors openBgPanel() exactly.
-  function openSnapshotPanel(){
+  function openSnapshotPanel() {
     closeTextEditor();
     const has = Canvas.hasSnapshot();
-    const box = el("div","text-editor");
-    if (!has){
-      if (!Canvas.getPieces().length){ toast(T("empty2d")); return; }
+    const box = el("div", "text-editor");
+    if (!has) {
+      if (!Canvas.getPieces().length) { toast(T("empty2d")); return; }
       box.innerHTML = `
         <div class="help-note" style="margin:0">${T("snapshotHint")}</div>
         <button class="tbtn snap-freeze active" style="width:auto;padding:0 14px">${T("freezeSnapshot")}</button>
         <div class="row" style="justify-content:flex-end">
           <button class="tbtn snap-close" style="width:auto;padding:0 10px">${T("close")}</button>
         </div>`;
-      placeFloating(box, innerWidth/2 - 130, 90);
-      box.querySelector(".snap-freeze").onclick = () => { Canvas.freezeSnapshot(); $("#snapshotBtn").classList.add("active"); closeTextEditor(); openSnapshotPanel(); toast(T("freezeSnapshot")+" ✓"); };
+      placeFloating(box, innerWidth / 2 - 130, 90);
+      box.querySelector(".snap-freeze").onclick = () => { Canvas.freezeSnapshot(); $("#snapshotBtn").classList.add("active"); closeTextEditor(); openSnapshotPanel(); toast(T("freezeSnapshot") + " ✓"); };
       box.querySelector(".snap-close").onclick = closeTextEditor;
       return;
     }
@@ -3429,7 +3457,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         <button class="tbtn snap-remove" style="width:auto;padding:0 10px;color:var(--danger)">${T("snapshotRemove")}</button>
         <button class="tbtn snap-close" style="width:auto;padding:0 10px">${T("close")}</button>
       </div>`;
-    placeFloating(box, innerWidth/2 - 130, 90);
+    placeFloating(box, innerWidth / 2 - 130, 90);
     box.querySelector(".snap-op").oninput = e => Canvas.setSnapshotOpacity(+e.target.value);
     box.querySelector(".snap-show").onchange = e => Canvas.showSnapshot(e.target.checked);
     box.querySelector(".snap-remove").onclick = () => { Canvas.removeSnapshot(); $("#snapshotBtn").classList.remove("active"); closeTextEditor(); };
@@ -3442,17 +3470,17 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // type, with a name filter and click-to-select/focus. Read-only inspection + focus —
   // it doesn't edit anything itself (use the existing point/piece editors for that).
   let objBrowserOpen = false;
-  function toggleObjectBrowser(){
+  function toggleObjectBrowser() {
     objBrowserOpen = !objBrowserOpen;
     $("#objBrowserBtn").classList.toggle("active", objBrowserOpen);
     if (objBrowserOpen) renderObjectBrowser();
-    else { const p=$("#objBrowserPanel"); if(p) p.remove(); }
+    else { const p = $("#objBrowserPanel"); if (p) p.remove(); }
   }
-  function renderObjectBrowser(){
+  function renderObjectBrowser() {
     if (!objBrowserOpen) return;
     let panel = $("#objBrowserPanel");
     const query = panel ? panel.querySelector(".ob-search")?.value.trim().toLowerCase() : "";
-    if (!panel){ panel = el("div","obj-browser"); panel.id="objBrowserPanel"; document.body.appendChild(panel); }
+    if (!panel) { panel = el("div", "obj-browser"); panel.id = "objBrowserPanel"; document.body.appendChild(panel); }
     panel.innerHTML = `
       <div class="ob-head">
         <b>${T("objBrowser")}</b>
@@ -3461,59 +3489,59 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
           <button class="tbtn ob-close" title="${T("close")}">✕</button>
         </div>
       </div>
-      <input class="input ob-search" placeholder="${T("objSearch")}" value="${escAttr(query||"")}">
+      <input class="input ob-search" placeholder="${T("objSearch")}" value="${escAttr(query || "")}">
       <div class="ob-list"></div>`;
     const list = panel.querySelector(".ob-list");
-    const match = label => !query || (label||"").toLowerCase().includes(query);
-    const lineNo = {}; let li=0, ai=0, ci=0;
+    const match = label => !query || (label || "").toLowerCase().includes(query);
+    const lineNo = {}; let li = 0, ai = 0, ci = 0;
     const groups = [
-      { key:"points",  label:T("objPoints"),  items: Canvas.getPoints().map(p=>({ id:p.id, label:p.name, kind:"point" })) },
-      { key:"lines",   label:T("objLines"),   items: Canvas.getCons().filter(c=>c.kind==="line").map(c=>({ id:c.id, label:`${T("objLine")} ${++li}`, kind:"cons" })) },
-      { key:"arcs",    label:T("objArcs"),    items: Canvas.getCons().filter(c=>c.kind==="arc").map(c=>({ id:c.id, label:`${T("objArc")} ${++ai}`, kind:"cons" })) },
-      { key:"circles", label:T("objCircles"), items: Canvas.getCons().filter(c=>c.kind==="circle").map(c=>({ id:c.id, label:`${T("objCircle")} ${++ci}`, kind:"cons" })) },
-      { key:"pieces",  label:T("objPieces"),  items: Canvas.getPieces().map((p,i)=>({ id:i, label:L(p.name), kind:"piece" })) },
-      { key:"texts",   label:T("objTexts"),   items: Canvas.getTexts().map(t=>({ id:t.id, label:t.text||T("objTextEmpty"), kind:"text", x:t.x, y:t.y })) },
+      { key: "points", label: T("objPoints"), items: Canvas.getPoints().map(p => ({ id: p.id, label: p.name, kind: "point" })) },
+      { key: "lines", label: T("objLines"), items: Canvas.getCons().filter(c => c.kind === "line").map(c => ({ id: c.id, label: `${T("objLine")} ${++li}`, kind: "cons" })) },
+      { key: "arcs", label: T("objArcs"), items: Canvas.getCons().filter(c => c.kind === "arc").map(c => ({ id: c.id, label: `${T("objArc")} ${++ai}`, kind: "cons" })) },
+      { key: "circles", label: T("objCircles"), items: Canvas.getCons().filter(c => c.kind === "circle").map(c => ({ id: c.id, label: `${T("objCircle")} ${++ci}`, kind: "cons" })) },
+      { key: "pieces", label: T("objPieces"), items: Canvas.getPieces().map((p, i) => ({ id: i, label: L(p.name), kind: "piece" })) },
+      { key: "texts", label: T("objTexts"), items: Canvas.getTexts().map(t => ({ id: t.id, label: t.text || T("objTextEmpty"), kind: "text", x: t.x, y: t.y })) },
     ];
-    groups.forEach(g=>{
-      const filtered = g.items.filter(it=>match(it.label));
+    groups.forEach(g => {
+      const filtered = g.items.filter(it => match(it.label));
       if (!filtered.length && query) return;
       const det = el("details"); det.open = true;
       det.innerHTML = `<summary>${g.label} · ${filtered.length}</summary>`;
-      const ul = el("div","ob-rows");
-      filtered.forEach(it=>{
-        const row = el("div","ob-row");
-        const label = el("span","ob-row-label", escAttr(it.label));
+      const ul = el("div", "ob-rows");
+      filtered.forEach(it => {
+        const row = el("div", "ob-row");
+        const label = el("span", "ob-row-label", escAttr(it.label));
         row.appendChild(label);
         row.onclick = () => {
-          if (it.kind==="point") Canvas.selectPoint(it.id);
-          else if (it.kind==="cons") Canvas.selectCons(it.id);
-          else if (it.kind==="piece") { Canvas.selectPiece(it.id); Canvas.render(); }
-          else if (it.kind==="text") Canvas.centerOn(it.x, it.y);
+          if (it.kind === "point") Canvas.selectPoint(it.id);
+          else if (it.kind === "cons") Canvas.selectCons(it.id);
+          else if (it.kind === "piece") { Canvas.selectPiece(it.id); Canvas.render(); }
+          else if (it.kind === "text") Canvas.centerOn(it.x, it.y);
         };
-        const actions = el("div","ob-row-actions");
+        const actions = el("div", "ob-row-actions");
         // Construction lines/arcs/circles have no name field to rename —
         // delete-only for those; every other kind gets both.
-        if (it.kind!=="cons"){
-          const renameBtn = el("button",null,IC.edit); renameBtn.title = T("objRename");
+        if (it.kind !== "cons") {
+          const renameBtn = el("button", null, IC.edit); renameBtn.title = T("objRename");
           renameBtn.onclick = (e) => {
             e.stopPropagation();
             const next = window.prompt(T("objRenamePrompt"), it.label);
-            if (next==null || !next.trim()) return;
+            if (next == null || !next.trim()) return;
             const v = next.trim();
-            if (it.kind==="point") Canvas.setPointName(it.id, v);
-            else if (it.kind==="piece") Canvas.renamePiece(it.id, {[state.lang]: v});
-            else if (it.kind==="text") Canvas.updateText(it.id, {text: v});
+            if (it.kind === "point") Canvas.setPointName(it.id, v);
+            else if (it.kind === "piece") Canvas.renamePiece(it.id, { [state.lang]: v });
+            else if (it.kind === "text") Canvas.updateText(it.id, { text: v });
             renderLayersPane(); renderObjectBrowser();
           };
           actions.appendChild(renameBtn);
         }
-        const delBtn = el("button",null,IC.trash); delBtn.title = T("objDelete");
+        const delBtn = el("button", null, IC.trash); delBtn.title = T("objDelete");
         delBtn.onclick = (e) => {
           e.stopPropagation();
-          if (it.kind==="point") Canvas.removePoint(it.id);
-          else if (it.kind==="cons") Canvas.removeCons(it.id);
-          else if (it.kind==="piece") Canvas.removePiece(it.id);
-          else if (it.kind==="text") Canvas.removeText(it.id);
+          if (it.kind === "point") Canvas.removePoint(it.id);
+          else if (it.kind === "cons") Canvas.removeCons(it.id);
+          else if (it.kind === "piece") Canvas.removePiece(it.id);
+          else if (it.kind === "text") Canvas.removeText(it.id);
           renderLayersPane(); sync3DVisibility(); renderObjectBrowser();
         };
         actions.appendChild(delBtn);
@@ -3522,7 +3550,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       });
       det.appendChild(ul); list.appendChild(det);
     });
-    if (!groups.some(g=>g.items.some(it=>match(it.label)))) list.appendChild(el("div","help-note",T("objEmpty")));
+    if (!groups.some(g => g.items.some(it => match(it.label)))) list.appendChild(el("div", "help-note", T("objEmpty")));
     panel.querySelector(".ob-close").onclick = toggleObjectBrowser;
     panel.querySelector(".ob-refresh").onclick = renderObjectBrowser;
     panel.querySelector(".ob-search").oninput = renderObjectBrowser;
@@ -3531,37 +3559,37 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
 
   // ================= HELP =================
-  function openHelp(){
+  function openHelp() {
     // Drawn straight from the real toolbar's own TOOLS list (above) rather
     // than a separately hand-maintained id list — every tool that actually
     // exists in the rail shows up here automatically, present tense, with
     // no separate "did the help table get updated too" step whenever a
     // tool is added or removed.
-    const tools = TOOLS.filter(t=>t!=="sep").map(t=>t.id);
+    const tools = TOOLS.filter(t => t !== "sep").map(t => t.id);
     let html = `<h3 style="margin-bottom:8px">${T("helpQuick")}</h3><ol style="padding-inline-start:20px;font-size:13px;line-height:1.7;color:var(--ink-2)">`;
     html += `<li>${T("helpQ1")}</li><li>${T("helpQ2")}</li><li>${T("helpQ3")}</li></ol>`;
     html += `<h3 style="margin:18px 0 8px">${T("helpTools")}</h3><table style="width:100%;border-collapse:collapse;font-size:12.5px">`;
-    tools.forEach(k=>{ html += `<tr><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);font-weight:700;white-space:nowrap">${T("t_"+k)}</td><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--ink-2)">${T("tt_"+k)}</td></tr>`; });
+    tools.forEach(k => { html += `<tr><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);font-weight:700;white-space:nowrap">${T("t_" + k)}</td><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--ink-2)">${T("tt_" + k)}</td></tr>`; });
     html += `</table><h3 style="margin:18px 0 8px">${T("helpShortcuts")}</h3><table style="width:100%;border-collapse:collapse;font-size:12.5px">`;
     [["V P L A M R S T", T("sc_tools")], ["Ctrl+Z / Ctrl+Shift+Z", T("sc_undo")], ["Ctrl+K", T("sc_cmd")], ["Esc", T("sc_esc")],
-     ["[ / ]", T("sc_cycle")], ["Arrow keys", T("sc_nudge")], ["Shift+Arrow", T("sc_nudgeFine")], ["Delete / Backspace", T("sc_delete")],
-     ["Shift+Drag", T("sc_freeDrag")], ["Shift+Drag (Line / Construction Line)", T("sc_angleSnap")],
-     ["Ctrl/⌘+C / X / V", T("sc_copyPaste")]]
-      .forEach(([k,d])=>{ html += `<tr><td style="padding:6px 8px;border-bottom:1px solid var(--line-2)"><code style="background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-weight:700">${k}</code></td><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--ink-2)">${d}</td></tr>`; });
+    ["[ / ]", T("sc_cycle")], ["Arrow keys", T("sc_nudge")], ["Shift+Arrow", T("sc_nudgeFine")], ["Delete / Backspace", T("sc_delete")],
+    ["Shift+Drag", T("sc_freeDrag")], ["Shift+Drag (Line / Construction Line)", T("sc_angleSnap")],
+    ["Ctrl/⌘+C / X / V", T("sc_copyPaste")]]
+      .forEach(([k, d]) => { html += `<tr><td style="padding:6px 8px;border-bottom:1px solid var(--line-2)"><code style="background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-weight:700">${k}</code></td><td style="padding:6px 8px;border-bottom:1px solid var(--line-2);color:var(--ink-2)">${d}</td></tr>`; });
     html += "</table>";
     openModal(T("helpTitle"), html, true);
   }
-  function techPack(){
-    if(!requireEntitlement()) return; // WP-42 Stage B: Export surface gate ("Tech Pack")
-    const pieces=Canvas.getPieces(); if(!pieces.length){toast(T("empty2d"));return;}
-    const m=currentMeas();
-    let html=`<h2 style="margin-bottom:8px">${state.loaded?L(PATTERNS[state.loaded].name):"Tech Pack"}</h2>`;
-    html+=`<p style="color:var(--ink-2);font-size:13px;margin-bottom:14px">${T("gradedTo")}: ${state.kids?L(KIDS_AGES.find(a=>a.id===state.kids).label):state.size} · ${T("std_"+state.standard)}</p>`;
-    html+=`<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="text-align:start"><th style="text-align:start;padding:6px;border-bottom:1px solid var(--line)">${T("pieces")}</th><th style="padding:6px;border-bottom:1px solid var(--line)">EN / AR</th></tr>`;
-    pieces.forEach(p=>{html+=`<tr><td style="padding:6px;border-bottom:1px solid var(--line-2)">${L(p.name)}</td><td style="padding:6px;border-bottom:1px solid var(--line-2);color:var(--ink-2)">${p.name[state.lang==="ar"?"en":"ar"]}</td></tr>`;});
-    html+=`</table><h3 style="margin:16px 0 6px">${T("customMeas")}</h3><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px">`;
-    MEAS_KEYS.forEach(k=>html+=`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line-2)"><span>${T("m_"+k)}</span><b>${m[k]} cm</b></div>`);
-    html+="</div>";
+  function techPack() {
+    if (!requireEntitlement()) return; // WP-42 Stage B: Export surface gate ("Tech Pack")
+    const pieces = Canvas.getPieces(); if (!pieces.length) { toast(T("empty2d")); return; }
+    const m = currentMeas();
+    let html = `<h2 style="margin-bottom:8px">${state.loaded ? L(PATTERNS[state.loaded].name) : "Tech Pack"}</h2>`;
+    html += `<p style="color:var(--ink-2);font-size:13px;margin-bottom:14px">${T("gradedTo")}: ${state.kids ? L(KIDS_AGES.find(a => a.id === state.kids).label) : state.size} · ${T("std_" + state.standard)}</p>`;
+    html += `<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="text-align:start"><th style="text-align:start;padding:6px;border-bottom:1px solid var(--line)">${T("pieces")}</th><th style="padding:6px;border-bottom:1px solid var(--line)">EN / AR</th></tr>`;
+    pieces.forEach(p => { html += `<tr><td style="padding:6px;border-bottom:1px solid var(--line-2)">${L(p.name)}</td><td style="padding:6px;border-bottom:1px solid var(--line-2);color:var(--ink-2)">${p.name[state.lang === "ar" ? "en" : "ar"]}</td></tr>`; });
+    html += `</table><h3 style="margin:16px 0 6px">${T("customMeas")}</h3><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px">`;
+    MEAS_KEYS.forEach(k => html += `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line-2)"><span>${T("m_" + k)}</span><b>${m[k]} cm</b></div>`);
+    html += "</div>";
     openModal("Tech Pack", html, true);
   }
 
@@ -3571,47 +3599,47 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // 'verified' for a crossPiece pair matched by a real declared role
   // (WP-25 — js/validate.js's pairByRole); 'heuristic' for one matched by
   // name-guessing (js/validate.js's pairFrontBack, the pre-WP-25 fallback).
-  function cpChip(checkKey, result, confidence){
+  function cpChip(checkKey, result, confidence) {
     const color = CP_COLOR[result.status] || "var(--ink-2)";
     const note = confidence === 'verified' ? T("cp_verifiedNote") : confidence === 'heuristic' ? T("cp_heuristicNote") : "";
     const title = [result.message, note].filter(Boolean).join(" — ");
     const badge = confidence === 'verified' ? ` · ${T("cp_verified")}` : confidence === 'heuristic' ? ` · ${T("cp_heuristic")}` : "";
-    return `<span title="${title.replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid ${color};color:${color};font-size:11px;font-weight:700;white-space:nowrap">
-      ${T("cp_"+checkKey)}${badge}: ${T("cp_"+result.status)}
+    return `<span title="${title.replace(/"/g, '&quot;')}" style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;border:1px solid ${color};color:${color};font-size:11px;font-weight:700;white-space:nowrap">
+      ${T("cp_" + checkKey)}${badge}: ${T("cp_" + result.status)}
     </span>`;
   }
-  function runCheckPattern(){
-    const pieces=Canvas.getPieces(); if(!pieces.length){toast(T("empty2d"));return;}
+  function runCheckPattern() {
+    const pieces = Canvas.getPieces(); if (!pieces.length) { toast(T("empty2d")); return; }
     // WP-24: bodyChestCm lets Ease compare a hinted piece's finished chest
     // against the actual wearer body — without it Ease honestly reports
     // "not applicable" for every piece rather than guessing a body.
-    const report = PatternValidator.run(pieces, { seamAllowanceCm: state.seamCm||1, offsetPoly: Canvas.offsetPoly, bodyChestCm: currentMeas().chest });
+    const report = PatternValidator.run(pieces, { seamAllowanceCm: state.seamCm || 1, offsetPoly: Canvas.offsetPoly, bodyChestCm: currentMeas().chest });
     const s = report.summary;
     let html = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      <span style="color:var(--ok);font-weight:700">${s.pass||0} ${T("cp_pass")}</span>
-      <span style="color:var(--warn);font-weight:700">${s.warn||0} ${T("cp_warn")}</span>
-      <span style="color:var(--danger);font-weight:700">${s.fail||0} ${T("cp_fail")}</span>
-      <span style="color:var(--ink-2);font-weight:700">${s.deferred||0} ${T("cp_deferred")}</span>
+      <span style="color:var(--ok);font-weight:700">${s.pass || 0} ${T("cp_pass")}</span>
+      <span style="color:var(--warn);font-weight:700">${s.warn || 0} ${T("cp_warn")}</span>
+      <span style="color:var(--danger);font-weight:700">${s.fail || 0} ${T("cp_fail")}</span>
+      <span style="color:var(--ink-2);font-weight:700">${s.deferred || 0} ${T("cp_deferred")}</span>
     </div>`;
 
     html += `<h3 style="margin:10px 0 6px">${T("cp_perPiece")}</h3>`;
-    report.perPiece.forEach((p)=>{
+    report.perPiece.forEach((p) => {
       html += `<div style="padding:8px 0;border-bottom:1px solid var(--line-2)">
         <div style="font-weight:700;margin-bottom:6px">${p.label}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,null)).join("")}
+          ${Object.entries(p.checks).map(([k, r]) => cpChip(k, r, null)).join("")}
         </div>
       </div>`;
     });
 
-    if (report.crossPiece.length){
+    if (report.crossPiece.length) {
       html += `<h3 style="margin:14px 0 6px">${T("cp_crossPiece")}</h3>`;
-      report.crossPiece.forEach((p)=>{
+      report.crossPiece.forEach((p) => {
         const confidence = p.verified ? 'verified' : 'heuristic';
         html += `<div style="padding:8px 0;border-bottom:1px solid var(--line-2)">
           <div style="font-weight:700;margin-bottom:6px">${p.label}</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            ${Object.entries(p.checks).map(([k,r])=>cpChip(k,r,confidence)).join("")}
+            ${Object.entries(p.checks).map(([k, r]) => cpChip(k, r, confidence)).join("")}
           </div>
         </div>`;
       });
@@ -3624,18 +3652,18 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // Shelf/FFDH bin packing over each piece's axis-aligned bounding box — not true
   // polygon (NFP) nesting. Simple, fast, always safe; the preview is explicitly
   // captioned as a simplified box approximation rather than an exact cutting layout.
-  function nestShelfPack(items, matWidth, allowRotate, minDist){
-    const sorted = items.slice().sort((a,b)=> Math.max(b.w,b.h) - Math.max(a.w,a.h));
+  function nestShelfPack(items, matWidth, allowRotate, minDist) {
+    const sorted = items.slice().sort((a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h));
     const shelves = [];
     let cur = null;
-    sorted.forEach(it=>{
-      const orients = allowRotate ? [{w:it.w,h:it.h},{w:it.h,h:it.w}] : [{w:it.w,h:it.h}];
-      let choice = cur && orients.find(o => cur.x + (cur.items.length?minDist:0) + o.w <= matWidth && o.h <= cur.height + 1e-6);
-      if(!choice){
-        const fitting = orients.filter(o=>o.w<=matWidth);
-        choice = (fitting.length?fitting:orients).slice().sort((a,b)=>a.h-b.h)[0];
-        const y = cur ? cur.y+cur.height+minDist : 0;
-        cur = { y, height: choice.h, x:0, items: [] };
+    sorted.forEach(it => {
+      const orients = allowRotate ? [{ w: it.w, h: it.h }, { w: it.h, h: it.w }] : [{ w: it.w, h: it.h }];
+      let choice = cur && orients.find(o => cur.x + (cur.items.length ? minDist : 0) + o.w <= matWidth && o.h <= cur.height + 1e-6);
+      if (!choice) {
+        const fitting = orients.filter(o => o.w <= matWidth);
+        choice = (fitting.length ? fitting : orients).slice().sort((a, b) => a.h - b.h)[0];
+        const y = cur ? cur.y + cur.height + minDist : 0;
+        cur = { y, height: choice.h, x: 0, items: [] };
         shelves.push(cur);
       }
       const gap = cur.items.length ? minDist : 0;
@@ -3643,27 +3671,27 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       cur.items.push({ label: it.label, x, y: cur.y, w: choice.w, h: choice.h });
       cur.x = x + choice.w;
     });
-    const totalHeight = shelves.length ? shelves[shelves.length-1].y + shelves[shelves.length-1].height : 0;
-    return { placed: shelves.flatMap(s=>s.items), totalHeight };
+    const totalHeight = shelves.length ? shelves[shelves.length - 1].y + shelves[shelves.length - 1].height : 0;
+    return { placed: shelves.flatMap(s => s.items), totalHeight };
   }
-  function drawNestPreview(canvas, result, matWidth, matLength){
-    const ctx = canvas.getContext("2d"); const W=canvas.width, H=canvas.height;
-    ctx.clearRect(0,0,W,H);
-    const h = Math.max(result.totalHeight, matLength*0.15, 10);
-    const scale = Math.min((W-20)/matWidth, (H-20)/h);
-    ctx.save(); ctx.translate(10,10);
-    const line = getComputedStyle(document.body).getPropertyValue("--line").trim()||"#ccc";
-    ctx.strokeStyle=line; ctx.lineWidth=1; ctx.strokeRect(0,0,matWidth*scale,result.totalHeight*scale);
-    ctx.setLineDash([4,3]);
-    for(let y=matLength; y<result.totalHeight; y+=matLength){ ctx.beginPath(); ctx.moveTo(0,y*scale); ctx.lineTo(matWidth*scale,y*scale); ctx.stroke(); }
+  function drawNestPreview(canvas, result, matWidth, matLength) {
+    const ctx = canvas.getContext("2d"); const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    const h = Math.max(result.totalHeight, matLength * 0.15, 10);
+    const scale = Math.min((W - 20) / matWidth, (H - 20) / h);
+    ctx.save(); ctx.translate(10, 10);
+    const line = getComputedStyle(document.body).getPropertyValue("--line").trim() || "#ccc";
+    ctx.strokeStyle = line; ctx.lineWidth = 1; ctx.strokeRect(0, 0, matWidth * scale, result.totalHeight * scale);
+    ctx.setLineDash([4, 3]);
+    for (let y = matLength; y < result.totalHeight; y += matLength) { ctx.beginPath(); ctx.moveTo(0, y * scale); ctx.lineTo(matWidth * scale, y * scale); ctx.stroke(); }
     ctx.setLineDash([]);
-    result.placed.forEach((p,i)=>{
-      const c = PALETTE[i%PALETTE.length];
-      ctx.fillStyle = c+"33"; ctx.strokeStyle = c; ctx.lineWidth=1.5;
-      ctx.fillRect(p.x*scale, p.y*scale, p.w*scale, p.h*scale);
-      ctx.strokeRect(p.x*scale, p.y*scale, p.w*scale, p.h*scale);
-      ctx.fillStyle = "#1a1a1a"; ctx.font = "10px Inter, sans-serif"; ctx.textBaseline="top";
-      ctx.fillText(p.label, p.x*scale+3, p.y*scale+3, Math.max(0,p.w*scale-6));
+    result.placed.forEach((p, i) => {
+      const c = PALETTE[i % PALETTE.length];
+      ctx.fillStyle = c + "33"; ctx.strokeStyle = c; ctx.lineWidth = 1.5;
+      ctx.fillRect(p.x * scale, p.y * scale, p.w * scale, p.h * scale);
+      ctx.strokeRect(p.x * scale, p.y * scale, p.w * scale, p.h * scale);
+      ctx.fillStyle = "#1a1a1a"; ctx.font = "10px Inter, sans-serif"; ctx.textBaseline = "top";
+      ctx.fillText(p.label, p.x * scale + 3, p.y * scale + 3, Math.max(0, p.w * scale - 6));
     });
     ctx.restore();
   }
@@ -3672,116 +3700,116 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // drawNestPreview above, but tracing each piece's actual placed
   // polygon so a piece visibly nests into another's concave notch
   // instead of just stacking rectangles.
-  function drawNestPreviewPolygons(canvas, placements, matWidth){
-    const ctx = canvas.getContext("2d"); const W=canvas.width, H=canvas.height;
-    ctx.clearRect(0,0,W,H);
-    const totalHeight = placements.reduce((m,p)=>Math.max(m,...p.poly.map(pt=>pt[1])), 0);
+  function drawNestPreviewPolygons(canvas, placements, matWidth) {
+    const ctx = canvas.getContext("2d"); const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    const totalHeight = placements.reduce((m, p) => Math.max(m, ...p.poly.map(pt => pt[1])), 0);
     const h = Math.max(totalHeight, 10);
-    const scale = Math.min((W-20)/matWidth, (H-20)/h);
-    ctx.save(); ctx.translate(10,10);
-    const line = getComputedStyle(document.body).getPropertyValue("--line").trim()||"#ccc";
-    ctx.strokeStyle=line; ctx.lineWidth=1; ctx.strokeRect(0,0,matWidth*scale,totalHeight*scale);
-    placements.forEach((p,i)=>{
-      const c = PALETTE[i%PALETTE.length];
-      ctx.fillStyle = c+"33"; ctx.strokeStyle = c; ctx.lineWidth=1.5;
+    const scale = Math.min((W - 20) / matWidth, (H - 20) / h);
+    ctx.save(); ctx.translate(10, 10);
+    const line = getComputedStyle(document.body).getPropertyValue("--line").trim() || "#ccc";
+    ctx.strokeStyle = line; ctx.lineWidth = 1; ctx.strokeRect(0, 0, matWidth * scale, totalHeight * scale);
+    placements.forEach((p, i) => {
+      const c = PALETTE[i % PALETTE.length];
+      ctx.fillStyle = c + "33"; ctx.strokeStyle = c; ctx.lineWidth = 1.5;
       ctx.beginPath();
-      p.poly.forEach(([x,y],j)=>{ const px=x*scale, py=y*scale; j===0?ctx.moveTo(px,py):ctx.lineTo(px,py); });
+      p.poly.forEach(([x, y], j) => { const px = x * scale, py = y * scale; j === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); });
       ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "#1a1a1a"; ctx.font = "10px Inter, sans-serif"; ctx.textBaseline="top";
-      const bx = Math.min(...p.poly.map(pt=>pt[0])), by = Math.min(...p.poly.map(pt=>pt[1]));
-      ctx.fillText(p.label, bx*scale+3, by*scale+3);
+      ctx.fillStyle = "#1a1a1a"; ctx.font = "10px Inter, sans-serif"; ctx.textBaseline = "top";
+      const bx = Math.min(...p.poly.map(pt => pt[0])), by = Math.min(...p.poly.map(pt => pt[1]));
+      ctx.fillText(p.label, bx * scale + 3, by * scale + 3);
     });
     ctx.restore();
   }
-  function openMarkerModal(){
+  function openMarkerModal() {
     const pieces = Canvas.getPieces();
-    if(!pieces.length){ toast(T("empty2d")); return; }
+    if (!pieces.length) { toast(T("empty2d")); return; }
     openModal(T("createMarker"), "", true);
-    const body = $("#genericModal .modal-body"); body.innerHTML="";
+    const body = $("#genericModal .modal-body"); body.innerHTML = "";
 
-    const matField = el("div","field");
+    const matField = el("div", "field");
     matField.innerHTML = `<label>${T("markerMaterial")}</label>
       <select class="input mk-mat">
         <option value="">${T("pieceMaterialDefault")}</option>
-        ${FABRICS.map(f=>`<option value="${f.key}">${T("fab_"+f.key)}</option>`).join("")}
+        ${FABRICS.map(f => `<option value="${f.key}">${T("fab_" + f.key)}</option>`).join("")}
       </select>`;
     body.appendChild(matField);
 
-    const pcsField = el("div","field"); pcsField.style.marginTop="12px";
+    const pcsField = el("div", "field"); pcsField.style.marginTop = "12px";
     pcsField.innerHTML = `<label>${T("markerPieces")} · <span class="mk-count"></span></label>`;
-    const pcsList = el("div"); pcsList.style.cssText="max-height:140px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px";
-    const checks = pieces.map((p,i)=>{
-      const row = el("label"); row.style.cssText="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:12.5px";
-      const cb = el("input"); cb.type="checkbox"; cb.checked=true;
-      row.appendChild(cb); row.appendChild(el("span",null,L(p.name)));
+    const pcsList = el("div"); pcsList.style.cssText = "max-height:140px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px";
+    const checks = pieces.map((p, i) => {
+      const row = el("label"); row.style.cssText = "display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:12.5px";
+      const cb = el("input"); cb.type = "checkbox"; cb.checked = true;
+      row.appendChild(cb); row.appendChild(el("span", null, L(p.name)));
       pcsList.appendChild(row); return cb;
     });
     pcsField.appendChild(pcsList); body.appendChild(pcsField);
-    const updateCount = () => { pcsField.querySelector(".mk-count").textContent = `${checks.filter(c=>c.checked).length} / ${checks.length}`; };
-    checks.forEach(cb=>cb.onchange=updateCount); updateCount();
+    const updateCount = () => { pcsField.querySelector(".mk-count").textContent = `${checks.filter(c => c.checked).length} / ${checks.length}`; };
+    checks.forEach(cb => cb.onchange = updateCount); updateCount();
 
-    const row1 = el("div","row"); row1.style.cssText="display:flex;gap:10px;margin-top:12px";
-    const wField = el("div","field"); wField.style.flex="1"; wField.innerHTML=`<label>${T("markerWidth")}</label>`;
-    const wInp = el("input","input"); wInp.type="number"; wInp.min="20"; wInp.value="160"; wField.appendChild(wInp);
-    const lField = el("div","field"); lField.style.flex="1"; lField.innerHTML=`<label>${T("markerLength")}</label>`;
-    const lInp = el("input","input"); lInp.type="number"; lInp.min="20"; lInp.value="250"; lField.appendChild(lInp);
+    const row1 = el("div", "row"); row1.style.cssText = "display:flex;gap:10px;margin-top:12px";
+    const wField = el("div", "field"); wField.style.flex = "1"; wField.innerHTML = `<label>${T("markerWidth")}</label>`;
+    const wInp = el("input", "input"); wInp.type = "number"; wInp.min = "20"; wInp.value = "160"; wField.appendChild(wInp);
+    const lField = el("div", "field"); lField.style.flex = "1"; lField.innerHTML = `<label>${T("markerLength")}</label>`;
+    const lInp = el("input", "input"); lInp.type = "number"; lInp.min = "20"; lInp.value = "250"; lField.appendChild(lInp);
     row1.appendChild(wField); row1.appendChild(lField); body.appendChild(row1);
-    body.appendChild(el("div","help-note",T("markerLengthNote"))).style.marginTop="4px";
+    body.appendChild(el("div", "help-note", T("markerLengthNote"))).style.marginTop = "4px";
 
-    const row2 = el("div","row"); row2.style.cssText="display:flex;gap:10px;margin-top:12px";
-    const rField = el("div","field"); rField.style.flex="1"; rField.innerHTML=`<label>${T("markerRotation")}</label>
+    const row2 = el("div", "row"); row2.style.cssText = "display:flex;gap:10px;margin-top:12px";
+    const rField = el("div", "field"); rField.style.flex = "1"; rField.innerHTML = `<label>${T("markerRotation")}</label>
       <select class="input mk-rot"><option value="none">${T("markerRotNone")}</option><option value="any" selected>${T("markerRotAny")}</option></select>`;
-    const dField = el("div","field"); dField.style.flex="1"; dField.innerHTML=`<label>${T("markerMinDist")}</label>`;
-    const dInp = el("input","input"); dInp.type="number"; dInp.min="0"; dInp.step="0.1"; dInp.value="0.1"; dField.appendChild(dInp);
+    const dField = el("div", "field"); dField.style.flex = "1"; dField.innerHTML = `<label>${T("markerMinDist")}</label>`;
+    const dInp = el("input", "input"); dInp.type = "number"; dInp.min = "0"; dInp.step = "0.1"; dInp.value = "0.1"; dField.appendChild(dInp);
     row2.appendChild(rField); row2.appendChild(dField); body.appendChild(row2);
 
     // WP-11: true polygon nesting alongside the original instant
     // bounding-box packer — defaults to "fast" so nothing changes for an
     // existing user until they opt into the slower, tighter mode.
-    const modeField = el("div","field"); modeField.style.marginTop="12px";
+    const modeField = el("div", "field"); modeField.style.marginTop = "12px";
     modeField.innerHTML = `<label>${T("markerMode")}</label>`;
-    const modeSeg = el("div","seg");
+    const modeSeg = el("div", "seg");
     modeSeg.innerHTML = `<button class="active" data-mode="fast">${T("markerModeFast")}</button><button data-mode="full">${T("markerModeFull")}</button>`;
     modeField.appendChild(modeSeg); body.appendChild(modeField);
-    const noteEl = body.appendChild(el("div","help-note",T("markerPreviewNote")));
-    noteEl.style.marginTop="6px";
+    const noteEl = body.appendChild(el("div", "help-note", T("markerPreviewNote")));
+    noteEl.style.marginTop = "6px";
     let mode = "fast";
-    [...modeSeg.children].forEach(b=>b.onclick=()=>{
+    [...modeSeg.children].forEach(b => b.onclick = () => {
       mode = b.dataset.mode;
-      [...modeSeg.children].forEach(x=>x.classList.toggle("active", x===b));
-      noteEl.textContent = mode==="fast" ? T("markerPreviewNote") : T("markerFullNote");
+      [...modeSeg.children].forEach(x => x.classList.toggle("active", x === b));
+      noteEl.textContent = mode === "fast" ? T("markerPreviewNote") : T("markerFullNote");
     });
 
-    const canvas = el("canvas"); canvas.width=680; canvas.height=380;
-    canvas.style.cssText="width:100%;height:auto;margin-top:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)";
+    const canvas = el("canvas"); canvas.width = 680; canvas.height = 380;
+    canvas.style.cssText = "width:100%;height:auto;margin-top:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)";
     body.appendChild(canvas);
 
-    const yardEl = el("div","help-note"); yardEl.style.marginTop="8px"; yardEl.textContent=T("markerYardageHint");
-    const btnRow = el("div","row"); btnRow.style.cssText="display:flex;gap:8px;margin-top:12px";
-    const nestBtn = el("button","big-btn",T("markerNest")); nestBtn.style.flex="1";
-    const stopBtn = el("button","big-btn ghost",T("markerStop")); stopBtn.style.flex="1";
+    const yardEl = el("div", "help-note"); yardEl.style.marginTop = "8px"; yardEl.textContent = T("markerYardageHint");
+    const btnRow = el("div", "row"); btnRow.style.cssText = "display:flex;gap:8px;margin-top:12px";
+    const nestBtn = el("button", "big-btn", T("markerNest")); nestBtn.style.flex = "1";
+    const stopBtn = el("button", "big-btn ghost", T("markerStop")); stopBtn.style.flex = "1";
     btnRow.appendChild(nestBtn); btnRow.appendChild(stopBtn);
     body.appendChild(btnRow); body.appendChild(yardEl);
 
     let fullNestRunning = false;
-    stopBtn.onclick = () => { if(fullNestRunning) cancelNest(); else toast(T("markerInstant")); };
+    stopBtn.onclick = () => { if (fullNestRunning) cancelNest(); else toast(T("markerInstant")); };
 
     nestBtn.onclick = async () => {
       const matFilter = body.querySelector(".mk-mat").value;
-      const selected = pieces.filter((p,i)=>checks[i].checked && (!matFilter || (p.material||state.fabric3d)===matFilter));
-      if(!selected.length){ toast(T("empty2d")); return; }
-      const matWidth = +wInp.value||160, matLength = +lInp.value||250;
-      const allowRotate = rField.querySelector(".mk-rot").value==="any";
-      const minDistCm = +dInp.value||0;
+      const selected = pieces.filter((p, i) => checks[i].checked && (!matFilter || (p.material || state.fabric3d) === matFilter));
+      if (!selected.length) { toast(T("empty2d")); return; }
+      const matWidth = +wInp.value || 160, matLength = +lInp.value || 250;
+      const allowRotate = rField.querySelector(".mk-rot").value === "any";
+      const minDistCm = +dInp.value || 0;
 
-      if(mode==="fast"){
-        const items = selected.map(p=>{
-          const xs=p.outline.map(pt=>pt[0]), ys=p.outline.map(pt=>pt[1]);
-          return { label:L(p.name), w:Math.max(...xs)-Math.min(...xs), h:Math.max(...ys)-Math.min(...ys) };
+      if (mode === "fast") {
+        const items = selected.map(p => {
+          const xs = p.outline.map(pt => pt[0]), ys = p.outline.map(pt => pt[1]);
+          return { label: L(p.name), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
         });
         const result = nestShelfPack(items, matWidth, allowRotate, minDistCm);
         drawNestPreview(canvas, result, matWidth, matLength);
-        state.lastMarkerYards = result.totalHeight/100; state.lastMarkerWidth = matWidth; save();
+        state.lastMarkerYards = result.totalHeight / 100; state.lastMarkerWidth = matWidth; save();
         yardEl.innerHTML = `${T("markerYardage")}: <b>${state.lastMarkerYards.toFixed(2)} m</b> @ ${matWidth}cm`;
         renderExportPane();
         return;
@@ -3791,30 +3819,30 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       // the UI stays responsive — see WP-11's own honest-notes for why
       // this is bottom-left-fill + simulated annealing over true overlap
       // testing rather than literal Minkowski-NFP + convex decomposition.
-      const idToLabel = {}; selected.forEach((p,i)=>{ idToLabel[i]=L(p.name); });
-      const nestPieces = selected.map((p,i)=>({
+      const idToLabel = {}; selected.forEach((p, i) => { idToLabel[i] = L(p.name); });
+      const nestPieces = selected.map((p, i) => ({
         id: i, outline: p.outline,
-        grainLocked: !!(p.grain && p.grain.length>=2 && p.grainline!=="bias"),
+        grainLocked: !!(p.grain && p.grain.length >= 2 && p.grainline !== "bias"),
       }));
       fullNestRunning = true;
       nestBtn.disabled = true; nestBtn.textContent = T("markerNesting");
       try {
         const result = await nestTruePolygon(
           { pieces: nestPieces, matWidth, allowRotate, minDistCm },
-          (p)=>{ yardEl.innerHTML = `${T("markerNesting")} ${Math.round(p.utilization*100)}%`; },
+          (p) => { yardEl.innerHTML = `${T("markerNesting")} ${Math.round(p.utilization * 100)}%`; },
         );
         fullNestRunning = false;
         nestBtn.disabled = false; nestBtn.textContent = T("markerNest");
-        if(result.error){ toast(result.error); return; }
-        const placements = result.placements.map(pl=>({ ...pl, label: idToLabel[pl.id] }));
+        if (result.error) { toast(result.error); return; }
+        const placements = result.placements.map(pl => ({ ...pl, label: idToLabel[pl.id] }));
         drawNestPreviewPolygons(canvas, placements, matWidth);
-        state.lastMarkerYards = result.totalHeight/100; state.lastMarkerWidth = matWidth; save();
-        const utilPct = Math.round(result.utilization*100);
+        state.lastMarkerYards = result.totalHeight / 100; state.lastMarkerWidth = matWidth; save();
+        const utilPct = Math.round(result.utilization * 100);
         yardEl.innerHTML = `${T("markerYardage")}: <b>${state.lastMarkerYards.toFixed(2)} m</b> @ ${matWidth}cm`
           + ` · ${T("markerUtilization")}: <b>${utilPct}%</b>`
           + (result.cancelled ? ` — ${T("markerCancelled")}` : "");
         renderExportPane();
-      } catch(err){
+      } catch (err) {
         fullNestRunning = false;
         nestBtn.disabled = false; nestBtn.textContent = T("markerNest");
         toast(String(err && err.message || err));
@@ -3826,59 +3854,59 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // A condensed bilingual sheet — size table + a small labelled diagram per
   // piece with width/height call-outs + a construction note. Distinct from
   // the full Tech Pack: this is meant to be printed or saved as a single PDF.
-  function pieceBBox(outline){
-    const xs=outline.map(p=>p[0]), ys=outline.map(p=>p[1]);
-    return { minX:Math.min(...xs), minY:Math.min(...ys), maxX:Math.max(...xs), maxY:Math.max(...ys) };
+  function pieceBBox(outline) {
+    const xs = outline.map(p => p[0]), ys = outline.map(p => p[1]);
+    return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
   }
-  function dimLineH(x1,x2,y,val,fs,sw){
-    const a=fs*0.6, mid=(x1+x2)/2;
+  function dimLineH(x1, x2, y, val, fs, sw) {
+    const a = fs * 0.6, mid = (x1 + x2) / 2;
     return `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="#333" stroke-width="${sw}"/>
-      <line x1="${x1}" y1="${y-a}" x2="${x1}" y2="${y+a}" stroke="#333" stroke-width="${sw}"/>
-      <line x1="${x2}" y1="${y-a}" x2="${x2}" y2="${y+a}" stroke="#333" stroke-width="${sw}"/>
-      <rect x="${mid-fs*1.6}" y="${y+fs*0.35}" width="${fs*3.2}" height="${fs*1.15}" fill="#fff" opacity="0.85"/>
-      <text x="${mid}" y="${y+fs*1.25}" font-size="${fs}" text-anchor="middle" fill="#222">${val.toFixed(1)}cm</text>`;
+      <line x1="${x1}" y1="${y - a}" x2="${x1}" y2="${y + a}" stroke="#333" stroke-width="${sw}"/>
+      <line x1="${x2}" y1="${y - a}" x2="${x2}" y2="${y + a}" stroke="#333" stroke-width="${sw}"/>
+      <rect x="${mid - fs * 1.6}" y="${y + fs * 0.35}" width="${fs * 3.2}" height="${fs * 1.15}" fill="#fff" opacity="0.85"/>
+      <text x="${mid}" y="${y + fs * 1.25}" font-size="${fs}" text-anchor="middle" fill="#222">${val.toFixed(1)}cm</text>`;
   }
-  function dimLineV(y1,y2,x,val,fs,sw){
-    const a=fs*0.6, mid=(y1+y2)/2;
+  function dimLineV(y1, y2, x, val, fs, sw) {
+    const a = fs * 0.6, mid = (y1 + y2) / 2;
     return `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="#333" stroke-width="${sw}"/>
-      <line x1="${x-a}" y1="${y1}" x2="${x+a}" y2="${y1}" stroke="#333" stroke-width="${sw}"/>
-      <line x1="${x-a}" y1="${y2}" x2="${x+a}" y2="${y2}" stroke="#333" stroke-width="${sw}"/>
-      <text x="${x+fs*1.3}" y="${mid}" font-size="${fs}" text-anchor="middle" fill="#222" transform="rotate(-90 ${x+fs*1.3} ${mid})">${val.toFixed(1)}cm</text>`;
+      <line x1="${x - a}" y1="${y1}" x2="${x + a}" y2="${y1}" stroke="#333" stroke-width="${sw}"/>
+      <line x1="${x - a}" y1="${y2}" x2="${x + a}" y2="${y2}" stroke="#333" stroke-width="${sw}"/>
+      <text x="${x + fs * 1.3}" y="${mid}" font-size="${fs}" text-anchor="middle" fill="#222" transform="rotate(-90 ${x + fs * 1.3} ${mid})">${val.toFixed(1)}cm</text>`;
   }
-  function pieceDiagramSVG(p){
-    const b=pieceBBox(p.outline), w=b.maxX-b.minX||1, h=b.maxY-b.minY||1;
-    const pad=Math.max(w,h)*0.14+2, rp=pad+Math.max(w,h)*0.22, bp=pad+Math.max(w,h)*0.16;
-    const vbX=b.minX-pad, vbY=b.minY-pad, vbW=w+pad+rp, vbH=h+pad+bp;
-    const pts=p.outline.map(pt=>pt.join(",")).join(" ");
-    const col=p.color||"#6d5efc", fs=Math.max(w,h)*0.055, sw=Math.max(w,h)*0.01;
-    let s=`<svg viewBox="${vbX} ${vbY} ${vbW} ${vbH}" width="100%" height="168" preserveAspectRatio="xMidYMid meet">`;
-    s+=`<polygon points="${pts}" fill="${col}" fill-opacity="0.14" stroke="${col}" stroke-width="${sw}"/>`;
-    (p.grain&&p.grain.length===2? [p.grain] : []).forEach(g=>{
-      s+=`<line x1="${g[0][0]}" y1="${g[0][1]}" x2="${g[1][0]}" y2="${g[1][1]}" stroke="${col}" stroke-width="${sw*0.8}" stroke-dasharray="${sw*2},${sw}"/>`;
+  function pieceDiagramSVG(p) {
+    const b = pieceBBox(p.outline), w = b.maxX - b.minX || 1, h = b.maxY - b.minY || 1;
+    const pad = Math.max(w, h) * 0.14 + 2, rp = pad + Math.max(w, h) * 0.22, bp = pad + Math.max(w, h) * 0.16;
+    const vbX = b.minX - pad, vbY = b.minY - pad, vbW = w + pad + rp, vbH = h + pad + bp;
+    const pts = p.outline.map(pt => pt.join(",")).join(" ");
+    const col = p.color || "#6d5efc", fs = Math.max(w, h) * 0.055, sw = Math.max(w, h) * 0.01;
+    let s = `<svg viewBox="${vbX} ${vbY} ${vbW} ${vbH}" width="100%" height="168" preserveAspectRatio="xMidYMid meet">`;
+    s += `<polygon points="${pts}" fill="${col}" fill-opacity="0.14" stroke="${col}" stroke-width="${sw}"/>`;
+    (p.grain && p.grain.length === 2 ? [p.grain] : []).forEach(g => {
+      s += `<line x1="${g[0][0]}" y1="${g[0][1]}" x2="${g[1][0]}" y2="${g[1][1]}" stroke="${col}" stroke-width="${sw * 0.8}" stroke-dasharray="${sw * 2},${sw}"/>`;
     });
-    s+=dimLineH(b.minX,b.maxX,b.maxY+pad*0.55,w,fs,sw);
-    s+=dimLineV(b.maxY,b.minY,b.maxX+pad*0.55,h,fs,sw);
-    return s+"</svg>";
+    s += dimLineH(b.minX, b.maxX, b.maxY + pad * 0.55, w, fs, sw);
+    s += dimLineV(b.maxY, b.minY, b.maxX + pad * 0.55, h, fs, sw);
+    return s + "</svg>";
   }
-  function buildSummaryHTML(){
-    const pieces=Canvas.getPieces(); const m=currentMeas();
-    const nameObj = state.loaded ? PATTERNS[state.loaded].name : { en:T("customPattern"), ar:T("customPattern") };
+  function buildSummaryHTML() {
+    const pieces = Canvas.getPieces(); const m = currentMeas();
+    const nameObj = state.loaded ? PATTERNS[state.loaded].name : { en: T("customPattern"), ar: T("customPattern") };
     const descObj = state.loaded ? PATTERNS[state.loaded].desc : null;
-    const sizeLbl = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids).label) : state.size;
+    const sizeLbl = state.kids ? L(KIDS_AGES.find(a => a.id === state.kids).label) : state.size;
     const seamCm = Canvas.getOpt("seamCm");
-    const rows=[["m_chest","chest"],["m_waist","waist"],["m_hips","hips"],["m_shoulder","shoulder"],["m_sleeve","sleeve"]];
-    const rtl = state.lang==="ar";
-    const piecesHTML = pieces.map((p,i)=>`
+    const rows = [["m_chest", "chest"], ["m_waist", "waist"], ["m_hips", "hips"], ["m_shoulder", "shoulder"], ["m_sleeve", "sleeve"]];
+    const rtl = state.lang === "ar";
+    const piecesHTML = pieces.map((p, i) => `
       <div class="sp-box">
-        <div class="sp-head"><span class="sp-num">${i+1}</span><span class="sp-name">${p.name.en}</span><span class="sp-name-ar">${p.name.ar}</span></div>
+        <div class="sp-head"><span class="sp-num">${i + 1}</span><span class="sp-name">${p.name.en}</span><span class="sp-name-ar">${p.name.ar}</span></div>
         ${pieceDiagramSVG(p)}
       </div>`).join("");
-    return `<!doctype html><html lang="${state.lang}" dir="${rtl?"rtl":"ltr"}"><head><meta charset="utf-8">
+    return `<!doctype html><html lang="${state.lang}" dir="${rtl ? "rtl" : "ltr"}"><head><meta charset="utf-8">
 <title>BerryStudio — ${nameObj.en} · ${T("patternSummary")}</title>
 <style>
   @page{margin:14mm}
   *{box-sizing:border-box}
-  body{font-family:${rtl?"'Cairo','Segoe UI'":"'Segoe UI'"},Tahoma,Arial,sans-serif;color:#1a1a1a;margin:0;padding:22px;background:#fff}
+  body{font-family:${rtl ? "'Cairo','Segoe UI'" : "'Segoe UI'"},Tahoma,Arial,sans-serif;color:#1a1a1a;margin:0;padding:22px;background:#fff}
   h1{font-size:21px;margin:0 0 3px}
   h1 span{color:#8a8a8a;font-weight:600;font-size:16px}
   .sub{font-size:13px;color:#666;margin:0 0 16px}
@@ -3902,25 +3930,25 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
 <body>
   <div class="pbar"><button onclick="window.close()">${T("close")}</button><button class="primary" onclick="window.print()">${T("printNow")}</button></div>
   <h1>${nameObj.en} <span>/ ${nameObj.ar}</span></h1>
-  <p class="sub">BerryStudio · ${T("gradedTo")}: ${sizeLbl} · ${T("std_"+state.standard)}</p>
+  <p class="sub">BerryStudio · ${T("gradedTo")}: ${sizeLbl} · ${T("std_" + state.standard)}</p>
   <div class="top">
     <table>
       <tr><th>${T("tab_measure")}</th><th>cm</th></tr>
-      ${rows.map(([lk,mk])=>`<tr><td>${T(lk)}</td><td>${m[mk]}</td></tr>`).join("")}
+      ${rows.map(([lk, mk]) => `<tr><td>${T(lk)}</td><td>${m[mk]}</td></tr>`).join("")}
     </table>
-    <div class="refbox"><b>${nameObj.en} / ${nameObj.ar}</b>${descObj?L(descObj):""}</div>
+    <div class="refbox"><b>${nameObj.en} / ${nameObj.ar}</b>${descObj ? L(descObj) : ""}</div>
   </div>
   <div class="grid">${piecesHTML}</div>
-  <div class="note">${T("summaryNote").replace("{n}",seamCm)}</div>
+  <div class="note">${T("summaryNote").replace("{n}", seamCm)}</div>
 </body></html>`;
   }
-  function exportSummary(){
-    if(!requireEntitlement()) return; // WP-42 Stage B: Export surface gate
-    if(!Canvas.getPieces().length){ toast(T("empty2d")); return; }
-    const w=window.open("","_blank");
-    if(!w){ toast(T("patternSummary")+": allow pop-ups"); return; }
+  function exportSummary() {
+    if (!requireEntitlement()) return; // WP-42 Stage B: Export surface gate
+    if (!Canvas.getPieces().length) { toast(T("empty2d")); return; }
+    const w = window.open("", "_blank");
+    if (!w) { toast(T("patternSummary") + ": allow pop-ups"); return; }
     w.document.write(buildSummaryHTML()); w.document.close();
-    toast(T("exported")+" · "+T("patternSummary"));
+    toast(T("exported") + " · " + T("patternSummary"));
   }
 
   // ================= BILL OF MATERIALS =================
@@ -3930,57 +3958,57 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // fixed guessed list, so an empty/simple pattern gets a short, honest BOM
   // and a coat/suit gets a real one. Front-button count is the one estimate
   // (industry ~10-12cm spacing over the back length) and is labelled as such.
-  function buildBomFabricConsumption(){
-    const m=currentMeas();
-    const yards = state.lastMarkerYards!=null ? +state.lastMarkerYards.toFixed(2) : +((m.height/100)*(state.category==="women"?1.8:1.5)).toFixed(2);
+  function buildBomFabricConsumption() {
+    const m = currentMeas();
+    const yards = state.lastMarkerYards != null ? +state.lastMarkerYards.toFixed(2) : +((m.height / 100) * (state.category === "women" ? 1.8 : 1.5)).toFixed(2);
     const width = state.lastMarkerWidth || 160;
     return { yards, width };
   }
-  function buildBomItems(pieces){
-    const m=currentMeas();
+  function buildBomItems(pieces) {
+    const m = currentMeas();
     const { yards, width } = buildBomFabricConsumption();
-    const isZipPlacket = p => p.role==="placket-facing" && /zip/i.test((p.name&&p.name.en)||"");
-    const buttonFrontPiece = p => p.role==="lapel-facing" && !isZipPlacket(p);
+    const isZipPlacket = p => p.role === "placket-facing" && /zip/i.test((p.name && p.name.en) || "");
+    const buttonFrontPiece = p => p.role === "lapel-facing" && !isZipPlacket(p);
     const zipPresent = pieces.some(isZipPlacket);
-    const cuffCount = pieces.filter(p=>p.role==="cuff").length;
-    const waistbandCount = pieces.filter(p=>p.role==="waistband").length;
+    const cuffCount = pieces.filter(p => p.role === "cuff").length;
+    const waistbandCount = pieces.filter(p => p.role === "waistband").length;
     const buttonFrontPresent = pieces.some(buttonFrontPiece);
-    const liningNeeded = pieces.some(p=>p.role==="lapel-facing"||p.role==="placket-facing");
-    const interfacingNeeded = pieces.some(p=>["collar","cuff","waistband","lapel-facing","placket-facing"].includes(p.role));
+    const liningNeeded = pieces.some(p => p.role === "lapel-facing" || p.role === "placket-facing");
+    const interfacingNeeded = pieces.some(p => ["collar", "cuff", "waistband", "lapel-facing", "placket-facing"].includes(p.role));
     // Underwear & Bra Library (js/underwear-library.js): elastic and a
     // hook-and-eye back closure are real materials those patterns need that
     // nothing else in the BOM already covers.
-    const elasticNeeded = pieces.some(p=>["gusset","elastic-band","cup","band","strap"].includes(p.role));
-    const hookEyeNeeded = pieces.some(p=>p.role==="band");
+    const elasticNeeded = pieces.some(p => ["gusset", "elastic-band", "cup", "band", "strap"].includes(p.role));
+    const hookEyeNeeded = pieces.some(p => p.role === "band");
 
     const items = [];
-    items.push({ item:T("bomMainFabric"), qty:`${yards} m`, note:`@ ${width}cm — ${T("bomFabricDefault")}` });
-    if(liningNeeded) items.push({ item:T("bomLining"), qty:`${+(yards*0.4).toFixed(2)} m`, note:T("bomLiningNote") });
-    if(interfacingNeeded) items.push({ item:T("bomInterfacing"), qty:"0.3 m", note:T("bomInterfacingNote") });
-    if(zipPresent) items.push({ item:T("bomZipper"), qty:"1", note:`≈${Math.round(m.backLen*0.6)} cm` });
-    if(cuffCount) items.push({ item:T("bomButtonsCuff"), qty:String(cuffCount), note:T("bomButtonsCuffNote") });
-    if(waistbandCount) items.push({ item:T("bomClosureWaistband"), qty:String(waistbandCount), note:T("bomClosureWaistbandNote") });
-    if(buttonFrontPresent) items.push({ item:T("bomButtonsFront"), qty:String(Math.max(2,Math.round(m.backLen/12))), note:T("bomButtonsFrontNote") });
-    if(elasticNeeded) items.push({ item:T("bomElastic"), qty:"1.5 m", note:T("bomElasticNote") });
-    if(hookEyeNeeded) items.push({ item:T("bomHookEye"), qty:"1", note:T("bomHookEyeNote") });
-    items.push({ item:T("bomThread"), qty:"1", note:T("bomThreadNote") });
-    items.push({ item:T("bomLabels"), qty:"1", note:T("bomLabelsNote") });
+    items.push({ item: T("bomMainFabric"), qty: `${yards} m`, note: `@ ${width}cm — ${T("bomFabricDefault")}` });
+    if (liningNeeded) items.push({ item: T("bomLining"), qty: `${+(yards * 0.4).toFixed(2)} m`, note: T("bomLiningNote") });
+    if (interfacingNeeded) items.push({ item: T("bomInterfacing"), qty: "0.3 m", note: T("bomInterfacingNote") });
+    if (zipPresent) items.push({ item: T("bomZipper"), qty: "1", note: `≈${Math.round(m.backLen * 0.6)} cm` });
+    if (cuffCount) items.push({ item: T("bomButtonsCuff"), qty: String(cuffCount), note: T("bomButtonsCuffNote") });
+    if (waistbandCount) items.push({ item: T("bomClosureWaistband"), qty: String(waistbandCount), note: T("bomClosureWaistbandNote") });
+    if (buttonFrontPresent) items.push({ item: T("bomButtonsFront"), qty: String(Math.max(2, Math.round(m.backLen / 12))), note: T("bomButtonsFrontNote") });
+    if (elasticNeeded) items.push({ item: T("bomElastic"), qty: "1.5 m", note: T("bomElasticNote") });
+    if (hookEyeNeeded) items.push({ item: T("bomHookEye"), qty: "1", note: T("bomHookEyeNote") });
+    items.push({ item: T("bomThread"), qty: "1", note: T("bomThreadNote") });
+    items.push({ item: T("bomLabels"), qty: "1", note: T("bomLabelsNote") });
     return items;
   }
-  function buildBomHTML(){
-    const pieces=Canvas.getPieces();
-    const nameObj = state.loaded ? PATTERNS[state.loaded].name : { en:T("customPattern"), ar:T("customPattern") };
-    const sizeLbl = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids).label) : state.size;
-    const rtl = state.lang==="ar";
+  function buildBomHTML() {
+    const pieces = Canvas.getPieces();
+    const nameObj = state.loaded ? PATTERNS[state.loaded].name : { en: T("customPattern"), ar: T("customPattern") };
+    const sizeLbl = state.kids ? L(KIDS_AGES.find(a => a.id === state.kids).label) : state.size;
+    const rtl = state.lang === "ar";
     const items = buildBomItems(pieces);
-    const itemsHTML = items.map(row=>`<tr><td style="text-align:${rtl?"end":"start"}">${row.item}</td><td>${row.qty}</td><td style="color:#666;font-size:12px">${row.note}</td></tr>`).join("");
-    const cuttingHTML = pieces.map((p,i)=>`<tr><td style="text-align:${rtl?"end":"start"}">${i+1}. ${p.name.en} / ${p.name.ar}</td><td>${p.cutOnFold?T("cutOnFold"):"—"}</td><td>${p.color||""}</td></tr>`).join("");
-    return `<!doctype html><html lang="${state.lang}" dir="${rtl?"rtl":"ltr"}"><head><meta charset="utf-8">
+    const itemsHTML = items.map(row => `<tr><td style="text-align:${rtl ? "end" : "start"}">${row.item}</td><td>${row.qty}</td><td style="color:#666;font-size:12px">${row.note}</td></tr>`).join("");
+    const cuttingHTML = pieces.map((p, i) => `<tr><td style="text-align:${rtl ? "end" : "start"}">${i + 1}. ${p.name.en} / ${p.name.ar}</td><td>${p.cutOnFold ? T("cutOnFold") : "—"}</td><td>${p.color || ""}</td></tr>`).join("");
+    return `<!doctype html><html lang="${state.lang}" dir="${rtl ? "rtl" : "ltr"}"><head><meta charset="utf-8">
 <title>BerryStudio — ${nameObj.en} · ${T("bom")}</title>
 <style>
   @page{margin:14mm}
   *{box-sizing:border-box}
-  body{font-family:${rtl?"'Cairo','Segoe UI'":"'Segoe UI'"},Tahoma,Arial,sans-serif;color:#1a1a1a;margin:0;padding:22px;background:#fff}
+  body{font-family:${rtl ? "'Cairo','Segoe UI'" : "'Segoe UI'"},Tahoma,Arial,sans-serif;color:#1a1a1a;margin:0;padding:22px;background:#fff}
   h1{font-size:21px;margin:0 0 3px}
   h1 span{color:#8a8a8a;font-weight:600;font-size:16px}
   .sub{font-size:13px;color:#666;margin:0 0 16px}
@@ -3996,20 +4024,20 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
 <body>
   <div class="pbar"><button onclick="window.close()">${T("close")}</button><button class="primary" onclick="window.print()">${T("printNow")}</button></div>
   <h1>${nameObj.en} <span>/ ${nameObj.ar}</span></h1>
-  <p class="sub">BerryStudio · ${T("bom")} · ${T("gradedTo")}: ${sizeLbl} · ${T("std_"+state.standard)}</p>
+  <p class="sub">BerryStudio · ${T("bom")} · ${T("gradedTo")}: ${sizeLbl} · ${T("std_" + state.standard)}</p>
   <h2>${T("bom")}</h2>
   <table><tr><th>${T("bomItem")}</th><th>${T("bomQty")}</th><th>${T("bomNotes")}</th></tr>${itemsHTML}</table>
   <h2>${T("bomCuttingList")}</h2>
   <table><tr><th>${T("pieces")}</th><th>${T("cutOnFold")}</th><th>${T("pieceColor")}</th></tr>${cuttingHTML}</table>
 </body></html>`;
   }
-  function exportBom(){
-    if(!requireEntitlement()) return; // WP-42 Stage B: Export surface gate ("BOM")
-    const pieces=Canvas.getPieces(); if(!pieces.length){ toast(T("empty2d")); return; }
-    const w=window.open("","_blank");
-    if(!w){ toast(T("bom")+": allow pop-ups"); return; }
+  function exportBom() {
+    if (!requireEntitlement()) return; // WP-42 Stage B: Export surface gate ("BOM")
+    const pieces = Canvas.getPieces(); if (!pieces.length) { toast(T("empty2d")); return; }
+    const w = window.open("", "_blank");
+    if (!w) { toast(T("bom") + ": allow pop-ups"); return; }
     w.document.write(buildBomHTML()); w.document.close();
-    toast(T("exported")+" · "+T("bom"));
+    toast(T("exported") + " · " + T("bom"));
   }
 
   // Sewing Instructions (Tailornova feature study, WP-37): a real ordered
@@ -4019,21 +4047,21 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // Any piece with an unrecognised/no role (role:"other", freehand shapes)
   // simply contributes no step of its own — it's still cut and sewn, it just
   // doesn't get a dedicated instruction, which is the honest behaviour here.
-  function buildSewingSteps(pieces){
+  function buildSewingSteps(pieces) {
     const seamCm = Canvas.getOpt("seamCm");
     const m = currentMeas();
     const byRole = {};
-    pieces.forEach(p=>{ if(p.role) (byRole[p.role]=byRole[p.role]||[]).push(p); });
-    const has = (...roles) => roles.some(r=>(byRole[r]||[]).length>0);
-    const names = (...roles) => roles.flatMap(r=>byRole[r]||[]).map(p=>L(p.name)).join(", ");
-    const isZipPlacket = p => p.role==="placket-facing" && /zip/i.test((p.name&&p.name.en)||"");
-    const buttonFrontPiece = p => p.role==="lapel-facing" && !isZipPlacket(p);
+    pieces.forEach(p => { if (p.role) (byRole[p.role] = byRole[p.role] || []).push(p); });
+    const has = (...roles) => roles.some(r => (byRole[r] || []).length > 0);
+    const names = (...roles) => roles.flatMap(r => byRole[r] || []).map(p => L(p.name)).join(", ");
+    const isZipPlacket = p => p.role === "placket-facing" && /zip/i.test((p.name && p.name.en) || "");
+    const buttonFrontPiece = p => p.role === "lapel-facing" && !isZipPlacket(p);
     const zipPresent = pieces.some(isZipPlacket);
     const buttonFrontPresent = pieces.some(buttonFrontPiece);
-    const interfacingPieces = pieces.filter(p=>["collar","collar-stand","cuff","waistband","lapel-facing","placket-facing"].includes(p.role));
-    const dartCount = pieces.reduce((n,p)=>n+((p.darts||[]).length),0);
-    const hasFrontBack = has("bodice-front-center","front-panel") && has("bodice-back-center","back-panel");
-    const sleeveRoles = ["sleeve","cap-sleeve","puff-sleeve","butterfly-sleeve","cape-sleeve","sleeve-upper"];
+    const interfacingPieces = pieces.filter(p => ["collar", "collar-stand", "cuff", "waistband", "lapel-facing", "placket-facing"].includes(p.role));
+    const dartCount = pieces.reduce((n, p) => n + ((p.darts || []).length), 0);
+    const hasFrontBack = has("bodice-front-center", "front-panel") && has("bodice-back-center", "back-panel");
+    const sleeveRoles = ["sleeve", "cap-sleeve", "puff-sleeve", "butterfly-sleeve", "cape-sleeve", "sleeve-upper"];
     // Underwear & Bra Library (js/underwear-library.js): none of these five
     // roles existed before that file — real, dedicated instructions for
     // them rather than letting them fall through to role:"other"'s silent
@@ -4043,69 +4071,69 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // see that file's own header comment.
     const hasBriefBody = has("brief-front") && has("brief-back");
 
-    const steps=[];
+    const steps = [];
     steps.push(interfacingPieces.length
-      ? T("sewInstrPrep").replace("{n}",pieces.length).replace("{list}",interfacingPieces.map(p=>L(p.name)).join(", "))
-      : T("sewInstrPrepNoInterfacing").replace("{n}",pieces.length));
-    if(dartCount) steps.push(T("sewInstrDarts").replace("{n}",dartCount));
-    if(has("gusset")) steps.push(T("sewInstrGusset"));
-    if(has("cup")) steps.push(T("sewInstrCups"));
-    if(has("yoke")) steps.push(T("sewInstrYoke").replace("{pieces}",names("yoke")));
-    if(hasFrontBack) steps.push(T("sewInstrShoulder").replace("{front}",names("bodice-front-center","front-panel")).replace("{back}",names("bodice-back-center","back-panel")));
-    if(hasBriefBody) steps.push(T("sewInstrBriefSide"));
-    if(has("collar","collar-stand","undercollar","collar-band")) steps.push(T("sewInstrCollar"));
-    if(has(...sleeveRoles)) steps.push(T("sewInstrSleeve"));
-    else if(hasFrontBack) steps.push(T("sewInstrSide"));
-    if(has("band")) steps.push(T("sewInstrBand"));
-    if(has("pocket")) steps.push(T("sewInstrPocket").replace("{n}",byRole.pocket.length));
-    if(zipPresent) steps.push(T("sewInstrPlacket").replace("{type}",T("bomZipper")));
-    if(has("waistband")) steps.push(T("sewInstrWaistband").replace("{closure}",T("bomClosureWaistband")));
-    if(has("elastic-band")) steps.push(T("sewInstrElastic").replace("{n}",byRole["elastic-band"].length));
-    if(has("cuff","rib-cuff")) steps.push(T("sewInstrCuff").replace("{closure}",T("bomButtonsCuff")));
-    if(has("strap")) steps.push(T("sewInstrStraps"));
+      ? T("sewInstrPrep").replace("{n}", pieces.length).replace("{list}", interfacingPieces.map(p => L(p.name)).join(", "))
+      : T("sewInstrPrepNoInterfacing").replace("{n}", pieces.length));
+    if (dartCount) steps.push(T("sewInstrDarts").replace("{n}", dartCount));
+    if (has("gusset")) steps.push(T("sewInstrGusset"));
+    if (has("cup")) steps.push(T("sewInstrCups"));
+    if (has("yoke")) steps.push(T("sewInstrYoke").replace("{pieces}", names("yoke")));
+    if (hasFrontBack) steps.push(T("sewInstrShoulder").replace("{front}", names("bodice-front-center", "front-panel")).replace("{back}", names("bodice-back-center", "back-panel")));
+    if (hasBriefBody) steps.push(T("sewInstrBriefSide"));
+    if (has("collar", "collar-stand", "undercollar", "collar-band")) steps.push(T("sewInstrCollar"));
+    if (has(...sleeveRoles)) steps.push(T("sewInstrSleeve"));
+    else if (hasFrontBack) steps.push(T("sewInstrSide"));
+    if (has("band")) steps.push(T("sewInstrBand"));
+    if (has("pocket")) steps.push(T("sewInstrPocket").replace("{n}", byRole.pocket.length));
+    if (zipPresent) steps.push(T("sewInstrPlacket").replace("{type}", T("bomZipper")));
+    if (has("waistband")) steps.push(T("sewInstrWaistband").replace("{closure}", T("bomClosureWaistband")));
+    if (has("elastic-band")) steps.push(T("sewInstrElastic").replace("{n}", byRole["elastic-band"].length));
+    if (has("cuff", "rib-cuff")) steps.push(T("sewInstrCuff").replace("{closure}", T("bomButtonsCuff")));
+    if (has("strap")) steps.push(T("sewInstrStraps"));
     // WP-46: matched/named points and closing edges are per-edge/per-vertex
     // annotations a user places directly on the outline (Layer Props ▸ Edit
     // Outline Points), not garment-role facts like everything above — read
     // straight off the live pieces rather than through `byRole`.
-    Canvas.getMatchedPointGroups().forEach(g=>{
-      const where = g.points.map(pt=>L(pt.pieceName)).join(" ↔ ");
-      steps.push(T("sewInstrMatchedPoints").replace("{name}",g.name).replace("{pieces}",where));
+    Canvas.getMatchedPointGroups().forEach(g => {
+      const where = g.points.map(pt => L(pt.pieceName)).join(" ↔ ");
+      steps.push(T("sewInstrMatchedPoints").replace("{name}", g.name).replace("{pieces}", where));
     });
-    const closingEdgePieces = pieces.filter(p=>p.closingEdges && p.closingEdges.length);
-    if(closingEdgePieces.length) steps.push(T("sewInstrClosingEdges").replace("{list}",closingEdgePieces.map(p=>L(p.name)).join(", ")));
-    if(buttonFrontPresent) steps.push(T("sewInstrButtons").replace("{n}",Math.max(2,Math.round(m.backLen/12))));
+    const closingEdgePieces = pieces.filter(p => p.closingEdges && p.closingEdges.length);
+    if (closingEdgePieces.length) steps.push(T("sewInstrClosingEdges").replace("{list}", closingEdgePieces.map(p => L(p.name)).join(", ")));
+    if (buttonFrontPresent) steps.push(T("sewInstrButtons").replace("{n}", Math.max(2, Math.round(m.backLen / 12))));
     // A lining paired with a gusset (Underwear & Bra Library) is already
     // fully covered by the gusset step above ("sew the lining to the
     // gusset...") — the generic lining instruction talks about a facing/hem
     // edge, which doesn't describe a doubled gusset layer, so skip it in
     // that specific case rather than emitting an instruction that doesn't
     // match the piece it's nominally about.
-    if((has("lining") && !has("gusset")) || pieces.some(p=>p.role==="lapel-facing"||p.role==="placket-facing")) steps.push(T("sewInstrLining"));
-    steps.push(T("sewInstrHem").replace("{n}",seamCm));
+    if ((has("lining") && !has("gusset")) || pieces.some(p => p.role === "lapel-facing" || p.role === "placket-facing")) steps.push(T("sewInstrLining"));
+    steps.push(T("sewInstrHem").replace("{n}", seamCm));
     steps.push(T("sewInstrPress"));
     return steps;
   }
-  function buildSewingInstructionsHTML(){
-    const pieces=Canvas.getPieces();
-    const nameObj = state.loaded ? PATTERNS[state.loaded].name : { en:T("customPattern"), ar:T("customPattern") };
-    const sizeLbl = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids).label) : state.size;
-    const rtl = state.lang==="ar";
-    const stepsHTML = buildSewingSteps(pieces).map((s,i)=>`<li><span class="si-num">${i+1}</span><span>${s}</span></li>`).join("");
+  function buildSewingInstructionsHTML() {
+    const pieces = Canvas.getPieces();
+    const nameObj = state.loaded ? PATTERNS[state.loaded].name : { en: T("customPattern"), ar: T("customPattern") };
+    const sizeLbl = state.kids ? L(KIDS_AGES.find(a => a.id === state.kids).label) : state.size;
+    const rtl = state.lang === "ar";
+    const stepsHTML = buildSewingSteps(pieces).map((s, i) => `<li><span class="si-num">${i + 1}</span><span>${s}</span></li>`).join("");
     // WP-46: a short legend explaining what the amber dashed "closing edge"
     // lines and the small point-name tags on the pattern actually mean —
     // only shown when this pattern actually uses one of the two, so a plain
     // pattern's guide isn't padded with an unused legend.
-    const usesClosingEdges = pieces.some(p=>p.closingEdges && p.closingEdges.length);
-    const usesMatchedPoints = Canvas.getMatchedPointGroups().length>0;
-    const legendHTML = (usesClosingEdges||usesMatchedPoints)
-      ? `<div class="note">${[usesClosingEdges?T("sewInstrClosingLegend"):"", usesMatchedPoints?T("sewInstrMatchedLegend"):""].filter(Boolean).join(" ")}</div>`
+    const usesClosingEdges = pieces.some(p => p.closingEdges && p.closingEdges.length);
+    const usesMatchedPoints = Canvas.getMatchedPointGroups().length > 0;
+    const legendHTML = (usesClosingEdges || usesMatchedPoints)
+      ? `<div class="note">${[usesClosingEdges ? T("sewInstrClosingLegend") : "", usesMatchedPoints ? T("sewInstrMatchedLegend") : ""].filter(Boolean).join(" ")}</div>`
       : "";
-    return `<!doctype html><html lang="${state.lang}" dir="${rtl?"rtl":"ltr"}"><head><meta charset="utf-8">
+    return `<!doctype html><html lang="${state.lang}" dir="${rtl ? "rtl" : "ltr"}"><head><meta charset="utf-8">
 <title>BerryStudio — ${nameObj.en} · ${T("sewInstrTitle")}</title>
 <style>
   @page{margin:14mm}
   *{box-sizing:border-box}
-  body{font-family:${rtl?"'Cairo','Segoe UI'":"'Segoe UI'"},Tahoma,Arial,sans-serif;color:#1a1a1a;margin:0;padding:22px;background:#fff}
+  body{font-family:${rtl ? "'Cairo','Segoe UI'" : "'Segoe UI'"},Tahoma,Arial,sans-serif;color:#1a1a1a;margin:0;padding:22px;background:#fff}
   h1{font-size:21px;margin:0 0 3px}
   h1 span{color:#8a8a8a;font-weight:600;font-size:16px}
   .sub{font-size:13px;color:#666;margin:0 0 18px}
@@ -4121,18 +4149,18 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
 <body>
   <div class="pbar"><button onclick="window.close()">${T("close")}</button><button class="primary" onclick="window.print()">${T("printNow")}</button></div>
   <h1>${nameObj.en} <span>/ ${nameObj.ar}</span></h1>
-  <p class="sub">BerryStudio · ${T("sewInstrTitle")} · ${T("gradedTo")}: ${sizeLbl} · ${T("std_"+state.standard)}</p>
+  <p class="sub">BerryStudio · ${T("sewInstrTitle")} · ${T("gradedTo")}: ${sizeLbl} · ${T("std_" + state.standard)}</p>
   <ol>${stepsHTML}</ol>
   ${legendHTML}
   <div class="note">${T("sewInstrNote")}</div>
 </body></html>`;
   }
-  function exportSewingInstructions(){
-    const pieces=Canvas.getPieces(); if(!pieces.length){ toast(T("empty2d")); return; }
-    const w=window.open("","_blank");
-    if(!w){ toast(T("sewInstrTitle")+": allow pop-ups"); return; }
+  function exportSewingInstructions() {
+    const pieces = Canvas.getPieces(); if (!pieces.length) { toast(T("empty2d")); return; }
+    const w = window.open("", "_blank");
+    if (!w) { toast(T("sewInstrTitle") + ": allow pop-ups"); return; }
     w.document.write(buildSewingInstructionsHTML()); w.document.close();
-    toast(T("exported")+" · "+T("sewInstrTitle"));
+    toast(T("exported") + " · " + T("sewInstrTitle"));
   }
 
   // Fit Chart (Tailornova feature study, WP-40): a real per-size tolerance
@@ -4145,22 +4173,22 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // Values reuse the real grading engine (computeMeasurements) for every
   // size/age in the run — never a second, parallel calculation that could
   // drift from what Auto Grade itself produces.
-  const FIT_TOLERANCE_DEFAULT = { chest:0.5, waist:0.5, hips:0.5, shoulder:0.3, backLen:0.5, sleeve:0.5, neck:0.3, bicep:0.3, inseam:0.5, thigh:0.5, height:1.0 };
-  function fitTolerance(k){ return (state.fitTolerances && state.fitTolerances[k] != null) ? state.fitTolerances[k] : FIT_TOLERANCE_DEFAULT[k]; }
-  function setFitTolerance(k, v){ (state.fitTolerances ||= {})[k] = v; save(); }
-  function buildFitChartRows(){
+  const FIT_TOLERANCE_DEFAULT = { chest: 0.5, waist: 0.5, hips: 0.5, shoulder: 0.3, backLen: 0.5, sleeve: 0.5, neck: 0.3, bicep: 0.3, inseam: 0.5, thigh: 0.5, height: 1.0 };
+  function fitTolerance(k) { return (state.fitTolerances && state.fitTolerances[k] != null) ? state.fitTolerances[k] : FIT_TOLERANCE_DEFAULT[k]; }
+  function setFitTolerance(k, v) { (state.fitTolerances ||= {})[k] = v; save(); }
+  function buildFitChartRows() {
     const columns = state.kids
-      ? KIDS_AGES.map(a=>({ id:a.id, label:L(a.label) }))
-      : SIZES.map(s=>({ id:s, label:s }));
+      ? KIDS_AGES.map(a => ({ id: a.id, label: L(a.label) }))
+      : SIZES.map(s => ({ id: s, label: s }));
     const valuesByCol = {};
-    columns.forEach(col=>{
+    columns.forEach(col => {
       valuesByCol[col.id] = computeMeasurements({
         category: state.category, standard: state.standard, custom: null,
         size: state.kids ? null : col.id, kids: state.kids ? col.id : null,
       });
     });
     const rows = MEAS_KEYS.map(k => ({
-      key: k, label: T("m_"+k), tolerance: fitTolerance(k),
+      key: k, label: T("m_" + k), tolerance: fitTolerance(k),
       values: columns.map(col => valuesByCol[col.id][k]),
     }));
     return { columns, rows };
@@ -4172,59 +4200,59 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // copy-pasted from those other exports without checking whether this feature
   // actually needs a loaded pattern — it doesn't, so gating on one just blocked
   // a legitimate use (checking standard body measurements before drafting).
-  function openFitChartModal(){
+  function openFitChartModal() {
     openModal(T("fitChartTitle"), "", true);
-    const body = $("#genericModal .modal-body"); body.innerHTML="";
-    body.appendChild(el("div","help-note",T("fitChartD")));
-    const resetBtn = el("button","big-btn ghost",T("fitChartReset")); resetBtn.style.cssText="margin-top:10px;width:auto;padding:8px 16px";
+    const body = $("#genericModal .modal-body"); body.innerHTML = "";
+    body.appendChild(el("div", "help-note", T("fitChartD")));
+    const resetBtn = el("button", "big-btn ghost", T("fitChartReset")); resetBtn.style.cssText = "margin-top:10px;width:auto;padding:8px 16px";
     body.appendChild(resetBtn);
-    const wrap = el("div"); wrap.style.cssText="overflow-x:auto;margin-top:14px";
+    const wrap = el("div"); wrap.style.cssText = "overflow-x:auto;margin-top:14px";
     body.appendChild(wrap);
     const renderTable = () => {
       const { columns, rows } = buildFitChartRows();
-      const table = el("table"); table.style.cssText="width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap";
+      const table = el("table"); table.style.cssText = "width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap";
       table.innerHTML = `<tr>
         <th style="text-align:start;padding:6px 8px;border-bottom:1px solid var(--line)">${T("tab_measure")}</th>
         <th style="padding:6px 8px;border-bottom:1px solid var(--line)">${T("fitChartToleranceCol")}</th>
-        ${columns.map(c=>`<th style="padding:6px 8px;border-bottom:1px solid var(--line)">${c.label}</th>`).join("")}
-      </tr>` + rows.map(r=>`<tr>
+        ${columns.map(c => `<th style="padding:6px 8px;border-bottom:1px solid var(--line)">${c.label}</th>`).join("")}
+      </tr>` + rows.map(r => `<tr>
         <td style="padding:6px 8px;border-bottom:1px solid var(--line-2)">${r.label}</td>
         <td style="padding:6px 8px;border-bottom:1px solid var(--line-2)"><input class="input fc-tol" data-k="${r.key}" type="number" step="0.1" min="0" value="${r.tolerance}" style="width:60px;text-align:center"></td>
-        ${r.values.map(v=>`<td style="padding:6px 8px;border-bottom:1px solid var(--line-2);text-align:center">${v}</td>`).join("")}
+        ${r.values.map(v => `<td style="padding:6px 8px;border-bottom:1px solid var(--line-2);text-align:center">${v}</td>`).join("")}
       </tr>`).join("");
-      wrap.innerHTML=""; wrap.appendChild(table);
-      table.querySelectorAll(".fc-tol").forEach(inp=>{
-        inp.onchange = () => { setFitTolerance(inp.dataset.k, +inp.value||0); };
+      wrap.innerHTML = ""; wrap.appendChild(table);
+      table.querySelectorAll(".fc-tol").forEach(inp => {
+        inp.onchange = () => { setFitTolerance(inp.dataset.k, +inp.value || 0); };
       });
     };
     resetBtn.onclick = () => { state.fitTolerances = {}; save(); renderTable(); toast(T("fitChartReset")); };
     renderTable();
-    const exBtn = el("button","big-btn",IC.printer+T("fitChartExport")); exBtn.style.marginTop="16px";
+    const exBtn = el("button", "big-btn", IC.printer + T("fitChartExport")); exBtn.style.marginTop = "16px";
     exBtn.onclick = () => exportFitChart();
     body.appendChild(exBtn);
   }
-  function buildFitChartHTML(){
-    const nameObj = state.loaded ? PATTERNS[state.loaded].name : { en:T("customPattern"), ar:T("customPattern") };
-    const rtl = state.lang==="ar";
+  function buildFitChartHTML() {
+    const nameObj = state.loaded ? PATTERNS[state.loaded].name : { en: T("customPattern"), ar: T("customPattern") };
+    const rtl = state.lang === "ar";
     const { columns, rows } = buildFitChartRows();
-    const rowsHTML = rows.map(r=>`<tr>
-      <td style="text-align:${rtl?"end":"start"}">${r.label}</td>
+    const rowsHTML = rows.map(r => `<tr>
+      <td style="text-align:${rtl ? "end" : "start"}">${r.label}</td>
       <td>±${r.tolerance}</td>
-      ${r.values.map(v=>`<td>${v}</td>`).join("")}
+      ${r.values.map(v => `<td>${v}</td>`).join("")}
     </tr>`).join("");
-    return `<!doctype html><html lang="${state.lang}" dir="${rtl?"rtl":"ltr"}"><head><meta charset="utf-8">
+    return `<!doctype html><html lang="${state.lang}" dir="${rtl ? "rtl" : "ltr"}"><head><meta charset="utf-8">
 <title>BerryStudio — ${nameObj.en} · ${T("fitChartTitle")}</title>
 <style>
   @page{margin:12mm;size:landscape}
   *{box-sizing:border-box}
-  body{font-family:${rtl?"'Cairo','Segoe UI'":"'Segoe UI'"},Tahoma,Arial,sans-serif;color:#1a1a1a;margin:0;padding:22px;background:#fff}
+  body{font-family:${rtl ? "'Cairo','Segoe UI'" : "'Segoe UI'"},Tahoma,Arial,sans-serif;color:#1a1a1a;margin:0;padding:22px;background:#fff}
   h1{font-size:21px;margin:0 0 3px}
   h1 span{color:#8a8a8a;font-weight:600;font-size:16px}
   .sub{font-size:13px;color:#666;margin:0 0 18px}
   table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
   th,td{border:1px solid #ddd;padding:6px 9px;text-align:center}
   th{background:#f1eeff;font-weight:700}
-  td:first-child,th:first-child{text-align:${rtl?"end":"start"}}
+  td:first-child,th:first-child{text-align:${rtl ? "end" : "start"}}
   .note{margin-top:18px;border:1px dashed #c9a94a;background:#fff8e6;padding:11px 15px;border-radius:9px;font-size:12.5px;color:#7a5c00;line-height:1.6}
   .pbar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px}
   .pbar button{font-family:inherit;font-size:13px;font-weight:700;padding:9px 16px;border-radius:8px;border:1px solid #ccc;background:#f5f5f5;cursor:pointer}
@@ -4234,25 +4262,34 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
 <body>
   <div class="pbar"><button onclick="window.close()">${T("close")}</button><button class="primary" onclick="window.print()">${T("printNow")}</button></div>
   <h1>${nameObj.en} <span>/ ${nameObj.ar}</span></h1>
-  <p class="sub">BerryStudio · ${T("fitChartTitle")} · ${T("std_"+state.standard)}</p>
+  <p class="sub">BerryStudio · ${T("fitChartTitle")} · ${T("std_" + state.standard)}</p>
   <table><tr>
     <th>${T("tab_measure")}</th><th>${T("fitChartToleranceCol")}</th>
-    ${columns.map(c=>`<th>${c.label}</th>`).join("")}
+    ${columns.map(c => `<th>${c.label}</th>`).join("")}
   </tr>${rowsHTML}</table>
   <div class="note">${T("fitChartNote")}</div>
 </body></html>`;
   }
-  function exportFitChart(){
-    const w=window.open("","_blank");
-    if(!w){ toast(T("fitChartTitle")+": allow pop-ups"); return; }
+  function exportFitChart() {
+    const w = window.open("", "_blank");
+    if (!w) { toast(T("fitChartTitle") + ": allow pop-ups"); return; }
     w.document.write(buildFitChartHTML()); w.document.close();
-    toast(T("exported")+" · "+T("fitChartTitle"));
+    toast(T("exported") + " · " + T("fitChartTitle"));
   }
 
   // ================= PATTERNS =================
   let lastGradedMeas = null;
   let pendingLookbookEffects = null;
-  function currentMeas(){ return computeMeasurements({category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom}); }
+  function computeCatalogAwareMeasurements(opts){
+    if(!opts.kids && isActiveMannequinSize(opts.size)){
+      return resolveMannequinMeasurements(opts.category, opts.size, {
+        standard: opts.standard || "intl",
+        custom: opts.custom || null,
+      });
+    }
+    return computeMeasurements(opts);
+  }
+  function currentMeas(){ return computeCatalogAwareMeasurements({category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom}); }
   function syncLookbookControlsUI(lbStyle) {
     const acc = lbStyle?.accessories || {};
     const bCfg = acc.buttons || { enabled: false };
@@ -4292,19 +4329,21 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     }
 
     const activePreset = lbStyle?.print?.preset || "none";
-    $$(".v3d-preset-chip").forEach(c => c.classList.toggle("active", c.dataset.preset === activePreset));
+    $$("#v3dPrintsPanel .v3d-preset-chip").forEach(c => c.classList.toggle("active", c.dataset.preset === activePreset));
   }
-  function loadPattern(id){
-    state.loaded=id; const p=PATTERNS[id];
+  function loadPattern(id) {
+    state.loaded = id; const p = PATTERNS[id];
     // switch category to match
-    if(p.category && p.category!==state.category){ state.category=p.category; syncCategoryUI(); }
-    if(!state.avatarCategoryExplicit){
+    if (p.category && p.category !== state.category) { state.category = p.category; syncCategoryUI(); }
+    if (!state.avatarCategoryExplicit) {
       state.avatarCategory = p.category || state.category;
       const sel = $("#v3dModelSelect");
       if (sel) sel.value = state.avatarCategory;
     }
-    const opts={category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom};
-    const gradedPieces = resolveGradedPieces(p, opts, computeMeasurements, state.gradeRules[id]);
+    syncMannequinSelectorsUI();
+    renderMannequinCatalogPanel();
+    const opts = { category: state.category, size: state.size, standard: state.standard, kids: state.kids, custom: state.custom };
+    const gradedPieces = resolveGradedPieces(p, opts, computeCatalogAwareMeasurements, state.gradeRules[id]);
     const styledPieces = applyLookbookPieceColors(gradedPieces, id, p);
     const lbStyle = getPatternLookbookStyle(id, p, styledPieces);
     state.fabric3d = lbStyle.fabric || "cotton";
@@ -4316,17 +4355,17 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     syncLookbookControlsUI(lbStyle);
     afterLoad(L(p.name), true);
   }
-  function afterLoad(name, resetPrints=false){
+  function afterLoad(name, resetPrints = false) {
     hideEmpty(); renderLayersPane(); renderSizePane(); renderAIPane();
-    toast(T("patternLoaded")+" · "+name);
-    if(is3DActive()) build3D(null, { resetPrints });
-    if(state.view==="clothlab") syncClothLab();
+    toast(T("patternLoaded") + " · " + name);
+    if (is3DActive()) build3D(null, { resetPrints });
+    if (state.view === "clothlab") syncClothLab();
     update3DStatusPill();
     save(); renderProjectTabs();
   }
-  function grade(){
+  function grade() {
     const nextMeas = currentMeas();
-    if(state.loaded){
+    if (state.loaded) {
       const prevByKey = new Map();
       Canvas.getPieces().forEach((oldP, idx) => {
         prevByKey.set(oldP.key || `__idx_${idx}`, {
@@ -4344,7 +4383,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       });
       const p=PATTERNS[state.loaded];
       const opts={category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom};
-      const pieces=resolveGradedPieces(p, opts, computeMeasurements, state.gradeRules[state.loaded]).map((np, idx) => {
+      const pieces=resolveGradedPieces(p, opts, computeCatalogAwareMeasurements, state.gradeRules[state.loaded]).map((np, idx) => {
         const saved = prevByKey.get(np.key || `__idx_${idx}`);
         if (!saved) return np;
         return {
@@ -4373,31 +4412,31 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     }
     lastGradedMeas = { ...nextMeas };
     Canvas.recomputeConstruction();   // re-resolve any formula-driven construction points to the new measurements
-    if(is3DActive()) build3D();
-    if(state.view==="clothlab") syncClothLab();
+    if (is3DActive()) build3D();
+    if (state.view === "clothlab") syncClothLab();
     update3DStatusPill();
     refreshDesignBrief?.();
     updateGradeLbl(); updateStageChips(); renderSizePane(); renderMeasurePane(); save();
   }
 
-  function colorToInt(c){
-    if(typeof c === "number") return c;
-    if(!c) return cssHex("--brand");
+  function colorToInt(c) {
+    if (typeof c === "number") return c;
+    if (!c) return cssHex("--brand");
     c = String(c).trim();
-    if(c[0]==="#"){
-      const h = c.length===4 ? c.slice(1).split("").map(x=>x+x).join("") : c.slice(1);
+    if (c[0] === "#") {
+      const h = c.length === 4 ? c.slice(1).split("").map(x => x + x).join("") : c.slice(1);
       return parseInt(h, 16);
     }
     const m = /rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(c);
-    if(m) return (+m[1]<<16)|(+m[2]<<8)|+m[3];
+    if (m) return (+m[1] << 16) | (+m[2] << 8) | +m[3];
     try {
       const t = document.createElement("canvas").getContext("2d");
       t.fillStyle = c;
       const hex = t.fillStyle;
       if (hex && hex[0] === "#") return parseInt(hex.slice(1), 16);
-    } catch (_) {}
+    } catch (_) { }
     const m2 = /(\d+)\D+(\d+)\D+(\d+)/.exec(c);
-    return m2 ? (+m2[1]<<16)|(+m2[2]<<8)|+m2[3] : cssHex("--brand");
+    return m2 ? (+m2[1] << 16) | (+m2[2] << 8) | +m2[3] : cssHex("--brand");
   }
   // Solid opaque 3D cloth by default (1.0) so Cotton, Denim, Wool, Satin, and
   // Leather render with true Z-depth occlusion instead of inheriting 2D drafting
@@ -4407,10 +4446,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
 
   // Single source of truth for mapping 2D pattern pieces (including shared trims
   // like waistbands, pockets, gussets, flies, and cuffs) to View3D's 4 garment groups.
-  function classifyPart(p){
+  function classifyPart(p) {
     return classifyPiecePart(p, Canvas.getPieces(), state.category);
   }
-  function pieceVisMap(){
+  function pieceVisMap() {
     return Canvas.getPieces().map(p => ({
       part: classifyPart(p),
       role: p.role || null,
@@ -4418,7 +4457,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       visible: p.visible !== false
     }));
   }
-  function partsFabric(){
+  function partsFabric() {
     const pieces = Canvas.getPieces();
     const patternMeta = state.loaded ? PATTERNS[state.loaded] : null;
     const lookbookStyle = state.loaded ? getPatternLookbookStyle(state.loaded, patternMeta, pieces) : null;
@@ -4431,16 +4470,100 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       colorToInt,
     });
   }
+  function effectiveAvatarSize(){
+    return state.avatarSizeExplicit ? (state.avatarSize || state.size || "M") : (state.size || "M");
+  }
   function avatarMeas(cat) {
     const isKids = cat === "girls" || cat === "boys";
-    const kidsAge = isKids ? (state.kids || "8-9") : undefined;
-    return computeMeasurements({
+    const kidsAge = (isKids && state.kids) ? state.kids : undefined;
+    return computeCatalogAwareMeasurements({
       category: cat,
-      size: state.size,
+      size: effectiveAvatarSize(),
       standard: state.standard,
       kids: kidsAge,
-      custom: (cat === state.category) ? state.custom : null
+      custom: (cat === state.category && !state.avatarSizeExplicit) ? state.custom : null
     });
+  }
+
+  let activeMannequinFilterCat = "all";
+  function syncMannequinSelectorsUI(){
+    const avatarCat = state.avatarCategory || state.category || "women";
+    const modelSel = $("#v3dModelSelect");
+    if (modelSel && modelSel.value !== avatarCat) modelSel.value = avatarCat;
+    const sizeSel = $("#v3dMannequinSizeSelect");
+    if (!sizeSel) return;
+    const effSize = effectiveAvatarSize();
+    const list = getMannequinsByCategory(avatarCat);
+    const unitLbl = state.lang === "ar" ? "سم" : "cm";
+    sizeSel.innerHTML = "";
+    list.forEach((mq) => {
+      const opt = document.createElement("option");
+      opt.value = mq.size;
+      opt.textContent = `${mq.size} · ${L(mq.buildLabel)} (${mq.measurements.height} ${unitLbl})`;
+      sizeSel.appendChild(opt);
+    });
+    if (!isActiveMannequinSize(effSize)) {
+      const extOpt = document.createElement("option");
+      extOpt.value = effSize;
+      extOpt.textContent = `${effSize} (${Math.round(avatarMeas(avatarCat).height)} ${unitLbl})`;
+      sizeSel.appendChild(extOpt);
+      sizeSel.value = effSize;
+    } else {
+      sizeSel.value = getMannequinFor(avatarCat, effSize).size;
+    }
+  }
+  function renderMannequinCatalogPanel(){
+    const grid = $("#v3dMannequinGrid");
+    if (!grid) return;
+    const avatarCat = state.avatarCategory || state.category || "women";
+    const effSize = getMannequinFor(avatarCat, effectiveAvatarSize()).size;
+    const activeId = `${avatarCat}_${effSize.toLowerCase()}`;
+    const list = activeMannequinFilterCat === "all"
+      ? MANNEQUIN_CATALOG
+      : getMannequinsByCategory(activeMannequinFilterCat);
+    const unitLbl = state.lang === "ar" ? "سم" : "cm";
+    grid.innerHTML = "";
+    list.forEach((mq) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "v3d-mannequin-card" + (mq.id === activeId ? " active" : "");
+      btn.setAttribute("data-mannequin-id", mq.id);
+      btn.innerHTML = `<div class="v3d-mq-top"><span class="v3d-mq-title">${L(mq.name)}</span><span class="v3d-mq-swatches"><span class="v3d-mq-dot" style="background:${mq.skinHex}"></span><span class="v3d-mq-dot" style="background:${mq.hairHex}"></span></span></div><div class="v3d-mq-sub">${L(mq.buildLabel)} · ${mq.measurements.height} ${unitLbl}</div><div class="v3d-mq-meas">${mq.measurements.chest} / ${mq.measurements.waist} / ${mq.measurements.hips} ${unitLbl}</div>`;
+      btn.onclick = () => selectMannequinPreset(mq.category, mq.size, { toastNotify: true });
+      grid.appendChild(btn);
+    });
+    $$("#v3dMannequinTabs [data-mq-cat]").forEach((tab) => {
+      tab.classList.toggle("active", tab.dataset.mqCat === activeMannequinFilterCat);
+    });
+  }
+  function selectMannequinPreset(cat, size, { toastNotify = false } = {}){
+    const mq = getMannequinFor(cat, size);
+    state.avatarCategory = mq.category;
+    state.avatarSize = mq.size;
+    state.avatarSizeExplicit = true;
+    if (mq.category !== state.category) {
+      state.avatarCategoryExplicit = true;
+    }
+    const modelSel = $("#v3dModelSelect");
+    if (modelSel) modelSel.value = mq.category;
+    if (mq.category === state.category) {
+      state.size = mq.size;
+      state.kids = null;
+      state.custom = {};
+      state.avatarSizeExplicit = false;
+      grade();
+      renderSizePane();
+      renderMeasurePane();
+    } else {
+      if (is3DActive()) build3D();
+      if (state.view === "clothlab") syncClothLab(true);
+      updateMismatchWarning();
+      update3DStatusPill();
+      save();
+    }
+    syncMannequinSelectorsUI();
+    renderMannequinCatalogPanel();
+    if (toastNotify) toast(`${T("mannequinApplied")} · ${L(mq.name)} (${mq.measurements.height} cm)`);
   }
 
   function sync3DColorUI(col) {
@@ -4479,9 +4602,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const avatarCat = state.avatarCategory || state.category || "women";
     const isKids = avatarCat === "girls" || avatarCat === "boys";
     const catLabel = T(avatarCat) || avatarCat;
-    const sizeLabel = isKids
-      ? L((KIDS_AGES.find(a => a.id === (state.kids || "8-9")) || KIDS_AGES[2]).label)
-      : state.size;
+    const sizeLabel = (isKids && state.kids)
+      ? L((KIDS_AGES.find(a => a.id === state.kids) || KIDS_AGES[2]).label)
+      : effectiveAvatarSize();
     const m = avatarMeas(avatarCat);
     const fmt = v => state.unitsCm ? Math.round(v) : (v / 2.54).toFixed(1);
     const unit = state.unitsCm ? "cm" : "in";
@@ -4552,15 +4675,17 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     }
   }
 
-  function build3D(colorInt, extraOpts){
+  function build3D(colorInt, extraOpts) {
     const avatarCat = state.avatarCategory || state.category || "women";
+    const effSize = effectiveAvatarSize();
+    const mannequin = getMannequinFor(avatarCat, effSize);
     const m = avatarMeas(avatarCat);
     const pieces = Canvas.getPieces();
     const parts = partsFabric();
-    const leadPiece = pieces.find(p=>p.visible!==false && p.customColor) || pieces.find(p=>p.visible!==false);
-    const col = colorInt!=null ? colorInt : (leadPiece ? colorToInt(leadPiece.color) : cssHex("--brand"));
-    const modelSelect = $("#v3dModelSelect");
-    if (modelSelect && modelSelect.value !== avatarCat) modelSelect.value = avatarCat;
+    const leadPiece = pieces.find(p => p.visible !== false && p.customColor) || pieces.find(p => p.visible !== false);
+    const col = colorInt != null ? colorInt : (leadPiece ? colorToInt(leadPiece.color) : cssHex("--brand"));
+    syncMannequinSelectorsUI();
+    renderMannequinCatalogPanel();
     const fabricSelect = $("#v3dFabricSelect");
     if (fabricSelect && fabricSelect.value !== (state.fabric3d || "cotton")) {
       fabricSelect.value = state.fabric3d || "cotton";
@@ -4571,6 +4696,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const shouldApplyLookbook = Boolean((extraOpts && extraOpts.resetPrints) || (pendingLookbookEffects && pendingLookbookEffects === state.loaded));
     if (shouldApplyLookbook) pendingLookbookEffects = null;
     View3D.build(avatarCat, m, {
+      size: effSize,
+      mannequin,
       color: col,
       material: state.fabric3d || "cotton",
       opacity: fabricOpacity3D(),
@@ -4588,46 +4715,46 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     update3DStatusPill();
   }
   // live 3D updates (no full rebuild)
-  function is3DActive(){ return state.view==="3d" || state.splitView; }
-  function sync3DFabric(){
-    if(state.view==="clothlab") syncClothLab();
-    if(!is3DActive()) return;
+  function is3DActive() { return state.view === "3d" || state.splitView; }
+  function sync3DFabric() {
+    if (state.view === "clothlab") syncClothLab();
+    if (!is3DActive()) return;
     const pieces = Canvas.getPieces();
-    const fv = pieces.find(p=>p.visible!==false && p.customColor) || pieces.find(p=>p.visible!==false);
-    if(fv && fv.color) sync3DColorUI(fv.color);
+    const fv = pieces.find(p => p.visible !== false && p.customColor) || pieces.find(p => p.visible !== false);
+    if (fv && fv.color) sync3DColorUI(fv.color);
     View3D.setFabric({ parts: partsFabric(), opacity: fabricOpacity3D() });
     update3DStatusPill();
   }
-  function sync3DVisibility(){
-    if(state.view==="clothlab") syncClothLab();
-    if(!is3DActive()) return;
+  function sync3DVisibility() {
+    if (state.view === "clothlab") syncClothLab();
+    if (!is3DActive()) return;
     View3D.setPieceVisibility(pieceVisMap());
     update3DStatusPill();
   }
-  function cssHex(k){ const t=document.createElement("canvas").getContext("2d");t.fillStyle=getComputedStyle(document.body).getPropertyValue(k).trim();return parseInt(t.fillStyle.slice(1),16);}
-  function applySplitViewClasses(){
+  function cssHex(k) { const t = document.createElement("canvas").getContext("2d"); t.fillStyle = getComputedStyle(document.body).getPropertyValue(k).trim(); return parseInt(t.fillStyle.slice(1), 16); }
+  function applySplitViewClasses() {
     document.querySelector(".canvas-wrap").classList.toggle("split", !!state.splitView);
-    $("#view3d").classList.toggle("show", state.view==="3d" || !!state.splitView);
-    const btn=$("#splitViewBtn"); if(btn){ btn.classList.toggle("active", !!state.splitView); btn.setAttribute("aria-pressed", String(!!state.splitView)); }
+    $("#view3d").classList.toggle("show", state.view === "3d" || !!state.splitView);
+    const btn = $("#splitViewBtn"); if (btn) { btn.classList.toggle("active", !!state.splitView); btn.setAttribute("aria-pressed", String(!!state.splitView)); }
   }
-  function setSplitView(on){
-    if(on) setView("2d");
+  function setSplitView(on) {
+    if (on) setView("2d");
     state.splitView = on;
     applySplitViewClasses();
-    if(on){ View3D.resize(); build3D(); }
+    if (on) { View3D.resize(); build3D(); }
     save();
   }
-  function setView(v){
-    state.view=v;
-    if(v!=="2d") state.splitView=false;
+  function setView(v) {
+    state.view = v;
+    if (v !== "2d") state.splitView = false;
     applySplitViewClasses();
-    $("#viewClothLab").classList.toggle("show", v==="clothlab");
-    $("#viewClothLab").classList.toggle("engine-embedded", state.clothLabEngine==="embedded");
-    document.querySelector(".canvas-wrap").classList.toggle("threed", v==="3d");
-    document.querySelector(".canvas-wrap").classList.toggle("clothlab", v==="clothlab");
-    $$("#viewToggle button").forEach(b=>{ const on=b.dataset.v===v; b.classList.toggle("active",on); b.setAttribute("aria-pressed",on); });
-    if(v==="3d" || state.splitView){ View3D.resize(); build3D(); }
-    else if(v==="clothlab"){ loadClothLab(); syncClothLab(); }
+    $("#viewClothLab").classList.toggle("show", v === "clothlab");
+    $("#viewClothLab").classList.toggle("engine-embedded", state.clothLabEngine === "embedded");
+    document.querySelector(".canvas-wrap").classList.toggle("threed", v === "3d");
+    document.querySelector(".canvas-wrap").classList.toggle("clothlab", v === "clothlab");
+    $$("#viewToggle button").forEach(b => { const on = b.dataset.v === v; b.classList.toggle("active", on); b.setAttribute("aria-pressed", on); });
+    if (v === "3d" || state.splitView) { View3D.resize(); build3D(); }
+    else if (v === "clothlab") { loadClothLab(); syncClothLab(); }
     else Canvas.render();
     save();
   }
@@ -4658,33 +4785,33 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // gated panes show). Delegates to renderGateUpsell() for the actual
   // content now; this function's only remaining job is the overlay
   // wrapper/card DOM that the rail panes don't need.
-  function renderClothLabGate(){
-    const wrap=$("#viewClothLab");
-    let g=document.getElementById("clothLabGate");
-    if(!g){
-      g=el("div"); g.id="clothLabGate";
-      g.style.cssText="position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:var(--canvas-bg)";
-      const card=el("div"); card.style.cssText="max-width:340px;text-align:center;padding:24px";
+  function renderClothLabGate() {
+    const wrap = $("#viewClothLab");
+    let g = document.getElementById("clothLabGate");
+    if (!g) {
+      g = el("div"); g.id = "clothLabGate";
+      g.style.cssText = "position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:var(--canvas-bg)";
+      const card = el("div"); card.style.cssText = "max-width:340px;text-align:center;padding:24px";
       g.appendChild(card);
       wrap.appendChild(g);
     }
     renderGateUpsell(g.firstChild, "viewClothLab");
   }
-  function hideClothLabGate(){
-    const g=document.getElementById("clothLabGate");
-    if(g) g.remove();
+  function hideClothLabGate() {
+    const g = document.getElementById("clothLabGate");
+    if (g) g.remove();
   }
-  function loadClothLab(){
-    if(!gateAllowed()){ teardownClothLab(); renderClothLabGate(); return; }
+  function loadClothLab() {
+    if (!gateAllowed()) { teardownClothLab(); renderClothLabGate(); return; }
     hideClothLabGate();
-    if(clothLabActiveEngine !== state.clothLabEngine) teardownClothLab();
+    if (clothLabActiveEngine !== state.clothLabEngine) teardownClothLab();
     clothLabActiveEngine = state.clothLabEngine;
-    if(state.clothLabEngine==="embedded"){ mountClothLabEmbedded(); return; }
-    const frame=$("#clothLabFrame");
-    if(frame.dataset.loaded) return;
-    const isLocal=/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    if (state.clothLabEngine === "embedded") { mountClothLabEmbedded(); return; }
+    const frame = $("#clothLabFrame");
+    if (frame.dataset.loaded) return;
+    const isLocal = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
     frame.src = isLocal ? "http://localhost:5173/" : "cloth-lab/";
-    frame.dataset.loaded="1";
+    frame.dataset.loaded = "1";
   }
   // WP-42 Stage B code-review fix: an already-running Cloth Lab session
   // (embedded engine mounted, or iframe loaded and simulating) used to
@@ -4698,15 +4825,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // whichever state.clothLabEngine currently says) since the user could
   // have switched the setting mid-session while the other engine was still
   // live from before the switch.
-  function teardownClothLab(){
+  function teardownClothLab() {
     clothLabLoadGeneration++;
     clothLabActiveEngine = null;
     clothLabReady = false;
     lastClothLabPayloadJSON = null;
-    if(clothLabEmbedModule){ clothLabEmbedModule.unmount(); clothLabEmbedModule = null; }
+    if (clothLabEmbedModule) { clothLabEmbedModule.unmount(); clothLabEmbedModule = null; }
     clothLabEmbedLoadPromise = null;
-    const frame=$("#clothLabFrame");
-    if(frame){ frame.removeAttribute("src"); delete frame.dataset.loaded; }
+    const frame = $("#clothLabFrame");
+    if (frame) { frame.removeAttribute("src"); delete frame.dataset.loaded; }
   }
   // `clothLabEmbedModule` holds the {update, unmount} handle mount() returns
   // once the dynamic import + first render actually complete — syncClothLab()
@@ -4719,8 +4846,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   let clothLabActiveEngine = null;
   let clothLabEmbedModule = null;
   let clothLabEmbedLoadPromise = null;
-  function mountClothLabEmbedded(){
-    if(clothLabEmbedLoadPromise) return clothLabEmbedLoadPromise;
+  function mountClothLabEmbedded() {
+    if (clothLabEmbedLoadPromise) return clothLabEmbedLoadPromise;
     const container = $("#clothLabEmbed");
     // Relative to THIS module's own URL (js/app.js), not location.origin —
     // resolves correctly whether the site is served from the domain root
@@ -4730,29 +4857,29 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const assetBase = new URL("../cloth-lab/dist-embed/", import.meta.url).href;
     const generation = clothLabLoadGeneration;
     clothLabEmbedLoadPromise = import(/* @vite-ignore */ embedUrl).then((mod) => {
-      if(generation !== clothLabLoadGeneration || !gateAllowed() || state.clothLabEngine !== "embedded") return;
+      if (generation !== clothLabLoadGeneration || !gateAllowed() || state.clothLabEngine !== "embedded") return;
       clothLabEmbedModule = mod.mount(container, {
         assetBase,
         pattern: buildClothLabPayload(),
         onReady: () => {
-          if(generation !== clothLabLoadGeneration || !gateAllowed() || state.clothLabEngine !== "embedded") return;
+          if (generation !== clothLabLoadGeneration || !gateAllowed() || state.clothLabEngine !== "embedded") return;
           clothLabReady = true;
           syncClothLab(true); // include edits made while React was mounting
         },
       });
     }).catch((err) => {
-      if(generation !== clothLabLoadGeneration) return;
+      if (generation !== clothLabLoadGeneration) return;
       console.error("Cloth Lab (embedded engine) failed to load:", err);
       clothLabEmbedLoadPromise = null; // allow a retry on the next tab switch
     });
     return clothLabEmbedLoadPromise;
   }
-  function handleClothLabReady(e){
-    if(!e.data || e.data.type!=="clothlab:ready") return;
-    const frame=$("#clothLabFrame");
-    if(!frame || e.source!==frame.contentWindow || e.origin!==clothLabOrigin() ||
-       clothLabActiveEngine!=="iframe" || !frame.dataset.loaded || !gateAllowed()) return;
-    clothLabReady=true;
+  function handleClothLabReady(e) {
+    if (!e.data || e.data.type !== "clothlab:ready") return;
+    const frame = $("#clothLabFrame");
+    if (!frame || e.source !== frame.contentWindow || e.origin !== clothLabOrigin() ||
+      clothLabActiveEngine !== "iframe" || !frame.dataset.loaded || !gateAllowed()) return;
+    clothLabReady = true;
     syncClothLab(true);
   }
   // Derived straight from the iframe's actual src (same-origin in production
@@ -4761,8 +4888,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // .claude/launch.json) rather than re-deriving isLocal independently, so
   // this can never drift out of sync with whatever loadClothLab() actually
   // pointed the iframe at.
-  function clothLabOrigin(){
-    const frame=$("#clothLabFrame");
+  function clothLabOrigin() {
+    const frame = $("#clothLabFrame");
     return frame && frame.src ? new URL(frame.src).origin : location.origin;
   }
   // Real bug fix: the zoombar (#zin/#zout/#zfit below) used to be wired
@@ -4775,35 +4902,37 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // itself reaches cloth-lab/src/App.jsx's listener exactly as if it were
   // the iframe's contentWindow; the iframe engine keeps using
   // contentWindow + clothLabOrigin() like every other cloth-lab message.
-  function clothLabZoom(factor){
-    if(state.clothLabEngine==="embedded"){ window.postMessage({type:"berrystudio:zoom", factor}, location.origin); return; }
-    const frame=$("#clothLabFrame");
-    if(frame && frame.contentWindow) frame.contentWindow.postMessage({type:"berrystudio:zoom", factor}, clothLabOrigin());
+  function clothLabZoom(factor) {
+    if (state.clothLabEngine === "embedded") { window.postMessage({ type: "berrystudio:zoom", factor }, location.origin); return; }
+    const frame = $("#clothLabFrame");
+    if (frame && frame.contentWindow) frame.contentWindow.postMessage({ type: "berrystudio:zoom", factor }, clothLabOrigin());
   }
-  function clothLabFit(){
-    if(state.clothLabEngine==="embedded"){ window.postMessage({type:"berrystudio:fit"}, location.origin); return; }
-    const frame=$("#clothLabFrame");
-    if(frame && frame.contentWindow) frame.contentWindow.postMessage({type:"berrystudio:fit"}, clothLabOrigin());
+  function clothLabFit() {
+    if (state.clothLabEngine === "embedded") { window.postMessage({ type: "berrystudio:fit" }, location.origin); return; }
+    const frame = $("#clothLabFrame");
+    if (frame && frame.contentWindow) frame.contentWindow.postMessage({ type: "berrystudio:fit" }, clothLabOrigin());
   }
   // Majority vote over each visible piece's chosen material — both apps use
   // identical fabric key names (cotton/denim/silk/satin/chiffon/wool/linen/
   // leather), so this is a direct passthrough, not a translation.
-  function dominantFabricId(){
-    const counts={};
-    Canvas.getPieces().forEach(p=>{ if(p.material) counts[p.material]=(counts[p.material]||0)+1; });
-    let best=null, bestN=0;
-    for(const k in counts) if(counts[k]>bestN){ best=k; bestN=counts[k]; }
+  function dominantFabricId() {
+    const counts = {};
+    Canvas.getPieces().forEach(p => { if (p.material) counts[p.material] = (counts[p.material] || 0) + 1; });
+    let best = null, bestN = 0;
+    for (const k in counts) if (counts[k] > bestN) { best = k; bestN = counts[k]; }
     return best || state.fabric3d || null; // fallback to active 3D fabric preset for Cloth Lab
   }
   // What actually crosses the iframe boundary — see cloth-lab/src/App.jsx's
   // message listener (Phase 2) for how this gets turned into a simulated
   // garment. Piece outlines are already cm, already compatible; the harder
   // half-piece/role/seam conversion happens entirely on the cloth-lab side.
-  function buildClothLabPayload(){
+  function buildClothLabPayload() {
     const pieces = ensureClothPieceIds(Canvas.getPieces());
     const loadedMeta = state.loaded ? PATTERNS[state.loaded] : null;
     const lbStyle = state.loaded ? getPatternLookbookStyle(state.loaded, loadedMeta, pieces) : null;
     const lookbookPrint = (lbStyle?.print && pieces.some(p => p.lookbookColor)) ? lbStyle.print : null;
+    const activeMqSize = (!state.kids && (state.avatarSizeExplicit ? state.avatarSize : state.size)) || state.size || "M";
+    const activeMq = getMannequinFor(state.category, activeMqSize);
     return {
       designId: String(state.activeProjectId || "current"),
       patternId: state.loaded || null,
@@ -4812,6 +4941,17 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       type: "berrystudio:pattern",
       measurements: currentMeas(),
       category: state.category,
+      mannequinId: activeMq.id,
+      mannequinSize: activeMq.size,
+      mannequin: {
+        id: activeMq.id,
+        category: activeMq.category,
+        size: activeMq.size,
+        skinHex: activeMq.skinHex,
+        hairHex: activeMq.hairHex,
+        hairStyle: activeMq.hairStyle,
+        morph: activeMq.morph,
+      },
       fabricId: dominantFabricId(),
       lookbookPrint,
       avatarGLB: state.avatarGLB || {},
@@ -4820,10 +4960,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       // (below) but nothing telling cloth-lab which one, or its own UI
       // chrome, should actually be shown. See cloth-lab/src/i18n.js.
       lang: state.lang,
-      pieces: pieces.map((p,i)=>({
+      pieces: pieces.map((p, i) => ({
         id: p.clothLabId,
         visible: p.visible !== false,
-        label: p.name || {en:"Piece "+(i+1), ar:"قطعة "+(i+1)},
+        label: p.name || { en: "Piece " + (i + 1), ar: "قطعة " + (i + 1) },
         outline: p.outline,
         curves: p.curves || (p.outline && p.outline.curves) || undefined,
         darts: p.darts, notches: p.notches, grain: p.grain,
@@ -4882,41 +5022,43 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // and rebuilds the GPU sim on any pieces/seams/dims change, so resending an
   // identical payload on every tab visit would force a jarring multi-second
   // resim restart purely from switching tabs to look.
-  function syncClothLab(force){
+  function syncClothLab(force) {
     // WP-42 Stage B code-review fix: belt-and-suspenders alongside
     // teardownClothLab() above — if entitlement is ever gated while
     // clothLabReady is still (incorrectly) true for any reason, this stops
     // fresh pattern data from ever reaching a live simulation a gated user
     // shouldn't have.
-    if(!clothLabReady || !gateAllowed()) return;
+    if (!clothLabReady || !gateAllowed()) return;
     const payload = buildClothLabPayload();
     const json = JSON.stringify(payload);
-    if(!force && json===lastClothLabPayloadJSON) return;
+    if (!force && json === lastClothLabPayloadJSON) return;
     lastClothLabPayloadJSON = json;
-    if(state.clothLabEngine==="embedded"){
-      if(clothLabEmbedModule) clothLabEmbedModule.update({ pattern: payload });
+    if (state.clothLabEngine === "embedded") {
+      if (clothLabEmbedModule) clothLabEmbedModule.update({ pattern: payload });
       return;
     }
-    const frame=$("#clothLabFrame");
-    if(!frame || !frame.contentWindow) return;
+    const frame = $("#clothLabFrame");
+    if (!frame || !frame.contentWindow) return;
     frame.contentWindow.postMessage(payload, clothLabOrigin());
   }
 
   // ================= EMPTY STATE =================
-  function hideEmpty(){ $("#emptyState").classList.add("hidden"); }
-  function showEmpty(){ $("#emptyState").classList.remove("hidden"); }
+  function hideEmpty() { $("#emptyState").classList.add("hidden"); }
+  function showEmpty() { $("#emptyState").classList.remove("hidden"); }
 
   // ================= HEADER / CATEGORY =================
-  function syncCategoryUI(){ $$("#catSeg button").forEach(b=>{ const on=b.dataset.cat===state.category; b.classList.toggle("active",on); b.setAttribute("aria-pressed",on); }); }
-  const DEFAULT_PATTERN_BY_CATEGORY = {women:"womens_dress",men:"mens_shirt",girls:"girls_dress",boys:"boys_trousers"};
-  function setCategory(cat){
-    state.category=cat; syncCategoryUI();
+  function syncCategoryUI() { $$("#catSeg button").forEach(b => { const on = b.dataset.cat === state.category; b.classList.toggle("active", on); b.setAttribute("aria-pressed", on); }); }
+  const DEFAULT_PATTERN_BY_CATEGORY = { women: "womens_dress", men: "mens_shirt", girls: "girls_dress", boys: "boys_trousers" };
+  function setCategory(cat) {
+    state.category = cat; syncCategoryUI();
     state.avatarCategoryExplicit = false;
     state.avatarCategory = cat;
     const sel = $("#v3dModelSelect");
     if (sel) sel.value = cat;
+    syncMannequinSelectorsUI();
+    renderMannequinCatalogPanel();
     // load a default pattern for that category
-    const def=DEFAULT_PATTERN_BY_CATEGORY[cat];
+    const def = DEFAULT_PATTERN_BY_CATEGORY[cat];
     // Code-review fix: this unconditionally called loadPattern(def) — the
     // exact same function loadLibraryPattern() gates for the Library pane
     // — meaning any signed-out/expired user could load a different one of
@@ -4927,13 +5069,13 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // auto-swapping in a brand-new full catalog pattern for the new
     // category is gated the same as any other Library pick; a gated user
     // keeps whatever pattern they already had loaded.
-    if(state.loaded){
-      if(gateAllowed()) {
+    if (state.loaded) {
+      if (gateAllowed()) {
         loadPattern(def);
       } else {
         renderSizePane(); renderMeasurePane(); updateStageChips(); updateGradeLbl();
-        if(is3DActive()) build3D();
-        if(state.view==="clothlab") syncClothLab();
+        if (is3DActive()) build3D();
+        if (state.view === "clothlab") syncClothLab();
         update3DStatusPill();
         save();
       }
@@ -4951,40 +5093,42 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // explicitly selected, not decorative background motion — and Cloth Lab
   // has no continuous ambient motion of its own to reduce (its camera only
   // spins during an explicit turntable export, not while viewing).
-  function applyReduceMotion(on){
-    document.body.style.setProperty("--fast", on?"0s":".16s");
-    document.body.style.setProperty("--med", on?"0s":".28s");
-    document.body.style.setProperty("--slow", on?"0s":".5s");
+  function applyReduceMotion(on) {
+    document.body.style.setProperty("--fast", on ? "0s" : ".16s");
+    document.body.style.setProperty("--med", on ? "0s" : ".28s");
+    document.body.style.setProperty("--slow", on ? "0s" : ".5s");
     View3D.setReduceMotion(on);
   }
 
   // ================= THEME / LANG =================
-  function applyTheme(){
-    document.documentElement.setAttribute("data-theme",state.theme);
-    document.documentElement.setAttribute("data-mode",state.mode);
-    document.body.setAttribute("data-theme",state.theme);
-    document.body.setAttribute("data-mode",state.mode);
-    document.body.setAttribute("data-contrast",state.highContrast?"high":"normal");
-    $("#modeBtn").innerHTML = state.mode==="light"?IC.moon:IC.sun;
-    Canvas.render(); if(is3DActive()) build3D();
+  function applyTheme() {
+    document.documentElement.setAttribute("data-theme", state.theme);
+    document.documentElement.setAttribute("data-mode", state.mode);
+    document.body.setAttribute("data-theme", state.theme);
+    document.body.setAttribute("data-mode", state.mode);
+    document.body.setAttribute("data-contrast", state.highContrast ? "high" : "normal");
+    $("#modeBtn").innerHTML = state.mode === "light" ? IC.moon : IC.sun;
+    Canvas.render(); if (is3DActive()) build3D();
   }
-  function applyLang(){
-    const d=I18N[state.lang].dir;
-    document.documentElement.lang=state.lang; document.documentElement.dir=d;
-    $$("[data-i18n]").forEach(e=>e.textContent=T(e.dataset.i18n));
-    $$("[data-i18n-ph]").forEach(e=>e.placeholder=T(e.dataset.i18nPh));
-    $$("[data-i18n-aria]").forEach(e=>e.setAttribute("aria-label",T(e.dataset.i18nAria)));
+  function applyLang() {
+    const d = I18N[state.lang].dir;
+    document.documentElement.lang = state.lang; document.documentElement.dir = d;
+    $$("[data-i18n]").forEach(e => e.textContent = T(e.dataset.i18n));
+    $$("[data-i18n-ph]").forEach(e => e.placeholder = T(e.dataset.i18nPh));
+    $$("[data-i18n-aria]").forEach(e => e.setAttribute("aria-label", T(e.dataset.i18nAria)));
     Canvas.setTranslator(T);
     buildToolRail(); buildRail(); syncCategoryUI(); updateStageChips();
-    $("#brandName").textContent=T("appName"); $("#brandSub").textContent=T("tagline");
-    $$("#viewToggle button")[0].textContent=T("view2d"); $$("#viewToggle button")[1].textContent=T("view3d"); $$("#viewToggle button")[2].textContent=T("viewClothLab");
+    $("#brandName").textContent = T("appName"); $("#brandSub").textContent = T("tagline");
+    $$("#viewToggle button")[0].textContent = T("view2d"); $$("#viewToggle button")[1].textContent = T("view3d"); $$("#viewToggle button")[2].textContent = T("viewClothLab");
     Canvas.render();
+    syncMannequinSelectorsUI();
+    renderMannequinCatalogPanel();
     update3DStatusPill();
     // Cloth Lab only re-reads `lang` from a resent payload (it has no
     // language toggle of its own — it mirrors this app's) — without this,
     // switching language while already on the Cloth Lab tab left it
     // showing the old language until the next unrelated pattern edit.
-    if(clothLabReady) syncClothLab(true);
+    if (clothLabReady) syncClothLab(true);
     // WP-42 Stage B: the gate card is built once by loadClothLab()/
     // renderClothLabGate() and (unlike the rest of the chrome above) isn't
     // one of buildRail()'s panes, so it's easy to miss on a language
@@ -4993,32 +5137,32 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // showing its old language until the next tab round-trip. Re-render
     // is idempotent and cheap (a few DOM nodes, no network) — safe to call
     // unconditionally whether or not Cloth Lab is the active view.
-    if(!gateAllowed()) renderClothLabGate();
+    if (!gateAllowed()) renderClothLabGate();
   }
 
   // ================= TOOLTIPS =================
-  const ttEl=el("div","tt"); document.body.appendChild(ttEl);
-  function tip(node,title,body){
-    node.addEventListener("pointerenter",e=>{ if(!state.hoverHelp)return; ttEl.innerHTML=`<b>${title}</b>${body?`<small>${body}</small>`:""}`; ttEl.classList.add("show"); posTip(e); });
-    node.addEventListener("pointermove",posTip);
-    node.addEventListener("pointerleave",()=>ttEl.classList.remove("show"));
-    function posTip(e){ const r=ttEl.getBoundingClientRect(); let x=e.clientX+14,y=e.clientY+14; if(x+r.width>innerWidth)x=e.clientX-r.width-14; if(y+r.height>innerHeight)y=e.clientY-r.height-14; ttEl.style.left=x+"px"; ttEl.style.top=y+"px"; }
+  const ttEl = el("div", "tt"); document.body.appendChild(ttEl);
+  function tip(node, title, body) {
+    node.addEventListener("pointerenter", e => { if (!state.hoverHelp) return; ttEl.innerHTML = `<b>${title}</b>${body ? `<small>${body}</small>` : ""}`; ttEl.classList.add("show"); posTip(e); });
+    node.addEventListener("pointermove", posTip);
+    node.addEventListener("pointerleave", () => ttEl.classList.remove("show"));
+    function posTip(e) { const r = ttEl.getBoundingClientRect(); let x = e.clientX + 14, y = e.clientY + 14; if (x + r.width > innerWidth) x = e.clientX - r.width - 14; if (y + r.height > innerHeight) y = e.clientY - r.height - 14; ttEl.style.left = x + "px"; ttEl.style.top = y + "px"; }
   }
 
   // ================= PIECE INFO =================
-  function showPieceInfo(p){
-    const box=$("#pieceInfo");
-    box.innerHTML=`<div class="pi-t">${L(p.name)}</div><div class="pi-ar">${p.name[state.lang==="ar"?"en":"ar"]}</div><div class="pi-d">${L(p.desc||{en:"",ar:""})}</div>`;
+  function showPieceInfo(p) {
+    const box = $("#pieceInfo");
+    box.innerHTML = `<div class="pi-t">${L(p.name)}</div><div class="pi-ar">${p.name[state.lang === "ar" ? "en" : "ar"]}</div><div class="pi-d">${L(p.desc || { en: "", ar: "" })}</div>`;
     box.classList.add("show");
-    setTimeout(()=>box.classList.remove("show"),4200);
+    setTimeout(() => box.classList.remove("show"), 4200);
   }
 
   // ================= TOASTS =================
-  function toast(msg){ const t=el("div","toast",IC.check+`<span>${msg}</span>`); $("#toasts").appendChild(t); setTimeout(()=>{t.style.opacity="0";t.style.transform="translateY(8px)";setTimeout(()=>t.remove(),250);},1900); }
+  function toast(msg) { const t = el("div", "toast", IC.check + `<span>${msg}</span>`); $("#toasts").appendChild(t); setTimeout(() => { t.style.opacity = "0"; t.style.transform = "translateY(8px)"; setTimeout(() => t.remove(), 250); }, 1900); }
 
   // ================= MODALS =================
-  function openModal(title,body,wide){ const o=$("#genericModal"); o.querySelector(".modal").classList.toggle("wide",!!wide); o.querySelector("h2").textContent=title; o.querySelector(".modal-body").innerHTML=body; o.classList.add("show"); }
-  function closeModal(id){ $(id).classList.remove("show"); }
+  function openModal(title, body, wide) { const o = $("#genericModal"); o.querySelector(".modal").classList.toggle("wide", !!wide); o.querySelector("h2").textContent = title; o.querySelector(".modal-body").innerHTML = body; o.classList.add("show"); }
+  function closeModal(id) { $(id).classList.remove("show"); }
 
   // ================= MODAL ACCESSIBILITY (WP-17) =================
   // Every ".overlay" in index.html (theme/settings/command palette/generic/
@@ -5028,52 +5172,52 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // into the dialog when it appears and back to whatever triggered it when
   // it's gone, and Tab is trapped inside the visible dialog throughout.
   let modalReturnFocus = null;
-  function focusablesIn(root){
+  function focusablesIn(root) {
     // NOTE: $$() always queries the whole document and ignores a second
     // argument (see its definition above) — querySelectorAll directly on
     // root is required here to actually scope this to the open dialog.
     return [...root.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
       .filter(el => !el.disabled && el.offsetParent !== null);
   }
-  function initModalA11y(){
-    $$(".overlay").forEach(overlay=>{
-      new MutationObserver(()=>{
+  function initModalA11y() {
+    $$(".overlay").forEach(overlay => {
+      new MutationObserver(() => {
         const modal = overlay.querySelector(".modal");
-        if(overlay.classList.contains("show")){
+        if (overlay.classList.contains("show")) {
           modalReturnFocus = document.activeElement;
           const first = modal && focusablesIn(modal)[0];
-          (first || modal || overlay).focus({ preventScroll:true });
-        } else if(modalReturnFocus){
-          modalReturnFocus.focus({ preventScroll:true });
+          (first || modal || overlay).focus({ preventScroll: true });
+        } else if (modalReturnFocus) {
+          modalReturnFocus.focus({ preventScroll: true });
           modalReturnFocus = null;
         }
-      }).observe(overlay, { attributes:true, attributeFilter:["class"] });
+      }).observe(overlay, { attributes: true, attributeFilter: ["class"] });
     });
   }
-  function trapModalTab(e){
-    const overlay = $$(".overlay.show")[0]; if(!overlay) return;
-    const modal = overlay.querySelector(".modal"); if(!modal) return;
-    const items = focusablesIn(modal); if(!items.length) return;
-    const first=items[0], last=items[items.length-1];
-    if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
-    else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+  function trapModalTab(e) {
+    const overlay = $$(".overlay.show")[0]; if (!overlay) return;
+    const modal = overlay.querySelector(".modal"); if (!modal) return;
+    const items = focusablesIn(modal); if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
 
   // Theme picker
-  function openThemePicker(){
-    const body=$("#themeModal .modal-body"); body.innerHTML="";
-    const themes=[
-      {id:"egypt",name:{en:"Egyptian",ar:"مصري"},d:{en:"Warm earthy & gold",ar:"دفء ترابي وذهبي"},sw:["#c8912e","#1f7a6d","#c1492e"]},
-      {id:"saudi",name:{en:"Saudi / Gulf",ar:"سعودي / خليجي"},d:{en:"Emerald, gold, burgundy",ar:"زمردي وذهبي وعنابي"},sw:["#0f7a4f","#c69a2e","#7a1f2b"]},
-      {id:"intl",name:{en:"International",ar:"عالمي"},d:{en:"Clean modern accents",ar:"عصري نظيف"},sw:["#6d5efc","#00c2a8","#ff5d8f"]},
+  function openThemePicker() {
+    const body = $("#themeModal .modal-body"); body.innerHTML = "";
+    const themes = [
+      { id: "egypt", name: { en: "Egyptian", ar: "مصري" }, d: { en: "Warm earthy & gold", ar: "دفء ترابي وذهبي" }, sw: ["#c8912e", "#1f7a6d", "#c1492e"] },
+      { id: "saudi", name: { en: "Saudi / Gulf", ar: "سعودي / خليجي" }, d: { en: "Emerald, gold, burgundy", ar: "زمردي وذهبي وعنابي" }, sw: ["#0f7a4f", "#c69a2e", "#7a1f2b"] },
+      { id: "intl", name: { en: "International", ar: "عالمي" }, d: { en: "Clean modern accents", ar: "عصري نظيف" }, sw: ["#6d5efc", "#00c2a8", "#ff5d8f"] },
     ];
-    const grid=el("div","theme-cards");
-    themes.forEach(th=>{ const card=el("div","theme-card"+(state.theme===th.id?" active":"")); card.innerHTML=`<div class="swatches">${th.sw.map(s=>`<span class="sw" style="background:${s}"></span>`).join("")}</div><div class="tn">${L(th.name)}</div><div class="td">${L(th.d)}</div>`; card.onclick=()=>{state.theme=th.id;applyTheme();save();$$("#themeModal .theme-card").forEach(x=>x.classList.remove("active"));card.classList.add("active");toast(T("themeChanged"));}; grid.appendChild(card); });
+    const grid = el("div", "theme-cards");
+    themes.forEach(th => { const card = el("div", "theme-card" + (state.theme === th.id ? " active" : "")); card.innerHTML = `<div class="swatches">${th.sw.map(s => `<span class="sw" style="background:${s}"></span>`).join("")}</div><div class="tn">${L(th.name)}</div><div class="td">${L(th.d)}</div>`; card.onclick = () => { state.theme = th.id; applyTheme(); save(); $$("#themeModal .theme-card").forEach(x => x.classList.remove("active")); card.classList.add("active"); toast(T("themeChanged")); }; grid.appendChild(card); });
     body.appendChild(grid);
     // mode toggle inside
-    const row=el("label","set-row"); row.style.marginTop="18px"; row.innerHTML=`<span class="sl">${T("appearance")}<small>${T("tt_mode")}</small></span>`;
-    const sw=el("span","switch",`<input type="checkbox" ${state.mode==="dark"?"checked":""}><span class="track"></span>`);
-    sw.querySelector("input").onchange=e=>{state.mode=e.target.checked?"dark":"light";applyTheme();save();}; row.appendChild(sw); body.appendChild(row);
+    const row = el("label", "set-row"); row.style.marginTop = "18px"; row.innerHTML = `<span class="sl">${T("appearance")}<small>${T("tt_mode")}</small></span>`;
+    const sw = el("span", "switch", `<input type="checkbox" ${state.mode === "dark" ? "checked" : ""}><span class="track"></span>`);
+    sw.querySelector("input").onchange = e => { state.mode = e.target.checked ? "dark" : "light"; applyTheme(); save(); }; row.appendChild(sw); body.appendChild(row);
     $("#themeModal").classList.add("show");
   }
 
@@ -5092,73 +5236,73 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // Today's state.aiEndpoint/aiImageEndpoint (the old flat fields) become the
   // `proxy` adapter's persisted baseUrl the first time this renders — existing
   // users' saved values keep working with zero migration step of their own.
-  function ensureAIState(){
-    if(!state.aiProviderCfg) state.aiProviderCfg = { proxy: { baseUrl: state.aiEndpoint||"" } };
-    if(!state.aiImageProviderCfg) state.aiImageProviderCfg = { proxy: { baseUrl: state.aiImageEndpoint||"" } };
+  function ensureAIState() {
+    if (!state.aiProviderCfg) state.aiProviderCfg = { proxy: { baseUrl: state.aiEndpoint || "" } };
+    if (!state.aiImageProviderCfg) state.aiImageProviderCfg = { proxy: { baseUrl: state.aiImageEndpoint || "" } };
   }
-  function aiCfgFor(providerId, isImage){
+  function aiCfgFor(providerId, isImage) {
     const bag = isImage ? state.aiImageProviderCfg : state.aiProviderCfg;
-    if(!bag[providerId]) bag[providerId] = {};
+    if (!bag[providerId]) bag[providerId] = {};
     return bag[providerId];
   }
   // Resolves {baseUrl, apiKey, model} for an adapter call, prompting once for
   // the encryption passphrase if a persisted key exists but is locked. Never
   // logs/toasts the resolved key itself — see js/ai-keystore.js.
-  async function resolveAICfg(providerId, cfg, useVisionModel){
+  async function resolveAICfg(providerId, cfg, useVisionModel) {
     let apiKey = await KeyStore.resolve(providerId);
-    if(apiKey==null && KeyStore.hasPersistent(providerId) && KeyStore.needsPassphrase()){
+    if (apiKey == null && KeyStore.hasPersistent(providerId) && KeyStore.needsPassphrase()) {
       const pass = window.prompt(T("keyPassphrasePrompt"));
-      if(pass){ try{ await KeyStore.unlock(pass); apiKey = await KeyStore.resolve(providerId); }catch(e){ toast(T("keyPassphraseWrong")); } }
+      if (pass) { try { await KeyStore.unlock(pass); apiKey = await KeyStore.resolve(providerId); } catch (e) { toast(T("keyPassphraseWrong")); } }
     }
-    return { baseUrl: cfg.baseUrl||undefined, apiKey: apiKey||undefined, model: (useVisionModel? cfg.visionModel : cfg.model)||undefined };
+    return { baseUrl: cfg.baseUrl || undefined, apiKey: apiKey || undefined, model: (useVisionModel ? cfg.visionModel : cfg.model) || undefined };
   }
 
   // WP-18: cloud sync target configuration. Rendered only while Settings'
   // "Cloud Sync" toggle is on — off by default, matching the plan's "local
   // -first stays the default forever" requirement.
-  function renderSyncSettings(body){
-    const wrap=el("div","field"); wrap.style.marginTop="14px";
-    wrap.innerHTML=`<label>${T("syncTargetLabel")}</label>`;
-    const sel=el("select","select");
-    [["endpoint",T("syncTargetEndpoint")],["googleDrive",T("syncTargetDrive")],["oneDrive",T("syncTargetOneDrive")]].forEach(([id,label])=>{
-      const opt=document.createElement("option"); opt.value=id; opt.textContent=label; if(id===state.syncTarget) opt.selected=true;
+  function renderSyncSettings(body) {
+    const wrap = el("div", "field"); wrap.style.marginTop = "14px";
+    wrap.innerHTML = `<label>${T("syncTargetLabel")}</label>`;
+    const sel = el("select", "select");
+    [["endpoint", T("syncTargetEndpoint")], ["googleDrive", T("syncTargetDrive")], ["oneDrive", T("syncTargetOneDrive")]].forEach(([id, label]) => {
+      const opt = document.createElement("option"); opt.value = id; opt.textContent = label; if (id === state.syncTarget) opt.selected = true;
       sel.appendChild(opt);
     });
-    sel.onchange=()=>{ state.syncTarget=sel.value; save(); openSettings(); };
+    sel.onchange = () => { state.syncTarget = sel.value; save(); openSettings(); };
     wrap.appendChild(sel); body.appendChild(wrap);
 
-    if(state.syncTarget==="endpoint"){
-      const urlField=el("div","field"); urlField.style.marginTop="10px";
-      urlField.innerHTML=`<label>${T("syncEndpointUrlLabel")}</label>`;
-      const urlInp=el("input","input"); urlInp.type="url"; urlInp.dir="ltr"; urlInp.placeholder="https://your-server.example/berrystudio-project.json";
-      urlInp.value=state.syncEndpointUrl||"";
-      urlInp.onchange=()=>{ state.syncEndpointUrl=urlInp.value.trim(); save(); };
+    if (state.syncTarget === "endpoint") {
+      const urlField = el("div", "field"); urlField.style.marginTop = "10px";
+      urlField.innerHTML = `<label>${T("syncEndpointUrlLabel")}</label>`;
+      const urlInp = el("input", "input"); urlInp.type = "url"; urlInp.dir = "ltr"; urlInp.placeholder = "https://your-server.example/berrystudio-project.json";
+      urlInp.value = state.syncEndpointUrl || "";
+      urlInp.onchange = () => { state.syncEndpointUrl = urlInp.value.trim(); save(); };
       urlField.appendChild(urlInp); body.appendChild(urlField);
 
-      const tokField=el("div","field"); tokField.style.marginTop="10px";
-      tokField.innerHTML=`<label>${T("syncEndpointTokenLabel")}</label>`;
-      const tokInp=el("input","input"); tokInp.type="password"; tokInp.dir="ltr"; tokInp.placeholder=T("optional");
-      tokInp.value=SelfHostedSync.getToken();
-      tokInp.onchange=()=>SelfHostedSync.setToken(tokInp.value.trim());
+      const tokField = el("div", "field"); tokField.style.marginTop = "10px";
+      tokField.innerHTML = `<label>${T("syncEndpointTokenLabel")}</label>`;
+      const tokInp = el("input", "input"); tokInp.type = "password"; tokInp.dir = "ltr"; tokInp.placeholder = T("optional");
+      tokInp.value = SelfHostedSync.getToken();
+      tokInp.onchange = () => SelfHostedSync.setToken(tokInp.value.trim());
       tokField.appendChild(tokInp); body.appendChild(tokField);
-      body.appendChild(el("div","help-note",T("syncEndpointHint")));
+      body.appendChild(el("div", "help-note", T("syncEndpointHint")));
     } else {
-      const isDrive=state.syncTarget==="googleDrive";
-      const idField=el("div","field"); idField.style.marginTop="10px";
-      idField.innerHTML=`<label>${isDrive?T("syncGoogleClientIdLabel"):T("syncMicrosoftClientIdLabel")}</label>`;
-      const idInp=el("input","input"); idInp.dir="ltr"; idInp.placeholder=T("syncClientIdPlaceholder");
-      idInp.value=isDrive?(state.syncGoogleClientId||""):(state.syncMicrosoftClientId||"");
-      idInp.onchange=()=>{ if(isDrive) state.syncGoogleClientId=idInp.value.trim(); else state.syncMicrosoftClientId=idInp.value.trim(); save(); };
+      const isDrive = state.syncTarget === "googleDrive";
+      const idField = el("div", "field"); idField.style.marginTop = "10px";
+      idField.innerHTML = `<label>${isDrive ? T("syncGoogleClientIdLabel") : T("syncMicrosoftClientIdLabel")}</label>`;
+      const idInp = el("input", "input"); idInp.dir = "ltr"; idInp.placeholder = T("syncClientIdPlaceholder");
+      idInp.value = isDrive ? (state.syncGoogleClientId || "") : (state.syncMicrosoftClientId || "");
+      idInp.onchange = () => { if (isDrive) state.syncGoogleClientId = idInp.value.trim(); else state.syncMicrosoftClientId = idInp.value.trim(); save(); };
       idField.appendChild(idInp); body.appendChild(idField);
-      body.appendChild(el("div","help-note",isDrive?T("syncDriveHint"):T("syncOneDriveHint")));
+      body.appendChild(el("div", "help-note", isDrive ? T("syncDriveHint") : T("syncOneDriveHint")));
 
-      const impl=isDrive?GoogleDriveSync:OneDriveSync;
-      const connectBtn=el("button","big-btn ghost",impl.isConnected()?T("syncConnected"):T("syncConnect"));
-      connectBtn.style.marginTop="10px";
-      connectBtn.disabled=impl.isConnected();
-      connectBtn.onclick=async()=>{
-        try{ await cloudSyncConnect(); toast(T("syncConnected")); openSettings(); }
-        catch(e){ toast(T("syncFail")+": "+(e.message||e)); }
+      const impl = isDrive ? GoogleDriveSync : OneDriveSync;
+      const connectBtn = el("button", "big-btn ghost", impl.isConnected() ? T("syncConnected") : T("syncConnect"));
+      connectBtn.style.marginTop = "10px";
+      connectBtn.disabled = impl.isConnected();
+      connectBtn.onclick = async () => {
+        try { await cloudSyncConnect(); toast(T("syncConnected")); openSettings(); }
+        catch (e) { toast(T("syncFail") + ": " + (e.message || e)); }
       };
       body.appendChild(connectBtn);
     }
@@ -5168,7 +5312,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // own file. `state.avatarGLB[cat]` stores whichever URL is active —
   // bundled options resolve to a repo-relative path, uploads to a session-
   // only blob: URL (see the honest note in the upload handler below).
-  function renderAvatarPickerRow(container, cat){
+  function renderAvatarPickerRow(container, cat) {
     const current = (state.avatarGLB && state.avatarGLB[cat]) || "";
     const bundled = BUNDLED_AVATARS[cat] || [];
     const bundledMatch = bundled.find(b => b.file === current);
@@ -5196,7 +5340,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const detail = el("div"); detail.style.marginTop = "6px";
     row.appendChild(detail);
 
-    function renderDetail(selected){
+    function renderDetail(selected) {
       detail.innerHTML = "";
       if (selected === "url") {
         const inp = el("input", "input"); inp.type = "url"; inp.dir = "ltr";
@@ -5225,18 +5369,18 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     container.appendChild(row);
   }
 
-  function renderAISettings(body){
+  function renderAISettings(body) {
     ensureAIState();
-    const wrap=el("div","field"); wrap.style.marginTop="14px";
-    wrap.innerHTML=`<label>${T("aiProviderSection")}</label>`;
-    const seg=el("div","seg",`<button class="${aiSettingsTab==="text"?"active":""}">${T("aiTextGen")}</button><button class="${aiSettingsTab==="image"?"active":""}">${T("aiImageGen")}</button>`);
-    seg.children[0].onclick=()=>{ aiSettingsTab="text"; openSettings(); };
-    seg.children[1].onclick=()=>{ aiSettingsTab="image"; openSettings(); };
+    const wrap = el("div", "field"); wrap.style.marginTop = "14px";
+    wrap.innerHTML = `<label>${T("aiProviderSection")}</label>`;
+    const seg = el("div", "seg", `<button class="${aiSettingsTab === "text" ? "active" : ""}">${T("aiTextGen")}</button><button class="${aiSettingsTab === "image" ? "active" : ""}">${T("aiImageGen")}</button>`);
+    seg.children[0].onclick = () => { aiSettingsTab = "text"; openSettings(); };
+    seg.children[1].onclick = () => { aiSettingsTab = "image"; openSettings(); };
     wrap.appendChild(seg);
-    const pane=el("div"); pane.style.marginTop="10px";
+    const pane = el("div"); pane.style.marginTop = "10px";
     wrap.appendChild(pane);
     body.appendChild(wrap);
-    renderProviderPane(pane, aiSettingsTab==="image");
+    renderProviderPane(pane, aiSettingsTab === "image");
     renderSegmentationSettings(body);
   }
 
@@ -5247,22 +5391,22 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // segmentation architecture, run in-browser via the same worker Route
   // C's Hugging Face route uses. Empty (the default) keeps every existing
   // photo read byte-identical to before this WP — see getSegmentFn().
-  function renderSegmentationSettings(body){
-    const wrap=el("div","field"); wrap.style.marginTop="14px";
-    wrap.innerHTML=`<label>${T("segModelLabel")}</label>`;
-    const inp=el("input","input"); inp.dir="ltr"; inp.placeholder="Xenova/modnet";
+  function renderSegmentationSettings(body) {
+    const wrap = el("div", "field"); wrap.style.marginTop = "14px";
+    wrap.innerHTML = `<label>${T("segModelLabel")}</label>`;
+    const inp = el("input", "input"); inp.dir = "ltr"; inp.placeholder = "Xenova/modnet";
     inp.value = state.segmentationModelId || "";
-    inp.onchange=()=>{ state.segmentationModelId = inp.value.trim(); save(); };
+    inp.onchange = () => { state.segmentationModelId = inp.value.trim(); save(); };
     wrap.appendChild(inp);
-    wrap.appendChild(el("div","help-note", T("segModelHint")));
+    wrap.appendChild(el("div", "help-note", T("segModelHint")));
     body.appendChild(wrap);
   }
   // undefined (not null) when unconfigured — js/ai.js's analyzeImage()
   // only branches on `opts.segment` at all when it's truthy, so this stays
   // a plain pass-through with zero special-casing on either side.
-  function getSegmentFn(){
-    const modelId = (state.segmentationModelId||"").trim();
-    if(!modelId) return undefined;
+  function getSegmentFn() {
+    const modelId = (state.segmentationModelId || "").trim();
+    if (!modelId) return undefined;
     return async (imageData) => {
       await loadSegmentationModel(modelId);
       return await runSegmentationOn(imageData);
@@ -5274,37 +5418,37 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // own function rather than folded into renderProviderPane — this UI
   // shares nothing with the model/vision-model/fetch/test fields every
   // other adapter renders (see isRouteBFile's early return there).
-  function renderOnnxFileRoute(pane, cfg){
-    pane.appendChild(el("div","help-note",T("onnxHint")));
+  function renderOnnxFileRoute(pane, cfg) {
+    pane.appendChild(el("div", "help-note", T("onnxHint")));
 
-    const statusLine=el("div","help-note"); statusLine.dir="ltr"; statusLine.style.marginTop="10px";
-    function paintStatus(){
-      if(onnxLoadedInfo){
-        statusLine.style.color="var(--ok)";
-        statusLine.textContent=`✓ ${T("onnxModelLoaded")}: ${onnxLoadedInfo.name}`;
+    const statusLine = el("div", "help-note"); statusLine.dir = "ltr"; statusLine.style.marginTop = "10px";
+    function paintStatus() {
+      if (onnxLoadedInfo) {
+        statusLine.style.color = "var(--ok)";
+        statusLine.textContent = `✓ ${T("onnxModelLoaded")}: ${onnxLoadedInfo.name}`;
       } else {
-        statusLine.style.color="var(--ink-2)";
-        statusLine.textContent=`○ ${T("onnxNoModelLoaded")}`;
+        statusLine.style.color = "var(--ink-2)";
+        statusLine.textContent = `○ ${T("onnxNoModelLoaded")}`;
       }
     }
     paintStatus();
 
-    const pickRow=el("div"); pickRow.style.cssText="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;align-items:center";
-    const fileInput=el("input"); fileInput.type="file"; fileInput.accept=".onnx"; fileInput.style.display="none";
-    const pickBtn=el("button","big-btn ghost", T("onnxPickFile"));
-    pickBtn.type="button"; pickBtn.onclick=()=>fileInput.click();
-    fileInput.onchange=async()=>{
-      const f=fileInput.files && fileInput.files[0]; fileInput.value="";
-      if(!f) return;
-      const orig=pickBtn.textContent; pickBtn.disabled=true; pickBtn.textContent=T("onnxLoading");
-      try{
-        const bytes=await f.arrayBuffer();
-        const result=await loadLocalModelFromFile(f.name, f.type||"application/octet-stream", bytes);
-        onnxLoadedInfo={ name: result.name, inputNames: result.inputNames, outputNames: result.outputNames };
-        onnxLastResult=null;
-        toast("✓ "+T("onnxModelLoaded"));
-      }catch(e){ toast("✗ "+(e&&e.message||e)); }
-      finally{ pickBtn.disabled=false; pickBtn.textContent=orig; renderProviderPane(pane, false); }
+    const pickRow = el("div"); pickRow.style.cssText = "display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;align-items:center";
+    const fileInput = el("input"); fileInput.type = "file"; fileInput.accept = ".onnx"; fileInput.style.display = "none";
+    const pickBtn = el("button", "big-btn ghost", T("onnxPickFile"));
+    pickBtn.type = "button"; pickBtn.onclick = () => fileInput.click();
+    fileInput.onchange = async () => {
+      const f = fileInput.files && fileInput.files[0]; fileInput.value = "";
+      if (!f) return;
+      const orig = pickBtn.textContent; pickBtn.disabled = true; pickBtn.textContent = T("onnxLoading");
+      try {
+        const bytes = await f.arrayBuffer();
+        const result = await loadLocalModelFromFile(f.name, f.type || "application/octet-stream", bytes);
+        onnxLoadedInfo = { name: result.name, inputNames: result.inputNames, outputNames: result.outputNames };
+        onnxLastResult = null;
+        toast("✓ " + T("onnxModelLoaded"));
+      } catch (e) { toast("✗ " + (e && e.message || e)); }
+      finally { pickBtn.disabled = false; pickBtn.textContent = orig; renderProviderPane(pane, false); }
     };
     pickRow.appendChild(pickBtn); pickRow.appendChild(fileInput);
     pane.appendChild(pickRow);
@@ -5313,65 +5457,65 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // Cached-model row — metadata-only read (js/workers/model-file-cache.js
     // never hands back bytes for this), so this is cheap on every render
     // and never itself counts as "loading" a model.
-    const cacheRow=el("div"); cacheRow.style.cssText="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;align-items:center";
-    const cacheInfo=el("div","help-note"); cacheInfo.dir="ltr"; cacheInfo.textContent=T("loading");
+    const cacheRow = el("div"); cacheRow.style.cssText = "display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;align-items:center";
+    const cacheInfo = el("div", "help-note"); cacheInfo.dir = "ltr"; cacheInfo.textContent = T("loading");
     cacheRow.appendChild(cacheInfo);
     pane.appendChild(cacheRow);
-    getModelFileMeta().then(meta=>{
-      cacheInfo.textContent = meta ? `${T("onnxCachedLabel")}: ${meta.name} (${(meta.size/1e6).toFixed(1)}MB)` : T("onnxNoCached");
-      if(!meta) return;
-      const restoreBtn=el("button","big-btn ghost", T("onnxLoadCached"));
-      restoreBtn.type="button";
-      restoreBtn.onclick=async()=>{
-        const orig=restoreBtn.textContent; restoreBtn.disabled=true; restoreBtn.textContent=T("onnxLoading");
-        try{
-          const result=await restoreLocalModelFromCache();
-          onnxLoadedInfo={ name: result.name, inputNames: result.inputNames, outputNames: result.outputNames };
-          onnxLastResult=null;
-          toast("✓ "+T("onnxModelLoaded"));
-        }catch(e){ toast("✗ "+(e&&e.message||e)); }
-        finally{ restoreBtn.disabled=false; restoreBtn.textContent=orig; renderProviderPane(pane, false); }
+    getModelFileMeta().then(meta => {
+      cacheInfo.textContent = meta ? `${T("onnxCachedLabel")}: ${meta.name} (${(meta.size / 1e6).toFixed(1)}MB)` : T("onnxNoCached");
+      if (!meta) return;
+      const restoreBtn = el("button", "big-btn ghost", T("onnxLoadCached"));
+      restoreBtn.type = "button";
+      restoreBtn.onclick = async () => {
+        const orig = restoreBtn.textContent; restoreBtn.disabled = true; restoreBtn.textContent = T("onnxLoading");
+        try {
+          const result = await restoreLocalModelFromCache();
+          onnxLoadedInfo = { name: result.name, inputNames: result.inputNames, outputNames: result.outputNames };
+          onnxLastResult = null;
+          toast("✓ " + T("onnxModelLoaded"));
+        } catch (e) { toast("✗ " + (e && e.message || e)); }
+        finally { restoreBtn.disabled = false; restoreBtn.textContent = orig; renderProviderPane(pane, false); }
       };
-      const clearBtn=el("button","big-btn ghost", T("onnxClearCached"));
-      clearBtn.type="button";
-      clearBtn.onclick=async()=>{ await clearModelFile(); renderProviderPane(pane, false); };
+      const clearBtn = el("button", "big-btn ghost", T("onnxClearCached"));
+      clearBtn.type = "button";
+      clearBtn.onclick = async () => { await clearModelFile(); renderProviderPane(pane, false); };
       cacheRow.appendChild(restoreBtn); cacheRow.appendChild(clearBtn);
     });
 
     // Test-inference section — only meaningful once a model is actually
     // loaded this session (picked or restored above).
-    const testWrap=el("div"); testWrap.style.marginTop="10px";
+    const testWrap = el("div"); testWrap.style.marginTop = "10px";
     pane.appendChild(testWrap);
-    function renderTestSection(){
-      testWrap.innerHTML="";
-      if(!onnxLoadedInfo) return;
-      testWrap.appendChild(el("div","help-note",T("onnxTestHint")));
-      const testBtn=el("button","big-btn ghost", T("onnxRunTest"));
-      testBtn.type="button"; testBtn.style.marginTop="8px";
-      const resultLine=el("div","help-note"); resultLine.dir="ltr"; resultLine.style.marginTop="8px";
-      if(onnxLastResult) resultLine.textContent=onnxLastResult;
-      testBtn.onclick=async()=>{
-        const orig=testBtn.textContent; testBtn.disabled=true; testBtn.textContent=T("onnxLoading");
-        try{
-          const r=await runOnnxTestInference();
-          const outSummary=r.outputs.map(o=>`${o.name} [${o.dims.join("×")}] ${o.type}`).join(", ");
-          resultLine.style.color="var(--ok)";
+    function renderTestSection() {
+      testWrap.innerHTML = "";
+      if (!onnxLoadedInfo) return;
+      testWrap.appendChild(el("div", "help-note", T("onnxTestHint")));
+      const testBtn = el("button", "big-btn ghost", T("onnxRunTest"));
+      testBtn.type = "button"; testBtn.style.marginTop = "8px";
+      const resultLine = el("div", "help-note"); resultLine.dir = "ltr"; resultLine.style.marginTop = "8px";
+      if (onnxLastResult) resultLine.textContent = onnxLastResult;
+      testBtn.onclick = async () => {
+        const orig = testBtn.textContent; testBtn.disabled = true; testBtn.textContent = T("onnxLoading");
+        try {
+          const r = await runOnnxTestInference();
+          const outSummary = r.outputs.map(o => `${o.name} [${o.dims.join("×")}] ${o.type}`).join(", ");
+          resultLine.style.color = "var(--ok)";
           onnxLastResult = `✓ ${outSummary} (${r.latencyMs}ms)`;
-          resultLine.textContent=onnxLastResult;
-        }catch(e){
-          resultLine.style.color="var(--danger)";
-          onnxLastResult = "✗ "+(e&&e.message||e);
-          resultLine.textContent=onnxLastResult;
+          resultLine.textContent = onnxLastResult;
+        } catch (e) {
+          resultLine.style.color = "var(--danger)";
+          onnxLastResult = "✗ " + (e && e.message || e);
+          resultLine.textContent = onnxLastResult;
         }
-        finally{ testBtn.disabled=false; testBtn.textContent=orig; }
+        finally { testBtn.disabled = false; testBtn.textContent = orig; }
       };
       testWrap.appendChild(testBtn); testWrap.appendChild(resultLine);
     }
     renderTestSection();
   }
 
-  function renderProviderPane(pane, isImage){
-    pane.innerHTML="";
+  function renderProviderPane(pane, isImage) {
+    pane.innerHTML = "";
     // BerryStudio-Upgrade-Plan WP-4: image-generation adapters
     // (openai-images/gemini-image/local-image/comfyui, js/image-providers.js) —
     // `proxy` here preserves today's exact "AI Image endpoint" behaviour.
@@ -5379,40 +5523,40 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const providerSet = isImage ? ImageProviders : AIProviders;
     const stateKey = isImage ? "aiImageProvider" : "aiProvider";
     const activeId = providerList.includes(state[stateKey]) ? state[stateKey] : providerList[0];
-    if(activeId!==state[stateKey]){ state[stateKey]=activeId; save(); }
+    if (activeId !== state[stateKey]) { state[stateKey] = activeId; save(); }
 
-    const selWrap=el("div","field");
-    selWrap.innerHTML=`<label>${T("aiProviderLabel")}</label>`;
-    const sel=el("select","select");
-    providerList.forEach(id=>{
-      const opt=document.createElement("option"); opt.value=id; opt.textContent=providerSet[id].label; if(id===activeId) opt.selected=true;
+    const selWrap = el("div", "field");
+    selWrap.innerHTML = `<label>${T("aiProviderLabel")}</label>`;
+    const sel = el("select", "select");
+    providerList.forEach(id => {
+      const opt = document.createElement("option"); opt.value = id; opt.textContent = providerSet[id].label; if (id === activeId) opt.selected = true;
       sel.appendChild(opt);
     });
-    sel.onchange=()=>{ state[stateKey]=sel.value; save(); renderProviderPane(pane, isImage); };
+    sel.onchange = () => { state[stateKey] = sel.value; save(); renderProviderPane(pane, isImage); };
     selWrap.appendChild(sel); pane.appendChild(selWrap);
 
-    const adapter=providerSet[activeId];
-    const cfg=aiCfgFor(activeId, isImage);
+    const adapter = providerSet[activeId];
+    const cfg = aiCfgFor(activeId, isImage);
     // WP-21: Route B (local .onnx file) has its own dedicated UI
     // (renderOnnxFileRoute below) and no {model, test, fetchModels}
     // surface of its own — the generic model/vision fields and
     // fetch/test buttons further down don't apply to it.
-    const isRouteBFile = !isImage && activeId==="browser-local" && cfg.route==="file";
+    const isRouteBFile = !isImage && activeId === "browser-local" && cfg.route === "file";
 
-    if(isImage && activeId==="local-image"){
-      pane.appendChild(el("div","help-note",T("localImageHint")));
+    if (isImage && activeId === "local-image") {
+      pane.appendChild(el("div", "help-note", T("localImageHint")));
     }
-    if(isImage && activeId==="comfyui"){
-      pane.appendChild(el("div","help-note",T("comfyuiHint")));
-      pane.appendChild(el("div","help-note",T("localServerCorsHint")));
+    if (isImage && activeId === "comfyui") {
+      pane.appendChild(el("div", "help-note", T("comfyuiHint")));
+      pane.appendChild(el("div", "help-note", T("localServerCorsHint")));
     }
-    if(!isImage && activeId==="browser-local"){
-      pane.appendChild(el("div","help-note",T("browserLocalHint")));
-      const badge=el("div","help-note",T("loading")); pane.appendChild(badge);
-      probeCapabilities().then(cap=>{
-        const color = cap.tier==="green" ? "var(--ok)" : cap.tier==="amber" ? "var(--warn)" : "var(--danger)";
+    if (!isImage && activeId === "browser-local") {
+      pane.appendChild(el("div", "help-note", T("browserLocalHint")));
+      const badge = el("div", "help-note", T("loading")); pane.appendChild(badge);
+      probeCapabilities().then(cap => {
+        const color = cap.tier === "green" ? "var(--ok)" : cap.tier === "amber" ? "var(--warn)" : "var(--danger)";
         badge.style.color = color;
-        badge.textContent = `${cap.tier==="green"?"●":cap.tier==="amber"?"◐":"○"} WebGPU: ${cap.webgpu?"yes":"no"} — ${cap.reason}`;
+        badge.textContent = `${cap.tier === "green" ? "●" : cap.tier === "amber" ? "◐" : "○"} WebGPU: ${cap.webgpu ? "yes" : "no"} — ${cap.reason}`;
       });
       // BerryStudio-Upgrade-Plan-v2.0 WP-21 — Route B: a real local .onnx
       // file, alongside Route C's existing Hugging Face model ID (which
@@ -5420,50 +5564,50 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       // `cfg.route` defaults to "hf" so every existing saved config keeps
       // behaving exactly as before this WP.
       const route = cfg.route === "file" ? "file" : "hf";
-      const routeSeg=el("div","seg",`<button class="${route==="hf"?"active":""}">${T("routeBToggleHF")}</button><button class="${route==="file"?"active":""}">${T("routeBToggleFile")}</button>`);
-      routeSeg.children[0].onclick=()=>{ cfg.route="hf"; save(); renderProviderPane(pane, isImage); };
-      routeSeg.children[1].onclick=()=>{ cfg.route="file"; save(); renderProviderPane(pane, isImage); };
+      const routeSeg = el("div", "seg", `<button class="${route === "hf" ? "active" : ""}">${T("routeBToggleHF")}</button><button class="${route === "file" ? "active" : ""}">${T("routeBToggleFile")}</button>`);
+      routeSeg.children[0].onclick = () => { cfg.route = "hf"; save(); renderProviderPane(pane, isImage); };
+      routeSeg.children[1].onclick = () => { cfg.route = "file"; save(); renderProviderPane(pane, isImage); };
       pane.appendChild(routeSeg);
-      if(isRouteBFile) renderOnnxFileRoute(pane, cfg);
+      if (isRouteBFile) renderOnnxFileRoute(pane, cfg);
     }
 
-    (adapter.fields||[]).forEach(f=>{
-      const fWrap=el("div","field");
-      const labelKey = f.key==="apiKey" ? "aiKeyLabel" : f.key==="baseUrl" ? "aiBaseUrlLabel" : f.key;
-      fWrap.innerHTML=`<label>${T(labelKey)}${f.required?" *":""}</label>`;
-      const inp=el("input","input");
-      inp.type = f.key==="apiKey" ? "password" : "url";
-      inp.dir="ltr";
-      inp.placeholder = f.key==="baseUrl" ? (adapter.defaultBaseUrl||"") : "sk-…";
-      if(f.key==="apiKey"){
+    (adapter.fields || []).forEach(f => {
+      const fWrap = el("div", "field");
+      const labelKey = f.key === "apiKey" ? "aiKeyLabel" : f.key === "baseUrl" ? "aiBaseUrlLabel" : f.key;
+      fWrap.innerHTML = `<label>${T(labelKey)}${f.required ? " *" : ""}</label>`;
+      const inp = el("input", "input");
+      inp.type = f.key === "apiKey" ? "password" : "url";
+      inp.dir = "ltr";
+      inp.placeholder = f.key === "baseUrl" ? (adapter.defaultBaseUrl || "") : "sk-…";
+      if (f.key === "apiKey") {
         inp.value = KeyStore.get(activeId) || "";
-        inp.oninput=()=>{ KeyStore.set(activeId, inp.value); };
+        inp.oninput = () => { KeyStore.set(activeId, inp.value); };
       } else {
         inp.value = cfg[f.key] || "";
-        inp.oninput=()=>{ cfg[f.key]=inp.value.trim(); save(); };
+        inp.oninput = () => { cfg[f.key] = inp.value.trim(); save(); };
       }
       fWrap.appendChild(inp); pane.appendChild(fWrap);
     });
 
-    if(["ollama","lmstudio","llamacpp","vllm"].includes(activeId)){
-      pane.appendChild(el("div","help-note", activeId==="ollama" ? T("ollamaCorsHint") : T("localServerCorsHint")));
+    if (["ollama", "lmstudio", "llamacpp", "vllm"].includes(activeId)) {
+      pane.appendChild(el("div", "help-note", activeId === "ollama" ? T("ollamaCorsHint") : T("localServerCorsHint")));
     }
 
-    if(adapter.needsKey){
-      const pr=el("label","set-row");
-      pr.innerHTML=`<span class="sl">${T("keyPersistToggle")}<small>${T("keyPersistWarnD")}</small></span>`;
-      const sw=el("span","switch",`<input type="checkbox" ${state.aiKeyPersist?"checked":""}><span class="track"></span>`);
-      sw.querySelector("input").onchange=async(e)=>{
-        state.aiKeyPersist=e.target.checked; save();
-        if(state.aiKeyPersist){
-          if(KeyStore.needsPassphrase()){
-            const pass=window.prompt(T("keyPassphrasePrompt"));
-            if(!pass){ state.aiKeyPersist=false; save(); e.target.checked=false; return; }
-            try{ await KeyStore.unlock(pass); }catch(err){ toast(T("keyPassphraseWrong")); state.aiKeyPersist=false; save(); e.target.checked=false; return; }
+    if (adapter.needsKey) {
+      const pr = el("label", "set-row");
+      pr.innerHTML = `<span class="sl">${T("keyPersistToggle")}<small>${T("keyPersistWarnD")}</small></span>`;
+      const sw = el("span", "switch", `<input type="checkbox" ${state.aiKeyPersist ? "checked" : ""}><span class="track"></span>`);
+      sw.querySelector("input").onchange = async (e) => {
+        state.aiKeyPersist = e.target.checked; save();
+        if (state.aiKeyPersist) {
+          if (KeyStore.needsPassphrase()) {
+            const pass = window.prompt(T("keyPassphrasePrompt"));
+            if (!pass) { state.aiKeyPersist = false; save(); e.target.checked = false; return; }
+            try { await KeyStore.unlock(pass); } catch (err) { toast(T("keyPassphraseWrong")); state.aiKeyPersist = false; save(); e.target.checked = false; return; }
           }
-          const val=KeyStore.get(activeId);
-          if(val) await KeyStore.setPersistent(activeId, val);
-          toast("✓ "+T("keyPersistToggle"));
+          const val = KeyStore.get(activeId);
+          if (val) await KeyStore.setPersistent(activeId, val);
+          toast("✓ " + T("keyPersistToggle"));
         } else {
           KeyStore.removePersistent(activeId);
         }
@@ -5471,26 +5615,26 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       pr.appendChild(sw); pane.appendChild(pr);
     }
 
-    if(isRouteBFile) return; // Route B's own UI (renderOnnxFileRoute) already rendered everything this pane needs
+    if (isRouteBFile) return; // Route B's own UI (renderOnnxFileRoute) already rendered everything this pane needs
 
     // model slot — free-text input with a <datalist> populated by "Fetch
     // models" (text/vision providers only — image adapters have no
     // models-list API, the field still just sets cfg.model directly).
-    const modelRow=el("div","field"); modelRow.style.marginTop="10px";
-    modelRow.innerHTML=`<label>${T(isImage?"aiModelImage":"aiModelText")}</label>`;
-    const modelInput=el("input","input"); modelInput.dir="ltr"; modelInput.value=cfg.model||""; modelInput.placeholder=isImage?(adapter.id==="openai-images"?"gpt-image-2":""):"";
-    if(!isImage) modelInput.setAttribute("list","dl-text-"+activeId);
-    modelInput.oninput=()=>{ cfg.model=modelInput.value.trim(); save(); };
-    const dlText=isImage?null:el("datalist"); if(dlText) dlText.id="dl-text-"+activeId;
-    modelRow.appendChild(modelInput); if(dlText) modelRow.appendChild(dlText); pane.appendChild(modelRow);
+    const modelRow = el("div", "field"); modelRow.style.marginTop = "10px";
+    modelRow.innerHTML = `<label>${T(isImage ? "aiModelImage" : "aiModelText")}</label>`;
+    const modelInput = el("input", "input"); modelInput.dir = "ltr"; modelInput.value = cfg.model || ""; modelInput.placeholder = isImage ? (adapter.id === "openai-images" ? "gpt-image-2" : "") : "";
+    if (!isImage) modelInput.setAttribute("list", "dl-text-" + activeId);
+    modelInput.oninput = () => { cfg.model = modelInput.value.trim(); save(); };
+    const dlText = isImage ? null : el("datalist"); if (dlText) dlText.id = "dl-text-" + activeId;
+    modelRow.appendChild(modelInput); if (dlText) modelRow.appendChild(dlText); pane.appendChild(modelRow);
 
-    let visionInput=null, dlVision=null;
-    if(!isImage){
-      const visionRow=el("div","field");
-      visionRow.innerHTML=`<label>${T("aiModelVision")}</label>`;
-      visionInput=el("input","input"); visionInput.dir="ltr"; visionInput.value=cfg.visionModel||""; visionInput.setAttribute("list","dl-vision-"+activeId);
-      visionInput.oninput=()=>{ cfg.visionModel=visionInput.value.trim(); save(); };
-      dlVision=el("datalist"); dlVision.id="dl-vision-"+activeId;
+    let visionInput = null, dlVision = null;
+    if (!isImage) {
+      const visionRow = el("div", "field");
+      visionRow.innerHTML = `<label>${T("aiModelVision")}</label>`;
+      visionInput = el("input", "input"); visionInput.dir = "ltr"; visionInput.value = cfg.visionModel || ""; visionInput.setAttribute("list", "dl-vision-" + activeId);
+      visionInput.oninput = () => { cfg.visionModel = visionInput.value.trim(); save(); };
+      dlVision = el("datalist"); dlVision.id = "dl-vision-" + activeId;
       visionRow.appendChild(visionInput); visionRow.appendChild(dlVision); pane.appendChild(visionRow);
     }
     // Most image adapters have no models()/test() API — nothing further to
@@ -5499,41 +5643,41 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // text-provider adapters below, just without a "Fetch models" button
     // (ComfyUI's checkpoint list isn't a "model slot" the way text/vision
     // providers have one — generate() auto-detects it instead).
-    if(isImage && !adapter.test) return;
+    if (isImage && !adapter.test) return;
 
-    const btnRow=el("div"); btnRow.style.cssText="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap";
-    if(!isImage){
-      const fetchBtn=el("button","big-btn ghost", T("fetchModels"));
-      fetchBtn.type="button";
-      fetchBtn.onclick=async()=>{
-        const orig=fetchBtn.textContent; fetchBtn.disabled=true; fetchBtn.textContent=T("loading");
-        try{
-          const resolved=await resolveAICfg(activeId, cfg, false);
-          const {text, vision}=await adapter.models(resolved);
-          dlText.innerHTML=text.map(m=>`<option value="${m.replace(/"/g,'')}">`).join("");
-          if(dlVision) dlVision.innerHTML=vision.map(m=>`<option value="${m.replace(/"/g,'')}">`).join("");
+    const btnRow = el("div"); btnRow.style.cssText = "display:flex;gap:8px;margin:10px 0;flex-wrap:wrap";
+    if (!isImage) {
+      const fetchBtn = el("button", "big-btn ghost", T("fetchModels"));
+      fetchBtn.type = "button";
+      fetchBtn.onclick = async () => {
+        const orig = fetchBtn.textContent; fetchBtn.disabled = true; fetchBtn.textContent = T("loading");
+        try {
+          const resolved = await resolveAICfg(activeId, cfg, false);
+          const { text, vision } = await adapter.models(resolved);
+          dlText.innerHTML = text.map(m => `<option value="${m.replace(/"/g, '')}">`).join("");
+          if (dlVision) dlVision.innerHTML = vision.map(m => `<option value="${m.replace(/"/g, '')}">`).join("");
           toast(text.length ? `✓ ${text.length}` : T("noModelsFound"));
-        }catch(e){ toast(T("aiRequestFailed")); }
-        finally{ fetchBtn.disabled=false; fetchBtn.textContent=orig; }
+        } catch (e) { toast(T("aiRequestFailed")); }
+        finally { fetchBtn.disabled = false; fetchBtn.textContent = orig; }
       };
       btnRow.appendChild(fetchBtn);
     }
 
-    const testBtn=el("button","big-btn ghost", T("testConnection"));
-    testBtn.type="button";
-    const statusLine=el("div","help-note"); statusLine.style.display="none"; statusLine.style.marginTop="8px"; statusLine.dir="ltr"; statusLine.style.textAlign=state.lang==="ar"?"right":"left";
-    testBtn.onclick=async()=>{
-      const orig=testBtn.textContent; testBtn.disabled=true; testBtn.textContent=T("loading");
-      try{
-        const resolved=await resolveAICfg(activeId, cfg, false);
-        const r=await adapter.test(resolved);
-        statusLine.style.display="";
+    const testBtn = el("button", "big-btn ghost", T("testConnection"));
+    testBtn.type = "button";
+    const statusLine = el("div", "help-note"); statusLine.style.display = "none"; statusLine.style.marginTop = "8px"; statusLine.dir = "ltr"; statusLine.style.textAlign = state.lang === "ar" ? "right" : "left";
+    testBtn.onclick = async () => {
+      const orig = testBtn.textContent; testBtn.disabled = true; testBtn.textContent = T("loading");
+      try {
+        const resolved = await resolveAICfg(activeId, cfg, false);
+        const r = await adapter.test(resolved);
+        statusLine.style.display = "";
         statusLine.style.color = r.ok ? "var(--ok)" : "var(--danger)";
-        statusLine.textContent = (r.ok?"✓ ":"✗ ") + (r.message||"") + (r.latencyMs!=null?` (${r.latencyMs}ms)`:"");
-      }catch(e){
-        statusLine.style.display=""; statusLine.style.color="var(--danger)"; statusLine.textContent="✗ "+(e&&e.message||e);
+        statusLine.textContent = (r.ok ? "✓ " : "✗ ") + (r.message || "") + (r.latencyMs != null ? ` (${r.latencyMs}ms)` : "");
+      } catch (e) {
+        statusLine.style.display = ""; statusLine.style.color = "var(--danger)"; statusLine.textContent = "✗ " + (e && e.message || e);
       }
-      finally{ testBtn.disabled=false; testBtn.textContent=orig; }
+      finally { testBtn.disabled = false; testBtn.textContent = orig; }
     };
     btnRow.appendChild(testBtn);
     pane.appendChild(btnRow); pane.appendChild(statusLine);
@@ -5544,17 +5688,17 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // Stage B's trial/subscription status block below (signed-in branch) —
   // the account-state UI stays in one modal across both stages, same
   // openModal()-then-populate-the-body pattern as openOutlineEditorModal.
-  function openAccount(){
+  function openAccount() {
     openModal(T("accountTitle"), "");
-    const body=$("#genericModal .modal-body"); body.innerHTML="";
-    if(!isAuthConfigured()){
-      body.appendChild(el("div","help-note",T("accountNotConfigured")));
+    const body = $("#genericModal .modal-body"); body.innerHTML = "";
+    if (!isAuthConfigured()) {
+      body.appendChild(el("div", "help-note", T("accountNotConfigured")));
       return;
     }
-    body.appendChild(el("div","help-note",T("accountNotice")));
-    if(currentSession && currentSession.user){
-      const row=el("div","field"); row.style.marginTop="12px";
-      row.innerHTML=`<label>${T("signedInAs").replace("{email}", currentSession.user.email||"")}</label>`;
+    body.appendChild(el("div", "help-note", T("accountNotice")));
+    if (currentSession && currentSession.user) {
+      const row = el("div", "field"); row.style.marginTop = "12px";
+      row.innerHTML = `<label>${T("signedInAs").replace("{email}", currentSession.user.email || "")}</label>`;
       body.appendChild(row);
       // WP-42 Stage B: currentEntitlement is refreshed asynchronously on
       // every sign-in (see initAccountUI()) — it may still be null here for
@@ -5567,76 +5711,76 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       // extra plumbing for a fetch that normally resolves well under a
       // second.
       const ent = currentEntitlement;
-      const statusRow=el("div","help-note"); statusRow.style.marginTop="10px";
-      if(ent && ent.status==="active") statusRow.textContent=T("accountStatusActive");
-      else if(ent && ent.status==="trial") statusRow.textContent=T("accountStatusTrial").replace("{days}", String(ent.daysRemaining));
-      else statusRow.textContent=T("accountStatusExpired");
+      const statusRow = el("div", "help-note"); statusRow.style.marginTop = "10px";
+      if (ent && ent.status === "active") statusRow.textContent = T("accountStatusActive");
+      else if (ent && ent.status === "trial") statusRow.textContent = T("accountStatusTrial").replace("{days}", String(ent.daysRemaining));
+      else statusRow.textContent = T("accountStatusExpired");
       body.appendChild(statusRow);
-      if(!ent || ent.status==="expired"){
-        const up=el("button","big-btn",T("gateUpgradeBtn")); up.style.marginTop="8px";
-        up.onclick=openUpgradePrompt;
+      if (!ent || ent.status === "expired") {
+        const up = el("button", "big-btn", T("gateUpgradeBtn")); up.style.marginTop = "8px";
+        up.onclick = openUpgradePrompt;
         body.appendChild(up);
       }
-      const out=el("button","big-btn ghost",T("signOut")); out.style.marginTop="10px";
-      out.onclick=async()=>{
-        try{ await Auth.signOut(); closeModal("#genericModal"); }
-        catch(e){ console.error("[auth] signOut failed", e); toast((e&&e.message)||String(e)); }
+      const out = el("button", "big-btn ghost", T("signOut")); out.style.marginTop = "10px";
+      out.onclick = async () => {
+        try { await Auth.signOut(); closeModal("#genericModal"); }
+        catch (e) { console.error("[auth] signOut failed", e); toast((e && e.message) || String(e)); }
       };
       body.appendChild(out);
       return;
     }
-    const emailField=el("div","field"); emailField.style.marginTop="10px";
-    emailField.innerHTML=`<label>${T("emailLabel")}</label>`;
-    const emailInp=el("input","input"); emailInp.type="email"; emailInp.dir="ltr"; emailInp.autocomplete="email";
+    const emailField = el("div", "field"); emailField.style.marginTop = "10px";
+    emailField.innerHTML = `<label>${T("emailLabel")}</label>`;
+    const emailInp = el("input", "input"); emailInp.type = "email"; emailInp.dir = "ltr"; emailInp.autocomplete = "email";
     emailField.appendChild(emailInp); body.appendChild(emailField);
 
-    const pwField=el("div","field"); pwField.style.marginTop="10px";
-    pwField.innerHTML=`<label>${T("passwordLabel")}</label>`;
-    const pwInp=el("input","input"); pwInp.type="password"; pwInp.dir="ltr"; pwInp.autocomplete="current-password";
+    const pwField = el("div", "field"); pwField.style.marginTop = "10px";
+    pwField.innerHTML = `<label>${T("passwordLabel")}</label>`;
+    const pwInp = el("input", "input"); pwInp.type = "password"; pwInp.dir = "ltr"; pwInp.autocomplete = "current-password";
     pwField.appendChild(pwInp); body.appendChild(pwField);
 
-    const btnRow=el("div"); btnRow.style.cssText="display:flex;gap:8px;margin-top:12px";
-    const signInBtn=el("button","big-btn",T("signIn"));
-    const signUpBtn=el("button","big-btn ghost",T("signUp"));
+    const btnRow = el("div"); btnRow.style.cssText = "display:flex;gap:8px;margin-top:12px";
+    const signInBtn = el("button", "big-btn", T("signIn"));
+    const signUpBtn = el("button", "big-btn ghost", T("signUp"));
     btnRow.appendChild(signInBtn); btnRow.appendChild(signUpBtn); body.appendChild(btnRow);
 
-    signInBtn.onclick=async()=>{
-      try{ await Auth.signInWithPassword(emailInp.value.trim(), pwInp.value); closeModal("#genericModal"); }
-      catch(e){ console.error("[auth] signIn failed", e); toast((e&&e.message)||String(e)); }
+    signInBtn.onclick = async () => {
+      try { await Auth.signInWithPassword(emailInp.value.trim(), pwInp.value); closeModal("#genericModal"); }
+      catch (e) { console.error("[auth] signIn failed", e); toast((e && e.message) || String(e)); }
     };
-    signUpBtn.onclick=async()=>{
-      try{ await Auth.signUpWithPassword(emailInp.value.trim(), pwInp.value); toast(T("checkYourEmail")); }
-      catch(e){ console.error("[auth] signUp failed", e); toast((e&&e.message)||String(e)); }
+    signUpBtn.onclick = async () => {
+      try { await Auth.signUpWithPassword(emailInp.value.trim(), pwInp.value); toast(T("checkYourEmail")); }
+      catch (e) { console.error("[auth] signUp failed", e); toast((e && e.message) || String(e)); }
     };
 
-    const forgot=el("button",null,T("forgotPassword"));
-    forgot.style.cssText="margin-top:8px;background:none;border:none;color:var(--brand);cursor:pointer;font-size:12px;padding:0";
-    forgot.onclick=async()=>{
-      const email=emailInp.value.trim();
-      if(!email){ toast(T("emailLabel")); return; }
-      try{ await Auth.resetPassword(email); toast(T("resetPasswordSent")); }
-      catch(e){ console.error("[auth] resetPassword failed", e); toast((e&&e.message)||String(e)); }
+    const forgot = el("button", null, T("forgotPassword"));
+    forgot.style.cssText = "margin-top:8px;background:none;border:none;color:var(--brand);cursor:pointer;font-size:12px;padding:0";
+    forgot.onclick = async () => {
+      const email = emailInp.value.trim();
+      if (!email) { toast(T("emailLabel")); return; }
+      try { await Auth.resetPassword(email); toast(T("resetPasswordSent")); }
+      catch (e) { console.error("[auth] resetPassword failed", e); toast((e && e.message) || String(e)); }
     };
     body.appendChild(forgot);
 
-    body.appendChild(el("div","help-note",T("orContinueWith")));
-    const oauthRow=el("div"); oauthRow.style.cssText="display:flex;gap:8px;margin-top:8px";
-    const googleBtn=el("button","big-btn ghost",T("continueWithGoogle"));
-    googleBtn.onclick=()=>Auth.signInWithOAuth("google").catch(e=>{ console.error("[auth] Google OAuth failed", e); toast((e&&e.message)||String(e)); });
-    const fbBtn=el("button","big-btn ghost",T("continueWithFacebook"));
-    fbBtn.onclick=()=>Auth.signInWithOAuth("facebook").catch(e=>{ console.error("[auth] Facebook OAuth failed", e); toast((e&&e.message)||String(e)); });
+    body.appendChild(el("div", "help-note", T("orContinueWith")));
+    const oauthRow = el("div"); oauthRow.style.cssText = "display:flex;gap:8px;margin-top:8px";
+    const googleBtn = el("button", "big-btn ghost", T("continueWithGoogle"));
+    googleBtn.onclick = () => Auth.signInWithOAuth("google").catch(e => { console.error("[auth] Google OAuth failed", e); toast((e && e.message) || String(e)); });
+    const fbBtn = el("button", "big-btn ghost", T("continueWithFacebook"));
+    fbBtn.onclick = () => Auth.signInWithOAuth("facebook").catch(e => { console.error("[auth] Facebook OAuth failed", e); toast((e && e.message) || String(e)); });
     oauthRow.appendChild(googleBtn); oauthRow.appendChild(fbBtn); body.appendChild(oauthRow);
   }
 
   const ACCOUNT_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 1 0-16 0"/><circle cx="12" cy="8" r="4.5"/></svg>`;
-  function updateAccountButton(){
-    const btn=$("#accountBtn"); if(!btn) return;
-    if(currentSession && currentSession.user){
-      btn.textContent=(currentSession.user.email||"?").charAt(0).toUpperCase();
-      btn.style.fontWeight="800"; btn.style.fontSize="14px";
+  function updateAccountButton() {
+    const btn = $("#accountBtn"); if (!btn) return;
+    if (currentSession && currentSession.user) {
+      btn.textContent = (currentSession.user.email || "?").charAt(0).toUpperCase();
+      btn.style.fontWeight = "800"; btn.style.fontSize = "14px";
     } else {
-      btn.style.fontWeight=""; btn.style.fontSize="";
-      btn.innerHTML=ACCOUNT_ICON_SVG;
+      btn.style.fontWeight = ""; btn.style.fontSize = "";
+      btn.innerHTML = ACCOUNT_ICON_SVG;
     }
   }
   // Subscribes once at boot; no-ops entirely when auth-config.js is empty
@@ -5644,13 +5788,13 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   // accountSeenFirstEvent skips the toast on the initial fire, which just
   // reports whatever session already existed on page load (e.g. a returning
   // signed-in user) — toasts are for actual sign-in/out actions, not boot.
-  async function initAccountUI(){
-    if(!isAuthConfigured()) return;
-    await Auth.onChange(session=>{
-      currentSession=session;
+  async function initAccountUI() {
+    if (!isAuthConfigured()) return;
+    await Auth.onChange(session => {
+      currentSession = session;
       updateAccountButton();
-      if(accountSeenFirstEvent) toast(session ? T("signInSuccess") : T("signOutSuccess"));
-      accountSeenFirstEvent=true;
+      if (accountSeenFirstEvent) toast(session ? T("signInSuccess") : T("signOutSuccess"));
+      accountSeenFirstEvent = true;
       // WP-42 Stage B: async on purpose — the four gated panes/Cloth Lab
       // render with whatever currentEntitlement already is (null on first
       // boot, i.e. gated) and re-render themselves once the real fetch
@@ -5662,20 +5806,20 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     });
   }
 
-  function openSettings(){
-    const body=$("#settingsModal .modal-body"); body.innerHTML="";
-    const toggles=[["hoverHelp","hoverHelpD"],["highContrast","highContrastD"],["reduceMotion","reduceMotionD"],["cloudSync","cloudSyncD"]];
-    toggles.forEach(([k,d])=>{
-      const r=el("label","set-row"); r.innerHTML=`<span class="sl">${T(k)}<small>${T(d)}</small></span>`;
-      const sw=el("span","switch",`<input type="checkbox" ${state[k]?"checked":""}><span class="track"></span>`);
-      sw.querySelector("input").onchange=e=>{ state[k]=e.target.checked; save(); if(k==="highContrast")applyTheme(); if(k==="reduceMotion")applyReduceMotion(e.target.checked); if(k==="cloudSync")openSettings(); else toast("✓"); };
+  function openSettings() {
+    const body = $("#settingsModal .modal-body"); body.innerHTML = "";
+    const toggles = [["hoverHelp", "hoverHelpD"], ["highContrast", "highContrastD"], ["reduceMotion", "reduceMotionD"], ["cloudSync", "cloudSyncD"]];
+    toggles.forEach(([k, d]) => {
+      const r = el("label", "set-row"); r.innerHTML = `<span class="sl">${T(k)}<small>${T(d)}</small></span>`;
+      const sw = el("span", "switch", `<input type="checkbox" ${state[k] ? "checked" : ""}><span class="track"></span>`);
+      sw.querySelector("input").onchange = e => { state[k] = e.target.checked; save(); if (k === "highContrast") applyTheme(); if (k === "reduceMotion") applyReduceMotion(e.target.checked); if (k === "cloudSync") openSettings(); else toast("✓"); };
       r.appendChild(sw); body.appendChild(r);
     });
-    if(state.cloudSync) renderSyncSettings(body);
-    const units=el("label","set-row"); units.innerHTML=`<span class="sl">${T("tab_measure")}<small>cm / inch</small></span>`;
-    const seg=el("div","seg",`<button ${state.unitsCm?'class="active"':''}>cm</button><button ${!state.unitsCm?'class="active"':''}>inch</button>`);
-    seg.children[0].onclick=()=>{state.unitsCm=true;Canvas.setOpt("unitsCm",true);save();openSettings();updateStageChips();};
-    seg.children[1].onclick=()=>{state.unitsCm=false;Canvas.setOpt("unitsCm",false);save();openSettings();updateStageChips();};
+    if (state.cloudSync) renderSyncSettings(body);
+    const units = el("label", "set-row"); units.innerHTML = `<span class="sl">${T("tab_measure")}<small>cm / inch</small></span>`;
+    const seg = el("div", "seg", `<button ${state.unitsCm ? 'class="active"' : ''}>cm</button><button ${!state.unitsCm ? 'class="active"' : ''}>inch</button>`);
+    seg.children[0].onclick = () => { state.unitsCm = true; Canvas.setOpt("unitsCm", true); save(); openSettings(); updateStageChips(); };
+    seg.children[1].onclick = () => { state.unitsCm = false; Canvas.setOpt("unitsCm", false); save(); openSettings(); updateStageChips(); };
     units.appendChild(seg); body.appendChild(units);
     // AI Provider section (BerryStudio-Upgrade-Plan WP-1) — replaces the old
     // flat "AI endpoint"/"AI Image endpoint" fields; today's saved values
@@ -5683,10 +5827,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     renderAISettings(body);
     // 3D avatar models — pick a bundled model, paste a URL (e.g. Ready
     // Player Me), or upload your own GLB file, per category.
-    const av = el("div","field"); av.style.marginTop="14px";
+    const av = el("div", "field"); av.style.marginTop = "14px";
     av.innerHTML = `<label>${T("avatarModels")}</label>`;
-    ["women","men","girls","boys"].forEach(cat=>renderAvatarPickerRow(av, cat));
-    av.appendChild(el("div","help-note",T("avatarModelsD")));
+    ["women", "men", "girls", "boys"].forEach(cat => renderAvatarPickerRow(av, cat));
+    av.appendChild(el("div", "help-note", T("avatarModelsD")));
     body.appendChild(av);
     // BerryStudio-Upgrade-Plan WP-5: 3D Cloth Lab engine — feature-flagged
     // swap between the original iframe embed and the new same-page embedded
@@ -5695,114 +5839,116 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // (loadClothLab()'s dataset.loaded guard is iframe-only, so flipping
     // this while already on that tab needs a tab round-trip to re-mount —
     // acceptable for a rarely-changed setting, not worth extra plumbing).
-    const engineRow=el("label","set-row"); engineRow.style.marginTop="14px";
-    engineRow.innerHTML=`<span class="sl">${T("clothLabEngine")}<small>${T("clothLabEngineD")}</small></span>`;
-    const engineSeg=el("div","seg",
-      `<button ${state.clothLabEngine!=="embedded"?'class="active"':''}>${T("clothLabEngineIframe")}</button>`+
-      `<button ${state.clothLabEngine==="embedded"?'class="active"':''}>${T("clothLabEngineEmbedded")}</button>`
+    const engineRow = el("label", "set-row"); engineRow.style.marginTop = "14px";
+    engineRow.innerHTML = `<span class="sl">${T("clothLabEngine")}<small>${T("clothLabEngineD")}</small></span>`;
+    const engineSeg = el("div", "seg",
+      `<button ${state.clothLabEngine !== "embedded" ? 'class="active"' : ''}>${T("clothLabEngineIframe")}</button>` +
+      `<button ${state.clothLabEngine === "embedded" ? 'class="active"' : ''}>${T("clothLabEngineEmbedded")}</button>`
     );
-    engineSeg.children[0].onclick=()=>{state.clothLabEngine="iframe";save();if(clothLabActiveEngine && clothLabActiveEngine!==state.clothLabEngine) teardownClothLab();if(state.view==="clothlab") setView("clothlab");openSettings();};
-    engineSeg.children[1].onclick=()=>{state.clothLabEngine="embedded";save();if(clothLabActiveEngine && clothLabActiveEngine!==state.clothLabEngine) teardownClothLab();if(state.view==="clothlab") setView("clothlab");openSettings();};
+    engineSeg.children[0].onclick = () => { state.clothLabEngine = "iframe"; save(); if (clothLabActiveEngine && clothLabActiveEngine !== state.clothLabEngine) teardownClothLab(); if (state.view === "clothlab") setView("clothlab"); openSettings(); };
+    engineSeg.children[1].onclick = () => { state.clothLabEngine = "embedded"; save(); if (clothLabActiveEngine && clothLabActiveEngine !== state.clothLabEngine) teardownClothLab(); if (state.view === "clothlab") setView("clothlab"); openSettings(); };
     engineRow.appendChild(engineSeg); body.appendChild(engineRow);
-    const rb=el("button","big-btn ghost",T("resetOnb")); rb.style.marginTop="16px"; rb.onclick=()=>{closeModal("#settingsModal");startOnboarding();}; body.appendChild(rb);
-    const ib=el("button","big-btn",IC.download+T("installApp")); ib.style.marginTop="8px"; ib.onclick=installApp; body.appendChild(ib);
+    const rb = el("button", "big-btn ghost", T("resetOnb")); rb.style.marginTop = "16px"; rb.onclick = () => { closeModal("#settingsModal"); startOnboarding(); }; body.appendChild(rb);
+    const ib = el("button", "big-btn", IC.download + T("installApp")); ib.style.marginTop = "8px"; ib.onclick = installApp; body.appendChild(ib);
     $("#settingsModal").classList.add("show");
   }
 
   // ================= COMMAND PALETTE =================
-  let cmdSel=0, cmdItems=[];
-  function commands(){ return [
-    {t:T("helpTitle"),i:IC.question,run:openHelp},
-    {t:T("addLayer"),i:IC.layers,run:()=>{Canvas.addPiece({en:I18N.en.newLayer,ar:I18N.ar.newLayer});hideEmpty();renderLayersPane();showPane("layers");}},
-    {t:T("newProject"),i:IC.newdoc,run:newProject},
-    {t:T("importProject"),i:IC.importf,run:importProject},
-    {t:T("importPattern"),i:IC.importf,run:importPatternFile},
-    {t:T("savePDF"),i:IC.pdf,run:()=>exportAs("PDF")},
-    {t:T("exportDXF"),i:IC.download,run:()=>exportAs("DXF")},
-    {t:T("printProject"),i:IC.printer,run:printPattern},
-    {t:T("patternSummary"),i:IC.printer,run:exportSummary},
-    {t:T("sewInstrTitle"),i:IC.printer,run:exportSewingInstructions},
-    {t:T("fitChartTitle"),i:IC.printer,run:openFitChartModal},
-    {t:T("checkPattern"),i:IC.spark,run:()=>runCheckPattern()},
-    {t:T("undoLbl"),i:IC.undo,run:()=>{Canvas.doUndo();renderLayersPane();sync3DVisibility();}},
-    {t:T("redoLbl"),i:IC.redo,run:()=>{Canvas.doRedo();renderLayersPane();sync3DVisibility();}},
-    {t:T("view2d"),i:IC.grid,run:()=>setView("2d")},
-    {t:T("view3d"),i:IC.cube,run:()=>setView("3d")},
-    {t:T("viewClothLab"),i:IC.cube,run:()=>setView("clothlab")},
-    {t:T("autoGrade"),i:IC.spark,run:()=>{grade();toast(T("graded"));}},
-    {t:T("theme"),i:IC.palette,run:openThemePicker},
-    {t:T("settings"),i:IC.gear,run:openSettings},
-    {t:T("exportTitle"),i:IC.download,run:()=>{showPane("export");}},
-    {t:T("aiTitle"),i:IC.spark,run:()=>showPane("ai")},
-    {t:T("libraryTitle"),i:IC.shirt,run:()=>showPane("library")},
-    ...LIBRARY.map(x=>({t:L(PATTERNS[x.id].name),i:IC.dress,run:()=>loadLibraryPattern(x.id)})),
-    {t:T("language")+" · "+(state.lang==="en"?"العربية":"English"),i:IC.globe,run:toggleLang},
-  ]; }
-  function openCmd(){ $("#cmdModal").classList.add("show"); const inp=$("#cmdInput"); inp.value=""; inp.focus(); renderCmd(""); }
-  function renderCmd(q){ cmdItems=commands().filter(c=>c.t.toLowerCase().includes(q.toLowerCase())); cmdSel=0; const list=$("#cmdList"); list.innerHTML=""; cmdItems.forEach((c,i)=>{ const it=el("div","cmd-item"+(i===0?" sel":""),`${c.i}<span>${c.t}</span><span class="k">↵</span>`); it.onclick=()=>{c.run();closeModal("#cmdModal");}; list.appendChild(it); }); }
+  let cmdSel = 0, cmdItems = [];
+  function commands() {
+    return [
+      { t: T("helpTitle"), i: IC.question, run: openHelp },
+      { t: T("addLayer"), i: IC.layers, run: () => { Canvas.addPiece({ en: I18N.en.newLayer, ar: I18N.ar.newLayer }); hideEmpty(); renderLayersPane(); showPane("layers"); } },
+      { t: T("newProject"), i: IC.newdoc, run: newProject },
+      { t: T("importProject"), i: IC.importf, run: importProject },
+      { t: T("importPattern"), i: IC.importf, run: importPatternFile },
+      { t: T("savePDF"), i: IC.pdf, run: () => exportAs("PDF") },
+      { t: T("exportDXF"), i: IC.download, run: () => exportAs("DXF") },
+      { t: T("printProject"), i: IC.printer, run: printPattern },
+      { t: T("patternSummary"), i: IC.printer, run: exportSummary },
+      { t: T("sewInstrTitle"), i: IC.printer, run: exportSewingInstructions },
+      { t: T("fitChartTitle"), i: IC.printer, run: openFitChartModal },
+      { t: T("checkPattern"), i: IC.spark, run: () => runCheckPattern() },
+      { t: T("undoLbl"), i: IC.undo, run: () => { Canvas.doUndo(); renderLayersPane(); sync3DVisibility(); } },
+      { t: T("redoLbl"), i: IC.redo, run: () => { Canvas.doRedo(); renderLayersPane(); sync3DVisibility(); } },
+      { t: T("view2d"), i: IC.grid, run: () => setView("2d") },
+      { t: T("view3d"), i: IC.cube, run: () => setView("3d") },
+      { t: T("viewClothLab"), i: IC.cube, run: () => setView("clothlab") },
+      { t: T("autoGrade"), i: IC.spark, run: () => { grade(); toast(T("graded")); } },
+      { t: T("theme"), i: IC.palette, run: openThemePicker },
+      { t: T("settings"), i: IC.gear, run: openSettings },
+      { t: T("exportTitle"), i: IC.download, run: () => { showPane("export"); } },
+      { t: T("aiTitle"), i: IC.spark, run: () => showPane("ai") },
+      { t: T("libraryTitle"), i: IC.shirt, run: () => showPane("library") },
+      ...LIBRARY.map(x => ({ t: L(PATTERNS[x.id].name), i: IC.dress, run: () => loadLibraryPattern(x.id) })),
+      { t: T("language") + " · " + (state.lang === "en" ? "العربية" : "English"), i: IC.globe, run: toggleLang },
+    ];
+  }
+  function openCmd() { $("#cmdModal").classList.add("show"); const inp = $("#cmdInput"); inp.value = ""; inp.focus(); renderCmd(""); }
+  function renderCmd(q) { cmdItems = commands().filter(c => c.t.toLowerCase().includes(q.toLowerCase())); cmdSel = 0; const list = $("#cmdList"); list.innerHTML = ""; cmdItems.forEach((c, i) => { const it = el("div", "cmd-item" + (i === 0 ? " sel" : ""), `${c.i}<span>${c.t}</span><span class="k">↵</span>`); it.onclick = () => { c.run(); closeModal("#cmdModal"); }; list.appendChild(it); }); }
 
   // ================= ONBOARDING =================
-  let onbStep=0;
-  const ONB=[["onbTitle1","onbBody1"],["onbTitle2","onbBody2"],["onbTitle3","onbBody3"],["onbTitle4","onbBody4"]];
-  function startOnboarding(){ onbStep=0; $("#onbModal").classList.add("show"); renderOnb(); }
+  let onbStep = 0;
+  const ONB = [["onbTitle1", "onbBody1"], ["onbTitle2", "onbBody2"], ["onbTitle3", "onbBody3"], ["onbTitle4", "onbBody4"]];
+  function startOnboarding() { onbStep = 0; $("#onbModal").classList.add("show"); renderOnb(); }
   // last-resort fallback if every Berry Academy image source 404s
   const ONB_HERO_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2l4 3 4-3 5 4-3 4v11H6V10L3 6z"/></svg>';
-  function setOnbHero(){
-    const hero=$("#onbHero"); if(!hero) return;
+  function setOnbHero() {
+    const hero = $("#onbHero"); if (!hero) return;
     // Berry Academy logo on all 4 tutorial screens. Prefers a real photo
     // (icons/intro.png / .jpg) if one is dropped in; otherwise uses the
     // bundled branded recreation (icons/intro.svg).
-    hero.classList.add("photo"); hero.innerHTML="";
-    const img=el("img","onb-photo"); img.alt="Berry Academy";
-    const sources=["icons/intro.png","icons/intro.jpg","icons/intro.svg"];
-    let si=0;
-    const tryNext=()=>{ if(si>=sources.length){ hero.classList.remove("photo"); hero.innerHTML=ONB_HERO_SVG; return; } img.src=sources[si++]+"?v=1"; };
-    img.onerror=tryNext; tryNext();
+    hero.classList.add("photo"); hero.innerHTML = "";
+    const img = el("img", "onb-photo"); img.alt = "Berry Academy";
+    const sources = ["icons/intro.png", "icons/intro.jpg", "icons/intro.svg"];
+    let si = 0;
+    const tryNext = () => { if (si >= sources.length) { hero.classList.remove("photo"); hero.innerHTML = ONB_HERO_SVG; return; } img.src = sources[si++] + "?v=1"; };
+    img.onerror = tryNext; tryNext();
     hero.appendChild(img);
   }
-  function renderOnb(){
-    const [t,b]=ONB[onbStep];
+  function renderOnb() {
+    const [t, b] = ONB[onbStep];
     setOnbHero();
-    $("#onbTitle").textContent=T(t); $("#onbBody").textContent=T(b);
-    $("#onbDots").innerHTML=ONB.map((_,i)=>`<span class="onb-dot ${i===onbStep?"active":""}"></span>`).join("");
-    $("#onbNext").textContent = onbStep===ONB.length-1?T("getStarted"):T("next");
-    $("#onbBack").style.visibility = onbStep===0?"hidden":"visible";
+    $("#onbTitle").textContent = T(t); $("#onbBody").textContent = T(b);
+    $("#onbDots").innerHTML = ONB.map((_, i) => `<span class="onb-dot ${i === onbStep ? "active" : ""}"></span>`).join("");
+    $("#onbNext").textContent = onbStep === ONB.length - 1 ? T("getStarted") : T("next");
+    $("#onbBack").style.visibility = onbStep === 0 ? "hidden" : "visible";
   }
-  function onbNext(){ if(onbStep<ONB.length-1){onbStep++;renderOnb();} else {state.onboarded=true;save();closeModal("#onbModal");} }
-  function onbBack(){ if(onbStep>0){onbStep--;renderOnb();} }
+  function onbNext() { if (onbStep < ONB.length - 1) { onbStep++; renderOnb(); } else { state.onboarded = true; save(); closeModal("#onbModal"); } }
+  function onbBack() { if (onbStep > 0) { onbStep--; renderOnb(); } }
 
   // ================= STAGE CHIPS =================
-  function updateStageChips(){
-    const m=currentMeas();
-    $("#chipSize").innerHTML=`${T("gradedTo")}: <b>${state.kids?L(KIDS_AGES.find(a=>a.id===state.kids).label):state.size}</b>`;
-    $("#chipStd").innerHTML=`${T("standard")}: <b>${T("std_"+state.standard)}</b>`;
-    $("#chipChest").innerHTML=`${T("m_chest")}: <b>${state.unitsCm?m.chest+" cm":(m.chest/2.54).toFixed(1)+" in"}</b>`;
+  function updateStageChips() {
+    const m = currentMeas();
+    $("#chipSize").innerHTML = `${T("gradedTo")}: <b>${state.kids ? L(KIDS_AGES.find(a => a.id === state.kids).label) : state.size}</b>`;
+    $("#chipStd").innerHTML = `${T("standard")}: <b>${T("std_" + state.standard)}</b>`;
+    $("#chipChest").innerHTML = `${T("m_chest")}: <b>${state.unitsCm ? m.chest + " cm" : (m.chest / 2.54).toFixed(1) + " in"}</b>`;
   }
 
   // ================= LANG / MISC TOGGLES =================
-  function toggleLang(){ state.lang=state.lang==="en"?"ar":"en"; save(); applyLang(); applyTheme(); toast(state.lang==="ar"?"تم":"Done"); }
-  function toggleMode(){ state.mode=state.mode==="light"?"dark":"light"; applyTheme(); save(); }
+  function toggleLang() { state.lang = state.lang === "en" ? "ar" : "en"; save(); applyLang(); applyTheme(); toast(state.lang === "ar" ? "تم" : "Done"); }
+  function toggleMode() { state.mode = state.mode === "light" ? "dark" : "light"; applyTheme(); save(); }
 
   // ================= PWA INSTALL =================
-  let deferredPrompt=null;
-  window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e;$("#installBtn").classList.remove("hidden");});
-  function installApp(){ if(deferredPrompt){deferredPrompt.prompt();deferredPrompt=null;} else toast(T("installApp")+" — Add to Home Screen"); }
+  let deferredPrompt = null;
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredPrompt = e; $("#installBtn").classList.remove("hidden"); });
+  function installApp() { if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt = null; } else toast(T("installApp") + " — Add to Home Screen"); }
 
   // ================= KEYBOARD =================
-  function keys(e){
-    const meta=e.ctrlKey||e.metaKey;
-    if(e.key==="Tab" && $$(".overlay.show").length){ trapModalTab(e); return; }
-    if(meta&&e.key==="k"){e.preventDefault();openCmd();return;}
-    if(meta&&e.key==="z"&&!e.shiftKey){e.preventDefault();Canvas.doUndo();renderLayersPane();if(is3DActive())build3D();else{sync3DVisibility();sync3DFabric();}return;}
-    if(meta&&(e.key==="y"||(e.shiftKey&&e.key.toLowerCase()==="z"))){e.preventDefault();Canvas.doRedo();renderLayersPane();if(is3DActive())build3D();else{sync3DVisibility();sync3DFabric();}return;}
-    if($("#cmdModal").classList.contains("show")){
-      if(e.key==="ArrowDown"){e.preventDefault();cmdSel=Math.min(cmdItems.length-1,cmdSel+1);hiCmd();}
-      if(e.key==="ArrowUp"){e.preventDefault();cmdSel=Math.max(0,cmdSel-1);hiCmd();}
-      if(e.key==="Enter"&&cmdItems[cmdSel]){cmdItems[cmdSel].run();closeModal("#cmdModal");}
-      if(e.key==="Escape")closeModal("#cmdModal");
+  function keys(e) {
+    const meta = e.ctrlKey || e.metaKey;
+    if (e.key === "Tab" && $$(".overlay.show").length) { trapModalTab(e); return; }
+    if (meta && e.key === "k") { e.preventDefault(); openCmd(); return; }
+    if (meta && e.key === "z" && !e.shiftKey) { e.preventDefault(); Canvas.doUndo(); renderLayersPane(); if (is3DActive()) build3D(); else { sync3DVisibility(); sync3DFabric(); } return; }
+    if (meta && (e.key === "y" || (e.shiftKey && e.key.toLowerCase() === "z"))) { e.preventDefault(); Canvas.doRedo(); renderLayersPane(); if (is3DActive()) build3D(); else { sync3DVisibility(); sync3DFabric(); } return; }
+    if ($("#cmdModal").classList.contains("show")) {
+      if (e.key === "ArrowDown") { e.preventDefault(); cmdSel = Math.min(cmdItems.length - 1, cmdSel + 1); hiCmd(); }
+      if (e.key === "ArrowUp") { e.preventDefault(); cmdSel = Math.max(0, cmdSel - 1); hiCmd(); }
+      if (e.key === "Enter" && cmdItems[cmdSel]) { cmdItems[cmdSel].run(); closeModal("#cmdModal"); }
+      if (e.key === "Escape") closeModal("#cmdModal");
       return;
     }
-    if(e.key==="Escape"){ $$(".overlay.show").forEach(o=>o.classList.remove("show")); closeAnyMenu(); closeTextEditor(); Canvas.cancelPick(); }
+    if (e.key === "Escape") { $$(".overlay.show").forEach(o => o.classList.remove("show")); closeAnyMenu(); closeTextEditor(); Canvas.cancelPick(); }
     // SELECT belongs here alongside INPUT/TEXTAREA: a focused <select>'s
     // native behaviour for ArrowUp/ArrowDown/Delete etc. is to cycle its
     // own options — without this, those keys never reached the browser at
@@ -5812,10 +5958,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // CANVAS PIECE instead, and the dropdown never visibly responded to
     // the keyboard at all — the concrete bug behind "I can't select from
     // the piece dropdown".
-    const typing = document.activeElement.tagName==="INPUT" || document.activeElement.tagName==="TEXTAREA" || document.activeElement.tagName==="SELECT" || document.activeElement.isContentEditable;
+    const typing = document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA" || document.activeElement.tagName === "SELECT" || document.activeElement.isContentEditable;
     // tool shortcuts
-    const map={v:"select",p:"pen",l:"line",a:"arc",m:"measure",r:"rotate",s:"scale",t:"text"};
-    if(!meta&&map[e.key]&&!typing)setTool(map[e.key]);
+    const map = { v: "select", p: "pen", l: "line", a: "arc", m: "measure", r: "rotate", s: "scale", t: "text" };
+    if (!meta && map[e.key] && !typing) setTool(map[e.key]);
     // WP-17: keyboard operation of the canvas — cycle/nudge the selected
     // pattern piece with "[" / "]" and arrow keys ("[" / "]" rather than
     // Tab, so Tab keeps doing its normal job of moving DOM focus between
@@ -5826,48 +5972,48 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // single OUTLINE VERTEX (click a piece's own edge/corner point handle
     // to select just that point, without dragging it) — not just whole
     // pieces.
-    if(!meta && !typing && state.view==="2d" && !$$(".overlay.show").length){
-      const pieces=Canvas.getPieces(), sel=Canvas.getSelected();
-      if((e.key==="["||e.key==="]") && pieces.length){
+    if (!meta && !typing && state.view === "2d" && !$$(".overlay.show").length) {
+      const pieces = Canvas.getPieces(), sel = Canvas.getSelected();
+      if ((e.key === "[" || e.key === "]") && pieces.length) {
         e.preventDefault();
-        const dir=e.key==="]"?1:-1;
-        const next=sel<0 ? (dir>0?0:pieces.length-1) : (sel+dir+pieces.length)%pieces.length;
+        const dir = e.key === "]" ? 1 : -1;
+        const next = sel < 0 ? (dir > 0 ? 0 : pieces.length - 1) : (sel + dir + pieces.length) % pieces.length;
         Canvas.selectPiece(next); renderLayersPane();
-      } else if((sel>=0 || Canvas.getMultiSelection().length) && (e.key==="ArrowUp"||e.key==="ArrowDown"||e.key==="ArrowLeft"||e.key==="ArrowRight")){
+      } else if ((sel >= 0 || Canvas.getMultiSelection().length) && (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight")) {
         e.preventDefault();
-        const step=e.shiftKey?0.1:1;
-        const dx=e.key==="ArrowLeft"?-step:e.key==="ArrowRight"?step:0;
-        const dy=e.key==="ArrowUp"?-step:e.key==="ArrowDown"?step:0;
-        const group=Canvas.getMultiSelection();
-        if(group.length) Canvas.nudgePieces(group,dx,dy); else Canvas.nudgePiece(sel,dx,dy);
-        if(is3DActive()) build3D(); else sync3DVisibility();
-      } else if(e.key==="Delete"||e.key==="Backspace"){
-        if (Canvas.deleteSelection()){
+        const step = e.shiftKey ? 0.1 : 1;
+        const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+        const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+        const group = Canvas.getMultiSelection();
+        if (group.length) Canvas.nudgePieces(group, dx, dy); else Canvas.nudgePiece(sel, dx, dy);
+        if (is3DActive()) build3D(); else sync3DVisibility();
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        if (Canvas.deleteSelection()) {
           e.preventDefault();
           renderLayersPane();
-          if(is3DActive()) build3D(); else sync3DVisibility();
+          if (is3DActive()) build3D(); else sync3DVisibility();
           if (objBrowserOpen) renderObjectBrowser();
         }
       }
-    } else if(meta && !typing && state.view==="2d" && !$$(".overlay.show").length){
+    } else if (meta && !typing && state.view === "2d" && !$$(".overlay.show").length) {
       // Copy/cut/paste for whatever's selected on the canvas — a construction
       // point, line/arc/circle, text, notch, or whole piece (same target
       // Canvas.deleteSelection() acts on). Only preventDefault when the
       // canvas actually had something to act on, so Ctrl/Cmd+C|X|V still do
       // their normal browser thing (e.g. copying selected page text) when
       // nothing on the canvas is selected.
-      const k=e.key.toLowerCase();
-      if(k==="c" && Canvas.copySelection()){ e.preventDefault(); toast(T("copiedObj")); }
-      else if(k==="x" && Canvas.cutSelection()){
+      const k = e.key.toLowerCase();
+      if (k === "c" && Canvas.copySelection()) { e.preventDefault(); toast(T("copiedObj")); }
+      else if (k === "x" && Canvas.cutSelection()) {
         e.preventDefault();
         renderLayersPane();
-        if(is3DActive()) build3D(); else sync3DVisibility();
+        if (is3DActive()) build3D(); else sync3DVisibility();
         if (objBrowserOpen) renderObjectBrowser();
         toast(T("cutObj"));
-      } else if(k==="v" && Canvas.pasteClipboard()){
+      } else if (k === "v" && Canvas.pasteClipboard()) {
         e.preventDefault();
         renderLayersPane();
-        if(is3DActive()) build3D(); else sync3DVisibility();
+        if (is3DActive()) build3D(); else sync3DVisibility();
         if (objBrowserOpen) renderObjectBrowser();
         toast(T("pastedObj"));
       }
@@ -5881,6 +6027,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const printsBtn = $("#v3dPrintsBtn");
     const printsPanel = $("#v3dPrintsPanel");
     const printsClose = $("#v3dPrintsCloseBtn");
+    const mqPanel = $("#v3dMannequinPanel");
+    const mqBtn = $("#v3dMannequinCatalogBtn");
+    const closeMqPanel = () => {
+      if (mqPanel) mqPanel.classList.add("hidden");
+      mqBtn?.classList.remove("active");
+    };
 
     // Drawer / Panel Toggles
     if (accBtn && accPanel) {
@@ -5888,9 +6040,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         const isHidden = accPanel.classList.contains("hidden");
         accPanel.classList.toggle("hidden", !isHidden);
         accBtn.classList.toggle("active", isHidden);
-        if (isHidden && printsPanel) {
-          printsPanel.classList.add("hidden");
-          printsBtn?.classList.remove("active");
+        if (isHidden) {
+          closeMqPanel();
+          if (printsPanel) {
+            printsPanel.classList.add("hidden");
+            printsBtn?.classList.remove("active");
+          }
         }
       };
     }
@@ -5906,9 +6061,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         const isHidden = printsPanel.classList.contains("hidden");
         printsPanel.classList.toggle("hidden", !isHidden);
         printsBtn.classList.toggle("active", isHidden);
-        if (isHidden && accPanel) {
-          accPanel.classList.add("hidden");
-          accBtn?.classList.remove("active");
+        if (isHidden) {
+          closeMqPanel();
+          if (accPanel) {
+            accPanel.classList.add("hidden");
+            accBtn?.classList.remove("active");
+          }
         }
       };
     }
@@ -6008,7 +6166,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
 
     // Prints & Artwork Presets
     const printTarget = $("#v3dPrintTarget");
-    const presetChips = $$(".v3d-preset-chip");
+    const presetChips = $$("#v3dPrintsPanel .v3d-preset-chip");
     presetChips.forEach(chip => {
       chip.onclick = () => {
         presetChips.forEach(c => c.classList.remove("active"));
@@ -6202,7 +6360,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       function onDrawStart(e) {
         pushUndo();
         isDrawing = true;
-        try { if (e.pointerId != null) dCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+        try { if (e.pointerId != null) dCanvas.setPointerCapture(e.pointerId); } catch (_) { }
         const pt = getCoords(e);
         lastX = pt.x;
         lastY = pt.y;
@@ -6237,7 +6395,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       function onDrawEnd(e) {
         if (isDrawing) {
           isDrawing = false;
-          try { if (e.pointerId != null) dCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
+          try { if (e.pointerId != null) dCanvas.releasePointerCapture(e.pointerId); } catch (_) { }
         }
       }
 
@@ -6270,7 +6428,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       if (applyBtn) {
         applyBtn.onclick = () => {
           const target = $("#v3dDrawTargetSelect")?.value || "all";
-          
+
           if (isCanvasBlank(dCanvas)) {
             // If canvas is blank, clear drawings on target garment parts
             View3D.setGarmentPrint({
@@ -6311,35 +6469,35 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
 
   // ================= WIRE EVENTS =================
-  function wire(){
+  function wire() {
     // category
-    $$("#catSeg button").forEach(b=>b.onclick=()=>setCategory(b.dataset.cat));
+    $$("#catSeg button").forEach(b => b.onclick = () => setCategory(b.dataset.cat));
     // view toggle
-    $$("#viewToggle button").forEach(b=>{ b.onclick=()=>setView(b.dataset.v); });
+    $$("#viewToggle button").forEach(b => { b.onclick = () => setView(b.dataset.v); });
     // header buttons
-    $("#projectBtn").onclick=(e)=>{ e.stopPropagation(); openMenu($("#projectBtn"), projectMenuItems()); }; tip($("#projectBtn"),T("project"),T("projectMenu"));
-    $("#cmdBtn").onclick=openCmd; tip($("#cmdBtn"),T("cmd")||"⌘K",T("tt_cmd"));
-    $("#themeBtn").onclick=openThemePicker; tip($("#themeBtn"),T("theme"),T("tt_theme"));
-    $("#langBtn").onclick=toggleLang; tip($("#langBtn"),T("language"),T("tt_lang"));
-    $("#modeBtn").onclick=toggleMode; tip($("#modeBtn"),T("appearance"),T("tt_mode"));
-    $("#settingsBtn").onclick=openSettings; tip($("#settingsBtn"),T("settings"),T("tt_settings"));
-    $("#accountBtn").onclick=openAccount; tip($("#accountBtn"),T("account"),T("tt_account"));
-    tip($("#docsBtn"),T("docs"),T("tt_docs"));
-    $("#helpBtn").onclick=openHelp; tip($("#helpBtn"),T("help"),T("helpTitle"));
-    $("#installBtn").onclick=installApp;
-    $("#unitsPill").onclick=()=>{state.unitsCm=!state.unitsCm;Canvas.setOpt("unitsCm",state.unitsCm);save();updateUnitsPill();updateStageChips();update3DStatusPill();};
-    tip($("#unitsPill"),T("tab_measure"),T("tt_units"));
+    $("#projectBtn").onclick = (e) => { e.stopPropagation(); openMenu($("#projectBtn"), projectMenuItems()); }; tip($("#projectBtn"), T("project"), T("projectMenu"));
+    $("#cmdBtn").onclick = openCmd; tip($("#cmdBtn"), T("cmd") || "⌘K", T("tt_cmd"));
+    $("#themeBtn").onclick = openThemePicker; tip($("#themeBtn"), T("theme"), T("tt_theme"));
+    $("#langBtn").onclick = toggleLang; tip($("#langBtn"), T("language"), T("tt_lang"));
+    $("#modeBtn").onclick = toggleMode; tip($("#modeBtn"), T("appearance"), T("tt_mode"));
+    $("#settingsBtn").onclick = openSettings; tip($("#settingsBtn"), T("settings"), T("tt_settings"));
+    $("#accountBtn").onclick = openAccount; tip($("#accountBtn"), T("account"), T("tt_account"));
+    tip($("#docsBtn"), T("docs"), T("tt_docs"));
+    $("#helpBtn").onclick = openHelp; tip($("#helpBtn"), T("help"), T("helpTitle"));
+    $("#installBtn").onclick = installApp;
+    $("#unitsPill").onclick = () => { state.unitsCm = !state.unitsCm; Canvas.setOpt("unitsCm", state.unitsCm); save(); updateUnitsPill(); updateStageChips(); update3DStatusPill(); };
+    tip($("#unitsPill"), T("tab_measure"), T("tt_units"));
     // grid/snap in stage toolbar
-    $("#undoBtn").onclick=()=>{Canvas.doUndo();renderLayersPane();if(is3DActive())build3D();else{sync3DVisibility();sync3DFabric();}}; tip($("#undoBtn"),T("undoLbl"),T("tt_undo"));
-    $("#redoBtn").onclick=()=>{Canvas.doRedo();renderLayersPane();if(is3DActive())build3D();else{sync3DVisibility();sync3DFabric();}}; tip($("#redoBtn"),T("redoLbl"),T("tt_redo"));
-    $("#gridBtn").onclick=()=>{const v=!Canvas.getOpt("grid");Canvas.setOpt("grid",v);$("#gridBtn").classList.toggle("active",v);}; tip($("#gridBtn"),T("t_line"),T("tt_grid"));
-    $("#snapBtn").onclick=()=>{const v=!Canvas.getOpt("snap");Canvas.setOpt("snap",v);$("#snapBtn").classList.toggle("active",v);}; tip($("#snapBtn"),"Snap",T("tt_snap"));
-    $("#bgBtn").onclick=()=>openBgPanel(); tip($("#bgBtn"),T("bgImage"),T("tt_bgImage"));
-    $("#bgBtn").classList.toggle("active",Canvas.hasBackground());
-    $("#objBrowserBtn").onclick=()=>toggleObjectBrowser(); tip($("#objBrowserBtn"),T("objBrowser"),T("tt_objBrowser"));
-    $("#snapshotBtn").onclick=()=>openSnapshotPanel(); tip($("#snapshotBtn"),T("snapshotMenu"),T("tt_snapshot"));
-    $("#snapshotBtn").classList.toggle("active",Canvas.hasSnapshot());
-    $("#splitViewBtn").onclick=()=>setSplitView(!state.splitView); tip($("#splitViewBtn"),T("splitView"),T("tt_splitView"));
+    $("#undoBtn").onclick = () => { Canvas.doUndo(); renderLayersPane(); if (is3DActive()) build3D(); else { sync3DVisibility(); sync3DFabric(); } }; tip($("#undoBtn"), T("undoLbl"), T("tt_undo"));
+    $("#redoBtn").onclick = () => { Canvas.doRedo(); renderLayersPane(); if (is3DActive()) build3D(); else { sync3DVisibility(); sync3DFabric(); } }; tip($("#redoBtn"), T("redoLbl"), T("tt_redo"));
+    $("#gridBtn").onclick = () => { const v = !Canvas.getOpt("grid"); Canvas.setOpt("grid", v); $("#gridBtn").classList.toggle("active", v); }; tip($("#gridBtn"), T("t_line"), T("tt_grid"));
+    $("#snapBtn").onclick = () => { const v = !Canvas.getOpt("snap"); Canvas.setOpt("snap", v); $("#snapBtn").classList.toggle("active", v); }; tip($("#snapBtn"), "Snap", T("tt_snap"));
+    $("#bgBtn").onclick = () => openBgPanel(); tip($("#bgBtn"), T("bgImage"), T("tt_bgImage"));
+    $("#bgBtn").classList.toggle("active", Canvas.hasBackground());
+    $("#objBrowserBtn").onclick = () => toggleObjectBrowser(); tip($("#objBrowserBtn"), T("objBrowser"), T("tt_objBrowser"));
+    $("#snapshotBtn").onclick = () => openSnapshotPanel(); tip($("#snapshotBtn"), T("snapshotMenu"), T("tt_snapshot"));
+    $("#snapshotBtn").classList.toggle("active", Canvas.hasSnapshot());
+    $("#splitViewBtn").onclick = () => setSplitView(!state.splitView); tip($("#splitViewBtn"), T("splitView"), T("tt_splitView"));
     // Split View never auto-restores across a reload — same as state.view
     // itself, which also always boots back to "2D Pattern" rather than
     // replaying whatever tab was open last session. Restoring it here would
@@ -6353,22 +6511,22 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // there. state.view stays "2d" during Split View (setView() only ever
     // sets it to "2d"/"3d"/"clothlab" — see its own comment), so this keeps
     // driving the 2D canvas in that mode too, unchanged from before.
-    $("#zin").onclick=()=>{ if(state.view==="3d") View3D.zoom(1.2); else if(state.view==="clothlab") clothLabZoom(1.2); else Canvas.zoom(1.2); }; tip($("#zin"),"+",T("tt_zoomin"));
-    $("#zout").onclick=()=>{ if(state.view==="3d") View3D.zoom(0.83); else if(state.view==="clothlab") clothLabZoom(0.83); else Canvas.zoom(0.83); }; tip($("#zout"),"−",T("tt_zoomout"));
-    $("#zfit").onclick=()=>{ if(state.view==="3d") View3D.fit(); else if(state.view==="clothlab") clothLabFit(); else Canvas.fit(); }; tip($("#zfit"),"Fit",T("tt_zoomfit"));
+    $("#zin").onclick = () => { if (state.view === "3d") View3D.zoom(1.2); else if (state.view === "clothlab") clothLabZoom(1.2); else Canvas.zoom(1.2); }; tip($("#zin"), "+", T("tt_zoomin"));
+    $("#zout").onclick = () => { if (state.view === "3d") View3D.zoom(0.83); else if (state.view === "clothlab") clothLabZoom(0.83); else Canvas.zoom(0.83); }; tip($("#zout"), "−", T("tt_zoomout"));
+    $("#zfit").onclick = () => { if (state.view === "3d") View3D.fit(); else if (state.view === "clothlab") clothLabFit(); else Canvas.fit(); }; tip($("#zfit"), "Fit", T("tt_zoomfit"));
     // empty state
-    $("#emptyDraft").onclick=()=>{hideEmpty();setTool("pen");};
-    $("#emptyLib").onclick=()=>{showPane("library");};
+    $("#emptyDraft").onclick = () => { hideEmpty(); setTool("pen"); };
+    $("#emptyLib").onclick = () => { showPane("library"); };
     // modals close
-    $$("[data-close]").forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
-    $$(".overlay").forEach(o=>o.addEventListener("click",e=>{if(e.target===o)o.classList.remove("show");}));
+    $$("[data-close]").forEach(b => b.onclick = () => closeModal(b.dataset.close));
+    $$(".overlay").forEach(o => o.addEventListener("click", e => { if (e.target === o) o.classList.remove("show"); }));
     // cmd input
-    $("#cmdInput").oninput=e=>renderCmd(e.target.value);
+    $("#cmdInput").oninput = e => renderCmd(e.target.value);
     // onboarding
-    $("#onbNext").onclick=onbNext; $("#onbBack").onclick=onbBack; $("#onbSkip").onclick=()=>{state.onboarded=true;save();closeModal("#onbModal");};
+    $("#onbNext").onclick = onbNext; $("#onbBack").onclick = onbBack; $("#onbSkip").onclick = () => { state.onboarded = true; save(); closeModal("#onbModal"); };
     // 3d controls
-    $("#spinToggle").onchange=e=>View3D.setSpin(e.target.checked);
-    $("#walkToggle").onchange=e=>View3D.setWalk(e.target.checked);
+    $("#spinToggle").onchange = e => View3D.setSpin(e.target.checked);
+    $("#walkToggle").onchange = e => View3D.setWalk(e.target.checked);
     const camBtns = $$("#v3dCamBar [data-cam-preset]");
     camBtns.forEach(btn => {
       btn.onclick = () => {
@@ -6391,6 +6549,41 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         save();
       };
     }
+    const mqSizeSelect = $("#v3dMannequinSizeSelect");
+    if (mqSizeSelect) {
+      mqSizeSelect.onchange = e => {
+        selectMannequinPreset(state.avatarCategory || state.category || "women", e.target.value, { toastNotify: true });
+      };
+    }
+    const mqCatalogBtn = $("#v3dMannequinCatalogBtn");
+    const mqPanel = $("#v3dMannequinPanel");
+    const mqCloseBtn = $("#v3dMannequinClose");
+    if (mqCatalogBtn && mqPanel) {
+      mqCatalogBtn.onclick = () => {
+        const opening = mqPanel.classList.contains("hidden");
+        mqPanel.classList.toggle("hidden", !opening);
+        mqCatalogBtn.classList.toggle("active", opening);
+        if (opening) {
+          renderMannequinCatalogPanel();
+          $("#v3dAccPanel")?.classList.add("hidden");
+          $("#v3dAccBtn")?.classList.remove("active");
+          $("#v3dPrintsPanel")?.classList.add("hidden");
+          $("#v3dPrintsBtn")?.classList.remove("active");
+        }
+      };
+    }
+    if (mqCloseBtn && mqPanel) {
+      mqCloseBtn.onclick = () => {
+        mqPanel.classList.add("hidden");
+        mqCatalogBtn?.classList.remove("active");
+      };
+    }
+    $$("#v3dMannequinTabs [data-mq-cat]").forEach(btn => {
+      btn.onclick = () => {
+        activeMannequinFilterCat = btn.dataset.mqCat || "all";
+        renderMannequinCatalogPanel();
+      };
+    });
     const colorPicker = $("#v3dColorPicker");
     if (colorPicker) {
       const onCol = e => set3DGarmentColor(e.target.value);
@@ -6454,89 +6647,91 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     });
 
     init3DAccessoriesAndPrints();
-    document.addEventListener("keydown",keys);
-    window.addEventListener("resize",()=>{if(is3DActive())View3D.resize();});
+    document.addEventListener("keydown", keys);
+    window.addEventListener("resize", () => { if (is3DActive()) View3D.resize(); });
     // 3D Cloth Lab bridge: cloth-lab posts {type:"clothlab:ready"} once its
     // own listener is mounted (avoids a race where we'd post before it can
     // hear us) — confirm the sender really is our iframe, then send it the
     // current pattern right away and on every later tab switch (syncClothLab
     // itself no-ops if the pattern hasn't actually changed).
-    window.addEventListener("message",handleClothLabReady);
+    window.addEventListener("message", handleClothLabReady);
     window.addEventListener("message", e => {
-      if(e.data?.type!=="clothlab:setup" || !gateAllowed()) return;
+      if (e.data?.type !== "clothlab:setup" || !gateAllowed()) return;
       const embedded = state.clothLabEngine === "embedded";
       const frame = $("#clothLabFrame");
-      if(embedded ? (e.source!==window || e.origin!==location.origin) : (!frame || e.source!==frame.contentWindow || e.origin!==clothLabOrigin())) return;
+      if (embedded ? (e.source !== window || e.origin !== location.origin) : (!frame || e.source !== frame.contentWindow || e.origin !== clothLabOrigin())) return;
       const current = buildClothLabPayload();
-      if(e.data.designId!==current.designId || e.data.design!==clothDesignKey(current)) return;
+      if (e.data.designId !== current.designId || e.data.design !== clothDesignKey(current)) return;
       const setup = e.data.setup;
-      if(!setup || typeof setup.answers!=="object" || JSON.stringify(setup).length>2000000) return;
+      if (!setup || typeof setup.answers !== "object" || JSON.stringify(setup).length > 2000000) return;
       const first = Canvas.getPieces()[0];
-      if(first){
+      if (first) {
         first.clothLabSetup = { ...setup, design: e.data.design };
         lastClothLabPayloadJSON = JSON.stringify(buildClothLabPayload());
         save();
       }
     });
   }
-  function updateUnitsPill(){ $("#unitsPill .u").textContent=state.unitsCm?"cm":"inch"; }
+  function updateUnitsPill() { $("#unitsPill .u").textContent = state.unitsCm ? "cm" : "inch"; }
 
   // ================= INIT =================
-  function init(){
+  function init() {
     // shell text
-    $("#brandName").textContent=T("appName"); $("#brandSub").textContent=T("tagline");
-    Canvas.init($("#patternCanvas"), T, (p)=>{ if(p)showPieceInfo(p); });
-    Canvas.setOpt("unitsCm",state.unitsCm);
-    Canvas.onZoomChange(()=>{ $("#zval").textContent=Canvas.getZoom()+"%"; });
-    View3D.setLoadingCallback((v,detail)=>{
-      const o=$("#v3dLoading"); if(!o) return;
+    $("#brandName").textContent = T("appName"); $("#brandSub").textContent = T("tagline");
+    Canvas.init($("#patternCanvas"), T, (p) => { if (p) showPieceInfo(p); });
+    Canvas.setOpt("unitsCm", state.unitsCm);
+    Canvas.onZoomChange(() => { $("#zval").textContent = Canvas.getZoom() + "%"; });
+    View3D.setLoadingCallback((v, detail) => {
+      const o = $("#v3dLoading"); if (!o) return;
       o.classList.toggle("show", v);
-      if(v){ const pct=detail&&detail.progress; const txt=$("#v3dLoadingTxt");
-        if(txt) txt.textContent = pct>0 ? `${T("v3dLoadingLabel")} ${pct}%` : T("v3dLoadingLabel"); }
+      if (v) {
+        const pct = detail && detail.progress; const txt = $("#v3dLoadingTxt");
+        if (txt) txt.textContent = pct > 0 ? `${T("v3dLoadingLabel")} ${pct}%` : T("v3dLoadingLabel");
+      }
     });
-    View3D.setAvatarIssueCallback((cat,err)=>{ console.warn("[3D avatar]",cat,err); toast(T("v3dAvatarFailed")); });
-    View3D.setFatalErrorCallback(()=>{ const o=$("#v3dError"); if(o) o.classList.add("show"); });
+    View3D.setAvatarIssueCallback((cat, err) => { console.warn("[3D avatar]", cat, err); toast(T("v3dAvatarFailed")); });
+    View3D.setFatalErrorCallback(() => { const o = $("#v3dError"); if (o) o.classList.add("show"); });
     View3D.init($("#canvas3d"));
-    $("#v3dRetryBtn").onclick=async()=>{
-      const o=$("#v3dError"); if(o) o.classList.remove("show");
-      const ok=await View3D.retryInit();
-      if(ok){ View3D.resize(); build3D(); } else if(o) o.classList.add("show");
+    $("#v3dRetryBtn").onclick = async () => {
+      const o = $("#v3dError"); if (o) o.classList.remove("show");
+      const ok = await View3D.retryInit();
+      if (ok) { View3D.resize(); build3D(); } else if (o) o.classList.add("show");
     };
-    $("#v3dContinue2DBtn").onclick=()=>{ $("#v3dError").classList.remove("show"); setView("2d"); };
+    $("#v3dContinue2DBtn").onclick = () => { $("#v3dError").classList.remove("show"); setView("2d"); };
     applyReduceMotion(state.reduceMotion);
     initModalA11y();
     // Custom uploaded 3D avatars saved in Settings (per category)
-    Object.entries(state.avatarGLB || {}).forEach(([cat,url]) => { if(url && !url.startsWith("avatars/")) View3D.setAvatarURL(cat, url); });
+    Object.entries(state.avatarGLB || {}).forEach(([cat, url]) => { if (url && !url.startsWith("avatars/")) View3D.setAvatarURL(cat, url); });
     Canvas.onTextRequest(openTextEditor);
-    Canvas.setMeasureProvider(()=>currentMeas());
+    Canvas.setMeasureProvider(() => currentMeas());
     Canvas.onPointRequest(openPointEditor);
     Canvas.onPromoteRequest(openPromotePrompt);
     Canvas.onCalibrationRequest(openCalibPrompt);
-    Canvas.onWarnRequest(key=>toast(T(key)));
+    Canvas.onWarnRequest(key => toast(T(key)));
     buildToolRail(); buildRail(); wire();
     initResponsiveWorkspace();
-    initAccountUI().catch(e=>console.warn("[account] Sign-in is unavailable while offline", e));
+    initAccountUI().catch(e => console.warn("[account] Sign-in is unavailable while offline", e));
     applyTheme(); applyLang();
     updateUnitsPill(); updateStageChips();
-    $("#gridBtn").classList.toggle("active",Canvas.getOpt("grid"));
-    $("#snapBtn").classList.toggle("active",Canvas.getOpt("snap"));
+    $("#gridBtn").classList.toggle("active", Canvas.getOpt("grid"));
+    $("#snapBtn").classList.toggle("active", Canvas.getOpt("snap"));
     // Snapshot direct canvas edits too: these do not all pass through a
     // settings/action handler that calls save(). Capture again on exit.
     $("#patternCanvas").addEventListener("pointerup", () => {
       if (state.splitView) build3D();
       save();
     });
-    document.addEventListener("keyup", e=>{
-      if(!/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && !e.target.isContentEditable) save();
+    document.addEventListener("keyup", e => {
+      if (!/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && !e.target.isContentEditable) save();
     });
     window.addEventListener("pagehide", save);
-    document.addEventListener("visibilitychange", ()=>{ if(document.hidden) save(); });
+    document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
     // register SW with active update check and reload on controller change
-    if("serviceWorker" in navigator) {
+    if ("serviceWorker" in navigator) {
       const hadController = !!navigator.serviceWorker.controller;
       let refreshing = false;
-      navigator.serviceWorker.register("sw.js").then(r=>{ r.update().catch(()=>{}); }).catch(()=>{});
-      navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+      navigator.serviceWorker.register("sw.js").then(r => { r.update().catch(() => { }); }).catch(() => { });
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
         if (hadController && !refreshing) {
           refreshing = true;
           window.location.reload();
@@ -6544,30 +6739,37 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       });
     }
     // onboarding first run
-    if(!state.onboarded) setTimeout(startOnboarding,400);
+    if (!state.onboarded) setTimeout(startOnboarding, 400);
     // load default pattern so app looks alive, then restore last view —
     // unless BodyForm (body.html) just handed off a category+measurements
     // set (BerryStudio-Upgrade-Plan WP-10), in which case land directly in
     // the 3D Cloth Lab with those values instead of the usual boot pattern.
-    setTimeout(()=>{
+    setTimeout(() => {
       const handoff = consumeBodyFormHandoff();
       if(handoff && handoff.category && handoff.measurements){
+        const hSize = handoff.mannequinSize || handoff.size;
+        if (hSize) {
+          state.size = hSize;
+          state.kids = null;
+          state.avatarSize = isActiveMannequinSize(hSize) ? hSize : "M";
+          state.avatarSizeExplicit = isActiveMannequinSize(hSize);
+        }
         state.custom = {...handoff.measurements};
         loadPattern(DEFAULT_PATTERN_BY_CATEGORY[handoff.category] || "womens_dress");
         grade(); renderSizePane(); renderMeasurePane();
         setView("clothlab");
-      } else if(state.projects.length){
+      } else if (state.projects.length) {
         const target = activeProject() || state.projects[0];
         state.activeProjectId = null;
         switchToProject(target.id);
-        setView(state.view||"2d");
+        setView(state.view || "2d");
       } else {
-        loadPattern(state.loaded||"womens_dress"); setView(state.view||"2d");
+        loadPattern(state.loaded || "womens_dress"); setView(state.view || "2d");
       }
       initProjectTabs();
       projectsReady = true;
       save();
-    },200);
+    }, 200);
   }
-  document.addEventListener("DOMContentLoaded",init);
+  document.addEventListener("DOMContentLoaded", init);
 })();

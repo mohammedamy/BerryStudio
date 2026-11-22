@@ -13,8 +13,8 @@ export const HANDOFF_URL_FLAG = "fromBodyForm";
 
 // Called by body.html's "Open in Fit Studio" button just before
 // navigating to `index.html?fromBodyForm=1`.
-export function saveBodyFormHandoff({ category, measurements }) {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ category, measurements }));
+export function saveBodyFormHandoff({ category, measurements, size = null, mannequinSize = null }) {
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ category, measurements, size, mannequinSize }));
 }
 
 // Called once by js/app.js's init() on boot. Reads-and-clears — a handoff

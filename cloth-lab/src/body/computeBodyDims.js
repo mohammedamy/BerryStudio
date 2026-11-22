@@ -10,13 +10,14 @@
 const cm = (v) => v * 0.01
 const radiusFromCirc = (circ) => cm(circ) / (2 * Math.PI)
 
-export function computeBodyDims(measurements, category) {
+export function computeBodyDims(measurements, category, morph = null) {
   const m = measurements
+  const activeMorph = morph || m?.morph || null
   const female = category === 'women' || category === 'girls'
   const kid = category === 'girls' || category === 'boys'
 
   const H = cm(m.height)
-  const headH = H * (kid ? 0.16 : 0.128)
+  const headH = H * (activeMorph && activeMorph.headRatio > 0 ? activeMorph.headRatio : (kid ? 0.16 : 0.128))
   const neckTopY = H - headH
   const shoulderY = H * (kid ? 0.80 : 0.82)
   const hipY = H * (kid ? 0.47 : 0.52)
@@ -56,6 +57,7 @@ export function computeBodyDims(measurements, category) {
   return {
     female, kid, H, headH, neckTopY, shoulderY, hipY, span,
     chestR, waistR, hipR, shoulderHalf, neckR, armLen, upperR, legLen, thighR,
+    morph: activeMorph,
   }
 }
 

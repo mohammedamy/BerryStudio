@@ -1,4 +1,5 @@
 import { SKIN_TONES } from '../body/skinTones'
+import { getMannequinsByCategory, isActiveMannequinSize } from '../../../js/mannequin-catalog.js'
 import { t } from '../i18n'
 
 export { DEFAULT_SKIN_TONE } from '../body/skinTones'
@@ -29,11 +30,72 @@ const POSE_I18N_KEYS = {
   contrapposto: 'pose_contrapposto', seated: 'pose_seated', walk: 'pose_walk',
 }
 
-export default function AvatarPanel({ lang = 'en', skinTone, onChange, pose, onPoseChange }) {
+export default function AvatarPanel({ lang = 'en', category = 'women', mannequinSize = 'M', onMannequinSizeChange, skinTone, onChange, pose, onPoseChange }) {
+  const mannequins = getMannequinsByCategory(category)
+  const ar = lang === 'ar'
   return (
     <div style={{ padding: 14, borderTop: '1px solid var(--border)' }}>
-      <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
-        {t(lang, 'skinTone')}
+      {onMannequinSizeChange && (
+        <div style={{ marginBottom: 14, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
+          <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+            {t(lang, 'mannequinSize')}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 8 }}>
+            {t(lang, 'mannequinPresetHint')}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+            {mannequins.map((mq) => {
+              const active = isActiveMannequinSize(mannequinSize) && mq.size === mannequinSize
+              return (
+                <button
+                  key={mq.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onMannequinSizeChange(mq.size)}
+                  title={`${ar ? mq.name.ar : mq.name.en} — ${mq.measurements.height} cm`}
+                  style={{
+                    padding: '6px 6px',
+                    borderRadius: 8,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 2,
+                    background: active ? 'var(--accent-2)' : 'var(--panel-2)',
+                    color: active ? '#fff' : 'var(--text)',
+                    border: active ? '1px solid var(--accent)' : '1px solid var(--border)',
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: mq.skinHex, border: '1px solid rgba(0,0,0,0.25)' }} />
+                    <span>{mq.size}</span>
+                  </span>
+                  <span style={{ fontSize: 9.5, opacity: 0.84, fontWeight: 600 }}>{mq.measurements.height} {ar ? 'سم' : 'cm'}</span>
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 6, textAlign: 'center' }}>
+            {t(lang, 'mannequinFutureShort')}
+          </div>
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          {t(lang, 'skinTone')}
+        </div>
+        {skinTone != null && (
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0 }}
+          >
+            {t(lang, 'skinAuto')}
+          </button>
+        )}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6 }}>
         {SKIN_TONES.map((tone) => (

@@ -23,6 +23,7 @@ import {
   maleTorsoZBump,
   torsoZBump,
 } from "./human-mannequin.js";
+import { getMannequinFor } from "./mannequin-catalog.js";
 import { computePatternMetrics3D } from "./pattern-3d-metrics.js";
 
 export const View3D = (() => {
@@ -30,6 +31,7 @@ export const View3D = (() => {
   let renderer, scene, camera, controls, raf = null;
   let root, bodyGroup, garmentGroup, limbs = {};
   let activeMannequin = null;
+  let curMannequin = null;
   let ready = false, initPromise = null, initFailed = false;
   let spinning = true, walking = true, t = 0;
   let reduceMotion = false;
@@ -635,9 +637,10 @@ export const View3D = (() => {
   }
 
   // ---------- Unified Lifelike Human Mannequin ----------
-  function buildProcedural(category, m, patternMetrics = null, preserveCamera = false) {
+  function buildProcedural(category, m, patternMetrics = null, preserveCamera = false, mannequinPreset = null) {
     curCategory = category;
     curMeasurements = m;
+    curMannequin = mannequinPreset || null;
     const prevH = curH;
     disposeObject3D(bodyGroup);
     disposeObject3D(garmentGroup);
@@ -648,9 +651,13 @@ export const View3D = (() => {
     bodyGroup = new THREE.Group();
     root.add(bodyGroup);
 
-    const skin = createHumanSkinMaterial(THREE, category, undefined, isSoftwareGL);
+    const skin = createHumanSkinMaterial(THREE, category, mannequinPreset?.skinColor, isSoftwareGL);
     activeMannequin = buildHumanMannequin(THREE, category, m, {
       skinMaterial: skin,
+      mannequin: mannequinPreset,
+      morph: mannequinPreset?.morph,
+      hairColor: mannequinPreset?.hairColor,
+      hairStyle: mannequinPreset?.hairStyle,
       pose: "standing",
       lowPower: isSoftwareGL,
     });
@@ -5969,6 +5976,8 @@ export const View3D = (() => {
     if (opts.opacity != null) Object.values(fabricState).forEach((st) => { st.opacity = opts.opacity; });
     if (opts.pieces !== undefined) lastPieceVis = opts.pieces;
     const incomingMetrics = opts.patternMetrics || null;
+    const mannequinPreset = opts.mannequin || (opts.size ? getMannequinFor(category, opts.size) : null);
+    curMannequin = mannequinPreset || null;
 
     const token = ++buildToken;
     if (!ready) {
@@ -6003,13 +6012,13 @@ export const View3D = (() => {
           applyPieceVisibility();
         } catch (e) {
           if (token === buildToken) onAvatarIssue(category, e);
-          buildProcedural(category, m, incomingMetrics, preserveCamera);
+          buildProcedural(category, m, incomingMetrics, preserveCamera, mannequinPreset);
           if (tensionMapEnabled) applyTensionHeatmap();
           else applyFabric();
           applyPieceVisibility();
         }
       } else {
-        buildProcedural(category, m, incomingMetrics, preserveCamera);
+        buildProcedural(category, m, incomingMetrics, preserveCamera, mannequinPreset);
         if (tensionMapEnabled) applyTensionHeatmap();
         else applyFabric();
         applyPieceVisibility();
@@ -6691,7 +6700,8 @@ export const View3D = (() => {
     },
     setWalk: (v) => { walking = v; },
     stepMotion,
-    getSceneDebugRefs: () => ({ root, bodyGroup, garmentGroup, activeMannequin, limbs, lastDims }),
+    getSceneDebugRefs: () => ({ root, bodyGroup, garmentGroup, activeMannequin, curMannequin, limbs, lastDims }),
+    getActiveMannequin: () => curMannequin,
     setReduceMotion: (v) => {
       reduceMotion = !!v;
       if (controls) controls.autoRotate = spinning && !reduceMotion;

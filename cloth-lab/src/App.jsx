@@ -8,6 +8,7 @@ import ExportPanel from './ui/ExportPanel'
 import SolverHUD, { isSolverHUDEnabled } from './ui/SolverHUD'
 import Scene from './scene/Scene'
 import { DEFAULT_MEASUREMENTS } from './state/measurements'
+import { getMannequinFor } from '../../js/mannequin-catalog.js'
 import { computeBodyDims } from './body/computeBodyDims'
 import { DEFAULT_FABRIC } from './cloth/fabricPresets'
 import { QUALITY_TIER_DEFAULT } from './cloth/ClothSimulation'
@@ -81,7 +82,8 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   // this is a local rendering-quality preference, not part of a garment's
   // own saved data the way fabricId is.
   const [qualityTier, setQualityTier] = useState(QUALITY_TIER_DEFAULT)
-  const [skinToneId, setSkinToneId] = useState(DEFAULT_SKIN_TONE)
+  const [mannequinSize, setMannequinSize] = useState(pattern?.mannequinSize || 'M')
+  const [skinToneId, setSkinToneId] = useState(null)
   const [poseId, setPoseId] = useState(DEFAULT_POSE)
   // Surfaced from deep inside GLBAvatar (see its own header comment) —
   // unrecognized rig, VRM, no walk clip, no leg rig for "seated". null when
@@ -129,8 +131,22 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   // force a clean re-init, the standard React fix for that.
   const [garmentVersion, setGarmentVersion] = useState(0)
 
+  const activeMannequin = useMemo(() => getMannequinFor(category, mannequinSize), [category, mannequinSize])
   const measurements = measurementsByCategory[category]
-  const dims = useMemo(() => computeBodyDims(measurements, category), [measurements, category])
+  const dims = useMemo(() => computeBodyDims(measurements, category, activeMannequin?.morph || null), [measurements, category, activeMannequin])
+
+  function handleSelectMannequinSize(nextSize) {
+    const mq = getMannequinFor(category, nextSize)
+    setMannequinSize(mq.size)
+    setSkinToneId(null)
+    setMeasurementsByCategory(prev => ({ ...prev, [category]: { ...mq.measurements } }))
+  }
+
+  function handleCategoryChange(nextCategory) {
+    setCategory(nextCategory)
+    const mq = getMannequinFor(nextCategory, mannequinSize)
+    setMeasurementsByCategory(prev => ({ ...prev, [nextCategory]: { ...mq.measurements } }))
+  }
 
   // Shared by both ingestion paths below: convert (closed-world classifier
   // — see importFromApp.js for exactly what is/isn't recognized), sync
@@ -147,9 +163,15 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   // remount — seam-editor progress lost) and forced the user back to the
   // first step purely from switching languages.
   const lastPatternSignatureRef = useRef(pattern ? patternSignature(pattern) : null)
+  const lastMannequinIdRef = useRef(pattern?.mannequinId || null)
   function applyIncomingPattern(payload) {
     if (payload.lang) setLang(payload.lang)
     setCategory(payload.category)
+    if (payload.mannequinSize) setMannequinSize(payload.mannequinSize)
+    if (payload.mannequinId && payload.mannequinId !== lastMannequinIdRef.current) {
+      lastMannequinIdRef.current = payload.mannequinId
+      setSkinToneId(null)
+    }
     setMeasurementsByCategory(prev => ({ ...prev, [payload.category]: payload.measurements }))
     setFabricId(resolveDefaultPatternFabric(payload))
     setAvatarGLBByCategory(payload.avatarGLB || {})
@@ -231,7 +253,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
     <div className="cloth-lab-root" dir={dirFor(lang)} lang={lang}>
       <Header
         embedded={embedded} bodyOnly={bodyOnly} lang={lang}
-        category={category} onCategoryChange={setCategory} linked={!!source}
+        category={category} onCategoryChange={handleCategoryChange} linked={!!source}
         step={step} onStep={goTo}
       />
       {storageWarning && <div role="status" className="cl-callout tone-warn cl-inline">{ar ? 'تعذر الحفظ المحلي. أبقِ هذه الصفحة مفتوحة.' : 'Local saving failed. Keep this page open to retain your work.'}</div>}
@@ -255,6 +277,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
         key={garmentVersion}
         bodyOnly={bodyOnly} lang={lang} step={step} onStep={goTo} onStepForce={setStep}
         view={view} onViewChange={setView}
+        category={category} mannequinSize={mannequinSize} mannequin={activeMannequin} onMannequinSizeChange={handleSelectMannequinSize}
         dims={dims} measurements={measurements}
         onMeasurementsChange={(next) => setMeasurementsByCategory((prev) => ({ ...prev, [category]: next }))}
         fabricId={fabricId} onFabricChange={setFabricId}
@@ -293,7 +316,7 @@ const TABS = [
 // Try-on canvas — split out from App so the whole thing can be remounted
 // (via App's key={garmentVersion}) as a unit whenever a new garment import
 // needs a fresh seam-editor rather than picking up on top of a stale one.
-function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChange, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, qualityTier, onQualityTierChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, garment, print = null, notice, onNotice, imported, restored, onEditorChange, avatarGLBUrl, onSimulate }) {
+function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChange, category, mannequinSize, mannequin, onMannequinSizeChange, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, qualityTier, onQualityTierChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, garment, print = null, notice, onNotice, imported, restored, onEditorChange, avatarGLBUrl, onSimulate }) {
   const ar = lang === 'ar', text = (en, arabic) => ar ? arabic : en
   const rawPieces = imported ? imported.rawPieces : []
   const roles = imported ? imported.roles : {}
@@ -397,8 +420,8 @@ function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChan
           // BodyForm's whole job is measure → generate → export, so its
           // three short panels stay visible together (no tabs hiding Export).
           <div className="cl-tabpanel cl-stack">
-            <MeasurementPanel lang={lang} measurements={measurements} onChange={onMeasurementsChange} />
-            <AvatarPanel lang={lang} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />
+            <MeasurementPanel lang={lang} category={category} mannequinSize={mannequinSize} measurements={measurements} onChange={onMeasurementsChange} />
+            <AvatarPanel lang={lang} category={category} mannequinSize={mannequinSize} onMannequinSizeChange={onMannequinSizeChange} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />
             <ExportPanel lang={lang} exportRef={exportRef} />
           </div>
         ) : <>
@@ -407,8 +430,8 @@ function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChan
           </div>
           <div className="cl-tabpanel" role="tabpanel">
             {tab === 'fabric' && <FabricPanel lang={lang} fabricId={fabricId} onChange={onFabricChange} qualityTier={qualityTier} onQualityTierChange={onQualityTierChange} />}
-            {tab === 'body' && <MeasurementPanel lang={lang} measurements={measurements} onChange={onMeasurementsChange} />}
-            {tab === 'look' && <AvatarPanel lang={lang} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />}
+            {tab === 'body' && <MeasurementPanel lang={lang} category={category} mannequinSize={mannequinSize} onMannequinSizeChange={onMannequinSizeChange} measurements={measurements} onChange={onMeasurementsChange} />}
+            {tab === 'look' && <AvatarPanel lang={lang} category={category} mannequinSize={mannequinSize} onMannequinSizeChange={onMannequinSizeChange} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />}
             {tab === 'export' && <ExportPanel lang={lang} exportRef={exportRef} />}
           </div>
         </>}
@@ -454,7 +477,7 @@ function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChan
           <SceneBoundary key={`${view}-${garment?.pieces?.length}`} lang={lang} onRecover={() => onStep('sew')}>
             <div className="cl-canvas">
               <Canvas key={restartVersion} shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
-                <Scene dims={dims} lang={lang} debugView={bodyOnly ? 'off' : view} fabricId={fabricId} qualityTier={qualityTier} print={print} skinToneId={skinToneId} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} controlsRef={controlsRef} paused={paused} />
+                <Scene dims={dims} lang={lang} debugView={bodyOnly ? 'off' : view} fabricId={fabricId} qualityTier={qualityTier} print={print} skinToneId={skinToneId} mannequin={mannequin} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} controlsRef={controlsRef} paused={paused} />
               </Canvas>
             </div>
           </SceneBoundary>

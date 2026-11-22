@@ -12,7 +12,7 @@ import ExportControls from './ExportControls'
 import { getAssetBase } from '../assetBase'
 
 // The actual <Canvas> contents: lighting, ground, avatar, orbit camera.
-export default function Scene({ paused = false, dims, lang = 'en', debugView, fabricId, qualityTier, print = null, skinToneId, poseId, garment, seamEditor, avatarGLBUrl, statsRef, exportRef, onPoseWarning, controlsRef }) {
+export default function Scene({ paused = false, dims, lang = 'en', debugView, fabricId, qualityTier, print = null, skinToneId, mannequin = null, poseId, garment, seamEditor, avatarGLBUrl, statsRef, exportRef, onPoseWarning, controlsRef }) {
   // Disabled while grabbing a cloth particle — otherwise dragging the mouse
   // to move the pin also orbits the camera at the same time, fighting itself.
   const [dragging, setDragging] = useState(false)
@@ -27,6 +27,9 @@ export default function Scene({ paused = false, dims, lang = 'en', debugView, fa
   // visual result (subject spins in place) without fighting user-driven
   // orbit input mid-capture.
   const turntableGroupRef = useRef(null)
+  const skinColor = skinToneId ? resolveSkinToneHex(skinToneId) : (mannequin?.skinHex || resolveSkinToneHex())
+  const hairColor = mannequin?.hairColor ?? null
+  const hairStyle = mannequin?.hairStyle ?? null
 
   return (
     <>
@@ -50,7 +53,7 @@ export default function Scene({ paused = false, dims, lang = 'en', debugView, fa
 
       <group ref={turntableGroupRef}>
         {debugView !== 'seams' && (
-          <BodyAvatar dims={dims} lang={lang} url={avatarGLBUrl} collisionRigRef={meshFitRigRef} bodyColliderRef={bodyColliderRef} skinColor={resolveSkinToneHex(skinToneId)} pose={poseId} paused={paused} onPoseWarning={onPoseWarning} />
+          <BodyAvatar dims={dims} lang={lang} url={avatarGLBUrl} collisionRigRef={meshFitRigRef} bodyColliderRef={bodyColliderRef} skinColor={skinColor} hairColor={hairColor} hairStyle={hairStyle} pose={poseId} paused={paused} onPoseWarning={onPoseWarning} />
         )}
         {debugView === 'pieces' && <StaticPiecesDebug dims={dims} pose={poseId} pieces={garment?.pieces} seams={garment?.seams} />}
         {debugView === 'weld' && <WeldDebugView dims={dims} pose={poseId} pieces={garment?.pieces} seams={garment?.seams} />}

@@ -49,15 +49,19 @@ export function bumpWindow(x, center, halfWidth) {
 // consistent silhouette).
 export function femaleTorsoSculpt(dims) {
   const { hipY, span, chestR, waistR, hipR } = dims
+  const morph = dims.morph || null
+  const bustScale = morph && morph.bustScale != null ? morph.bustScale : 1
+  const lumbarScale = morph && morph.lumbarScale != null ? morph.lumbarScale : 1
+  const gluteScale = morph && morph.gluteFullness != null ? morph.gluteFullness : 1
   return {
     // Two lobes, not one central mound: phi0 is each lobe's own center
     // angle (radians either side of dead-center-front), phiHalfWidth is
     // narrower than phi0 so the two windows' zero-crossings meet (or pass)
     // before phi=0 — the "valley" between them is an exact, deliberate 0,
     // not an approximation (see torsoZBump's own test coverage).
-    breast: { centerY: hipY + span * 0.72, halfWidth: span * 0.13, amplitude: chestR * 0.10, phi0: 0.5, phiHalfWidth: 0.42 },
-    lumbar: { centerY: hipY + span * 0.38, halfWidth: span * 0.12, amplitude: waistR * 0.10 },
-    glute: { centerY: hipY - span * 0.02, halfWidth: span * 0.10, amplitude: hipR * 0.14 },
+    breast: { centerY: hipY + span * 0.72, halfWidth: span * 0.13, amplitude: chestR * 0.10 * bustScale, phi0: 0.5, phiHalfWidth: 0.42 },
+    lumbar: { centerY: hipY + span * 0.38, halfWidth: span * 0.12, amplitude: waistR * 0.10 * lumbarScale },
+    glute: { centerY: hipY - span * 0.02, halfWidth: span * 0.10, amplitude: hipR * 0.14 * gluteScale },
   }
 }
 
@@ -141,10 +145,14 @@ export function femaleTorsoExtraRadius(y, dims, zScale, samples = 96) {
 // assumed to inherit it just because the mechanism looks similar.
 export function maleTorsoSculpt(dims) {
   const { hipY, span, chestR, waistR, hipR } = dims
+  const morph = dims.morph || null
+  const chestScale = morph && morph.bustScale != null ? morph.bustScale : 1
+  const lumbarScale = morph && morph.lumbarScale != null ? morph.lumbarScale : 1
+  const gluteScale = morph && morph.gluteFullness != null ? morph.gluteFullness : 1
   return {
-    chest: { centerY: hipY + span * 0.72, halfWidth: span * 0.13, amplitude: chestR * 0.05, phiHalfWidth: 0.7 },
-    lumbar: { centerY: hipY + span * 0.38, halfWidth: span * 0.12, amplitude: waistR * 0.06 },
-    glute: { centerY: hipY - span * 0.02, halfWidth: span * 0.10, amplitude: hipR * 0.08 },
+    chest: { centerY: hipY + span * 0.72, halfWidth: span * 0.13, amplitude: chestR * 0.05 * chestScale, phiHalfWidth: 0.7 },
+    lumbar: { centerY: hipY + span * 0.38, halfWidth: span * 0.12, amplitude: waistR * 0.06 * lumbarScale },
+    glute: { centerY: hipY - span * 0.02, halfWidth: span * 0.10, amplitude: hipR * 0.08 * gluteScale },
   }
 }
 

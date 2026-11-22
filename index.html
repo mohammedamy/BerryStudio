@@ -203,12 +203,20 @@
               <div class="v3d-select-wrap">
                 <label for="v3dModelSelect" class="sr-only" data-i18n="mannequinModel">Mannequin</label>
                 <select id="v3dModelSelect" class="v3d-select" title="Mannequin Model & Body Type">
-                  <option value="women" data-i18n="mannequinWomen">👩 Woman (168 cm)</option>
-                  <option value="men" data-i18n="mannequinMen">👨 Man (178 cm)</option>
-                  <option value="girls" data-i18n="mannequinGirls">👧 Girl (130 cm)</option>
-                  <option value="boys" data-i18n="mannequinBoys">👦 Boy (132 cm)</option>
+                  <option value="women" data-i18n="mannequinWomen">👩 Woman</option>
+                  <option value="men" data-i18n="mannequinMen">👨 Man</option>
+                  <option value="girls" data-i18n="mannequinGirls">👧 Girl</option>
+                  <option value="boys" data-i18n="mannequinBoys">👦 Boy</option>
                 </select>
               </div>
+              <div class="v3d-select-wrap">
+                <label for="v3dMannequinSizeSelect" class="sr-only" data-i18n="mannequinSize">Mannequin Size</label>
+                <select id="v3dMannequinSizeSelect" class="v3d-select v3d-select-size" title="Mannequin Size (XS–XXL)"></select>
+              </div>
+              <button id="v3dMannequinCatalogBtn" class="v3d-btn" title="Browse All 24 Mannequins" aria-label="Browse All 24 Mannequins">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                <span data-i18n="mannequinCatalog">24 Models</span>
+              </button>
               <label class="v3d-btn-label" title="Rotate 360°"><input type="checkbox" id="spinToggle" checked> <span data-i18n="v3dSpin">360°</span></label>
               <label class="v3d-btn-label" title="Walk Animation"><input type="checkbox" id="walkToggle" checked> <span data-i18n="v3dWalk">Walk</span></label>
             </div>
@@ -272,6 +280,26 @@
                 <span data-i18n="v3dExportShort">OBJ</span>
               </button>
             </div>
+          </div>
+
+          <!-- Floating 24-Mannequin Studio Catalog Panel -->
+          <div id="v3dMannequinPanel" class="v3d-floating-panel v3d-mannequin-panel hidden" aria-labelledby="v3dMannequinPanelTitle">
+            <div class="v3d-panel-head">
+              <div>
+                <h3 id="v3dMannequinPanelTitle" data-i18n="mannequinCatalogTitle">Studio Mannequins (24)</h3>
+                <div class="v3d-panel-sub" data-i18n="mannequinCatalogSub">6 sizes (XS–XXL) × 4 categories</div>
+              </div>
+              <button id="v3dMannequinClose" class="v3d-panel-close" title="Close" aria-label="Close">&times;</button>
+            </div>
+            <div class="v3d-mannequin-tabs" id="v3dMannequinTabs" role="tablist">
+              <button type="button" class="v3d-mq-tab active" data-mq-cat="all" data-i18n="mannequinAllCount">All (24)</button>
+              <button type="button" class="v3d-mq-tab" data-mq-cat="women" data-i18n="women">Women</button>
+              <button type="button" class="v3d-mq-tab" data-mq-cat="girls" data-i18n="girls">Girls</button>
+              <button type="button" class="v3d-mq-tab" data-mq-cat="men" data-i18n="men">Men</button>
+              <button type="button" class="v3d-mq-tab" data-mq-cat="boys" data-i18n="boys">Boys</button>
+            </div>
+            <div id="v3dMannequinGrid" class="v3d-mannequin-grid"></div>
+            <div class="v3d-mannequin-future" data-i18n="mannequinFutureNote">Coming next: XXS · XXXL · 4XL · 5XL</div>
           </div>
 
           <!-- Floating Accessories Drawer / Panel -->
