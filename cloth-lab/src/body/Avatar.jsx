@@ -29,7 +29,24 @@ function disposeGroup(group) {
   mats.forEach((m) => m.dispose())
 }
 
-export default function Avatar({ dims, skinColor = '#dca98e', hairColor = null, hairStyle = null, hairType = 'straight', headwear = 'none', headwearColor = null, pose = 'standing', paused = false, bodyColliderRef = null }) {
+export default function Avatar({
+  dims,
+  skinColor = '#dca98e',
+  hairColor = null,
+  hairStyle = null,
+  hairType = 'straight',
+  hairLength = 'natural',
+  hairHighlight = 'none',
+  headwear = 'none',
+  headwearColor = null,
+  headwearFabric = null,
+  headwearLength = null,
+  undercapColor = null,
+  niqabEyeScreen = null,
+  pose = 'standing',
+  paused = false,
+  bodyColliderRef = null,
+}) {
   const category = categoryOf(dims.female, dims.kid)
   const walkTimeRef = useRef(0)
 
@@ -44,8 +61,14 @@ export default function Avatar({ dims, skinColor = '#dca98e', hairColor = null, 
       hairColor,
       hairStyle,
       hairType,
+      hairLength,
+      hairHighlight,
       headwear,
       headwearColor,
+      headwearFabric,
+      headwearLength,
+      undercapColor,
+      niqabEyeScreen,
       morph: dims.morph || null,
       pose: isWalk ? 'standing' : pose,
       bakeStatic: !isWalk,
@@ -71,7 +94,24 @@ export default function Avatar({ dims, skinColor = '#dca98e', hairColor = null, 
     }
 
     return built
-  }, [category, dims, skinColor, hairColor, hairStyle, hairType, headwear, headwearColor, pose, bodyColliderRef])
+  }, [
+    category,
+    dims,
+    skinColor,
+    hairColor,
+    hairStyle,
+    hairType,
+    hairLength,
+    hairHighlight,
+    headwear,
+    headwearColor,
+    headwearFabric,
+    headwearLength,
+    undercapColor,
+    niqabEyeScreen,
+    pose,
+    bodyColliderRef,
+  ])
 
   useFrame((_, delta) => {
     if (pose !== 'walk' || paused || !mannequin.skeleton) return

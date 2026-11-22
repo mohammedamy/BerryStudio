@@ -92,9 +92,15 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
       [pattern.category]: {
         hairStyle: mq.hairStyle,
         hairType: mq.hairType,
+        hairLength: mq.hairLength,
+        hairHighlight: mq.hairHighlight,
         hairColor: mq.hairColor ?? mq.hairHex,
         headwear: mq.headwear,
         headwearColor: mq.headwearColor ?? mq.headwearHex,
+        headwearFabric: mq.headwearFabric,
+        headwearLength: mq.headwearLength,
+        undercapColor: mq.undercapColor ?? mq.undercapHex,
+        niqabEyeScreen: mq.niqabEyeScreen,
       },
     }
   })
@@ -155,11 +161,18 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
       ...activeMannequin,
       hairStyle: stylingSpec.hairStyle,
       hairType: stylingSpec.hairType,
+      hairLength: stylingSpec.hairLength,
+      hairHighlight: stylingSpec.hairHighlight,
       hairHex: stylingSpec.hairHex,
       hairColor: stylingSpec.hairColor,
       headwear: stylingSpec.headwear,
       headwearHex: stylingSpec.headwearHex,
       headwearColor: stylingSpec.headwearColor,
+      headwearFabric: stylingSpec.headwearFabric,
+      headwearLength: stylingSpec.headwearLength,
+      undercapHex: stylingSpec.undercapHex,
+      undercapColor: stylingSpec.undercapColor,
+      niqabEyeScreen: stylingSpec.niqabEyeScreen,
     }),
     [activeMannequin, stylingSpec],
   )
@@ -225,9 +238,15 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
         [payload.category]: {
           hairStyle: mq.hairStyle,
           hairType: mq.hairType,
+          hairLength: mq.hairLength,
+          hairHighlight: mq.hairHighlight,
           hairColor: mq.hairColor ?? mq.hairHex,
           headwear: mq.headwear,
           headwearColor: mq.headwearColor ?? mq.headwearHex,
+          headwearFabric: mq.headwearFabric,
+          headwearLength: mq.headwearLength,
+          undercapColor: mq.undercapColor ?? mq.undercapHex,
+          niqabEyeScreen: mq.niqabEyeScreen,
         },
       }))
     }

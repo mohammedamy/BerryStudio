@@ -1,5 +1,21 @@
 # Changelog
 
+## Enhanced Hairstyles, Long Hair Collection & Customizable Long Islamic Hijab / Niqab Studio (`berrystudio-v100`)
+
+Dramatically upgrades 3D mannequin hairstyle realism, introduces a comprehensive collection of cascading long hairstyles across categories, and adds authentic customizable long Islamic hijabs and niqab versions synchronized across 3D Preview, Cloth Lab, BodyForm, and the 3D Measurement Teaching Studio:
+
+- **Customizable Hair & Headwear Styling Registry (`js/mannequin-styling.js`)**:
+  - Adds `HAIR_LENGTH_PRESETS` (`short`, `natural`, `long`, `extra_long`) and `HAIR_HIGHLIGHT_PRESETS` (balayage & streak tones: Honey, Caramel, Ash Pearl, Copper, Rose, Silver) with custom hex highlight support.
+  - Expands `HAIRCUT_CATALOG` with lush long hairstyles (`long_waist_straight`, `long_hollywood_waves`, `long_layered_curls`, `long_half_up`, `long_high_ponytail`, `long_side_sweep`, `long_twin_braids` for women/girls; `long_men_waves`, `long_men_straight`, `long_men_half_up` for men/boys) while keeping all 44 preset IDs backward-compatible.
+  - Expands `HEADWEAR_CATALOG` for women/girls with **4 Long Islamic Hijab** styles (`hijab_long_draped`, `hijab_long_khimar`, `hijab_french_jilbab`, `hijab_long_shayla`) and **4 Long Islamic Niqab** versions (`niqab_long_saudi`, `niqab_long_layered`, `niqab_khimar_long`, `niqab_eye_screen`), plus `HEADWEAR_FABRIC_PRESETS` (`crepe`, `silk`, `chiffon`, `jersey`), `HEADWEAR_LENGTH_PRESETS` (`standard`, `long`, `extra_long`), `UNDERCAP_COLOR_PRESETS`, and `niqabEyeScreen` support in `resolveMannequinStyling()`.
+- **Enhanced 3D Hair & Long Islamic Hijab/Niqab Sculpting Engine (`js/human-mannequin.js`)**:
+  - Upgrades hair shading with procedural anisotropic strand fiber textures, specular sheen bands, root-to-tip dimensional highlights, and soft temple hairline tapering.
+  - Adds exact `bodyGeo`-derived torso & shoulder clearance sampling (`sampleTorsoClearance`) so waist-length curtains, Hollywood waves, layered corkscrew curls, sculpted braids, high flowing ponytails, long khimars, French jilbabs, and multi-layer niqabs drape smoothly over the trapezius, bust, and back with zero body clipping across `XXS–6XL`.
+  - Adds sculpted multi-part niqab assembly (`buildNiqabAssembly`): inner undercap, outer hood, forehead brow tie-band with rear ribbons, anatomically framed eye aperture, infraorbital nose-bridge-to-waist pleated veil, cascading dual-tier back veil option, and toggleable translucent chiffon eye screen (`Ghashwa`).
+- **Multi-Surface UI & Bridge Parity (`js/app.js`, `js/three-view.js`, `js/body-page.js`, `js/i18n.js`, `css/styles.css`, `cloth-lab/src/*`)**:
+  - Wires hair length, highlights, grouped long haircuts, grouped hijab/niqab selector, fabric finish, drape length, undercap color, and eye-screen toggle across 3D Preview and Cloth Lab (`AvatarPanel.jsx`) in EN and AR RTL, persisting in `localStorage` and synced through the Cloth Lab bridge and BodyForm.
+- **Verification & Cache (`test/mannequin-styling.test.js`, `e2e/mannequin-styling.spec.js`, `sw.js`)**: Covers all new long hairstyles, long hijabs, long niqabs, fabric/length/undercap/eye-screen options, torso clearance across sizes, and bumps offline precache to `berrystudio-v100`.
+
 ## Comprehensive Shoulder Sewing, 3D Drape & Mannequin Shoulder Motion Upgrade (`berrystudio-v99`)
 
 Upgrades shoulder sewing accuracy, frame-0 3D shoulder/armscye placement, 3D Preview garment shoulder silhouette & shading, and mannequin shoulder anatomy/motion across the entire studio:

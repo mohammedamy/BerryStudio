@@ -60,18 +60,41 @@ test('3D Preview Hair Customization & Women Hijabs / Men Ghutra-Shemagh-Hats + P
   await page.locator('#v3dMannequinModeBar [data-mq-mode="styling"]').click();
   await expect(page.locator('#v3dMannequinStylingView')).toBeVisible();
 
-  // Customize Women's haircut, hair texture, color, and hijab style + hijab color
+  // Customize Women's haircut (new long waist straight), length, highlight, texture, color, and long Islamic hijab + niqab controls
+  await page.locator('#v3dHaircutSelect').selectOption('long_waist_straight');
+  await page.locator('#v3dMannequinStylingView [data-hair-length="extra_long"]').click();
+  await page.locator('#v3dMannequinStylingView [data-hair-highlight="warm_honey"]').click();
   await page.locator('#v3dHaircutSelect').selectOption('long_wavy');
   await page.locator('#v3dMannequinStylingView [data-hair-type="curly"]').click();
   await page.locator('#v3dMannequinStylingView [data-hair-color="#b88b4a"]').click();
 
-  // Verify women's hijabs are present and men's headwear is not mixed in
+  // Verify women's hijabs, long Islamic hijabs, and niqab versions are present and men's headwear is excluded
   await expect(page.locator('#v3dMannequinStylingView [data-headwear-id="hijab_turkish"]')).toBeVisible();
+  await expect(page.locator('#v3dMannequinStylingView [data-headwear-id="hijab_long_khimar"]')).toBeVisible();
+  await expect(page.locator('#v3dMannequinStylingView [data-headwear-id="hijab_french_jilbab"]')).toBeVisible();
   await expect(page.locator('#v3dMannequinStylingView [data-headwear-id="hijab_niqab"]')).toBeVisible();
+  await expect(page.locator('#v3dMannequinStylingView [data-headwear-id="niqab_long_saudi"]')).toBeVisible();
+  await expect(page.locator('#v3dMannequinStylingView [data-headwear-id="niqab_long_layered"]')).toBeVisible();
+  await expect(page.locator('#v3dMannequinStylingView [data-headwear-id="niqab_eye_screen"]')).toBeVisible();
   await expect(page.locator('#v3dMannequinStylingView [data-headwear-id="ghutra_iqal"]')).toHaveCount(0);
+
+  // Test long niqab customization (fabric, length, undercap, eye screen toggle) then switch back to hijab_turkish for persistence assertions
+  await page.locator('#v3dMannequinStylingView [data-headwear-id="niqab_long_layered"]').click();
+  await page.locator('#v3dMannequinStylingView [data-headwear-fabric="chiffon"]').click();
+  await page.locator('#v3dMannequinStylingView [data-headwear-length="extra_long"]').click();
+  await page.locator('#v3dMannequinStylingView [data-undercap-color="#5c2030"]').click();
+  await page.locator('#v3dNiqabEyeScreenToggle').click();
+  let niqabCheck = await page.evaluate(() => JSON.parse(localStorage.getItem('pps') || '{}').mannequinStyling.women);
+  expect(niqabCheck.headwear).toBe('niqab_long_layered');
+  expect(niqabCheck.headwearFabric).toBe('chiffon');
+  expect(niqabCheck.headwearLength).toBe('extra_long');
+  expect(niqabCheck.undercapColor).toBe('#5c2030');
+  expect(niqabCheck.niqabEyeScreen).toBe(true);
 
   await page.locator('#v3dMannequinStylingView [data-headwear-id="hijab_turkish"]').click();
   await page.locator('#v3dMannequinStylingView [data-headwear-color="#1f513f"]').click();
+  await page.locator('#v3dMannequinStylingView [data-headwear-fabric="silk"]').click();
+  await page.locator('#v3dMannequinStylingView [data-headwear-length="long"]').click();
 
   // Switch mannequin category to Men and test Shemagh & Iqal + Fedora
   await page.locator('#v3dModelSelect').selectOption('men');
@@ -86,10 +109,14 @@ test('3D Preview Hair Customization & Women Hijabs / Men Ghutra-Shemagh-Hats + P
   // Verify localStorage saved both categories cleanly
   const savedStyling = await page.evaluate(() => JSON.parse(localStorage.getItem('pps') || '{}').mannequinStyling);
   expect(savedStyling.women.hairStyle).toBe('long_wavy');
+  expect(savedStyling.women.hairLength).toBe('extra_long');
+  expect(savedStyling.women.hairHighlight).toBe('warm_honey');
   expect(savedStyling.women.hairType).toBe('curly');
   expect(savedStyling.women.hairColor).toBe('#b88b4a');
   expect(savedStyling.women.headwear).toBe('hijab_turkish');
   expect(savedStyling.women.headwearColor).toBe('#1f513f');
+  expect(savedStyling.women.headwearFabric).toBe('silk');
+  expect(savedStyling.women.headwearLength).toBe('long');
   expect(savedStyling.men.headwear).toBe('shemagh_iqal');
 
   // Switch back to Women and reload page to verify persistence across reload

@@ -5,10 +5,15 @@ import { computeMeasurements } from '../js/data.js';
 import { getMannequinFor } from '../js/mannequin-catalog.js';
 import {
   HAIR_TYPES,
+  HAIR_LENGTH_PRESETS,
+  HAIR_HIGHLIGHT_PRESETS,
   HAIR_COLOR_PRESETS,
   HAIRCUT_CATALOG,
   HEADWEAR_CATALOG,
   HEADWEAR_COLOR_PRESETS,
+  HEADWEAR_FABRIC_PRESETS,
+  HEADWEAR_LENGTH_PRESETS,
+  UNDERCAP_COLOR_PRESETS,
   getHaircutsForCategory,
   getHeadwearForCategory,
   getHeadwearSpec,
@@ -203,4 +208,179 @@ test('3D Headwear Engine: all women hijabs/hats and all men ghutra/shemagh/shawl
   assert.ok(assertGroupGeometryFinite(girlHijab.headGroup.getObjectByName('headwearGroup'), 'girls hijab').meshCount >= 2);
   const boyGhutra = buildHumanMannequin(THREE, 'boys', mBoys, { headwear: 'ghutra_iqal', bakeStatic: true });
   assert.ok(assertGroupGeometryFinite(boyGhutra.headGroup.getObjectByName('headwearGroup'), 'boys ghutra_iqal').meshCount >= 4);
+});
+
+function groupWorldYBounds(group) {
+  group.updateMatrixWorld(true);
+  let minY = Infinity;
+  let maxY = -Infinity;
+  const v = new THREE.Vector3();
+  group.traverse((obj) => {
+    if (!obj.isMesh || !obj.geometry?.attributes?.position) return;
+    const pos = obj.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.set(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(obj.matrixWorld);
+      if (v.y < minY) minY = v.y;
+      if (v.y > maxY) maxY = v.y;
+    }
+  });
+  return { minY, maxY };
+}
+
+test('Customization Presets, Long Hairstyles, Long Islamic Hijabs & Long Niqabs across sizes', () => {
+  assert.ok(HAIR_LENGTH_PRESETS.length >= 4);
+  assert.ok(HAIR_HIGHLIGHT_PRESETS.length >= 5);
+  assert.ok(HEADWEAR_FABRIC_PRESETS.length >= 4);
+  assert.ok(HEADWEAR_LENGTH_PRESETS.length >= 3);
+  assert.ok(UNDERCAP_COLOR_PRESETS.length >= 6);
+
+  for (const list of [HAIR_LENGTH_PRESETS, HAIR_HIGHLIGHT_PRESETS, HEADWEAR_FABRIC_PRESETS, HEADWEAR_LENGTH_PRESETS, UNDERCAP_COLOR_PRESETS]) {
+    for (const item of list) {
+      assert.ok(item.label?.en && item.label?.ar, `preset ${item.id} has EN/AR labels`);
+      if (item.hex) assert.match(item.hex, /^#[0-9a-f]{6}$/i);
+    }
+  }
+
+  // Verify resolveMannequinStyling resolves all new hair & hijab/niqab customization fields cleanly
+  const womenM = getMannequinFor('women', 'M');
+  const niqabResolved = resolveMannequinStyling('women', womenM, {
+    hairStyle: 'long_waist_straight',
+    hairLength: 'extra_long',
+    hairHighlight: 'warm_honey',
+    headwear: 'niqab_eye_screen',
+    headwearFabric: 'silk',
+    headwearLength: 'extra_long',
+    undercapColor: '#5c2030',
+  });
+  assert.equal(niqabResolved.hairLength, 'extra_long');
+  assert.equal(niqabResolved.hairHighlight, 'warm_honey');
+  assert.equal(niqabResolved.headwearFabric, 'silk');
+  assert.equal(niqabResolved.headwearLength, 'extra_long');
+  assert.equal(niqabResolved.undercapHex, '#5c2030');
+  assert.equal(niqabResolved.niqabEyeScreen, true);
+  assert.equal(niqabResolved.hasOverrides, true);
+
+  const eyeOffResolved = resolveMannequinStyling('women', womenM, {
+    headwear: 'niqab_eye_screen',
+    niqabEyeScreen: false,
+  });
+  assert.equal(eyeOffResolved.niqabEyeScreen, false);
+
+  // Verify every new long hairstyle across women, girls, men, and boys builds finite geometry
+  const mWomenXS = computeMeasurements({ category: 'women', size: 'XS', standard: 'intl' });
+  const mWomenM = computeMeasurements({ category: 'women', size: 'M', standard: 'intl' });
+  const mWomen4XL = computeMeasurements({ category: 'women', size: 'XXXXL', standard: 'intl' });
+  const mGirls = computeMeasurements({ category: 'girls', size: 'L', standard: 'intl' });
+  const mMen = computeMeasurements({ category: 'men', size: 'M', standard: 'intl' });
+  const mBoys = computeMeasurements({ category: 'boys', size: 'XL', standard: 'intl' });
+
+  const womenLongCuts = [
+    'long_waist_straight',
+    'long_hollywood_waves',
+    'long_layered_curls',
+    'long_half_up',
+    'long_high_ponytail',
+    'long_side_sweep',
+    'long_twin_braids',
+  ];
+  for (const cut of womenLongCuts) {
+    const built = buildHumanMannequin(THREE, 'women', mWomenM, {
+      hairStyle: cut,
+      hairType: 'wavy',
+      hairLength: 'long',
+      hairHighlight: 'warm_honey',
+      hairColor: '#3f281b',
+      bakeStatic: true,
+    });
+    const hairGroup = built.headGroup.getObjectByName('hairGroup');
+    const stats = assertGroupGeometryFinite(hairGroup, `women ${cut}`);
+    assert.ok(stats.meshCount >= 2 && stats.totalVerts > 200, `women ${cut}: lush multi-mesh long hair geometry`);
+  }
+
+  for (const cut of ['long_waist_straight', 'long_hollywood_waves', 'long_layered_curls', 'long_twin_braids', 'long_high_ponytail']) {
+    const built = buildHumanMannequin(THREE, 'girls', mGirls, { hairStyle: cut, bakeStatic: true });
+    assert.ok(assertGroupGeometryFinite(built.headGroup.getObjectByName('hairGroup'), `girls ${cut}`).meshCount >= 2);
+  }
+  for (const cut of ['long_men_waves', 'long_men_straight', 'long_men_half_up']) {
+    const built = buildHumanMannequin(THREE, 'men', mMen, { hairStyle: cut, bakeStatic: true });
+    assert.ok(assertGroupGeometryFinite(built.headGroup.getObjectByName('hairGroup'), `men ${cut}`).meshCount >= 2);
+  }
+  for (const cut of ['long_men_waves', 'long_men_straight']) {
+    const built = buildHumanMannequin(THREE, 'boys', mBoys, { hairStyle: cut, bakeStatic: true });
+    assert.ok(assertGroupGeometryFinite(built.headGroup.getObjectByName('hairGroup'), `boys ${cut}`).meshCount >= 2);
+  }
+
+  // Verify hairLength visibly extends downward reach (extra_long minY < short minY)
+  const shortLongBuilt = buildHumanMannequin(THREE, 'women', mWomenM, { hairStyle: 'long_waist_straight', hairLength: 'short', bakeStatic: true });
+  const extraLongBuilt = buildHumanMannequin(THREE, 'women', mWomenM, { hairStyle: 'long_waist_straight', hairLength: 'extra_long', bakeStatic: true });
+  assert.ok(
+    groupWorldYBounds(extraLongBuilt.headGroup.getObjectByName('hairGroup')).minY
+    < groupWorldYBounds(shortLongBuilt.headGroup.getObjectByName('hairGroup')).minY - 0.08,
+    'extra_long hair drapes significantly deeper than trimmed hair'
+  );
+
+  // Verify all 8 new long Islamic hijabs & niqabs across XS, M, and 4XL sizes
+  const newIslamicStyles = [
+    'hijab_long_draped',
+    'hijab_long_khimar',
+    'hijab_french_jilbab',
+    'hijab_long_shayla',
+    'niqab_long_saudi',
+    'niqab_long_layered',
+    'niqab_khimar_long',
+    'niqab_eye_screen',
+  ];
+  for (const hwId of newIslamicStyles) {
+    assert.ok(getHeadwearForCategory('women').some((h) => h.id === hwId), `women catalog includes ${hwId}`);
+    assert.ok(getHeadwearForCategory('girls').some((h) => h.id === hwId), `girls catalog includes ${hwId}`);
+    assert.equal(getHeadwearForCategory('men').some((h) => h.id === hwId), false, `men excludes ${hwId}`);
+    for (const [sizeTag, meas] of [['XS', mWomenXS], ['M', mWomenM], ['4XL', mWomen4XL]]) {
+      const built = buildHumanMannequin(THREE, 'women', meas, {
+        headwear: hwId,
+        headwearColor: '#1e2028',
+        headwearFabric: 'chiffon',
+        headwearLength: 'extra_long',
+        undercapColor: '#131418',
+        hairStyle: 'long_waist_straight',
+        bakeStatic: true,
+      });
+      const hwGroup = built.headGroup.getObjectByName('headwearGroup');
+      const stats = assertGroupGeometryFinite(hwGroup, `women ${sizeTag} ${hwId}`);
+      assert.ok(stats.meshCount >= 3 && stats.totalVerts > 500, `${sizeTag} ${hwId}: rich sculpted Islamic headwear`);
+      const hairStats = assertGroupGeometryFinite(built.headGroup.getObjectByName('hairGroup'), `hair under ${hwId}`);
+      assert.equal(hairStats.meshCount, 0, `${sizeTag} ${hwId}: hides exterior hair cleanly`);
+
+      // Check torso clearance around mid-chest / underbust (no cape vertices inside core chest ellipsoid)
+      built.group.updateMatrixWorld(true);
+      const yCheckLo = built.dims.hipY + built.dims.span * 0.45;
+      const yCheckHi = built.dims.hipY + built.dims.span * 0.78;
+      const minFrontClear = built.dims.chestR * 0.85;
+      const vTmp = new THREE.Vector3();
+      hwGroup.traverse((obj) => {
+        if (!obj.isMesh || !obj.geometry?.attributes?.position) return;
+        const pos = obj.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          vTmp.set(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(obj.matrixWorld);
+          if (vTmp.y >= yCheckLo && vTmp.y <= yCheckHi && Math.abs(vTmp.x) < built.dims.chestR * 0.5) {
+            assert.ok(Math.hypot(vTmp.x, vTmp.z) > minFrontClear, `${sizeTag} ${hwId}: mid-torso cape clears core body`);
+          }
+        }
+      });
+    }
+  }
+
+  // Verify headwearLength visibly lowers drape hem (extra_long < standard)
+  const khimarStd = buildHumanMannequin(THREE, 'women', mWomenM, { headwear: 'hijab_long_khimar', headwearLength: 'standard', bakeStatic: true });
+  const khimarXLong = buildHumanMannequin(THREE, 'women', mWomenM, { headwear: 'hijab_long_khimar', headwearLength: 'extra_long', bakeStatic: true });
+  assert.ok(
+    groupWorldYBounds(khimarXLong.headGroup.getObjectByName('headwearGroup')).minY
+    < groupWorldYBounds(khimarStd.headGroup.getObjectByName('headwearGroup')).minY - 0.10,
+    'extra_long khimar drapes significantly lower than standard length'
+  );
+
+  // Verify niqabEyeScreen adds/removes the semi-sheer ghashwa mesh on demand
+  const withEyeScreen = buildHumanMannequin(THREE, 'women', mWomenM, { headwear: 'niqab_long_saudi', niqabEyeScreen: true, bakeStatic: true });
+  assert.ok(withEyeScreen.headGroup.getObjectByName('niqabEyeScreenMesh'), 'eye screen mesh built when niqabEyeScreen=true');
+  const withoutEyeScreen = buildHumanMannequin(THREE, 'women', mWomenM, { headwear: 'niqab_eye_screen', niqabEyeScreen: false, bakeStatic: true });
+  assert.equal(withoutEyeScreen.headGroup.getObjectByName('niqabEyeScreenMesh'), undefined, 'eye screen omitted when niqabEyeScreen=false');
 });

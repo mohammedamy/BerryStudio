@@ -19,10 +19,16 @@ import {
 } from './mannequin-catalog.js';
 import {
   HAIR_TYPES,
+  HAIR_LENGTH_PRESETS,
+  HAIR_HIGHLIGHT_PRESETS,
   HAIR_COLOR_PRESETS,
   HEADWEAR_COLOR_PRESETS,
+  HEADWEAR_FABRIC_PRESETS,
+  HEADWEAR_LENGTH_PRESETS,
+  UNDERCAP_COLOR_PRESETS,
   getHaircutsForCategory,
   getHeadwearForCategory,
+  getHeadwearSpec,
   resolveMannequinStyling,
 } from './mannequin-styling.js';
 import { Canvas } from './canvas.js';
@@ -4508,11 +4514,18 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     return Object.assign({}, base, {
       hairStyle: resolved.hairStyle,
       hairType: resolved.hairType,
+      hairLength: resolved.hairLength,
+      hairHighlight: resolved.hairHighlight,
       hairHex: resolved.hairHex,
       hairColor: resolved.hairColor,
       headwear: resolved.headwear,
       headwearHex: resolved.headwearHex,
       headwearColor: resolved.headwearColor,
+      headwearFabric: resolved.headwearFabric,
+      headwearLength: resolved.headwearLength,
+      undercapHex: resolved.undercapHex,
+      undercapColor: resolved.undercapColor,
+      niqabEyeScreen: resolved.niqabEyeScreen,
       styling: resolved,
     });
   }
@@ -4554,6 +4567,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const styled = getStyledMannequinFor(cat, effSize);
     const haircuts = getHaircutsForCategory(cat);
     const headwears = getHeadwearForCategory(cat);
+    const hwSpec = getHeadwearSpec(styled.headwear);
     const femaleCat = cat === "women" || cat === "girls";
     const catLabelMap = {
       women: T("mannequinWomen"),
@@ -4562,19 +4576,46 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       boys: T("mannequinBoys"),
     };
     const ar = state.lang === "ar";
-    const hairCutOpts = haircuts.map((c) => `<option value="${c.id}"${c.id === styled.hairStyle ? " selected" : ""}>${ar ? c.label.ar : c.label.en}</option>`).join("");
+    const longCuts = haircuts.filter((c) => c.group === "long");
+    const classicCuts = haircuts.filter((c) => c.group !== "long");
+    const optHtml = (list) => list.map((c) => `<option value="${c.id}"${c.id === styled.hairStyle ? " selected" : ""}>${ar ? c.label.ar : c.label.en}</option>`).join("");
+    const hairCutOpts = `${longCuts.length ? `<optgroup label="${T("stylingGroupLongHair")}">${optHtml(longCuts)}</optgroup>` : ""}<optgroup label="${T("stylingGroupClassicHair")}">${optHtml(classicCuts)}</optgroup>`;
     const typePills = HAIR_TYPES.map((ht) => `<button type="button" class="v3d-style-pill${ht.id === styled.hairType ? " active" : ""}" data-hair-type="${ht.id}" aria-pressed="${ht.id === styled.hairType}">${ar ? ht.label.ar : ht.label.en}</button>`).join("");
+    const lengthPills = HAIR_LENGTH_PRESETS.map((hl) => `<button type="button" class="v3d-style-pill${hl.id === styled.hairLength ? " active" : ""}" data-hair-length="${hl.id}" aria-pressed="${hl.id === styled.hairLength}">${ar ? hl.label.ar : hl.label.en}</button>`).join("");
+    const highlightSwatches = HAIR_HIGHLIGHT_PRESETS.map((hh) => `<button type="button" class="${hh.hex ? "v3d-style-swatch" : "v3d-style-pill"}${hh.id === styled.hairHighlight ? " active" : ""}" data-hair-highlight="${hh.id}" title="${ar ? hh.label.ar : hh.label.en}" aria-label="${ar ? hh.label.ar : hh.label.en}"${hh.hex ? ` style="background:${hh.hex}"` : ""}>${hh.hex ? "" : T("stylingAuto")}</button>`).join("");
     const hairSwatches = HAIR_COLOR_PRESETS.slice(0, 12).map((sw) => `<button type="button" class="v3d-style-swatch${sw.hex === styled.hairHex ? " active" : ""}" data-hair-color="${sw.hex}" title="${ar ? sw.label.ar : sw.label.en}" aria-label="${ar ? sw.label.ar : sw.label.en}" style="background:${sw.hex}"></button>`).join("");
-    const hwChips = headwears.map((hw) => `<button type="button" class="v3d-style-chip${hw.id === styled.headwear ? " active" : ""}" data-headwear-id="${hw.id}" aria-pressed="${hw.id === styled.headwear}">${ar ? hw.label.ar : hw.label.en}</button>`).join("");
+    const renderHwChip = (hw) => `<button type="button" class="v3d-style-chip${hw.id === styled.headwear ? " active" : ""}" data-headwear-id="${hw.id}" aria-pressed="${hw.id === styled.headwear}">${ar ? hw.label.ar : hw.label.en}</button>`;
+    let hwGridHtml = "";
+    if (femaleCat) {
+      const noneHw = headwears.filter((h) => h.id === "none");
+      const hijabHws = headwears.filter((h) => h.group === "hijab");
+      const niqabHws = headwears.filter((h) => h.group === "niqab");
+      const hatHws = headwears.filter((h) => h.group === "hat");
+      hwGridHtml = `${noneHw.map(renderHwChip).join("")}${hijabHws.length ? `<div class="v3d-style-subhead">${T("stylingGroupHijabs")}</div>${hijabHws.map(renderHwChip).join("")}` : ""}${niqabHws.length ? `<div class="v3d-style-subhead">${T("stylingGroupNiqabs")}</div>${niqabHws.map(renderHwChip).join("")}` : ""}${hatHws.length ? `<div class="v3d-style-subhead">${T("stylingGroupHats")}</div>${hatHws.map(renderHwChip).join("")}` : ""}`;
+    } else {
+      hwGridHtml = headwears.map(renderHwChip).join("");
+    }
     const hwSwatches = HEADWEAR_COLOR_PRESETS.slice(0, 12).map((sw) => `<button type="button" class="v3d-style-swatch${sw.hex === styled.headwearHex ? " active" : ""}" data-headwear-color="${sw.hex}" title="${ar ? sw.label.ar : sw.label.en}" aria-label="${ar ? sw.label.ar : sw.label.en}" style="background:${sw.hex}"></button>`).join("");
     const showHwColor = styled.headwear && styled.headwear !== "none";
-    host.innerHTML = `<div class="v3d-style-header"><span class="v3d-style-cat-pill">${catLabelMap[cat] || cat} · ${styled.size}</span>${styled.styling.hasOverrides ? `<button type="button" class="v3d-style-reset" id="v3dStylingResetBtn">${T("stylingReset")}</button>` : ""}</div><div class="v3d-style-group"><div class="v3d-style-label">${T("stylingHaircut")}</div><select id="v3dHaircutSelect" class="v3d-style-select" aria-label="${T("stylingHaircut")}">${hairCutOpts}</select></div><div class="v3d-style-group"><div class="v3d-style-label">${T("stylingHairType")}</div><div class="v3d-style-pills">${typePills}</div></div><div class="v3d-style-group"><div class="v3d-style-label-row"><span class="v3d-style-label">${T("stylingHairColor")}</span><button type="button" class="v3d-style-reset" id="v3dHairColorAutoBtn">${T("stylingAuto")}</button></div><div class="v3d-style-swatches">${hairSwatches}<input type="color" id="v3dHairColorPicker" class="v3d-style-color-input" value="${styled.hairHex}" title="${T("stylingCustomColor")}" aria-label="${T("stylingCustomColor")}"></div></div><div class="v3d-style-group"><div class="v3d-style-label">${femaleCat ? T("stylingHijabHeadwear") : T("stylingHeadwear")}</div><div class="v3d-style-headwear-grid">${hwChips}</div></div>${showHwColor ? `<div class="v3d-style-group"><div class="v3d-style-label-row"><span class="v3d-style-label">${T("stylingHeadwearColor")}</span><button type="button" class="v3d-style-reset" id="v3dHwColorAutoBtn">${T("stylingAuto")}</button></div><div class="v3d-style-swatches">${hwSwatches}<input type="color" id="v3dHeadwearColorPicker" class="v3d-style-color-input" value="${styled.headwearHex || "#f3ece4"}" title="${T("stylingCustomColor")}" aria-label="${T("stylingCustomColor")}"></div></div>` : ""}`;
+    const fabricPills = HEADWEAR_FABRIC_PRESETS.map((fb) => `<button type="button" class="v3d-style-pill${fb.id === styled.headwearFabric ? " active" : ""}" data-headwear-fabric="${fb.id}" aria-pressed="${fb.id === styled.headwearFabric}">${ar ? fb.label.ar : fb.label.en}</button>`).join("");
+    const hwLenPills = HEADWEAR_LENGTH_PRESETS.map((hl) => `<button type="button" class="v3d-style-pill${hl.id === styled.headwearLength ? " active" : ""}" data-headwear-length="${hl.id}" aria-pressed="${hl.id === styled.headwearLength}">${ar ? hl.label.ar : hl.label.en}</button>`).join("");
+    const ucSwatches = UNDERCAP_COLOR_PRESETS.slice(0, 8).map((sw) => `<button type="button" class="v3d-style-swatch${sw.hex === styled.undercapHex ? " active" : ""}" data-undercap-color="${sw.hex}" title="${ar ? sw.label.ar : sw.label.en}" aria-label="${ar ? sw.label.ar : sw.label.en}" style="background:${sw.hex}"></button>`).join("");
+    const hwExtrasHtml = showHwColor
+      ? `<div class="v3d-style-group"><div class="v3d-style-label-row"><span class="v3d-style-label">${T("stylingHeadwearColor")}</span><button type="button" class="v3d-style-reset" id="v3dHwColorAutoBtn">${T("stylingAuto")}</button></div><div class="v3d-style-swatches">${hwSwatches}<input type="color" id="v3dHeadwearColorPicker" class="v3d-style-color-input" value="${styled.headwearHex || "#f3ece4"}" title="${T("stylingCustomColor")}" aria-label="${T("stylingCustomColor")}"></div></div>${hwSpec.supportsFabric ? `<div class="v3d-style-group"><div class="v3d-style-label">${T("stylingHeadwearFabric")}</div><div class="v3d-style-pills-2">${fabricPills}</div></div>` : ""}${hwSpec.supportsLength ? `<div class="v3d-style-group"><div class="v3d-style-label">${T("stylingHeadwearLength")}</div><div class="v3d-style-pills">${hwLenPills}</div></div>` : ""}${hwSpec.supportsUndercap ? `<div class="v3d-style-group"><div class="v3d-style-label-row"><span class="v3d-style-label">${T("stylingUndercapColor")}</span><button type="button" class="v3d-style-reset" id="v3dUndercapAutoBtn">${T("stylingAuto")}</button></div><div class="v3d-style-swatches">${ucSwatches}<input type="color" id="v3dUndercapColorPicker" class="v3d-style-color-input" value="${styled.undercapHex || "#18191e"}" title="${T("stylingCustomColor")}" aria-label="${T("stylingCustomColor")}"></div></div>` : ""}${hwSpec.isNiqab ? `<div class="v3d-style-toggle-row"><span class="v3d-style-label">${T("stylingNiqabEyeScreen")}</span><button type="button" id="v3dNiqabEyeScreenToggle" class="v3d-style-toggle-btn${styled.niqabEyeScreen ? " active" : ""}" data-niqab-eye-screen="${styled.niqabEyeScreen ? "on" : "off"}" aria-pressed="${styled.niqabEyeScreen}">${styled.niqabEyeScreen ? T("stylingOn") : T("stylingOff")}</button></div>` : ""}`
+      : "";
+    host.innerHTML = `<div class="v3d-style-header"><span class="v3d-style-cat-pill">${catLabelMap[cat] || cat} · ${styled.size}</span>${styled.styling.hasOverrides ? `<button type="button" class="v3d-style-reset" id="v3dStylingResetBtn">${T("stylingReset")}</button>` : ""}</div><div class="v3d-style-group"><div class="v3d-style-label">${T("stylingHaircut")}</div><select id="v3dHaircutSelect" class="v3d-style-select" aria-label="${T("stylingHaircut")}">${hairCutOpts}</select></div><div class="v3d-style-group"><div class="v3d-style-label">${T("stylingHairLength")}</div><div class="v3d-style-pills-4">${lengthPills}</div></div><div class="v3d-style-group"><div class="v3d-style-label">${T("stylingHairType")}</div><div class="v3d-style-pills">${typePills}</div></div><div class="v3d-style-group"><div class="v3d-style-label-row"><span class="v3d-style-label">${T("stylingHairColor")}</span><button type="button" class="v3d-style-reset" id="v3dHairColorAutoBtn">${T("stylingAuto")}</button></div><div class="v3d-style-swatches">${hairSwatches}<input type="color" id="v3dHairColorPicker" class="v3d-style-color-input" value="${styled.hairHex}" title="${T("stylingCustomColor")}" aria-label="${T("stylingCustomColor")}"></div></div><div class="v3d-style-group"><div class="v3d-style-label">${T("stylingHairHighlight")}</div><div class="v3d-style-swatches">${highlightSwatches}</div></div><div class="v3d-style-group"><div class="v3d-style-label">${femaleCat ? T("stylingHijabHeadwear") : T("stylingHeadwear")}</div><div class="v3d-style-headwear-grid">${hwGridHtml}</div></div>${hwExtrasHtml}`;
     const resetBtn = $("#v3dStylingResetBtn");
     if (resetBtn) resetBtn.onclick = () => updateMannequinStyling(null, { notify: true });
     const cutSel = $("#v3dHaircutSelect");
     if (cutSel) cutSel.onchange = (e) => updateMannequinStyling({ hairStyle: e.target.value });
+    $$("#v3dMannequinStylingView [data-hair-length]").forEach((b) => {
+      b.onclick = () => updateMannequinStyling({ hairLength: b.dataset.hairLength });
+    });
     $$("#v3dMannequinStylingView [data-hair-type]").forEach((b) => {
       b.onclick = () => updateMannequinStyling({ hairType: b.dataset.hairType });
+    });
+    $$("#v3dMannequinStylingView [data-hair-highlight]").forEach((b) => {
+      b.onclick = () => updateMannequinStyling({ hairHighlight: b.dataset.hairHighlight });
     });
     $$("#v3dMannequinStylingView [data-hair-color]").forEach((b) => {
       b.onclick = () => updateMannequinStyling({ hairColor: b.dataset.hairColor });
@@ -4584,7 +4625,14 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const hPick = $("#v3dHairColorPicker");
     if (hPick) hPick.onchange = (e) => updateMannequinStyling({ hairColor: e.target.value });
     $$("#v3dMannequinStylingView [data-headwear-id]").forEach((b) => {
-      b.onclick = () => updateMannequinStyling({ headwear: b.dataset.headwearId, headwearColor: null }, { notify: true });
+      b.onclick = () => updateMannequinStyling({
+        headwear: b.dataset.headwearId,
+        headwearColor: null,
+        headwearFabric: null,
+        headwearLength: null,
+        undercapColor: null,
+        niqabEyeScreen: null,
+      }, { notify: true });
     });
     $$("#v3dMannequinStylingView [data-headwear-color]").forEach((b) => {
       b.onclick = () => updateMannequinStyling({ headwearColor: b.dataset.headwearColor });
@@ -4593,6 +4641,21 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if (hwAuto) hwAuto.onclick = () => updateMannequinStyling({ headwearColor: null });
     const hwPick = $("#v3dHeadwearColorPicker");
     if (hwPick) hwPick.onchange = (e) => updateMannequinStyling({ headwearColor: e.target.value });
+    $$("#v3dMannequinStylingView [data-headwear-fabric]").forEach((b) => {
+      b.onclick = () => updateMannequinStyling({ headwearFabric: b.dataset.headwearFabric });
+    });
+    $$("#v3dMannequinStylingView [data-headwear-length]").forEach((b) => {
+      b.onclick = () => updateMannequinStyling({ headwearLength: b.dataset.headwearLength });
+    });
+    $$("#v3dMannequinStylingView [data-undercap-color]").forEach((b) => {
+      b.onclick = () => updateMannequinStyling({ undercapColor: b.dataset.undercapColor });
+    });
+    const ucAuto = $("#v3dUndercapAutoBtn");
+    if (ucAuto) ucAuto.onclick = () => updateMannequinStyling({ undercapColor: null });
+    const ucPick = $("#v3dUndercapColorPicker");
+    if (ucPick) ucPick.onchange = (e) => updateMannequinStyling({ undercapColor: e.target.value });
+    const eyeBtn = $("#v3dNiqabEyeScreenToggle");
+    if (eyeBtn) eyeBtn.onclick = () => updateMannequinStyling({ niqabEyeScreen: !styled.niqabEyeScreen });
   }
   function syncMannequinSelectorsUI(){
     const avatarCat = state.avatarCategory || state.category || "women";
@@ -5062,9 +5125,16 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         hairColor: activeMq.hairColor,
         hairStyle: activeMq.hairStyle,
         hairType: activeMq.hairType,
+        hairLength: activeMq.hairLength,
+        hairHighlight: activeMq.hairHighlight,
         headwear: activeMq.headwear,
         headwearHex: activeMq.headwearHex,
         headwearColor: activeMq.headwearColor,
+        headwearFabric: activeMq.headwearFabric,
+        headwearLength: activeMq.headwearLength,
+        undercapHex: activeMq.undercapHex,
+        undercapColor: activeMq.undercapColor,
+        niqabEyeScreen: activeMq.niqabEyeScreen,
         morph: activeMq.morph,
       },
       fabricId: dominantFabricId(),

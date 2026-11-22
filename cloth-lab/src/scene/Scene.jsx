@@ -31,8 +31,14 @@ export default function Scene({ paused = false, dims, lang = 'en', debugView, fa
   const hairColor = mannequin?.hairColor ?? mannequin?.hairHex ?? null
   const hairStyle = mannequin?.hairStyle ?? null
   const hairType = mannequin?.hairType ?? 'straight'
+  const hairLength = mannequin?.hairLength ?? 'natural'
+  const hairHighlight = mannequin?.hairHighlight ?? 'none'
   const headwear = mannequin?.headwear ?? 'none'
   const headwearColor = mannequin?.headwearColor ?? mannequin?.headwearHex ?? null
+  const headwearFabric = mannequin?.headwearFabric ?? null
+  const headwearLength = mannequin?.headwearLength ?? null
+  const undercapColor = mannequin?.undercapColor ?? mannequin?.undercapHex ?? null
+  const niqabEyeScreen = mannequin?.niqabEyeScreen ?? null
 
   return (
     <>
@@ -56,7 +62,28 @@ export default function Scene({ paused = false, dims, lang = 'en', debugView, fa
 
       <group ref={turntableGroupRef}>
         {debugView !== 'seams' && (
-          <BodyAvatar dims={dims} lang={lang} url={avatarGLBUrl} collisionRigRef={meshFitRigRef} bodyColliderRef={bodyColliderRef} skinColor={skinColor} hairColor={hairColor} hairStyle={hairStyle} hairType={hairType} headwear={headwear} headwearColor={headwearColor} pose={poseId} paused={paused} onPoseWarning={onPoseWarning} />
+          <BodyAvatar
+            dims={dims}
+            lang={lang}
+            url={avatarGLBUrl}
+            collisionRigRef={meshFitRigRef}
+            bodyColliderRef={bodyColliderRef}
+            skinColor={skinColor}
+            hairColor={hairColor}
+            hairStyle={hairStyle}
+            hairType={hairType}
+            hairLength={hairLength}
+            hairHighlight={hairHighlight}
+            headwear={headwear}
+            headwearColor={headwearColor}
+            headwearFabric={headwearFabric}
+            headwearLength={headwearLength}
+            undercapColor={undercapColor}
+            niqabEyeScreen={niqabEyeScreen}
+            pose={poseId}
+            paused={paused}
+            onPoseWarning={onPoseWarning}
+          />
         )}
         {debugView === 'pieces' && <StaticPiecesDebug dims={dims} pose={poseId} pieces={garment?.pieces} seams={garment?.seams} />}
         {debugView === 'weld' && <WeldDebugView dims={dims} pose={poseId} pieces={garment?.pieces} seams={garment?.seams} />}
