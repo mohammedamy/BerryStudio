@@ -1,28 +1,19 @@
-# V6-11 — construction-evidence record
+# Construction-evidence record & readiness contract
 
-The construction-evidence download is a portable JSON snapshot of the current
-project's declared geometry checks. It contains a schema name, evaluation time,
-project ID/revision, piece roles, whether a saved brief or pattern program is
-present, the applicable seam assessment, and explicit null maker/sample
-approval fields.
+The construction-evidence download (`berrystudio.construction-evidence.v1`) is a portable JSON snapshot of the current project's declared geometry checks and portable P7-05 construction packet. It contains a schema name, evaluation time, project ID/revision, piece roles, whether a saved brief or pattern program is present, `readinessStage`, the applicable seam assessment, embedded `packet`, and explicit null maker/sample approval fields.
 
-The typed woven-skirt slice keeps its specific side-seam assessment. Any other
-project with an explicitly declared two-sided `edges[].seamId` pair receives a
-generic `declared-seams` assessment, which measures only those supplied edge
-lengths. The record never infers joins from silhouettes, roles or proximity.
-Projects with no declared seam evidence produce `not-applicable` with
-`constructionFamilyUnsupported`. Every record sets `productionEligible` to
-`false`.
+Family routing assesses declared seams explicitly by family:
+- `woven-basic-dress`: requires `bodice-front`, `bodice-back`, `skirt-front`, `skirt-back` and matching `dress-bodice-side` & `dress-skirt-side` seams (`dress-seams-checked`).
+- `woven-basic-bodice`: requires `bodice-front`, `bodice-back` and matching `bodice-side` seam (`bodice-seams-checked`).
+- `woven-a-line-skirt`: requires `skirt-front`/`skirt-back` and matching `skirt-side` seam (`side-seam-checked`).
+- `woven-basic-trousers`: requires `trouser-front`, `trouser-back`, `waistband` and matching `trouser-outseam` & `trouser-inseam` seams (`trouser-seams-checked`).
+- Other projects with explicitly declared two-sided `edges[].seamId` pairs receive a generic `declared-seams` assessment measuring only supplied edge lengths.
+- Projects with no declared seam evidence produce `not-applicable` with `constructionFamilyUnsupported` and `readinessStage: "unsupported"`.
 
-The record is a local download and is not sent to a provider or cloud service.
-It is not a tech pack, fit report, construction instruction, material test,
-grade validation, maker review, sewn-sample approval, or permission to cut or
-produce. Those decisions remain outside this release.
+The derived `readinessStage` is `unsupported`, `draft`, `geometry-checked`, `maker-reviewed`, or `sample-approved`. Every automated check remains capped at `geometry-checked` with `productionEligible: false` and never infers joins from silhouettes, roles, or proximity.
 
-## V6-12 in-app review
+The record is a local download and is not sent to a provider or cloud service. It is not a final fit guarantee, material test, grade validation, maker review, sewn-sample approval, or permission to cut or produce.
 
-The Export pane can render the same current-project evidence before it is
-downloaded. It shows declared seam lengths and their millimetre difference when
-they exist, or the explicit blockers when they do not. It always shows maker
-approval, sewn-sample approval and production eligibility as absent/not eligible.
-The panel does not persist an approval, change geometry or upload data.
+## In-app review
+
+The Export pane renders the current-project readiness stage, declared seam lengths and millimetre differences (or explicit blockers), ordered construction handoff steps when supported, and explicit null maker, sewn-sample, and production-eligibility statuses. It does not persist an approval, change geometry, or upload data.

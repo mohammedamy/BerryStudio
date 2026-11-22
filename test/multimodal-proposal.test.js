@@ -54,3 +54,31 @@ test('P7-09 rejects malformed provenance on project import before it can persist
   assert.throws(() => validateMultimodalProposal(invalid), /multimodalProposalInvalid/);
   assert.throws(() => migrateProject({ pieces: [], multimodalProposal: invalid }), /projectInvalid/);
 });
+
+
+test('P7-09 reconciles EN/AR bodice, dress, and trousers briefs with reference images across extreme valid sizes', async () => {
+  const { MANNEQUIN_CATALOG } = await import('../js/mannequin-catalog.js');
+  const small = MANNEQUIN_CATALOG.find(m => m.id === 'women_xxs');
+  const large = MANNEQUIN_CATALOG.find(m => m.id === 'men_6xl');
+  assert.ok(small && large);
+
+  let studio = setStudioSource(emptyImageStudio(), image('ref'), true);
+  studio = appendStudioConcept(studio, { prompt: 'pleated reference silhouette', providerId: 'proxy', image: image('con'), mode: 'image-to-image' });
+  studio = selectStudioConcept(studio, studio.concepts[0].id);
+
+  for (const [text, lang, mq, expectedFamily] of [
+    [`regular-length woven bodice, chest ${small.measurements.chest} cm, waist ${small.measurements.waist} cm`, 'en', small, 'bodice'],
+    [`فستان منسوج طويل، صدر ${large.measurements.chest} سم، خصر ${large.measurements.waist} سم، أرداف ${large.measurements.hips} سم`, 'ar', large, 'dress'],
+    [`regular-length woven trousers, waist ${small.measurements.waist} cm, hips ${small.measurements.hips} cm, inseam ${small.measurements.inseam} cm`, 'en', small, 'trousers'],
+    [`بنطلون منسوج قصير، خصر ${large.measurements.waist} سم، أرداف ${large.measurements.hips} سم، طول الساق الداخلي ${large.measurements.inseam} سم`, 'ar', large, 'trousers'],
+  ]) {
+    const b = updateDesignBrief(null, text, lang);
+    const proposal = prepareMultimodalProposal({ brief: b, measurements: mq.measurements, studio, category: mq.category });
+    assert.equal(proposal.decision, 'propose');
+    assert.equal(proposal.fields.family.value, expectedFamily);
+    assert.equal(proposal.reference.kind, 'selected-concept');
+    assert.deepEqual(proposal.issues.filter(i => i.field === 'reference').map(i => i.code), [
+      'referenceAppearanceOnly', 'referenceConstructionUnresolved', 'referenceScaleUnresolved', 'referenceBackViewUnresolved',
+    ]);
+  }
+});

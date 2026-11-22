@@ -3,7 +3,7 @@ import { prepareMultimodalProposal } from './multimodal-proposal.js';
 import { executePatternProgram } from './pattern-program.js';
 import { createWovenALineSkirtConfiguration, configurationToWovenALineSkirtProgram, diffWovenALineSkirtConfiguration, summarizeWovenALineSkirtConfiguration } from './skirt-configurator.js';
 import { createWovenBasicBodiceConfiguration, configurationToWovenBasicBodiceProgram, summarizeWovenBasicBodiceConfiguration } from './bodice-configurator.js';
-import { createWovenBasicDressConfiguration, configurationToWovenBasicDressProgram, summarizeWovenBasicDressConfiguration } from './dress-configurator.js';
+import { createWovenBasicDressConfiguration, configurationToWovenBasicDressProgram, diffWovenBasicDressConfiguration, summarizeWovenBasicDressConfiguration } from './dress-configurator.js';
 import { createWovenBasicTrousersConfiguration, configurationToWovenBasicTrousersProgram, diffWovenBasicTrousersConfiguration, summarizeWovenBasicTrousersConfiguration } from './trouser-configurator.js';
 
 const node=(tag,text)=>{const element=document.createElement(tag);if(text!=null) element.textContent=text;return element;};
@@ -29,7 +29,7 @@ export function mountPatternProgram(container,{t,getBrief,getStudio,category,mea
     label.hidden=isBodice;
     labelText.textContent=isTrousers?t('programTrouserLength'):t('programLength');
     for(const option of length.options) option.textContent=t(`${isTrousers?'programTrouserLength':'programLength'}_${option.value}`);
-    pieces.textContent=isTrousers?t('programPiecesTrousers'):t('programPieces');
+    pieces.textContent=isBodice?t('programPiecesBodice'):isDress?t('programPiecesDress'):isTrousers?t('programPiecesTrousers'):t('programPieces');
     button.textContent=isBodice?t('programDraftBodice'):isDress?t('programDraftDress'):isTrousers?t('programDraftTrousers'):t('programDraft');
     try {
       const profileId=measurementProfileId?.()||null, lang=language?.()||'en';
@@ -82,7 +82,7 @@ export function mountPatternProgram(container,{t,getBrief,getStudio,category,mea
       const changes=isBodice
         ? []
         : isDress
-          ? (baseline.length===configuration.length?[]:[{field:'length',before:baseline.length,after:configuration.length}])
+          ? diffWovenBasicDressConfiguration(baseline,configuration)
           : isTrousers
             ? diffWovenBasicTrousersConfiguration(baseline,configuration)
             : diffWovenALineSkirtConfiguration(baseline,configuration);

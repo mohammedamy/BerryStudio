@@ -1,5 +1,13 @@
 # Changelog
 
+## Plan 7 P7-05 4-Family Construction Packet & Readiness Closure (`berrystudio-v95`)
+
+Closes Plan 7 engineering evidence, P7-05 multi-family construction packets & readiness reporting, and P7-07/P7-09 multi-family benchmark coverage across all four reviewed starter families (`woven-a-line-skirt`, `woven-basic-bodice`, `woven-basic-dress`, `woven-basic-trousers`):
+
+- **4-Family Construction Acceptance, Packet & Evidence Record (`js/construction-acceptance.js`, `js/construction-packet.js`, `js/construction-evidence-record.js`, `js/dress-configurator.js`)**: Adds `assessWovenBodiceConstruction()`, `assessWovenDressConstruction()`, and `deriveReadinessStage()` (`draft`, `geometry-checked`, `maker-reviewed`, `sample-approved`, `unsupported`), fixes `woven-basic-dress` packet/evidence classification precedence ahead of skirt, emits ordered honest construction handoff steps & explicit unverified joins across all 4 families, and exports `diffWovenBasicDressConfiguration()` / `serializeWovenBasicDressConfiguration()`.
+- **Studio Panel, Modal Readiness & Localization (`js/pattern-program-panel.js`, `js/i18n.js`, `js/app.js`, `sw.js`)**: Updates affected-piece descriptions per garment family, uses structured dress configuration diffs, displays `readinessStage` and supported packet handoff steps inside the in-app Construction Evidence modal without implying maker/sample approval, and bumps offline cache to `berrystudio-v95`.
+- **Multi-Family Benchmarks, 44-Mannequin Program Sweeps & Truthful Evidence (`evaluation/p7-07/corpus.json`, `test/*`, `e2e/*`, `docs/plan-v7-evidence-2026-11-22.md`, `docs/audits/2026-11-22-p7-06-avatar-confidence.md`)**: Expands P7-07/P7-09 coverage across all 4 families (including `women_xxs` / `men_6xl` extremes and locked `inseam`), validates all 44 mannequins for bodice (44 blocks) and dress (132 blocks) alongside skirt (132 blocks) and trousers (132 blocks), and refreshes P7-01/P7-06 evidence records while explicitly preserving pending external human/device gates.
+
 ## Plan 7 Trousers Made-to-Measure Configurator & Readiness Blocker Closures (`berrystudio-v94`)
 
 Implements the bounded Plan 7 **woven trousers configurator (`woven-basic-trousers`)** after closing the trouser construction, validation, and inseam-brief blockers:

@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createConstructionPacket } from '../js/construction-packet.js';
+import {
+  createWovenBasicBodiceProgram,
+  createWovenBasicDressProgram,
+  createWovenBasicTrousersProgram,
+  executePatternProgram,
+} from '../js/pattern-program.js';
 
 const project = { patternConfiguration:{family:'woven-a-line-skirt'}, pieces:[
   {key:'front',name:{en:'Front',ar:'أمام'},role:'skirt-front',quantity:1,cutOnFold:true,grain:[[0,0],[0,40]],notches:[[10,20]],outline:[[0,0],[20,0],[24,40],[0,40]],edges:[{seamId:'skirt-side',fromIdx:1,toIdx:2}]},
@@ -23,5 +29,53 @@ test('unsupported projects produce no instructions or false readiness', () => {
   const packet = createConstructionPacket({pieces:[{role:'bodice-front',outline:[[0,0],[1,0],[0,1]]}]});
   assert.equal(packet.supported, false);
   assert.deepEqual(packet.instructions, []);
+  assert.equal(packet.readiness.productionEligible, false);
+});
+
+
+test('woven bodice packet provides cut list, bodice-side seam, 5 ordered instructions and honest readiness', () => {
+  const output = executePatternProgram(createWovenBasicBodiceProgram(), { chest: 92, waist: 74 });
+  const packet = createConstructionPacket({
+    patternConfiguration: { family: 'woven-basic-bodice', seamAllowanceCm: 1 },
+    pieces: output.pieces,
+  });
+  assert.equal(packet.supported, true);
+  assert.equal(packet.family, 'woven-basic-bodice');
+  assert.equal(packet.seamAllowanceCm, 1);
+  assert.equal(packet.cutList.length, 2);
+  assert.deepEqual(packet.declaredSeams.map(s => s.id), ['bodice-side']);
+  assert.equal(packet.instructions.length, 5);
+  assert.equal(packet.readiness.stage, 'geometry-checked');
+  assert.equal(packet.readiness.shoulderAndNeckline, 'not-verified');
+  assert.equal(packet.readiness.productionEligible, false);
+});
+
+test('woven dress packet classifies 4-piece dress distinctly from skirt with both seams and 6 steps', () => {
+  const output = executePatternProgram(createWovenBasicDressProgram('long'), { chest: 92, waist: 74, hips: 100 });
+  const packet = createConstructionPacket({
+    patternConfiguration: { family: 'woven-basic-dress', seamAllowanceCm: 1 },
+    pieces: output.pieces,
+  });
+  assert.equal(packet.supported, true);
+  assert.equal(packet.family, 'woven-basic-dress');
+  assert.equal(packet.seamAllowanceCm, 1);
+  assert.equal(packet.cutList.length, 4);
+  assert.deepEqual(packet.cutList.map(c => c.role), ['bodice-front', 'bodice-back', 'skirt-front', 'skirt-back']);
+  assert.deepEqual(packet.declaredSeams.map(s => s.id), ['dress-bodice-side', 'dress-skirt-side']);
+  assert.equal(packet.instructions.length, 6);
+  assert.equal(packet.readiness.stage, 'geometry-checked');
+  assert.equal(packet.readiness.waistJoin, 'not-verified');
+  assert.equal(packet.readiness.productionEligible, false);
+});
+
+test('woven trousers packet carries geometry-checked readiness stage', () => {
+  const output = executePatternProgram(createWovenBasicTrousersProgram('regular'), { waist: 76, hips: 100, inseam: 78 });
+  const packet = createConstructionPacket({
+    patternConfiguration: { family: 'woven-basic-trousers', seamAllowanceCm: 1 },
+    pieces: output.pieces,
+  });
+  assert.equal(packet.supported, true);
+  assert.equal(packet.family, 'woven-basic-trousers');
+  assert.equal(packet.readiness.stage, 'geometry-checked');
   assert.equal(packet.readiness.productionEligible, false);
 });

@@ -55,7 +55,9 @@ test('a basic woven bodice brief previews and accepts only the bounded bodice pr
   await brief.getByRole('button',{name:'Update brief',exact:true}).click();
   const program=page.locator('.pattern-program');
   await expect(program.getByText('Ready to create a typed basic woven bodice program.',{exact:true})).toBeVisible();
+  await expect(program.getByText('Affected pieces: bodice front (cut on fold) and bodice back (cut on fold). Shoulder seam, sleeves, neckline and closure remain unverified.',{exact:true})).toBeVisible();
   await program.getByRole('button',{name:'Preview bodice program',exact:true}).click();
+  await expect(page.getByText(/Declared bodice side-seam lengths match\./)).toBeVisible();
   await page.getByRole('button',{name:'Accept as new project',exact:true}).click();
   const state=await page.evaluate(()=>window.Canvas.snapshotState());
   expect(state.patternProgram.family).toBe('woven-basic-bodice');
@@ -70,9 +72,11 @@ test('a basic woven dress brief reviews its selected length before acceptance',a
   await brief.getByRole('button',{name:'Update brief',exact:true}).click();
   const program=page.locator('.pattern-program');
   await expect(program.getByText('Ready to create a typed basic woven dress program.',{exact:true})).toBeVisible();
+  await expect(program.getByText('Affected pieces: bodice front, bodice back, skirt front, and skirt back (all cut on fold). Waist join, sleeves, neckline and closure remain unverified.',{exact:true})).toBeVisible();
   await program.locator('select[name="pattern-length"]').selectOption('long');
   await program.getByRole('button',{name:'Preview dress program',exact:true}).click();
   await expect(page.getByText('Length: Regular — 60 cm → Long — 85 cm',{exact:true})).toBeVisible();
+  await expect(page.getByText(/Declared bodice and skirt side-seam lengths match\./)).toBeVisible();
   await page.getByRole('button',{name:'Accept as new project',exact:true}).click();
   const state=await page.evaluate(()=>window.Canvas.snapshotState());
   expect(state.patternProgram.family).toBe('woven-basic-dress');

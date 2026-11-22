@@ -1,37 +1,21 @@
-# V6-09 — typed pattern-program vertical slice
+# Plan 7 — typed pattern-program engine
 
-This release implements one bounded, reviewable program family: a woven A-line
-skirt. It is not a general program language, a fit approval or a construction
-approval.
+This release implements bounded, reviewable declarative pattern-program families across four starter blocks:
 
-The program accepts only `defineVariable`, `placePoint`, `lineBetween`,
-`promotePiece` and `setPieceRole` operations. Its validator rejects unknown
-fields, duplicate names, unknown or mistyped references, malformed formulas, executable
-text, invalid loops and unsupported roles before output. Formulas are limited
-to numbers, named measurements/variables, arithmetic and parentheses.
+1. `woven-a-line-skirt` (`skirt-front`, `skirt-back`, `waistband`)
+2. `woven-basic-bodice` (`bodice-front`, `bodice-back`)
+3. `woven-basic-dress` (`bodice-front`, `bodice-back`, `skirt-front`, `skirt-back`)
+4. `woven-basic-trousers` (`trouser-front`, `trouser-back`, `waistband`)
 
-A complete saved Design brief must declare skirt, woven fabric, a supported
-length and valid waist/hip measurements. The program derives a front, back and
-waistband, runs the existing pattern validator, opens the normal new-project
-review, and stores the typed operations, inputs, provenance and validation with
-the accepted project. The source project is not mutated.
+None of these families constitute a general program language, physical fit approval, or construction approval.
 
-Only the woven A-line skirt family is supported. There are no AI-authored
-programs, arcs, intersections, offsets, darts, closures, grade rules,
-multi-family claims or maker acceptance evidence in this slice. Those require
-the remaining Phase 4 and Phase 5 work.
+The program engine accepts only `defineVariable`, `placePoint`, `lineBetween`, `promotePiece`, `setPieceRole`, and `setPieceConstruction` operations. Its validator rejects unknown fields, duplicate names, unknown or mistyped references, malformed formulas, executable text, invalid loops, and unsupported roles before output. Formulas are limited to numbers, named measurements/variables, arithmetic, and parentheses.
 
-## Template limitations and release revision
+A complete saved Design brief must declare the supported garment family, woven fabric, supported length (where applicable), and required measurements (`waist`/`hips` for skirt; `chest`/`waist` for bodice; `chest`/`waist`/`hips` for dress; `waist`/`hips`/`inseam` for trousers). The engine derives typed pieces, runs `PatternValidator`, opens the normal new-project review, and stores the typed operations, configuration, inputs, provenance, and validation with the accepted project without mutating the source project.
 
-The current UI explicitly selects an experimental A-line template. It does not
-interpret arbitrary brief notes as construction commands. Short/regular/long
-use fixed 45/60/85 cm lengths, not calibrated wearer-relative lengths. Hip
-shaping, closure and waistband construction need maker correction before cutting.
-A general validator pass does not verify these missing construction choices.
-Unsaved brief text disables the program action; the saved brief and operations
-travel together into the new project. Acceptance rechecks account access.
+## Explicit boundaries and release honesty
 
-Measurement names cannot be redefined as program variables. Point references
-must identify points rather than variables or lines; extra top-level fields
-are rejected. No provider-generated program or image-to-pattern execution is
-claimed by this slice.
+- Short / regular / long skirt & dress lengths map to fixed 45 / 60 / 85 cm skirt spans; trouser short / regular / long lengths scale from `inseam` (`inseam * 0.78`, `inseam`, `inseam + 6`).
+- Hip/seat shaping, crotch rise ease, shoulder/waist joins, closures, waistband attachment, and grading fit still require maker review and sewn-sample verification before cutting or production.
+- Unsaved brief text disables the program action; the saved brief, configurator selection, and operations travel together into the new project. Acceptance rechecks account access.
+- Measurement names cannot be redefined as program variables. Point references must identify points rather than variables or lines; extra top-level fields are rejected. No provider-generated JavaScript or image-to-pattern construction execution is permitted.

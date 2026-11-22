@@ -1,4 +1,11 @@
-import { assessDeclaredSeamConstruction, assessWovenSkirtConstruction, assessWovenTrouserConstruction } from './construction-acceptance.js';
+import {
+  assessDeclaredSeamConstruction,
+  assessWovenBodiceConstruction,
+  assessWovenDressConstruction,
+  assessWovenSkirtConstruction,
+  assessWovenTrouserConstruction,
+  deriveReadinessStage,
+} from './construction-acceptance.js';
 import { createConstructionPacket } from './construction-packet.js';
 
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -9,16 +16,33 @@ const skirtRoles = new Set(['skirt-front', 'skirt-back', 'waistband']);
 export function createConstructionEvidenceRecord(project, { evaluatedAt = new Date().toISOString() } = {}) {
   const pieces = Array.isArray(project?.pieces) ? project.pieces : [];
   const roles = [...new Set(pieces.map(piece => typeof piece?.role === 'string' ? piece.role : null).filter(Boolean))].sort();
-  const isSkirt = project?.patternProgram?.family === 'woven-a-line-skirt' || (roles.some(role => skirtRoles.has(role)) && !roles.includes('trouser-front') && !roles.includes('trouser-back'));
-  const isTrousers = !isSkirt && (project?.patternProgram?.family === 'woven-basic-trousers' || project?.patternConfiguration?.family === 'woven-basic-trousers' || (roles.includes('trouser-front') && roles.includes('trouser-back') && roles.includes('waistband')));
+  const family = project?.patternProgram?.family || project?.patternConfiguration?.family || null;
+  const isDress = family === 'woven-basic-dress'
+    || (roles.includes('bodice-front') && roles.includes('bodice-back') && roles.includes('skirt-front') && roles.includes('skirt-back'));
+  const isBodice = !isDress && (
+    family === 'woven-basic-bodice'
+    || (roles.includes('bodice-front') && roles.includes('bodice-back') && !roles.some(role => skirtRoles.has(role)) && !roles.includes('trouser-front') && !roles.includes('trouser-back'))
+  );
+  const isSkirt = !isDress && !isBodice && (
+    family === 'woven-a-line-skirt'
+    || (roles.some(role => skirtRoles.has(role)) && family !== 'woven-basic-trousers' && !roles.includes('trouser-front') && !roles.includes('trouser-back'))
+  );
+  const isTrousers = !isDress && !isBodice && !isSkirt && (
+    family === 'woven-basic-trousers'
+    || (roles.includes('trouser-front') && roles.includes('trouser-back') && roles.includes('waistband'))
+  );
   const hasDeclaredSeam = pieces.some(piece => Array.isArray(piece?.edges) && piece.edges.some(edge => typeof edge?.seamId === 'string' && edge.seamId));
-  const assessment = isSkirt
-    ? assessWovenSkirtConstruction(pieces)
-    : isTrousers
-      ? assessWovenTrouserConstruction(pieces)
-      : hasDeclaredSeam
-        ? assessDeclaredSeamConstruction(pieces)
-        : { family: null, decision: 'not-applicable', checks: [], blockers: ['constructionFamilyUnsupported'], makerApproval: null, sampleApproval: null, productionEligible: false };
+  const assessment = isDress
+    ? assessWovenDressConstruction(pieces)
+    : isBodice
+      ? assessWovenBodiceConstruction(pieces)
+      : isSkirt
+        ? assessWovenSkirtConstruction(pieces)
+        : isTrousers
+          ? assessWovenTrouserConstruction(pieces)
+          : hasDeclaredSeam
+            ? assessDeclaredSeamConstruction(pieces)
+            : { family: null, decision: 'not-applicable', checks: [], blockers: ['constructionFamilyUnsupported'], makerApproval: null, sampleApproval: null, productionEligible: false };
   return clone({
     schema: 'berrystudio.construction-evidence.v1',
     evaluatedAt,
@@ -30,6 +54,7 @@ export function createConstructionEvidenceRecord(project, { evaluatedAt = new Da
       briefPresent: !!project?.brief,
       patternProgramFamily: typeof project?.patternProgram?.family === 'string' ? project.patternProgram.family : null,
     },
+    readinessStage: deriveReadinessStage(assessment),
     assessment,
     packet: createConstructionPacket(project),
     approvals: { makerApproval: null, sampleApproval: null, productionEligible: false },

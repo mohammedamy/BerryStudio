@@ -1,7 +1,7 @@
 {
   "id": "p7-07-local-brief-foundation.v1",
   "scope": "Deterministic local brief capture only. It does not evaluate hosted-model advice, maker acceptance, pattern fit, construction quality, or production readiness.",
-  "defaultsCm": { "waist": 80, "hips": 100, "chest": 92 },
+  "defaultsCm": { "waist": 80, "hips": 100, "chest": 92, "inseam": 76 },
   "cases": [
     {
       "id": "en-supported-skirt",
@@ -39,6 +39,49 @@
       "language": "ar",
       "messages": ["تنورة منسوجة"],
       "expect": { "decision": "clarify", "issue": "missing" }
+    },
+    {
+      "id": "en-supported-bodice",
+      "language": "en",
+      "messages": ["regular-length woven bodice, chest 92 cm, waist 74 cm"],
+      "expect": { "decision": "propose", "fields": { "family": "bodice", "length": "regular", "fabric": "woven", "chest": 92, "waist": 74 } }
+    },
+    {
+      "id": "ar-supported-bodice",
+      "language": "ar",
+      "messages": ["صدّار منسوج بطول عادي، صدر ٩٢ سم، خصر ٧٤ سم"],
+      "expect": { "decision": "propose", "fields": { "family": "bodice", "length": "regular", "fabric": "woven", "chest": 92, "waist": 74 } }
+    },
+    {
+      "id": "en-supported-dress",
+      "language": "en",
+      "messages": ["knee length woven dress, chest 92 cm, waist 74 cm, hips 100 cm"],
+      "expect": { "decision": "propose", "fields": { "family": "dress", "length": "regular", "fabric": "woven", "chest": 92, "waist": 74, "hips": 100 } }
+    },
+    {
+      "id": "ar-supported-dress",
+      "language": "ar",
+      "messages": ["فستان منسوج بطول عادي، صدر ٩٢ سم، خصر ٧٤ سم، أرداف ١٠٠ سم"],
+      "expect": { "decision": "propose", "fields": { "family": "dress", "length": "regular", "fabric": "woven", "chest": 92, "waist": 74, "hips": 100 } }
+    },
+    {
+      "id": "en-supported-trousers",
+      "language": "en",
+      "messages": ["regular-length woven trousers, waist 76 cm, hips 100 cm, inseam 78 cm"],
+      "expect": { "decision": "propose", "fields": { "family": "trousers", "length": "regular", "fabric": "woven", "waist": 76, "hips": 100, "inseam": 78 } }
+    },
+    {
+      "id": "ar-supported-trousers",
+      "language": "ar",
+      "messages": ["بنطلون منسوج بطول عادي، خصر ٧٦ سم، أرداف ١٠٠ سم، طول الساق الداخلي ٧٨ سم"],
+      "expect": { "decision": "propose", "fields": { "family": "trousers", "length": "regular", "fabric": "woven", "waist": 76, "hips": 100, "inseam": 78 } }
+    },
+    {
+      "id": "locked-trouser-inseam",
+      "language": "en",
+      "messages": ["regular-length woven trousers, waist 76 cm, hips 100 cm, inseam 78 cm", "inseam 84 cm"],
+      "lockBeforeMessage": { "messageIndex": 1, "field": "inseam" },
+      "expect": { "decision": "clarify", "issue": "locked", "fields": { "inseam": 78 } }
     }
   ]
 }

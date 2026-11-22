@@ -24,7 +24,7 @@ import { mountDesignBrief } from './design-brief-panel.js';
 import { mountImageStudio } from './image-studio-panel.js';
 import { mountPatternProgram } from './pattern-program-panel.js';
 import { briefMatchesStyle } from './design-brief.js';
-import { assessWovenSkirtConstruction, assessWovenTrouserConstruction } from './construction-acceptance.js';
+import { assessWovenSkirtConstruction, assessWovenBodiceConstruction, assessWovenDressConstruction, assessWovenTrouserConstruction } from './construction-acceptance.js';
 import { createConstructionEvidenceRecord } from './construction-evidence-record.js';
 import { Billboard } from './billboard.js';
 import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, exports nothing
@@ -2820,6 +2820,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const body=$("#genericModal .modal-body");
     const decisionKey={
       'side-seam-checked':'constructionEvidenceChecked',
+      'bodice-seams-checked':'constructionEvidenceBodiceChecked',
+      'dress-seams-checked':'constructionEvidenceDressChecked',
       'declared-seams-checked':'constructionEvidenceDeclaredChecked',
       'trouser-seams-checked':'constructionEvidenceTrouserChecked',
       'needs-construction-evidence':'constructionEvidenceMissing',
@@ -2841,7 +2843,21 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       for(const blocker of report.assessment.blockers) list.appendChild(el("li",null,T(blocker)));
       body.appendChild(list);
     }
+    if(report.packet?.supported && Array.isArray(report.packet.instructions) && report.packet.instructions.length){
+      body.appendChild(el("h3",null,T("constructionEvidencePacketSteps")));
+      const list=el("ol");
+      for(const step of report.packet.instructions) list.appendChild(el("li",null,step.instruction));
+      body.appendChild(list);
+    }
+    const stageKey={
+      'draft':'readinessStage_draft',
+      'geometry-checked':'readinessStage_geometry-checked',
+      'maker-reviewed':'readinessStage_maker-reviewed',
+      'sample-approved':'readinessStage_sample-approved',
+      'unsupported':'readinessStage_unsupported',
+    }[report.readinessStage] || 'readinessStage_unsupported';
     body.append(
+      el("p",null,`${T("constructionEvidenceReadiness")}: ${T(stageKey)}`),
       el("p",null,`${T("constructionEvidenceMaker")}: ${T("constructionEvidenceNotRecorded")}`),
       el("p",null,`${T("constructionEvidenceSample")}: ${T("constructionEvidenceNotRecorded")}`),
       el("p",null,`${T("constructionEvidenceProduction")}: ${T("constructionEvidenceNotEligible")}`),
@@ -3029,7 +3045,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const body=$("#genericModal .modal-body");
     const hint=el("p"); hint.textContent=T("reviewGeneratedHint");
     const summary=el("p"); summary.textContent=typeof res.summary==='string'?res.summary:'';
-    const acceptance=(res.style?.type==='skirt' || res.patternProgram?.family==='woven-a-line-skirt') ? assessWovenSkirtConstruction(draft.pieces) : (res.patternProgram?.family==='woven-basic-trousers' ? assessWovenTrouserConstruction(draft.pieces) : null);
+    const acceptance=(res.style?.type==='skirt' || res.patternProgram?.family==='woven-a-line-skirt') ? assessWovenSkirtConstruction(draft.pieces) : res.patternProgram?.family==='woven-basic-bodice' ? assessWovenBodiceConstruction(draft.pieces) : res.patternProgram?.family==='woven-basic-dress' ? assessWovenDressConstruction(draft.pieces) : res.patternProgram?.family==='woven-basic-trousers' ? assessWovenTrouserConstruction(draft.pieces) : null;
     body.append(hint, summary);
     if(res.patternConfiguration) {
       const configuration=el('section','help-note');
@@ -3051,7 +3067,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     }
     if(acceptance) {
       const evidence=el("p","help-note");
-      evidence.textContent=acceptance.decision==='side-seam-checked' ? T('constructionEvidenceReady') : acceptance.decision==='trouser-seams-checked' ? T('constructionEvidenceTrouserReady') : `${T('constructionEvidenceMissing')}: ${acceptance.blockers.map(key=>T(key)).join(', ')}`;
+      evidence.textContent=acceptance.decision==='side-seam-checked' ? T('constructionEvidenceReady') : acceptance.decision==='bodice-seams-checked' ? T('constructionEvidenceBodiceReady') : acceptance.decision==='dress-seams-checked' ? T('constructionEvidenceDressReady') : acceptance.decision==='trouser-seams-checked' ? T('constructionEvidenceTrouserReady') : `${T('constructionEvidenceMissing')}: ${acceptance.blockers.map(key=>T(key)).join(', ')}`;
       body.append(evidence);
     }
     body.append(patternPreview(draft.pieces));
