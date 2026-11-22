@@ -286,7 +286,6 @@ export function deriveNeighbors(cloth, maxNeighbors = 8) {
   const bendSets = Array.from({ length: simParticleCount }, () => new Set())
   const posOf = (idx) => [simRestPositions[idx * 3], simRestPositions[idx * 3 + 1], simRestPositions[idx * 3 + 2]]
   const cross3 = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
-  const dot3 = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
   const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 
   const hingeForWingPair = new Map() // "c_d" -> canonical hinge record
@@ -310,9 +309,9 @@ export function deriveNeighbors(cloth, maxNeighbors = 8) {
 
     const isCrossPiece = Boolean(isGarmentAssembly && renderTriPieceIdx && tC.pieceIdx !== tD.pieceIdx)
     const n2Sign = isCrossPiece
-      ? (dot3(n1r, n2r) < 0 ? -1 : 1)
+      ? 1
       : ((tD.a === p2 && tD.b === p1) ? 1 : -1)
-    const seamScale = isCrossPiece ? 0.35 : 1.0
+    const seamScale = isCrossPiece ? 0.20 : 1.0
 
     let canonRest = 0.0
     if (!isGarmentAssembly) {

@@ -459,7 +459,7 @@ vec3 dihedralCanonicalRoleDelta(
   float t3 = dot(v3, e) / edgeLen;
   float t4 = dot(v4, e) / edgeLen;
   vec3 q3 = -n1 / h3;
-  vec3 q4 = -n2 / h4;
+  vec3 q4 = (-n2Sign * n2) / h4;
   vec3 q1 = -((1.0 - t3) * q3 + (1.0 - t4) * q4);
   vec3 q2 = -(t3 * q3 + t4 * q4);
 
@@ -468,9 +468,10 @@ vec3 dihedralCanonicalRoleDelta(
 
   float hingeBendScale = 0.25 * (bendScaleFor(a1.ba) + bendScaleFor(a2.ba) + bendScaleFor(a3.ba) + bendScaleFor(a4.ba));
   float effStiff = clamp(uDihedralStiff * hingeBendScale, 0.0, 1.0) * seamScale;
-  float stepAngle = clamp(effStiff * error, -uDihedralMaxDelta * 2.5, uDihedralMaxDelta * 2.5);
+  float foldGuard = smoothstep(-0.995, -0.80, cosT);
+  float stepAngle = clamp(effStiff * error, -uDihedralMaxDelta * 1.5, uDihedralMaxDelta * 1.5) * foldGuard;
   float lambda = stepAngle / denom;
-  float maxDisp = 0.20 * min(h3, h4);
+  float maxDisp = 0.14 * min(h3, h4);
   float peakDisp = max(
     max(w1 * length(q1), w2 * length(q2)),
     max(w3 * length(q3), w4 * length(q4))
@@ -744,7 +745,7 @@ const DIHEDRAL_BEND_MAIN_GLSL = `
   ${['A.x', 'A.y', 'A.z', 'A.w', 'B.x', 'B.y', 'B.z', 'B.w'].map((ch) => `
   if (b${ch} > -0.5 && abs(bev0${ch}) > 0.5) {
     float p1Idx = abs(bev0${ch}) - 1.0;
-    float seamScale = bev0${ch} < 0.0 ? 0.35 : 1.0;
+    float seamScale = bev0${ch} < 0.0 ? 0.20 : 1.0;
     float p2Idx = abs(bev1${ch}) - 1.0;
     float n2Sign = bev1${ch} < 0.0 ? -1.0 : 1.0;
     bool meIsC = myFlatIdx < b${ch};
@@ -760,11 +761,11 @@ const DIHEDRAL_BEND_MAIN_GLSL = `
     float p3Idx = abs(eev0${ch}) - 1.0;
     float p4Idx = abs(eev1${ch}) - 1.0;
     float n2Sign = eev1${ch} < 0.0 ? -1.0 : 1.0;
-    float seamScale = era${ch} > 32.0 ? 0.35 : 1.0;
+    float seamScale = era${ch} > 32.0 ? 0.20 : 1.0;
     float canonRest = era${ch} > 32.0 ? (era${ch} - 64.0) : era${ch};
     dihedralTotal += dihedralCanonicalRoleDelta(p1Idx, p2Idx, p3Idx, p4Idx, n2Sign, seamScale, canonRest, meP1 ? 1 : 2);
   }`).join('')}
-  predicted += dihedralTotal * 0.125;
+  predicted += dihedralTotal * 0.0625;
 `
 
 // NOTE: `texturePosition` / `texturePrevPosition` are NOT declared here —

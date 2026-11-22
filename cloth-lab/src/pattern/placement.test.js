@@ -110,3 +110,38 @@ describe('attachment placements wrap outside the body surface', () => {
     }
   })
 })
+
+describe('skirt flare monotonicity & paired hipPanel seam alignment', () => {
+  const dims = computeBodyDims(WOMEN_M, 'women')
+
+  it('paired hipPanelFront and hipPanelBack stay strictly in their front/back hemispheres and meet at x = ±r, z = 0', () => {
+    const panel2D = [
+      [-18, 0], [18, 0],
+      [28, 55], [-28, 55],
+    ]
+    const front = placePiece({ pieceId: 'skirtF', role: 'hipPanelFront', positions2D: panel2D }, dims)
+    const back = placePiece({ pieceId: 'skirtB', role: 'hipPanelBack', positions2D: panel2D }, dims)
+    for (let i = 0; i < panel2D.length; i++) {
+      expect(front[i][2]).toBeGreaterThanOrEqual(-1e-6)
+      expect(back[i][2]).toBeLessThanOrEqual(1e-6)
+      // Side edges (left/right vertices i=0,1,2,3) meet cleanly across Z=0
+      expect(Math.hypot(front[i][0] - back[i][0], front[i][1] - back[i][1], front[i][2] - back[i][2])).toBeLessThan(1e-5)
+    }
+  })
+
+  it('A-line dress torso placement flares monotonically below hip without mid-calf pumpkin bulge or hem shrink', () => {
+    const aLine2D = []
+    for (let row = 0; row <= 10; row++) {
+      const yCm = row * 10
+      const hw = row <= 4 ? 20 : 20 + (row - 4) * 3.5
+      aLine2D.push([-hw, yCm], [hw, yCm])
+    }
+    const placed = placePiece({ pieceId: 'front_0', role: 'frontPanel', positions2D: aLine2D }, dims)
+    let prevX = 0
+    for (let row = 5; row <= 10; row++) {
+      const rx = Math.abs(placed[row * 2 + 1][0])
+      expect(rx).toBeGreaterThanOrEqual(prevX - 0.005)
+      prevX = rx
+    }
+  })
+})

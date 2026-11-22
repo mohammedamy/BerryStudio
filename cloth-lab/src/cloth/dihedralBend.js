@@ -196,16 +196,19 @@ export function dihedralBend4Vertex(p1, p2, p3, p4, restAngle, {
   const t3 = dot(v3, e) / edgeLen
   const t4 = dot(v4, e) / edgeLen
   const q3 = scale(n1, -1 / h3)
-  const q4 = scale(n2, -1 / h4)
+  const q4 = scale(n2, -n2Sign / h4)
   const q1 = add(scale(q3, -(1 - t3)), scale(q4, -(1 - t4)))
   const q2 = add(scale(q3, -t3), scale(q4, -t4))
 
   const denom = w1 * dot(q1, q1) + w2 * dot(q2, q2) + w3 * dot(q3, q3) + w4 * dot(q4, q4)
   if (denom < 1e-10) return null
 
-  const stepAngle = Math.max(-maxDelta, Math.min(maxDelta, stiffness * error))
+  const foldGuard = cosT <= -0.995
+    ? 0
+    : (cosT >= -0.80 ? 1 : (() => { const u = (cosT + 0.995) / 0.195; return u * u * (3 - 2 * u) })())
+  const stepAngle = Math.max(-maxDelta, Math.min(maxDelta, stiffness * error)) * foldGuard
   const lambda = stepAngle / denom
-  const maxDisp = 0.25 * Math.min(h3, h4)
+  const maxDisp = 0.14 * Math.min(h3, h4)
   const peakDisp = Math.max(
     w1 * length(q1) * Math.abs(lambda),
     w2 * length(q2) * Math.abs(lambda),

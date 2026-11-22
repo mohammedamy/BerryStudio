@@ -258,4 +258,42 @@ describe('dihedralBend4Vertex — momentum conservation & convergence', () => {
       expect(maxSpreadN).toBeLessThanOrEqual(maxSpread0 * 1.15)
     }
   })
+
+  it('conserves linear/angular momentum AND strictly converges when n2Sign = -1 (cross-seam orientation)', () => {
+    let p1 = [0, 0, 0], p2 = [0, 1, 0], p3 = [-1, 0.5, 0], p4 = [-0.8, 0.5, 0.3]
+    const ms = [1.4, 1.9, 1.1, 2.2]
+    const ws = ms.map((m) => 1 / m)
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+
+    const r0 = dihedralBend4Vertex(p1, p2, p3, p4, 0, {
+      stiffness: 0.5,
+      n2Sign: -1,
+      w1: ws[0], w2: ws[1], w3: ws[2], w4: ws[3],
+    })
+    expect(r0).not.toBeNull()
+    const pts = [p1, p2, p3, p4]
+    const dps = [r0.dp1, r0.dp2, r0.dp3, r0.dp4]
+    for (let ax = 0; ax < 3; ax++) {
+      expect(dps.reduce((s, d, i) => s + ms[i] * d[ax], 0)).toBeCloseTo(0, 9)
+    }
+    const ang = [0, 1, 2].map((ax) => dps.reduce((s, d, i) => s + ms[i] * cross(pts[i], d)[ax], 0))
+    expect(Math.hypot(...ang)).toBeLessThan(1e-9)
+
+    let prevAbs = Infinity
+    for (let step = 0; step < 30; step++) {
+      const r = dihedralBend4Vertex(p1, p2, p3, p4, 0, {
+        stiffness: 0.5,
+        n2Sign: -1,
+        w1: ws[0], w2: ws[1], w3: ws[2], w4: ws[3],
+      })
+      const curAbs = Math.abs(r.angle)
+      expect(curAbs).toBeLessThanOrEqual(prevAbs + 1e-6)
+      prevAbs = curAbs
+      p1 = p1.map((v, k) => v + r.dp1[k])
+      p2 = p2.map((v, k) => v + r.dp2[k])
+      p3 = p3.map((v, k) => v + r.dp3[k])
+      p4 = p4.map((v, k) => v + r.dp4[k])
+    }
+    expect(prevAbs).toBeLessThan(0.02)
+  })
 })

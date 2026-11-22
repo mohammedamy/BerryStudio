@@ -2311,6 +2311,7 @@ export function convertAppPattern(payload) {
     const fPiece = rawPieces.find((p) => p.id === f)
     const hasAuthoredSeam = edgeInstructions.some((e) => e.pieceId === f && e.edgeName.startsWith('seamId_'))
     if (fPiece?.outline?.length >= 4 && !hasAuthoredSeam && hasEdge(f, 'rightSide') && hasEdge(f, 'leftSide')) {
+      if (placementHints) placementHints[f] = { ...(placementHints[f] || {}), isSingleHipTube: true }
       seamInstructions.push({ id: 'hipPanelFront_tube', a: { piece: f, edge: 'rightSide' }, b: { piece: f, edge: 'leftSide' }, reverse: true })
     }
   }

@@ -1,5 +1,12 @@
 # Changelog
 
+## High-Quality dihedral solver stability & monotonic flared skirt/gore placement (`berrystudio-v89`)
+
+Fixes angular-momentum divergence and hem buckling in Cloth Lab's High-Quality dihedral simulation and eliminates initial placement distortions across A-line dresses, paired hip-panel skirts, multi-gore gowns, and peplum waists:
+
+- **Exact signed dihedral gradients & Jacobi relaxation (`cloth-lab/src/cloth/dihedralBend.js`, `assemble.js`, `ClothSimulation.js`, `dihedralBend.test.js`)**: Fixes the `q4 = (-n2Sign * n2) / h4` gradient sign across both `dihedralBend4Vertex` and GPU `DIHEDRAL_BEND_GLSL` so `n2Sign = -1` orientations conserve angular momentum and converge toward rest rather than applying destabilizing torque; stops flipping cross-piece seam hinges in `deriveNeighbors` when front/back panels curve past `90°` (`n2Sign = 1`, `seamScale = 0.20`), adds a smooth `±π` singularity `foldGuard`, tightens single-step rotation/displacement caps (`1.5 * uDihedralMaxDelta`, `0.14 * min(h3, h4)`), and lowers High-Quality Jacobi averaging weight to `0.0625` (`1/16`) across up to 16 hinge roles.
+- **Monotonic A-line flare, paired skirt hemispheres, gore row-bounds & peplum seam alignment (`cloth-lab/src/pattern/placement.js`, `importFromApp.js`, `placement.test.js`)**: Replaces the shrinking `rBody * 1.65` calf cap in `sampleFlaredSkirtRadius` with a hip-anchored smooth ceiling and protects curved bottom hems in `computeSmoothedRowHalfWidths` from last-bin pinch (`w01`, `womens_dress`, `w02`, `w08`, `w23`); clamps paired `hipPanelFront`/`hipPanelBack` skirts to `±π/2` while preserving full `±0.98π` wrap for single-piece skirt tubes (`girls_dress` via `isSingleHipTube`), enables per-row half-width sampling for split front torso panels (`abaya`) and coat shoulders (`mf05`), adds per-row min/max bounds and floor-safe scaling to `placeGorePanel` (`wf02`, `wf15`, `w12`, `w15`), aligns `peplum-front`/`peplum-back` side edges (`wf11`) in `placeAttachWaist`, and bumps the service worker cache to `berrystudio-v89`.
+
 ## Anatomical shoulder tailoring, constant-width bra straps, rounded hands & exact GPU Cloth Lab texel indexing (`berrystudio-v88`)
 
 Eliminates tented shoulder seams and loose/kinked bra straps across all 320 catalog models in both 3D Preview and Cloth Lab, refines hand/thumb sculpting and skirt hem flare, and fixes GPU solver texel-wrapping spikes on non-power-of-two particle grids:
