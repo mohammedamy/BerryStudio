@@ -78,7 +78,7 @@ export function computeMannequinPoseJoints(dims, pose = 'standing') {
   const totalLegSpan = Math.max(0.25, hipPivotY - ankleY)
   const thighLen = totalLegSpan * 0.53
   const calfLen = totalLegSpan * 0.47
-  const footLen = clamp(H * (kid ? 0.148 : (female ? 0.142 : 0.150)), 0.17, 0.29)
+  const footLen = clamp(H * (kid ? 0.148 : (female ? 0.142 : 0.150)), 0.14, 0.29)
   const footW = footLen * (female ? 0.37 : 0.39)
 
   let pelvisRotZ = 0, spineRotZ = 0, chestRotZ = 0, headRotZ = 0
@@ -195,7 +195,7 @@ export function extractPoseJointsFromLimbs(dims, limbs) {
   const handLen = H * (kid ? 0.108 : (female ? 0.104 : 0.107))
   const wristR = Math.max(upperR * (female ? 0.50 : 0.53), handLen * 0.145)
   const ankleY = Math.max(0.054, H * 0.047)
-  const footLen = clamp(H * (kid ? 0.148 : (female ? 0.142 : 0.150)), 0.17, 0.29)
+  const footLen = clamp(H * (kid ? 0.148 : (female ? 0.142 : 0.150)), 0.14, 0.29)
   const footW = footLen * (female ? 0.37 : 0.39)
 
   const pelvisPos = worldPos(limbs.pelvis)

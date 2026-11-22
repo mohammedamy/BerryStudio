@@ -1,20 +1,19 @@
 /* ============================================================
    BerryStudio Studio Mannequin Catalog — Single Source of Truth
-   24 curated size-specific fit models across 4 categories:
-     - 6 Women  (XS, S, M, L, XL, XXL)
-     - 6 Girls  (XS, S, M, L, XL, XXL)
-     - 6 Men    (XS, S, M, L, XL, XXL)
-     - 6 Boys   (XS, S, M, L, XL, XXL)
-   Designed for seamless future expansion to XXS, XXXL, 4XL, 5XL.
+   44 curated size-specific fit models across 4 categories:
+     - 11 Women  (XXS, XS, S, M, L, XL, XXL, XXXL, 4XL, 5XL, 6XL)
+     - 11 Girls  (XXS, XS, S, M, L, XL, XXL, XXXL, 4XL, 5XL, 6XL)
+     - 11 Men    (XXS, XS, S, M, L, XL, XXL, XXXL, 4XL, 5XL, 6XL)
+     - 11 Boys   (XXS, XS, S, M, L, XL, XXL, XXXL, 4XL, 5XL, 6XL)
    Pure zero-dependency ES module shared across the main app,
    3D Preview, Cloth Lab, and BodyForm.
    ============================================================ */
 
 export const MANNEQUIN_CATEGORIES = Object.freeze(["women", "girls", "men", "boys"]);
 
-export const ACTIVE_MANNEQUIN_SIZES = Object.freeze(["XS", "S", "M", "L", "XL", "XXL"]);
+export const ACTIVE_MANNEQUIN_SIZES = Object.freeze(["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "4XL", "5XL", "6XL"]);
 
-export const PLANNED_MANNEQUIN_SIZES = Object.freeze(["XXS", "XXXL", "4XL", "5XL"]);
+export const PLANNED_MANNEQUIN_SIZES = Object.freeze([]);
 
 export const MANNEQUIN_SIZE_ALIASES = Object.freeze({
   XXXXL: "4XL",
@@ -60,7 +59,18 @@ function entry({ id, category, size, isBase = false, buildLabel, measurements, m
 }
 
 export const MANNEQUIN_CATALOG = Object.freeze([
-  // ---------------- WOMEN (6: XS..XXL) ----------------
+  // ---------------- WOMEN (11: XXS..6XL) ----------------
+  entry({
+    id: "women_xxs",
+    category: "women",
+    size: "XXS",
+    buildLabel: { en: "Petite Slim", ar: "نحيف جداً" },
+    measurements: { chest: 76, waist: 58, hips: 84, shoulder: 36, backLen: 38.3, sleeve: 54.2, neck: 34.6, bicep: 24.4, inseam: 73.0, thigh: 47.4, height: 158 },
+    morph: { bustScale: 0.82, bellyFullness: 0.55, gluteFullness: 0.85, lumbarScale: 1.07, headRatio: 0.133, cheekFullness: -0.08 },
+    hairStyle: "pixie_crop",
+    skinColor: 0xedc2aa,
+    hairColor: 0x462a18,
+  }),
   entry({
     id: "women_xs",
     category: "women",
@@ -128,8 +138,63 @@ export const MANNEQUIN_CATALOG = Object.freeze([
     skinColor: 0xb67b5b,
     hairColor: 0x1a110d,
   }),
+  entry({
+    id: "women_xxxl",
+    category: "women",
+    size: "XXXL",
+    buildLabel: { en: "Plus Curvy", ar: "مقاس كبير 3XL" },
+    measurements: { chest: 108, waist: 92, hips: 116, shoulder: 43.8, backLen: 45, sleeve: 63.2, neck: 41.0, bicep: 35.6, inseam: 82.2, thigh: 62.0, height: 175.5 },
+    morph: { bustScale: 1.28, bellyFullness: 1.94, gluteFullness: 1.28, lumbarScale: 0.84, headRatio: 0.124, cheekFullness: 0.16 },
+    hairStyle: "crown_braid",
+    skinColor: 0xd59d7d,
+    hairColor: 0x2b1910,
+  }),
+  entry({
+    id: "women_4xl",
+    category: "women",
+    size: "4XL",
+    buildLabel: { en: "Extended Plus", ar: "مقاس ممتد 4XL" },
+    measurements: { chest: 114, waist: 98.5, hips: 122, shoulder: 45.0, backLen: 46, sleeve: 64.4, neck: 42.1, bicep: 37.8, inseam: 82.9, thigh: 65.0, height: 177 },
+    morph: { bustScale: 1.34, bellyFullness: 2.16, gluteFullness: 1.34, lumbarScale: 0.81, headRatio: 0.123, cheekFullness: 0.18 },
+    hairStyle: "low_ponytail",
+    skinColor: 0xc88f6f,
+    hairColor: 0x1e130e,
+  }),
+  entry({
+    id: "women_5xl",
+    category: "women",
+    size: "5XL",
+    buildLabel: { en: "Full Plus", ar: "مقاس ممتلئ 5XL" },
+    measurements: { chest: 120, waist: 105, hips: 128, shoulder: 46.2, backLen: 47, sleeve: 65.5, neck: 43.2, bicep: 40.0, inseam: 83.6, thigh: 68.0, height: 178.5 },
+    morph: { bustScale: 1.40, bellyFullness: 2.38, gluteFullness: 1.40, lumbarScale: 0.78, headRatio: 0.122, cheekFullness: 0.20 },
+    hairStyle: "french_twist",
+    skinColor: 0xaa7052,
+    hairColor: 0x170f0b,
+  }),
+  entry({
+    id: "women_6xl",
+    category: "women",
+    size: "6XL",
+    buildLabel: { en: "Grand Plus", ar: "مقاس واسع 6XL" },
+    measurements: { chest: 126, waist: 111.5, hips: 134, shoulder: 47.4, backLen: 48, sleeve: 66.6, neck: 44.3, bicep: 42.2, inseam: 84.3, thigh: 71.0, height: 180 },
+    morph: { bustScale: 1.46, bellyFullness: 2.58, gluteFullness: 1.45, lumbarScale: 0.76, headRatio: 0.121, cheekFullness: 0.22 },
+    hairStyle: "glam_bun",
+    skinColor: 0x9b6346,
+    hairColor: 0x140d0a,
+  }),
 
-  // ---------------- GIRLS (6: XS..XXL, youth 4–15Y progression) ----------------
+  // ---------------- GIRLS (11: XXS..6XL, toddler to youth/junior progression) ----------------
+  entry({
+    id: "girls_xxs",
+    category: "girls",
+    size: "XXS",
+    buildLabel: { en: "2–3Y", ar: "٢–٣ سنوات" },
+    measurements: { chest: 54, waist: 50, hips: 56.5, shoulder: 24.5, backLen: 23.8, sleeve: 33.0, neck: 25.0, bicep: 16.6, inseam: 41.5, thigh: 29.2, height: 98 },
+    morph: { bustScale: 0.60, bellyFullness: 1.15, gluteFullness: 0.86, lumbarScale: 1.0, headRatio: 0.162, cheekFullness: 0.11 },
+    hairStyle: "toddler_puffs",
+    skinColor: 0xf0c9b2,
+    hairColor: 0x593a24,
+  }),
   entry({
     id: "girls_xs",
     category: "girls",
@@ -197,8 +262,63 @@ export const MANNEQUIN_CATALOG = Object.freeze([
     skinColor: 0xc49072,
     hairColor: 0x1d130e,
   }),
+  entry({
+    id: "girls_xxxl",
+    category: "girls",
+    size: "XXXL",
+    buildLabel: { en: "16Y / Jr L", ar: "١٦ سنة" },
+    measurements: { chest: 88, waist: 73, hips: 94.5, shoulder: 38.2, backLen: 40.0, sleeve: 56.5, neck: 35.4, bicep: 27.6, inseam: 74.5, thigh: 51.0, height: 164 },
+    morph: { bustScale: 1.55, bellyFullness: 1.02, gluteFullness: 1.16, lumbarScale: 0.98, headRatio: 0.131, cheekFullness: 0.0 },
+    hairStyle: "ribbon_ponytail",
+    skinColor: 0xdca98d,
+    hairColor: 0x342014,
+  }),
+  entry({
+    id: "girls_4xl",
+    category: "girls",
+    size: "4XL",
+    buildLabel: { en: "Jr XL", ar: "شبابي 4XL" },
+    measurements: { chest: 93, waist: 78, hips: 100, shoulder: 39.6, backLen: 41.2, sleeve: 58.0, neck: 36.6, bicep: 29.4, inseam: 76.0, thigh: 54.0, height: 167 },
+    morph: { bustScale: 1.65, bellyFullness: 1.10, gluteFullness: 1.20, lumbarScale: 0.95, headRatio: 0.130, cheekFullness: 0.03 },
+    hairStyle: "side_braid_bun",
+    skinColor: 0xcf9b7e,
+    hairColor: 0x281810,
+  }),
+  entry({
+    id: "girls_5xl",
+    category: "girls",
+    size: "5XL",
+    buildLabel: { en: "Jr XXL", ar: "شبابي 5XL" },
+    measurements: { chest: 98.5, waist: 83.5, hips: 105.5, shoulder: 41.0, backLen: 42.4, sleeve: 59.5, neck: 37.8, bicep: 31.4, inseam: 77.5, thigh: 57.0, height: 169.5 },
+    morph: { bustScale: 1.75, bellyFullness: 1.20, gluteFullness: 1.24, lumbarScale: 0.92, headRatio: 0.129, cheekFullness: 0.06 },
+    hairStyle: "high_pony_wave",
+    skinColor: 0xb98568,
+    hairColor: 0x1e130d,
+  }),
+  entry({
+    id: "girls_6xl",
+    category: "girls",
+    size: "6XL",
+    buildLabel: { en: "Jr Plus", ar: "شبابي 6XL" },
+    measurements: { chest: 104, waist: 89, hips: 111, shoulder: 42.4, backLen: 43.6, sleeve: 61.0, neck: 39.0, bicep: 33.4, inseam: 79.0, thigh: 60.0, height: 172 },
+    morph: { bustScale: 1.85, bellyFullness: 1.32, gluteFullness: 1.28, lumbarScale: 0.90, headRatio: 0.128, cheekFullness: 0.09 },
+    hairStyle: "double_braid_buns",
+    skinColor: 0xa97659,
+    hairColor: 0x170f0b,
+  }),
 
-  // ---------------- MEN (6: XS..XXL) ----------------
+  // ---------------- MEN (11: XXS..6XL) ----------------
+  entry({
+    id: "men_xxs",
+    category: "men",
+    size: "XXS",
+    buildLabel: { en: "Extra Slim", ar: "نحيف جداً" },
+    measurements: { chest: 85, waist: 70, hips: 86.5, shoulder: 41.8, backLen: 41.7, sleeve: 59.5, neck: 36.4, bicep: 28.2, inseam: 76.0, thigh: 48.8, height: 167 },
+    morph: { bustScale: 0.82, bellyFullness: 0.50, gluteFullness: 0.86, lumbarScale: 1.06, headRatio: 0.133, cheekFullness: -0.07 },
+    hairStyle: "textured_crop",
+    skinColor: 0xe2ae90,
+    hairColor: 0x3b2619,
+  }),
   entry({
     id: "men_xs",
     category: "men",
@@ -266,8 +386,63 @@ export const MANNEQUIN_CATALOG = Object.freeze([
     skinColor: 0xa46f53,
     hairColor: 0x241913,
   }),
+  entry({
+    id: "men_xxxl",
+    category: "men",
+    size: "XXXL",
+    buildLabel: { en: "Big & Broad", ar: "مقاس كبير 3XL" },
+    measurements: { chest: 120, waist: 108, hips: 119.5, shoulder: 51.4, backLen: 49.2, sleeve: 69.2, neck: 44.8, bicep: 39.8, inseam: 86.5, thigh: 63.6, height: 188 },
+    morph: { bustScale: 1.24, bellyFullness: 1.98, gluteFullness: 1.25, lumbarScale: 0.85, headRatio: 0.124, cheekFullness: 0.16 },
+    hairStyle: "buzz_fade",
+    skinColor: 0xc89274,
+    hairColor: 0x221711,
+  }),
+  entry({
+    id: "men_4xl",
+    category: "men",
+    size: "4XL",
+    buildLabel: { en: "Extended Big", ar: "مقاس ممتد 4XL" },
+    measurements: { chest: 126, waist: 115, hips: 125, shoulder: 52.8, backLen: 50.4, sleeve: 70.4, neck: 46.0, bicep: 41.6, inseam: 87.5, thigh: 66.0, height: 190 },
+    morph: { bustScale: 1.30, bellyFullness: 2.22, gluteFullness: 1.30, lumbarScale: 0.82, headRatio: 0.123, cheekFullness: 0.18 },
+    hairStyle: "parted_pomp",
+    skinColor: 0xb78062,
+    hairColor: 0x1d140f,
+  }),
+  entry({
+    id: "men_5xl",
+    category: "men",
+    size: "5XL",
+    buildLabel: { en: "Full Big", ar: "مقاس ممتلئ 5XL" },
+    measurements: { chest: 132, waist: 122, hips: 130.5, shoulder: 54.2, backLen: 51.6, sleeve: 71.6, neck: 47.2, bicep: 43.4, inseam: 88.5, thigh: 68.4, height: 192 },
+    morph: { bustScale: 1.36, bellyFullness: 2.45, gluteFullness: 1.35, lumbarScale: 0.79, headRatio: 0.122, cheekFullness: 0.20 },
+    hairStyle: "executive_comb",
+    skinColor: 0x9c684d,
+    hairColor: 0x16100c,
+  }),
+  entry({
+    id: "men_6xl",
+    category: "men",
+    size: "6XL",
+    buildLabel: { en: "Grand Big", ar: "مقاس واسع 6XL" },
+    measurements: { chest: 138, waist: 129, hips: 136, shoulder: 55.6, backLen: 52.8, sleeve: 72.8, neck: 48.4, bicep: 45.2, inseam: 89.5, thigh: 70.8, height: 194 },
+    morph: { bustScale: 1.42, bellyFullness: 2.66, gluteFullness: 1.40, lumbarScale: 0.77, headRatio: 0.121, cheekFullness: 0.22 },
+    hairStyle: "classic_crown",
+    skinColor: 0x8e5c43,
+    hairColor: 0x130e0b,
+  }),
 
-  // ---------------- BOYS (6: XS..XXL, youth 4–15Y progression) ----------------
+  // ---------------- BOYS (11: XXS..6XL, toddler to youth/junior progression) ----------------
+  entry({
+    id: "boys_xxs",
+    category: "boys",
+    size: "XXS",
+    buildLabel: { en: "2–3Y", ar: "٢–٣ سنوات" },
+    measurements: { chest: 55, waist: 52, hips: 57.5, shoulder: 25, backLen: 24.5, sleeve: 34.0, neck: 25.5, bicep: 17.0, inseam: 42.5, thigh: 30.0, height: 100 },
+    morph: { bustScale: 0.72, bellyFullness: 1.15, gluteFullness: 0.86, lumbarScale: 1.0, headRatio: 0.162, cheekFullness: 0.11 },
+    hairStyle: "toddler_curls",
+    skinColor: 0xe9bca1,
+    hairColor: 0x523420,
+  }),
   entry({
     id: "boys_xs",
     category: "boys",
@@ -335,6 +510,50 @@ export const MANNEQUIN_CATALOG = Object.freeze([
     skinColor: 0xb17d61,
     hairColor: 0x17100c,
   }),
+  entry({
+    id: "boys_xxxl",
+    category: "boys",
+    size: "XXXL",
+    buildLabel: { en: "16Y / Jr L", ar: "١٦ سنة" },
+    measurements: { chest: 94, waist: 80, hips: 96.5, shoulder: 41.8, backLen: 43.0, sleeve: 60.5, neck: 38.0, bicep: 30.5, inseam: 78.0, thigh: 52.5, height: 171 },
+    morph: { bustScale: 1.35, bellyFullness: 1.06, gluteFullness: 1.15, lumbarScale: 0.98, headRatio: 0.131, cheekFullness: 0.0 },
+    hairStyle: "varsity_crop",
+    skinColor: 0xd29f82,
+    hairColor: 0x2b1d14,
+  }),
+  entry({
+    id: "boys_4xl",
+    category: "boys",
+    size: "4XL",
+    buildLabel: { en: "Jr XL", ar: "شبابي 4XL" },
+    measurements: { chest: 100, waist: 86, hips: 102, shoulder: 43.6, backLen: 44.5, sleeve: 62.5, neck: 39.4, bicep: 32.5, inseam: 80.0, thigh: 55.5, height: 175 },
+    morph: { bustScale: 1.42, bellyFullness: 1.14, gluteFullness: 1.19, lumbarScale: 0.95, headRatio: 0.130, cheekFullness: 0.03 },
+    hairStyle: "side_sweep_jr",
+    skinColor: 0xc28e71,
+    hairColor: 0x221610,
+  }),
+  entry({
+    id: "boys_5xl",
+    category: "boys",
+    size: "5XL",
+    buildLabel: { en: "Jr XXL", ar: "شبابي 5XL" },
+    measurements: { chest: 106, waist: 92, hips: 107.5, shoulder: 45.4, backLen: 46.0, sleeve: 64.5, neck: 40.8, bicep: 34.5, inseam: 82.0, thigh: 58.5, height: 178 },
+    morph: { bustScale: 1.48, bellyFullness: 1.24, gluteFullness: 1.23, lumbarScale: 0.92, headRatio: 0.129, cheekFullness: 0.06 },
+    hairStyle: "taper_quiff_jr",
+    skinColor: 0xae7b5f,
+    hairColor: 0x1b120d,
+  }),
+  entry({
+    id: "boys_6xl",
+    category: "boys",
+    size: "6XL",
+    buildLabel: { en: "Jr Plus", ar: "شبابي 6XL" },
+    measurements: { chest: 112, waist: 98, hips: 113, shoulder: 47.2, backLen: 47.5, sleeve: 66.5, neck: 42.2, bicep: 36.5, inseam: 84.0, thigh: 61.5, height: 181 },
+    morph: { bustScale: 1.54, bellyFullness: 1.36, gluteFullness: 1.27, lumbarScale: 0.90, headRatio: 0.128, cheekFullness: 0.09 },
+    hairStyle: "classic_jr_wave",
+    skinColor: 0x9f6d52,
+    hairColor: 0x150f0b,
+  }),
 ]);
 
 export const MANNEQUINS_BY_ID = Object.freeze(
@@ -356,6 +575,11 @@ export function normalizeMannequinSize(size) {
   return MANNEQUIN_SIZE_ALIASES[upper] || upper;
 }
 
+export function toPatternSize(size) {
+  const norm = normalizeMannequinSize(size);
+  return norm === "4XL" ? "XXXXL" : norm;
+}
+
 export function isActiveMannequinSize(size) {
   return ACTIVE_MANNEQUIN_SIZES.includes(normalizeMannequinSize(size));
 }
@@ -370,11 +594,9 @@ export function getMannequinsByCategory(category = "women") {
 }
 
 const PLANNED_STEP_OFFSET = Object.freeze({
-  XXS: -1,
-  XXXL: 1,
-  "4XL": 2,
-  "5XL": 3,
-  "6XL": 4,
+  XXXS: -1,
+  "7XL": 1,
+  "8XL": 2,
 });
 
 const PLANNED_EXTRA_DELTA = Object.freeze({
@@ -395,7 +617,8 @@ function buildExtrapolatedMannequin(category, normSize) {
   const stepOff = PLANNED_STEP_OFFSET[normSize];
   if (stepOff == null) return null;
   const isSmall = stepOff < 0;
-  const anchor = getMannequinsByCategory(category)[isSmall ? 0 : 5];
+  const catList = getMannequinsByCategory(category);
+  const anchor = catList[isSmall ? 0 : catList.length - 1];
   const isKid = category === "girls" || category === "boys";
   const meas = {};
   for (const [k, baseVal] of Object.entries(anchor.measurements)) {

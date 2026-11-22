@@ -1,5 +1,5 @@
 import { SKIN_TONES } from '../body/skinTones'
-import { getMannequinsByCategory, isActiveMannequinSize } from '../../../js/mannequin-catalog.js'
+import { getMannequinsByCategory, isActiveMannequinSize, normalizeMannequinSize } from '../../../js/mannequin-catalog.js'
 import { t } from '../i18n'
 
 export { DEFAULT_SKIN_TONE } from '../body/skinTones'
@@ -45,7 +45,7 @@ export default function AvatarPanel({ lang = 'en', category = 'women', mannequin
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
             {mannequins.map((mq) => {
-              const active = isActiveMannequinSize(mannequinSize) && mq.size === mannequinSize
+              const active = isActiveMannequinSize(mannequinSize) && mq.size === normalizeMannequinSize(mannequinSize)
               return (
                 <button
                   key={mq.id}

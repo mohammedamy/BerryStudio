@@ -3892,7 +3892,7 @@ export const View3D = (() => {
     const [hipLX, hipLY, hipLZ] = getRootBonePoint(bones[BONE_IDX.legL], 0, 0, 0);
     const [kneeLX, kneeLY, kneeLZ] = getRootBonePoint(bones[BONE_IDX.kneeL], 0, 0, 0);
     const [ankLX, ankLY, ankLZ] = getRootBonePoint(bones[BONE_IDX.footL], 0, 0, 0);
-    const footLen = clamp(d.H * (d.kid ? 0.148 : (d.female ? 0.142 : 0.150)), 0.17, 0.29);
+    const footLen = clamp(d.H * (d.kid ? 0.148 : (d.female ? 0.142 : 0.150)), 0.14, 0.29);
     const [toeLX, toeLY, toeLZ] = getRootBonePoint(bones[BONE_IDX.footL], 0, -d.H * 0.025, footLen * 0.56);
 
     const [hipRX, hipRY, hipRZ] = getRootBonePoint(bones[BONE_IDX.legR], 0, 0, 0);

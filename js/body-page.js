@@ -9,7 +9,7 @@
    ============================================================ */
 import { I18N } from './i18n.js';
 import { SIZES, KIDS_AGES, computeMeasurements } from './data.js';
-import { getMannequinsByCategory, getMannequinFor, isActiveMannequinSize, resolveMannequinMeasurements } from './mannequin-catalog.js';
+import { getMannequinsByCategory, getMannequinFor, isActiveMannequinSize, normalizeMannequinSize, resolveMannequinMeasurements, toPatternSize } from './mannequin-catalog.js';
 import { renderMeasureFields } from './measure-form.js';
 import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
 
@@ -65,11 +65,12 @@ import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
     const g = $("#mannequinGrid");
     if (!g) return;
     g.innerHTML = "";
+    const activeNorm = normalizeMannequinSize(size);
     getMannequinsByCategory(category).forEach((mq) => {
-      const active = size === mq.size && !kids;
+      const active = activeNorm === mq.size && !kids;
       const b = el("button", "size-btn" + (active ? " active" : ""), `${mq.size} · ${mq.measurements.height}`);
       b.title = `${L(mq.name)} (${L(mq.buildLabel)}, ${mq.measurements.height} cm)`;
-      b.onclick = () => { size = mq.size; kids = null; custom = {}; refreshAll(); };
+      b.onclick = () => { size = toPatternSize(mq.size); kids = null; custom = {}; refreshAll(); };
       g.appendChild(b);
     });
   }
@@ -109,7 +110,7 @@ import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
     saveBodyFormHandoff({
       category,
       size,
-      mannequinSize: isActiveMannequinSize(size) ? size : null,
+      mannequinSize: isActiveMannequinSize(size) ? normalizeMannequinSize(size) : null,
       measurements: currentMeas(),
     });
     location.href = `index.html?${HANDOFF_URL_FLAG}=1`;
@@ -123,7 +124,7 @@ import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
   let clothLabEmbedModule = null;
   let clothLabEmbedLoadPromise = null;
   function buildBodyPayload() {
-    const mqSize = isActiveMannequinSize(size) ? size : "M";
+    const mqSize = isActiveMannequinSize(size) ? normalizeMannequinSize(size) : "M";
     const mq = getMannequinFor(category, mqSize);
     return {
       category,

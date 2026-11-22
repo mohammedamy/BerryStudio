@@ -13,7 +13,9 @@ import {
   getMannequinsByCategory,
   getMannequinFor,
   isActiveMannequinSize,
+  normalizeMannequinSize,
   resolveMannequinMeasurements,
+  toPatternSize,
 } from './mannequin-catalog.js';
 import { Canvas } from './canvas.js';
 import { View3D } from './three-view.js';
@@ -4527,7 +4529,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const modelSel = $("#v3dModelSelect");
     if (modelSel) modelSel.value = mq.category;
     if (mq.category === state.category) {
-      state.size = mq.size;
+      state.size = toPatternSize(mq.size);
       state.kids = null;
       state.custom = {};
       state.avatarSizeExplicit = false;
@@ -6727,7 +6729,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         if (hSize) {
           state.size = hSize;
           state.kids = null;
-          state.avatarSize = isActiveMannequinSize(hSize) ? hSize : "M";
+          state.avatarSize = isActiveMannequinSize(hSize) ? normalizeMannequinSize(hSize) : "M";
           state.avatarSizeExplicit = isActiveMannequinSize(hSize);
         }
         state.custom = {...handoff.measurements};

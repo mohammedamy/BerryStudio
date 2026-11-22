@@ -1,5 +1,5 @@
 import { MEASUREMENT_KEYS } from '../state/measurements'
-import { getMannequinsByCategory } from '../../../js/mannequin-catalog.js'
+import { getMannequinsByCategory, normalizeMannequinSize } from '../../../js/mannequin-catalog.js'
 import { t } from '../i18n'
 
 // Live measurement input panel — every change flows straight into
@@ -7,6 +7,7 @@ import { t } from '../i18n'
 // rig) re-morphs in real time as the user types.
 export default function MeasurementPanel({ lang = 'en', category = 'women', mannequinSize = 'M', onMannequinSizeChange, measurements, onChange }) {
   const mannequins = getMannequinsByCategory(category)
+  const normSize = normalizeMannequinSize(mannequinSize)
   return (
     <div style={{ padding: 14 }}>
       {onMannequinSizeChange && (
@@ -14,9 +15,9 @@ export default function MeasurementPanel({ lang = 'en', category = 'women', mann
           <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
             {t(lang, 'mannequinSize')}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
             {mannequins.map((mq) => {
-              const active = mq.size === mannequinSize
+              const active = mq.size === normSize
               return (
                 <button
                   key={mq.id}
@@ -24,9 +25,9 @@ export default function MeasurementPanel({ lang = 'en', category = 'women', mann
                   aria-pressed={active}
                   onClick={() => onMannequinSizeChange(mq.size)}
                   style={{
-                    padding: '4px 2px',
+                    padding: '5px 2px',
                     borderRadius: 6,
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: 700,
                     cursor: 'pointer',
                     background: active ? 'var(--accent-2)' : 'var(--panel-2)',

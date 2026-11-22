@@ -1,5 +1,13 @@
 # Changelog
 
+## Full 44 Studio Mannequin Size Range (`XXS–6XL` × 4 Categories) (`berrystudio-v92`)
+
+Expands the curated studio mannequin catalog from 24 to all **44 mannequins** covering the full 11-size grading range (`XXS`, `XS`, `S`, `M`, `L`, `XL`, `XXL`, `XXXL`, `4XL`, `5XL`, `6XL`) across Women, Girls, Men, and Boys in 3D Preview, Cloth Lab, and BodyForm:
+
+- **Full 44-Model Registry (`js/mannequin-catalog.js`, `sw.js`)**: Adds 20 new studio mannequins (`XXS`, `XXXL`, `4XL`, `5XL`, `6XL` × 4 categories, including `2–3Y` toddlers through `Jr Plus` for Girls & Boys and tailored petite-to-extended plus silhouettes for Women & Men), exports `toPatternSize()` to bridge `"4XL"` seamlessly with `js/data.js` `SIZES` (`"XXXXL"`), keeps future-proof extrapolation for `XXXS` / `7XL+`, and bumps the service worker cache to `berrystudio-v92`.
+- **20 New Studio Hairstyles & Extended Morph Ranges (`js/human-mannequin.js`, `cloth-lab/src/body/collisionRig.js`)**: Widens belly/cheek morph clamps (`0.45–2.8` and `-0.15–0.25`) and `footLen` lower bound (`0.14 m`) for `XXS` toddlers and `XXXL–6XL` extended sizes, and adds 20 distinct hairstyles (`pixie_crop`, `crown_braid`, `low_ponytail`, `french_twist`, `glam_bun`, `textured_crop`, `buzz_fade`, `parted_pomp`, `executive_comb`, `classic_crown`, `toddler_puffs`, `ribbon_ponytail`, `side_braid_bun`, `high_pony_wave`, `double_braid_buns`, `toddler_curls`, `varsity_crop`, `side_sweep_jr`, `taper_quiff_jr`, `classic_jr_wave`) bringing the total to 44 unique studio looks.
+- **3D Preview, Cloth Lab & BodyForm UI Updates (`index.html`, `js/i18n.js`, `js/app.js`, `body.html`, `js/body-page.js`, `cloth-lab/src/...`)**: Updates `#v3dMannequinSizeSelect`, the filterable 44-mannequin drawer (`#v3dMannequinPanel`), BodyForm's `#mannequinGrid`, and Cloth Lab's `Body`/`Look` pickers (4-column `MeasurementPanel` grid for crisp `XXXL–6XL` buttons in EN & AR), and expands verification across `test/mannequin-catalog.test.js` and `cloth-lab/src/body/mannequinCatalog24.test.js`.
+
 ## 20 New Size-Specific Studio Mannequins (24 Total: `XS–XXL` × 4 Categories) (`berrystudio-v91`)
 
 Adds 20 new size-specific studio mannequins (5 Women, 5 Girls, 5 Men, 5 Boys) to complement the 4 baseline `M` models—bringing the studio roster to 24 curated mannequins across `XS`, `S`, `M`, `L`, `XL`, and `XXL` in all four categories—paired with size-aware sculpting, 24 studio hairstyles, bilingual controls across 3D Preview, Cloth Lab, and BodyForm, and an extensible size-tier registry ready for `XXS`, `XXXL`, `4XL`, and `5XL`:

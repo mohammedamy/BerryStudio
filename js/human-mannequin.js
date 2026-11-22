@@ -85,7 +85,7 @@ export function torsoZBump(y, phi, d) {
 
   // Soft lower-abdominal fullness with subtle navel indentation
   if (!d.kid) {
-    const bellyScale = clamp(d.morph?.bellyFullness ?? 1.0, 0.5, 2.0);
+    const bellyScale = clamp(d.morph?.bellyFullness ?? 1.0, 0.45, 2.8);
     const bellyWin = bumpWindow(y, d.hipY + d.span * 0.21, d.span * 0.16) * bumpWindow(phi, 0, 0.72);
     dz += d.waistR * 0.038 * bellyScale * bellyWin;
     dz -= d.waistR * 0.016 * bumpWindow(y, d.hipY + d.span * 0.30, d.span * 0.035) * bumpWindow(phi, 0, 0.10);
@@ -133,7 +133,7 @@ export function maleTorsoZBump(y, phi, d) {
   const pecLobe = bumpWindow(phi, 0.44, 0.40) + bumpWindow(phi, -0.44, 0.40);
   dz += chest.amplitude * bumpWindow(y, chest.centerY, chest.halfWidth) * (pecLobe * 0.84 + bumpWindow(phi, 0, chest.phiHalfWidth) * 0.28);
   if (!d.kid) {
-    const bellyScale = clamp(d.morph?.bellyFullness ?? 1.0, 0.5, 2.0);
+    const bellyScale = clamp(d.morph?.bellyFullness ?? 1.0, 0.45, 2.8);
     dz += d.waistR * 0.024 * bellyScale * bumpWindow(y, d.hipY + d.span * 0.46, d.span * 0.16) * bumpWindow(phi, 0, 0.58);
   }
   const backWeight = Math.max(0, -Math.cos(phi));
@@ -452,7 +452,7 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
   // =========================================================================
   // 1. LEFT & RIGHT FEET -> ANKLES -> CALVES -> KNEES -> THIGHS (N = 48 each)
   // =========================================================================
-  const footLen = clamp(H * (kid ? 0.148 : (female ? 0.142 : 0.150)), 0.17, 0.29);
+  const footLen = clamp(H * (kid ? 0.148 : (female ? 0.142 : 0.150)), 0.14, 0.29);
   const footW = footLen * (female ? 0.37 : 0.39);
   const ankleY = lm.ankleY;
   const kneeY = lm.kneeY;
@@ -1368,7 +1368,7 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       const cheekLobe = superGauss(phi, 0.50, 0.35, 2.2) + superGauss(phi, -0.50, 0.35, 2.2);
       dz += cheekAmp * bumpWindow(yLocal, -headH * 0.058, headH * 0.138) * cheekLobe;
 
-      const cheekMorph = clamp(d.morph?.cheekFullness ?? 0, -0.15, 0.20);
+      const cheekMorph = clamp(d.morph?.cheekFullness ?? 0, -0.15, 0.25);
       if (Math.abs(cheekMorph) > 1e-4) {
         const midFaceWin = bumpWindow(yLocal, -headH * 0.14, headH * 0.16);
         const latCheekLobe = superGauss(phi, 0.75, 0.42, 2.0) + superGauss(phi, -0.75, 0.42, 2.0);
@@ -2163,7 +2163,20 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
   };
 
   if (category === "women") {
-    if (activeHairStyle === "high_bun") {
+    if (activeHairStyle === "pixie_crop") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.236,
+        templeSweep: 0.088,
+        napeYFrac: -0.22,
+        crownLiftFrac: 0.052,
+        sideLoftFrac: 0.026,
+        backLoftFrac: 0.036,
+        partPhi: 0.28,
+        partDepth: 0.006,
+        strandFreq: 32,
+        strandDepthFrac: 0.007,
+      }));
+    } else if (activeHairStyle === "high_bun") {
       headBone.add(buildParametricHairShell({
         frontYFrac: 0.258,
         templeSweep: 0.098,
@@ -2232,6 +2245,91 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
         strandDepthFrac: 0.0085,
       }));
       addSculptedBun(0.185, [0.92, 1.32, 0.84], [0, 0.02, -0.435], 7);
+    } else if (activeHairStyle === "crown_braid") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.250,
+        templeSweep: 0.104,
+        napeYFrac: -0.33,
+        crownLiftFrac: 0.054,
+        sideLoftFrac: 0.042,
+        backLoftFrac: 0.062,
+        partPhi: 0.0,
+        partDepth: 0.005,
+        strandFreq: 24,
+        strandDepthFrac: 0.008,
+      }));
+      const braidGeo = new THREE.TorusGeometry(headH * 0.405, headH * 0.044, 12, 36);
+      const brPos = braidGeo.attributes.position;
+      for (let i = 0; i < brPos.count; i++) {
+        const bx = brPos.getX(i), by = brPos.getY(i), bz = brPos.getZ(i);
+        const w = 1 + 0.08 * Math.sin(Math.atan2(by, bx) * 18);
+        brPos.setXYZ(i, bx * w, by * w, bz);
+      }
+      braidGeo.computeVertexNormals();
+      addUniformHairColors(braidGeo, 0.96);
+      const crown = new THREE.Mesh(braidGeo, hairVertMat);
+      crown.position.set(0, headH * 0.20, -headH * 0.02);
+      crown.rotation.x = Math.PI * 0.44;
+      crown.castShadow = true;
+      headBone.add(crown);
+    } else if (activeHairStyle === "low_ponytail") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.250,
+        templeSweep: 0.108,
+        napeYFrac: -0.34,
+        crownLiftFrac: 0.050,
+        sideLoftFrac: 0.040,
+        backLoftFrac: 0.058,
+        partPhi: 0.0,
+        partDepth: 0.006,
+        strandFreq: 28,
+        strandDepthFrac: 0.0075,
+      }));
+      const wTieMat = lowPower
+        ? new THREE.MeshPhongMaterial({ color: 0x2f2521, shininess: 30 })
+        : new THREE.MeshStandardMaterial({ color: 0x2f2521, roughness: 0.45 });
+      const wTie = new THREE.Mesh(new THREE.TorusGeometry(headH * 0.054, headH * 0.015, 10, 18), wTieMat);
+      wTie.position.set(0, -headH * 0.20, -headH * 0.42);
+      headBone.add(wTie);
+      const wCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, -headH * 0.20, -headH * 0.42),
+        new THREE.Vector3(0, -headH * 0.38, -headH * 0.49),
+        new THREE.Vector3(0, -headH * 0.62, -headH * 0.47),
+      ]);
+      const wTailGeo = new THREE.TubeGeometry(wCurve, 18, headH * 0.074, 12, false);
+      wTailGeo.computeVertexNormals();
+      addUniformHairColors(wTailGeo, 0.96);
+      const wTail = new THREE.Mesh(wTailGeo, hairVertMat);
+      wTail.castShadow = true;
+      headBone.add(wTail);
+    } else if (activeHairStyle === "french_twist") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.252,
+        templeSweep: 0.106,
+        napeYFrac: -0.34,
+        crownLiftFrac: 0.068,
+        sideLoftFrac: 0.044,
+        backLoftFrac: 0.066,
+        partPhi: -0.14,
+        partDepth: 0.005,
+        strandFreq: 28,
+        strandDepthFrac: 0.0075,
+      }));
+      addSculptedBun(0.155, [0.76, 1.55, 0.72], [0, -0.02, -0.435], 9);
+    } else if (activeHairStyle === "glam_bun") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.254,
+        templeSweep: 0.102,
+        napeYFrac: -0.30,
+        crownLiftFrac: 0.082,
+        sideLoftFrac: 0.048,
+        backLoftFrac: 0.072,
+        partPhi: 0.0,
+        partDepth: 0.004,
+        strandFreq: 26,
+        strandDepthFrac: 0.008,
+      }));
+      addSculptedBun(0.195, [1.14, 1.02, 0.94], [0, 0.34, -0.34], 8);
     } else {
       // "chignon" — Classic M baseline
       headBone.add(buildParametricHairShell({
@@ -2249,7 +2347,73 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
       addSculptedBun(0.178, [1.18, 0.88, 0.84], [0, -0.17, -0.435], 7);
     }
   } else if (category === "men") {
-    if (activeHairStyle === "side_crop") {
+    if (activeHairStyle === "textured_crop") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.246,
+        templeSweep: 0.064,
+        napeYFrac: -0.22,
+        crownLiftFrac: 0.048,
+        sideLoftFrac: 0.020,
+        backLoftFrac: 0.030,
+        partPhi: 0.0,
+        partDepth: 0.002,
+        strandFreq: 30,
+        strandDepthFrac: 0.011,
+      }));
+    } else if (activeHairStyle === "buzz_fade") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.270,
+        templeSweep: 0.050,
+        napeYFrac: -0.19,
+        crownLiftFrac: 0.022,
+        sideLoftFrac: 0.012,
+        backLoftFrac: 0.018,
+        partPhi: 0.0,
+        partDepth: 0.0,
+        strandFreq: 42,
+        strandDepthFrac: 0.003,
+      }));
+    } else if (activeHairStyle === "parted_pomp") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.264,
+        templeSweep: 0.074,
+        napeYFrac: -0.25,
+        crownLiftFrac: 0.072,
+        sideLoftFrac: 0.022,
+        backLoftFrac: 0.036,
+        partPhi: -0.34,
+        partDepth: 0.009,
+        strandFreq: 28,
+        strandDepthFrac: 0.0085,
+      }));
+      addSculptedBun(0.132, [1.18, 0.48, 1.38], [0.05, 0.40, 0.10], 7);
+    } else if (activeHairStyle === "executive_comb") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.258,
+        templeSweep: 0.074,
+        napeYFrac: -0.25,
+        crownLiftFrac: 0.058,
+        sideLoftFrac: 0.028,
+        backLoftFrac: 0.038,
+        partPhi: 0.38,
+        partDepth: 0.010,
+        strandFreq: 30,
+        strandDepthFrac: 0.0085,
+      }));
+    } else if (activeHairStyle === "classic_crown") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.250,
+        templeSweep: 0.078,
+        napeYFrac: -0.30,
+        crownLiftFrac: 0.068,
+        sideLoftFrac: 0.036,
+        backLoftFrac: 0.052,
+        partPhi: -0.18,
+        partDepth: 0.007,
+        strandFreq: 20,
+        strandDepthFrac: 0.011,
+      }));
+    } else if (activeHairStyle === "side_crop") {
       headBone.add(buildParametricHairShell({
         frontYFrac: 0.264,
         templeSweep: 0.068,
@@ -2335,7 +2499,119 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
       ? new THREE.MeshPhongMaterial({ color: 0xe0568c, shininess: 35 })
       : new THREE.MeshStandardMaterial({ color: 0xe0568c, roughness: 0.38 });
 
-    if (activeHairStyle === "twin_buns") {
+    if (activeHairStyle === "toddler_puffs") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.242,
+        templeSweep: 0.094,
+        napeYFrac: -0.26,
+        crownLiftFrac: 0.044,
+        sideLoftFrac: 0.030,
+        backLoftFrac: 0.042,
+        partPhi: 0.0,
+        partDepth: 0.007,
+        strandFreq: 26,
+        strandDepthFrac: 0.008,
+      }));
+      [-1, 1].forEach((s) => {
+        const pTie = new THREE.Mesh(new THREE.TorusGeometry(headH * 0.056, headH * 0.015, 10, 18), tieMat);
+        pTie.position.set(s * headH * 0.28, headH * 0.34, -headH * 0.04);
+        pTie.rotation.set(Math.PI * 0.38, 0, s * -0.45);
+        headBone.add(pTie);
+        addSculptedBun(0.132, [1.02, 0.96, 1.0], [s * 0.30, 0.40, -0.04], 5);
+      });
+    } else if (activeHairStyle === "ribbon_ponytail") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.248,
+        templeSweep: 0.102,
+        napeYFrac: -0.29,
+        crownLiftFrac: 0.050,
+        sideLoftFrac: 0.036,
+        backLoftFrac: 0.048,
+        partPhi: 0.16,
+        partDepth: 0.006,
+        strandFreq: 28,
+        strandDepthFrac: 0.007,
+      }));
+      const rTie = new THREE.Mesh(new THREE.TorusGeometry(headH * 0.054, headH * 0.016, 10, 18), tieMat);
+      rTie.position.set(0, headH * 0.08, -headH * 0.41);
+      headBone.add(rTie);
+      const rCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, headH * 0.08, -headH * 0.41),
+        new THREE.Vector3(0, -headH * 0.10, -headH * 0.49),
+        new THREE.Vector3(0, -headH * 0.36, -headH * 0.46),
+      ]);
+      const rTailGeo = new THREE.TubeGeometry(rCurve, 18, headH * 0.068, 12, false);
+      rTailGeo.computeVertexNormals();
+      addUniformHairColors(rTailGeo, 0.96);
+      const rTail = new THREE.Mesh(rTailGeo, hairVertMat);
+      rTail.castShadow = true;
+      headBone.add(rTail);
+    } else if (activeHairStyle === "side_braid_bun") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.248,
+        templeSweep: 0.106,
+        napeYFrac: -0.32,
+        crownLiftFrac: 0.050,
+        sideLoftFrac: 0.036,
+        backLoftFrac: 0.054,
+        partPhi: -0.28,
+        partDepth: 0.008,
+        strandFreq: 28,
+        strandDepthFrac: 0.0075,
+      }));
+      const sTie = new THREE.Mesh(new THREE.TorusGeometry(headH * 0.052, headH * 0.015, 10, 18), tieMat);
+      sTie.position.set(-headH * 0.23, -headH * 0.12, -headH * 0.36);
+      headBone.add(sTie);
+      addSculptedBun(0.145, [1.05, 0.94, 0.92], [-0.24, -0.12, -0.38], 10);
+    } else if (activeHairStyle === "high_pony_wave") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.252,
+        templeSweep: 0.100,
+        napeYFrac: -0.27,
+        crownLiftFrac: 0.056,
+        sideLoftFrac: 0.034,
+        backLoftFrac: 0.048,
+        partPhi: 0.0,
+        partDepth: 0.004,
+        strandFreq: 26,
+        strandDepthFrac: 0.0075,
+      }));
+      const hTie = new THREE.Mesh(new THREE.TorusGeometry(headH * 0.052, headH * 0.015, 10, 18), tieMat);
+      hTie.position.set(0, headH * 0.28, -headH * 0.34);
+      hTie.rotation.x = Math.PI * 0.28;
+      headBone.add(hTie);
+      const hCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, headH * 0.28, -headH * 0.34),
+        new THREE.Vector3(0, headH * 0.12, -headH * 0.48),
+        new THREE.Vector3(0, -headH * 0.28, -headH * 0.48),
+      ]);
+      const hTailGeo = new THREE.TubeGeometry(hCurve, 18, headH * 0.070, 12, false);
+      hTailGeo.computeVertexNormals();
+      addUniformHairColors(hTailGeo, 0.96);
+      const hTail = new THREE.Mesh(hTailGeo, hairVertMat);
+      hTail.castShadow = true;
+      headBone.add(hTail);
+    } else if (activeHairStyle === "double_braid_buns") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.246,
+        templeSweep: 0.104,
+        napeYFrac: -0.30,
+        crownLiftFrac: 0.048,
+        sideLoftFrac: 0.036,
+        backLoftFrac: 0.050,
+        partPhi: 0.0,
+        partDepth: 0.008,
+        strandFreq: 26,
+        strandDepthFrac: 0.0075,
+      }));
+      [-1, 1].forEach((s) => {
+        const dTie = new THREE.Mesh(new THREE.TorusGeometry(headH * 0.046, headH * 0.013, 10, 18), tieMat);
+        dTie.position.set(s * headH * 0.27, -headH * 0.12, -headH * 0.32);
+        dTie.rotation.y = s * 0.50;
+        headBone.add(dTie);
+        addSculptedBun(0.130, [0.98, 0.95, 0.92], [s * 0.28, -0.12, -0.34], 9);
+      });
+    } else if (activeHairStyle === "twin_buns") {
       headBone.add(buildParametricHairShell({
         frontYFrac: 0.248,
         templeSweep: 0.098,
@@ -2485,7 +2761,73 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
       });
     }
   } else {
-    if (activeHairStyle === "soft_fringe") {
+    if (activeHairStyle === "toddler_curls") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.222,
+        templeSweep: 0.082,
+        napeYFrac: -0.30,
+        crownLiftFrac: 0.064,
+        sideLoftFrac: 0.042,
+        backLoftFrac: 0.054,
+        partPhi: 0.0,
+        partDepth: 0.002,
+        strandFreq: 18,
+        strandDepthFrac: 0.013,
+      }));
+    } else if (activeHairStyle === "varsity_crop") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.258,
+        templeSweep: 0.068,
+        napeYFrac: -0.24,
+        crownLiftFrac: 0.058,
+        sideLoftFrac: 0.022,
+        backLoftFrac: 0.032,
+        partPhi: -0.26,
+        partDepth: 0.008,
+        strandFreq: 30,
+        strandDepthFrac: 0.008,
+      }));
+    } else if (activeHairStyle === "side_sweep_jr") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.236,
+        templeSweep: 0.080,
+        napeYFrac: -0.28,
+        crownLiftFrac: 0.054,
+        sideLoftFrac: 0.030,
+        backLoftFrac: 0.042,
+        partPhi: 0.32,
+        partDepth: 0.007,
+        strandFreq: 24,
+        strandDepthFrac: 0.009,
+      }));
+    } else if (activeHairStyle === "taper_quiff_jr") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.256,
+        templeSweep: 0.068,
+        napeYFrac: -0.24,
+        crownLiftFrac: 0.066,
+        sideLoftFrac: 0.020,
+        backLoftFrac: 0.032,
+        partPhi: -0.22,
+        partDepth: 0.005,
+        strandFreq: 30,
+        strandDepthFrac: 0.008,
+      }));
+      addSculptedBun(0.118, [1.14, 0.46, 1.24], [0.02, 0.37, 0.09], 6);
+    } else if (activeHairStyle === "classic_jr_wave") {
+      headBone.add(buildParametricHairShell({
+        frontYFrac: 0.248,
+        templeSweep: 0.082,
+        napeYFrac: -0.29,
+        crownLiftFrac: 0.062,
+        sideLoftFrac: 0.034,
+        backLoftFrac: 0.048,
+        partPhi: 0.16,
+        partDepth: 0.006,
+        strandFreq: 20,
+        strandDepthFrac: 0.011,
+      }));
+    } else if (activeHairStyle === "soft_fringe") {
       headBone.add(buildParametricHairShell({
         frontYFrac: 0.228,
         templeSweep: 0.068,

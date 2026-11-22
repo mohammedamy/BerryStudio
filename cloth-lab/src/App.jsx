@@ -8,7 +8,7 @@ import ExportPanel from './ui/ExportPanel'
 import SolverHUD, { isSolverHUDEnabled } from './ui/SolverHUD'
 import Scene from './scene/Scene'
 import { DEFAULT_MEASUREMENTS } from './state/measurements'
-import { getMannequinFor } from '../../js/mannequin-catalog.js'
+import { getMannequinFor, normalizeMannequinSize } from '../../js/mannequin-catalog.js'
 import { computeBodyDims } from './body/computeBodyDims'
 import { DEFAULT_FABRIC } from './cloth/fabricPresets'
 import { QUALITY_TIER_DEFAULT } from './cloth/ClothSimulation'
@@ -82,7 +82,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   // this is a local rendering-quality preference, not part of a garment's
   // own saved data the way fabricId is.
   const [qualityTier, setQualityTier] = useState(QUALITY_TIER_DEFAULT)
-  const [mannequinSize, setMannequinSize] = useState(pattern?.mannequinSize || 'M')
+  const [mannequinSize, setMannequinSize] = useState(pattern?.mannequinSize ? normalizeMannequinSize(pattern.mannequinSize) : 'M')
   const [skinToneId, setSkinToneId] = useState(null)
   const [poseId, setPoseId] = useState(DEFAULT_POSE)
   // Surfaced from deep inside GLBAvatar (see its own header comment) —
@@ -167,7 +167,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   function applyIncomingPattern(payload) {
     if (payload.lang) setLang(payload.lang)
     setCategory(payload.category)
-    if (payload.mannequinSize) setMannequinSize(payload.mannequinSize)
+    if (payload.mannequinSize) setMannequinSize(normalizeMannequinSize(payload.mannequinSize))
     if (payload.mannequinId && payload.mannequinId !== lastMannequinIdRef.current) {
       lastMannequinIdRef.current = payload.mannequinId
       setSkinToneId(null)
