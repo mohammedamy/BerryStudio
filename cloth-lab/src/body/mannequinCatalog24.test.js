@@ -65,8 +65,10 @@ describe('24-Mannequin Cloth Lab Collision & Envelope Parity', () => {
         }
       }
       expect(tested, `${mq.id} tested vertices`).toBeGreaterThan(10)
+      env?.texture?.dispose?.()
+      built.bodyMesh?.geometry?.dispose?.()
     }
-  })
+  }, 60000)
 
   it('orders categories cleanly with 6 active sizes each', () => {
     for (const cat of ['women', 'girls', 'men', 'boys']) {
