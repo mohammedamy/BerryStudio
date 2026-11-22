@@ -1,5 +1,13 @@
 # Changelog
 
+## Recover Remaining Valid Worktree Updates: V6-14 Declared-Seam Coverage, WP-41 Worker Recovery & v7 Roadmap (`berrystudio-v93`)
+
+Saves and integrates the remaining unmerged fixes discovered during a full cross-worktree, branch, and stash duplicate audit:
+
+- **V6-14 Generic Declared-Seam Construction Coverage (`js/construction-acceptance.js`, `js/construction-evidence-record.js`, `docs/construction-evidence-record-contract.md`, `js/app.js`, `js/i18n.js`, `test/construction-acceptance.test.js`, `test/construction-evidence-record.test.js`)**: Adds `assessDeclaredSeamConstruction()` so non-skirt projects declaring explicit two-sided `edges[].seamId` pairs receive a bounded `declared-seams` geometry check (without inferring unauthored seams or production eligibility) while preserving `createConstructionPacket()`.
+- **WP-41 Browser-Local Worker Recovery (`js/ai-providers.js`, `test/ai-providers.test.js`)**: Adds `discardLocalWorker()` so failed `loadRoute` worker initialization terminates and resets the cached worker instead of poisoning subsequent in-browser model loads, while preserving healthy loaded workers across inference-time errors.
+- **Upgrade Roadmap v7 (`BerryStudio-Upgrade-Plan-v7.md`, `sw.js`)**: Saves the v7 roadmap document into the main repository root and bumps the service worker cache to `berrystudio-v93`.
+
 ## Full 44 Studio Mannequin Size Range (`XXS–6XL` × 4 Categories) (`berrystudio-v92`)
 
 Expands the curated studio mannequin catalog from 24 to all **44 mannequins** covering the full 11-size grading range (`XXS`, `XS`, `S`, `M`, `L`, `XL`, `XXL`, `XXXL`, `4XL`, `5XL`, `6XL`) across Women, Girls, Men, and Boys in 3D Preview, Cloth Lab, and BodyForm:

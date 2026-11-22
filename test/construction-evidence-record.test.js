@@ -20,3 +20,13 @@ test('unsupported drafts are recorded as not applicable rather than treated as p
   assert.deepEqual(record.assessment.blockers,['constructionFamilyUnsupported']);
   assert.equal(record.approvals.productionEligible,false);
 });
+
+test('a declared non-skirt seam is recorded as geometry evidence, never an approval',()=>{
+  const record=createConstructionEvidenceRecord({pieces:[
+    {role:'trouser-front',outline:[[0,0],[8,0],[8,24],[0,24]],edges:[{seamId:'outseam',fromIdx:1,toIdx:2}]},
+    {role:'trouser-back',outline:[[0,0],[8,0],[8,24],[0,24]],edges:[{seamId:'outseam',fromIdx:1,toIdx:2}]},
+  ]});
+  assert.equal(record.assessment.family,'declared-seams');
+  assert.equal(record.assessment.decision,'declared-seams-checked');
+  assert.equal(record.assessment.productionEligible,false);
+});

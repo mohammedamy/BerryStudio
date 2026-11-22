@@ -1,5 +1,17 @@
 // A narrow seam audit, never an approval of construction or physical fit.
 export function assessWovenSkirtConstruction(pieces) {
+  return assessDeclaredSeams(pieces, { family: 'woven-skirt', decision: 'side-seam-checked' });
+}
+
+// Audits only geometry that the pattern itself explicitly declares as a
+// two-sided seam. It intentionally does not infer joins from proximity, role
+// names or silhouettes, which makes it safe to use for other supported
+// families without presenting a construction or fit conclusion.
+export function assessDeclaredSeamConstruction(pieces) {
+  return assessDeclaredSeams(pieces, { family: 'declared-seams', decision: 'declared-seams-checked' });
+}
+
+function assessDeclaredSeams(pieces, { family, decision }) {
   if (!Array.isArray(pieces)) throw new Error('constructionInvalid');
   const blockers = [], groups = new Map();
   for (const piece of pieces) {
@@ -31,6 +43,6 @@ export function assessWovenSkirtConstruction(pieces) {
     }
   }
   if (!groups.size) blockers.push('constructionSeam');
-  return {family:'woven-skirt',decision:blockers.length?'needs-construction-evidence':'side-seam-checked',checks,
+  return {family,decision:blockers.length?'needs-construction-evidence':decision,checks,
     blockers:[...new Set(blockers)],makerApproval:null,sampleApproval:null,productionEligible:false};
 }

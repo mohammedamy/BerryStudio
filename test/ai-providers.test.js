@@ -127,3 +127,68 @@ test('proxy.complete: fails cleanly with no endpoint configured', async () => {
   assert.equal(r.ok, false);
   assert.match(r.error, /no endpoint configured/);
 });
+
+class MockWorker {
+  constructor() {
+    this.listeners = [];
+    this.terminated = false;
+    MockWorker.instances.push(this);
+  }
+  addEventListener(type, fn) { this.listeners.push(fn); }
+  removeEventListener(type, fn) { this.listeners = this.listeners.filter((l) => l !== fn); }
+  postMessage(msg) {
+    const respond = MockWorker.script.shift();
+    if (!respond) throw new Error(`MockWorker: no scripted response queued for ${JSON.stringify(msg)}`);
+    const data = respond(msg);
+    queueMicrotask(() => this.listeners.slice().forEach((fn) => fn({ data })));
+  }
+  terminate() { this.terminated = true; }
+}
+MockWorker.instances = [];
+MockWorker.script = [];
+
+test('browser-local: a failed model load terminates the shared worker so the next load gets a fresh instance', async () => {
+  const realWorker = globalThis.Worker;
+  globalThis.Worker = MockWorker;
+  const before = MockWorker.instances.length;
+  try {
+    MockWorker.script.push(() => ({ type: 'error', message: 'Failed to load external data file "model.onnx_data"' }));
+    const r1 = await AIProviders['browser-local'].test({ model: 'Xenova/TinyLlama-1.1B-Chat-v1.0' });
+    assert.equal(r1.ok, false);
+    assert.equal(MockWorker.instances.length, before + 1);
+    assert.equal(MockWorker.instances[before].terminated, true);
+
+    MockWorker.script.push(() => ({ type: 'ready' }));
+    const r2 = await AIProviders['browser-local'].test({ model: 'Xenova/distilgpt2' });
+    assert.equal(r2.ok, true, r2.message);
+    assert.equal(MockWorker.instances.length, before + 2);
+    assert.equal(MockWorker.instances[before + 1].terminated, false);
+  } finally {
+    globalThis.Worker = realWorker;
+  }
+});
+
+test('browser-local: a failed complete() call on an already-loaded model does NOT discard/replace the worker', async () => {
+  const realWorker = globalThis.Worker;
+  globalThis.Worker = MockWorker;
+  try {
+    MockWorker.script.push(() => ({ type: 'ready' }));
+    const loaded = await AIProviders['browser-local'].test({ model: 'Xenova/distilgpt2-again' });
+    assert.equal(loaded.ok, true);
+    const workerAfterLoad = MockWorker.instances[MockWorker.instances.length - 1];
+    const countAfterLoad = MockWorker.instances.length;
+
+    MockWorker.script.push(() => ({ type: 'error', message: 'generation failed: unrelated runtime error' }));
+    const r1 = await AIProviders['browser-local'].complete({ model: 'Xenova/distilgpt2-again' }, { messages: [{ role: 'user', content: 'hi' }] });
+    assert.equal(r1.ok, false);
+    assert.equal(MockWorker.instances.length, countAfterLoad);
+    assert.equal(workerAfterLoad.terminated, false);
+
+    MockWorker.script.push(() => ({ type: 'result', ok: true, providerId: 'browser-local', text: 'ok', json: null, raw: null, usage: {} }));
+    const r2 = await AIProviders['browser-local'].complete({ model: 'Xenova/distilgpt2-again' }, { messages: [{ role: 'user', content: 'hi again' }] });
+    assert.equal(r2.ok, true);
+    assert.equal(MockWorker.instances.length, countAfterLoad);
+  } finally {
+    globalThis.Worker = realWorker;
+  }
+});

@@ -2820,6 +2820,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const body=$("#genericModal .modal-body");
     const decisionKey={
       'side-seam-checked':'constructionEvidenceChecked',
+      'declared-seams-checked':'constructionEvidenceDeclaredChecked',
       'needs-construction-evidence':'constructionEvidenceMissing',
       'not-applicable':'constructionEvidenceUnavailable',
     }[report.assessment.decision] || 'constructionEvidenceMissing';

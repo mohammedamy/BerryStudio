@@ -6,10 +6,13 @@ project ID/revision, piece roles, whether a saved brief or pattern program is
 present, the applicable seam assessment, and explicit null maker/sample
 approval fields.
 
-Only a project whose roles or typed program identify the supported woven-skirt
-slice is assessed with the declared-seam audit. Other projects produce a
-`not-applicable` result with `constructionFamilyUnsupported`; they never
-receive an inferred pass. Every record sets `productionEligible` to `false`.
+The typed woven-skirt slice keeps its specific side-seam assessment. Any other
+project with an explicitly declared two-sided `edges[].seamId` pair receives a
+generic `declared-seams` assessment, which measures only those supplied edge
+lengths. The record never infers joins from silhouettes, roles or proximity.
+Projects with no declared seam evidence produce `not-applicable` with
+`constructionFamilyUnsupported`. Every record sets `productionEligible` to
+`false`.
 
 The record is a local download and is not sent to a provider or cloud service.
 It is not a tech pack, fit report, construction instruction, material test,

@@ -424,6 +424,13 @@ function getLocalWorker() {
   return localWorker;
 }
 
+function discardLocalWorker() {
+  if (localWorker) { try { localWorker.terminate(); } catch { /* already dead */ } }
+  localWorker = null;
+  loadedModelId = null;
+  loadedSegModelId = null;
+}
+
 function postToWorker(msg, onProgress) {
   return new Promise((resolve, reject) => {
     const w = getLocalWorker();
@@ -431,8 +438,13 @@ function postToWorker(msg, onProgress) {
       const data = e.data;
       if (data.type === 'progress') { if (onProgress) onProgress(data.pct); return; }
       w.removeEventListener('message', handler);
-      if (data.type === 'error') reject(new Error(data.message));
-      else resolve(data);
+      if (data.type === 'error') {
+        // Terminate & clear a worker corrupted during model/session loading so later loads start fresh.
+        if (msg.type === 'loadRoute') discardLocalWorker();
+        reject(new Error(data.message));
+      } else {
+        resolve(data);
+      }
     }
     w.addEventListener('message', handler);
     w.postMessage(msg);

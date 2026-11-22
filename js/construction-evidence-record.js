@@ -1,4 +1,4 @@
-import { assessWovenSkirtConstruction } from './construction-acceptance.js';
+import { assessDeclaredSeamConstruction, assessWovenSkirtConstruction } from './construction-acceptance.js';
 import { createConstructionPacket } from './construction-packet.js';
 
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -10,9 +10,12 @@ export function createConstructionEvidenceRecord(project, { evaluatedAt = new Da
   const pieces = Array.isArray(project?.pieces) ? project.pieces : [];
   const roles = [...new Set(pieces.map(piece => typeof piece?.role === 'string' ? piece.role : null).filter(Boolean))].sort();
   const isSkirt = project?.patternProgram?.family === 'woven-a-line-skirt' || roles.some(role => skirtRoles.has(role));
+  const hasDeclaredSeam = pieces.some(piece => Array.isArray(piece?.edges) && piece.edges.some(edge => typeof edge?.seamId === 'string' && edge.seamId));
   const assessment = isSkirt
     ? assessWovenSkirtConstruction(pieces)
-    : { family: null, decision: 'not-applicable', checks: [], blockers: ['constructionFamilyUnsupported'], makerApproval: null, sampleApproval: null, productionEligible: false };
+    : hasDeclaredSeam
+      ? assessDeclaredSeamConstruction(pieces)
+      : { family: null, decision: 'not-applicable', checks: [], blockers: ['constructionFamilyUnsupported'], makerApproval: null, sampleApproval: null, productionEligible: false };
   return clone({
     schema: 'berrystudio.construction-evidence.v1',
     evaluatedAt,

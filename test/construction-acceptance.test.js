@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assessWovenSkirtConstruction } from '../js/construction-acceptance.js';
+import { assessDeclaredSeamConstruction, assessWovenSkirtConstruction } from '../js/construction-acceptance.js';
 import { AIGen } from '../js/ai.js';
 
 const measurements={hips:98,waist:72,inseam:76};
@@ -24,4 +24,16 @@ for (const [label,edge,delta,code] of [
   const pieces=[0,delta].map(d=>({outline:[[0,0],[10,0],[10,20+d],[0,20]],edges:[{...edge,seamId:'side'}]}));
   const report=assessWovenSkirtConstruction(pieces);
   assert.ok(report.blockers.includes(code)); assert.equal(report.productionEligible,false);
+});
+
+test('a non-skirt declared pair is measured without inferring construction approval',()=>{
+  const pieces=[
+    {role:'trouser-front',outline:[[0,0],[8,0],[8,24],[0,24]],edges:[{seamId:'outseam',fromIdx:1,toIdx:2}]},
+    {role:'trouser-back',outline:[[0,0],[8,0],[8,24],[0,24]],edges:[{seamId:'outseam',fromIdx:1,toIdx:2}]},
+  ];
+  const result=assessDeclaredSeamConstruction(pieces);
+  assert.equal(result.family,'declared-seams');
+  assert.equal(result.decision,'declared-seams-checked');
+  assert.deepEqual(result.checks,[{seamId:'outseam',lengthsCm:[24,24],differenceMm:0}]);
+  assert.equal(result.productionEligible,false);
 });
