@@ -5,15 +5,15 @@ const tokens = {
   length: { short: /\b(?:short|mini)\b|قصير/u, regular: /\b(?:regular|medium|knee)[ -]length\b|طول عادي|طول متوسط/u, long: /\b(?:long|maxi)\b|طويل/u },
   fabric: { woven: /\bwoven\b|منسوج/u, stretch: /\b(?:stretch|knit|jersey)\b|مطاط|تريكو/u },
 };
-const measurementNames = /\b(?:waist|hips|chest)\b|خصر[ي]?|أرداف|ارداف|صدر[ي]?/gu;
-const measurementKey = word => /waist|خصر/u.test(word) ? 'waist' : /hips|أرداف|ارداف/u.test(word) ? 'hips' : 'chest';
+const measurementNames = /\b(?:waist|hips|chest|inseam)\b|خصر[ي]?|أرداف|ارداف|صدر[ي]?|طول\s+الساق(?:\s+الداخلي)?|الساق\s+الداخلي/gu;
+const measurementKey = word => /waist|خصر/u.test(word) ? 'waist' : /hips|أرداف|ارداف/u.test(word) ? 'hips' : /inseam|الساق/u.test(word) ? 'inseam' : 'chest';
 const normalize = text => text.toLowerCase().replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632)).replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-1776)).replace(/٫/g,'.');
 
 function validateSession(session) {
   const record=value=>value && typeof value==='object' && !Array.isArray(value);
   const issuesValid=issues=>Array.isArray(issues) && issues.length<=20 && issues.every(i=>record(i) && typeof i.field==='string' && typeof i.code==='string');
   const fieldsValid=fields=>record(fields) && Object.entries(fields).every(([key,field])=>record(field) && field.source==='user' && typeof field.turnId==='string' && (field.locked == null || typeof field.locked==='boolean') &&
-    (Object.hasOwn(tokens,key) ? Object.hasOwn(tokens[key],field.value) : ['waist','hips','chest'].includes(key) && field.unit==='cm' && Number.isFinite(field.value) && field.value>0));
+    (Object.hasOwn(tokens,key) ? Object.hasOwn(tokens[key],field.value) : ['waist','hips','chest','inseam'].includes(key) && field.unit==='cm' && Number.isFinite(field.value) && field.value>0));
   if(!record(session) || session.version!==1 || !record(session.fields) || !Array.isArray(session.turns) || session.turns.length>60 || !Array.isArray(session.issues) || session.issues.length>20) throw new Error('briefVersion');
   for(const turn of session.turns) if(!record(turn) || !['user','assistant'].includes(turn.role) || (turn.role==='user' ? typeof turn.text!=='string' || turn.text.length>2000 : !fieldsValid(turn.fields) || !issuesValid(turn.issues))) throw new Error('briefVersion');
   if(!fieldsValid(session.fields)) throw new Error('briefVersion');
@@ -110,12 +110,21 @@ export function prepareBriefDraft(session, defaults) {
   if(session.fields.fabric?.value==='stretch') issues.push({field:'fabric',code:'unsupported'});
   const measurements={...defaults};
   const provenance={};
-  for(const field of ['waist','hips','chest']) {
+  const provenanceKeys=(session.fields.inseam || session.fields.family?.value==='trousers')
+    ? ['waist','hips','chest','inseam']
+    : ['waist','hips','chest'];
+  for(const field of provenanceKeys) {
     const supplied=session.fields[field];
     if(supplied) measurements[field]=supplied.value;
     provenance[field]=supplied ? copy(supplied) : {value:measurements[field],unit:'cm',source:'current-size'};
   }
-  const required=session.fields.family?.value==='dress'?['waist','hips','chest']:session.fields.family?.value==='bodice'?['waist','chest']:['waist','hips'];
+  const required=session.fields.family?.value==='dress'
+    ? ['waist','hips','chest']
+    : session.fields.family?.value==='bodice'
+      ? ['waist','chest']
+      : session.fields.family?.value==='trousers'
+        ? ['waist','hips','inseam']
+        : ['waist','hips'];
   for(const field of required) if(!Number.isFinite(measurements[field]) || measurements[field]<=0) issues.push({field,code:'invalid'});
   if(issues.length) return {decision:issues.some(i=>i.code==='invalid'||i.code==='unsupported')?'abstain':'clarify',issues};
   const {family,length,fabric}=session.fields;

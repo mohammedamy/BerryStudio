@@ -415,13 +415,22 @@ function walkEdgeLength(outline, fromIdx, toIdx) {
 // present on BOTH sides — pairing a front's declared seam against a back
 // that declares none (or a different one) is exactly the "not applicable"
 // case the proxy exists for.
-function sharedSeamEdge(front, back) {
+function sharedSeamEdges(front, back) {
   const frontIds = (front.edges || []).filter((e) => e.seamId);
-  const backIds = new Set((back.edges || []).filter((e) => e.seamId).map((e) => e.seamId));
-  const match = frontIds.find((e) => backIds.has(e.seamId));
-  if (!match) return null;
-  const backEdge = (back.edges || []).find((e) => e.seamId === match.seamId);
-  return { seamId: match.seamId, front: match, back: backEdge };
+  const backBySeam = new Map();
+  for (const e of back.edges || []) {
+    if (e.seamId && !backBySeam.has(e.seamId)) backBySeam.set(e.seamId, e);
+  }
+  const shared = [];
+  for (const fe of frontIds) {
+    const be = backBySeam.get(fe.seamId);
+    if (be) shared.push({ seamId: fe.seamId, front: fe, back: be });
+  }
+  return shared;
+}
+
+function sharedSeamEdge(front, back) {
+  return sharedSeamEdges(front, back)[0] || null;
 }
 
 function checkSeamLengthParity(pair) {
@@ -430,8 +439,9 @@ function checkSeamLengthParity(pair) {
   const hf = heightOf(pair.front), hb = heightOf(pair.back);
   const proxyDiffMm = Math.abs(hf - hb) * 10;
 
-  const shared = sharedSeamEdge(pair.front, pair.back);
-  if (shared) {
+  const edges = sharedSeamEdges(pair.front, pair.back);
+  if (edges.length === 1) {
+    const shared = edges[0];
     const lf = walkEdgeLength(pair.front.outline, shared.front.fromIdx, shared.front.toIdx);
     const lb = walkEdgeLength(pair.back.outline, shared.back.fromIdx, shared.back.toIdx);
     if (lf != null && lb != null) {
@@ -442,6 +452,24 @@ function checkSeamLengthParity(pair) {
     }
     // Indices present but malformed — fall through to the proxy rather than
     // silently guessing, but say so, since this is an authoring bug.
+  } else if (edges.length > 1) {
+    const measured = [];
+    for (const shared of edges) {
+      const lf = walkEdgeLength(pair.front.outline, shared.front.fromIdx, shared.front.toIdx);
+      const lb = walkEdgeLength(pair.back.outline, shared.back.fromIdx, shared.back.toIdx);
+      if (lf != null && lb != null) {
+        measured.push({ seamId: shared.seamId, lf, lb, diffMm: Math.abs(lf - lb) * 10 });
+      }
+    }
+    if (measured.length === edges.length) {
+      const seamList = measured.map((m) => m.seamId).join(', ');
+      const failing = measured.find((m) => m.diffMm > SEAM_LENGTH_TOL_MM);
+      if (failing) {
+        return { status: 'fail', message: `declared "${failing.seamId}" seam: front (${failing.lf.toFixed(1)}cm) and back (${failing.lb.toFixed(1)}cm) differ by ${failing.diffMm.toFixed(1)}mm — an un-sewable seam, not a proxy artifact (checked ${seamList})` };
+      }
+      const maxDiff = Math.max(...measured.map((m) => m.diffMm));
+      return { status: 'pass', message: `declared seams (${seamList}) match within ${maxDiff.toFixed(1)}mm` };
+    }
   }
 
   // Heuristic proxy for "the side seam": each piece's own vertical extent.
@@ -499,22 +527,32 @@ function checkNotchAlignment(pair) {
   // sitting on a seam whose own real length matches to the millimetre
   // (confirmed separately by checkSeamLengthParity itself) — a false
   // positive with the whole-piece-only method, not a real defect.
-  const shared = sharedSeamEdge(pair.front, pair.back);
-  let worst = 0, usedSeam = false;
+  const edges = sharedSeamEdges(pair.front, pair.back);
+  let worst = 0;
+  const usedSeams = new Set();
   for (let i = 0; i < nf; i++) {
     const fn = pair.front.notches[i], bn = pair.back.notches[i];
-    if (shared) {
+    let matchedSeam = false;
+    for (const shared of edges) {
       const fw = arcPositionWithinEdge(pair.front.outline, shared.front.fromIdx, shared.front.toIdx, fn);
       const bw = arcPositionWithinEdge(pair.back.outline, shared.back.fromIdx, shared.back.toIdx, bn);
       if (fw && bw && fw.total > 0 && bw.total > 0) {
-        usedSeam = true;
+        usedSeams.add(shared.seamId);
         worst = Math.max(worst, Math.abs(fw.arc / fw.total - bw.arc / bw.total));
-        continue;
+        matchedSeam = true;
+        break;
       }
     }
-    worst = Math.max(worst, Math.abs(arcPositionFraction(pair.front.outline, fn) - arcPositionFraction(pair.back.outline, bn)));
+    if (!matchedSeam) {
+      worst = Math.max(worst, Math.abs(arcPositionFraction(pair.front.outline, fn) - arcPositionFraction(pair.back.outline, bn)));
+    }
   }
-  const note = usedSeam ? ` (measured along the declared "${shared.seamId}" seam)` : '';
+  const seamNames = [...usedSeams];
+  const note = seamNames.length === 1
+    ? ` (measured along the declared "${seamNames[0]}" seam)`
+    : seamNames.length > 1
+      ? ` (measured along the declared "${seamNames.join(', ')}" seams)`
+      : '';
   if (worst <= NOTCH_ARC_TOL_FRACTION) return { status: 'pass', message: `matches within ${(worst * 100).toFixed(1)}% of perimeter${note}` };
   return { status: 'fail', message: `notch position differs by ${(worst * 100).toFixed(1)}% of perimeter between front and back${note}` };
 }

@@ -465,8 +465,8 @@ export const PATTERNS = {
       const frontOut = [[0, 0], fHip[0], ...qBez(...fHip, 5), [w, hemY], fIns[0], ...qBez(...fIns, 5), ...qBez(...fRise, 4).slice(0, 3)];
 
       const bHip = [[w + 3, 0], [w + 5.5, 8], [w + 4.5, 16]];
-      const bIns = [[2, hemY], [0.8, 25], [-4, 12]];
-      const bRise = [[-4, 12], [-0.3, 7.2], [0, 0]];
+      const bIns = [[2, hemY], [0.8, 24], [-4, 10.25]];
+      const bRise = [[-4, 10.25], [-0.3, 6.2], [0, 0]];
       const backOut = [[0, 0], bHip[0], ...qBez(...bHip, 5), [w + 2, hemY], bIns[0], ...qBez(...bIns, 5), ...qBez(...bRise, 4).slice(0, 3)];
 
       return hoistCurves([

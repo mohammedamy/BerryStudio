@@ -11,6 +11,25 @@ export function assessDeclaredSeamConstruction(pieces) {
   return assessDeclaredSeams(pieces, { family: 'declared-seams', decision: 'declared-seams-checked' });
 }
 
+export function assessWovenTrouserConstruction(pieces) {
+  const report = assessDeclaredSeams(pieces, { family: 'woven-basic-trousers', decision: 'trouser-seams-checked' });
+  const roles = new Set((Array.isArray(pieces) ? pieces : []).map(piece => piece?.role).filter(Boolean));
+  const blockers = [...report.blockers];
+  if (!['trouser-front', 'trouser-back', 'waistband'].every(role => roles.has(role))) blockers.push('constructionPieces');
+  const seamIds = new Set(report.checks.map(check => check.seamId));
+  if (!seamIds.has('trouser-outseam') || !seamIds.has('trouser-inseam')) blockers.push('constructionSeam');
+  const uniqueBlockers = [...new Set(blockers)];
+  return {
+    family: 'woven-basic-trousers',
+    decision: uniqueBlockers.length ? 'needs-construction-evidence' : 'trouser-seams-checked',
+    checks: report.checks,
+    blockers: uniqueBlockers,
+    makerApproval: null,
+    sampleApproval: null,
+    productionEligible: false,
+  };
+}
+
 function assessDeclaredSeams(pieces, { family, decision }) {
   if (!Array.isArray(pieces)) throw new Error('constructionInvalid');
   const blockers = [], groups = new Map();

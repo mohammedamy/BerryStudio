@@ -1,5 +1,13 @@
 # Changelog
 
+## Plan 7 Trousers Made-to-Measure Configurator & Readiness Blocker Closures (`berrystudio-v94`)
+
+Implements the bounded Plan 7 **woven trousers configurator (`woven-basic-trousers`)** after closing the trouser construction, validation, and inseam-brief blockers:
+
+- **Multi-Seam 2D Validation & Zero-Delta Trouser Seam Parity (`js/validate.js`, `js/data.js`, `js/pattern-program.js`, `js/trouser-configurator.js`)**: Upgrades `PatternValidator` (`sharedSeamEdges`) to validate **every** declared front/back seam and notch alignment along each declared seam (replacing single-edge truncation), resolves the `17.5 mm` `boysTrouserInseam` mismatch in `boys_trousers` (`js/data.js`, now `<= 0.5 mm` across all 21 graded boys sizes), and adds `createWovenBasicTrousersProgram()` + `js/trouser-configurator.js` (`short`/`regular`/`long` with `trouser-outseam` and `trouser-inseam` matching within `0.000 mm` across all 44 mannequin sizes `XXS–6XL`, closing the historical `67.42 mm` inseam blocker).
+- **Trouser Construction Acceptance, Evidence & Packet + Inseam Brief Capture (`js/construction-acceptance.js`, `js/construction-evidence-record.js`, `js/construction-packet.js`, `js/design-brief.js`, `js/project-revisions.js`)**: Adds `assessWovenTrouserConstruction()`, trouser construction-packet generation (cut list, declared outseam/inseam metrics, ordered instructions with explicit unverified crotch-curve/waistband/closure flags), and bilingual EN/AR `inseam` capture (`inseam` / `طول الساق الداخلي`) with field locks and abstention when invalid.
+- **Studio Panel UI, Review Flow & Verification (`js/pattern-program-panel.js`, `js/app.js`, `js/i18n.js`, `sw.js`, `test/trouser-configurator.test.js`, `cloth-lab/src/pattern/importFromApp.trousersProgram.test.js`, `e2e/pattern-program.spec.js`)**: Wires trousers selection, length diffs, construction evidence display, and `sw.js` (`berrystudio-v94`) offline caching with full unit, Cloth Lab import/drape, and Playwright E2E coverage across all 44 mannequins × 3 lengths (132 blocks).
+
 ## Recover Remaining Valid Worktree Updates: V6-14 Declared-Seam Coverage, WP-41 Worker Recovery & v7 Roadmap (`berrystudio-v93`)
 
 Saves and integrates the remaining unmerged fixes discovered during a full cross-worktree, branch, and stash duplicate audit:

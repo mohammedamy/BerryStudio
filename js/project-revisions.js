@@ -4,6 +4,7 @@ import { validateMultimodalProposal } from './multimodal-proposal.js';
 import { validateWovenALineSkirtConfiguration } from './skirt-configurator.js';
 import { validateWovenBasicBodiceConfiguration } from './bodice-configurator.js';
 import { validateWovenBasicDressConfiguration } from './dress-configurator.js';
+import { validateWovenBasicTrousersConfiguration } from './trouser-configurator.js';
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -42,6 +43,7 @@ export function migrateProject(input) {
       if(source.patternConfiguration.family==='woven-a-line-skirt') validateWovenALineSkirtConfiguration(source.patternConfiguration);
       else if(source.patternConfiguration.family==='woven-basic-bodice') validateWovenBasicBodiceConfiguration(source.patternConfiguration);
       else if(source.patternConfiguration.family==='woven-basic-dress') validateWovenBasicDressConfiguration(source.patternConfiguration);
+      else if(source.patternConfiguration.family==='woven-basic-trousers') validateWovenBasicTrousersConfiguration(source.patternConfiguration);
       else fail('projectInvalid');
     }
     catch { fail('projectInvalid'); }

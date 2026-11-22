@@ -28,6 +28,7 @@ export function validatePatternProgram(program) {
     'woven-a-line-skirt':['skirt-front','skirt-back','waistband'],
     'woven-basic-bodice':['bodice-front','bodice-back'],
     'woven-basic-dress':['bodice-front','bodice-back','skirt-front','skirt-back'],
+    'woven-basic-trousers':['trouser-front','trouser-back','waistband'],
   };
   if (!program || program.version !== 1 || Object.keys(program).some(key => !['version','family','operations'].includes(key)) || !Object.hasOwn(rolesByFamily,program.family) || !Array.isArray(program.operations) || program.operations.length < 1 || program.operations.length > 60) fail('programInvalid');
   const known = new Set(['waist','hips','chest','height','inseam']); const points = new Set(); const pieces = new Set();
@@ -56,7 +57,13 @@ export function validatePatternProgram(program) {
 
 export function executePatternProgram(program, measurements) {
   validatePatternProgram(program);
-  const required=program.family==='woven-basic-bodice'?['chest','waist']:['waist','hips','chest'].filter(key=>program.family!=='woven-a-line-skirt'||key!=='chest');
+  const required = program.family === 'woven-basic-bodice'
+    ? ['chest', 'waist']
+    : program.family === 'woven-a-line-skirt'
+      ? ['waist', 'hips']
+      : program.family === 'woven-basic-trousers'
+        ? ['waist', 'hips', 'inseam']
+        : ['waist', 'hips', 'chest'];
   if (!measurements || !required.every(key => Number.isFinite(measurements[key]) && measurements[key] > 20 && measurements[key] < 200)) fail('programMeasurements');
   const values = Object.assign(Object.create(null), measurements), points = Object.create(null), lines = [], pieces = [];
   for (const op of program.operations) {
@@ -120,4 +127,102 @@ export function createWovenBasicDressProgram(length) {
     ...panel('bodiceFront','bodice-front','Basic woven dress bodice front','أمام صدّار فستان منسوج أساسي','bf',0,0,0,'dress-bodice-side'), ...panel('bodiceBack','bodice-back','Basic woven dress bodice back','خلف صدّار فستان منسوج أساسي','bb',55,0,0,'dress-bodice-side'),
     ...skirt('skirtFront','skirt-front','Basic woven dress skirt front','أمام تنورة فستان منسوج أساسي','sf',110,'dress-skirt-side'), ...skirt('skirtBack','skirt-back','Basic woven dress skirt back','خلف تنورة فستان منسوج أساسي','sb',110+skirtLength+15,'dress-skirt-side'),
   ]};
+}
+
+export function createWovenBasicTrousersProgram(length = 'regular') {
+  const legFormula = ({ short: 'inseam*0.78', regular: 'inseam', long: 'inseam+6' })[length];
+  if (!legFormula) fail('programInvalid');
+  return {
+    version: 1,
+    family: 'woven-basic-trousers',
+    operations: [
+      { op: 'defineVariable', name: 'waistQ', formula: 'waist/4+1' },
+      { op: 'defineVariable', name: 'hipQ', formula: 'hips/4+2' },
+      { op: 'defineVariable', name: 'hemHalf', formula: 'hipQ*0.62' },
+      { op: 'defineVariable', name: 'rise', formula: 'hips/4+3' },
+      { op: 'defineVariable', name: 'legLen', formula: legFormula },
+      { op: 'defineVariable', name: 'crotchFront', formula: 'hips/20+1' },
+      { op: 'defineVariable', name: 'xBack', formula: 'crotchFront+hipQ+14' },
+
+      { op: 'placePoint', name: 'fOutWaist', x: 'crotchFront+waistQ', y: '0' },
+      { op: 'placePoint', name: 'fOutHip', x: 'crotchFront+hipQ', y: 'rise' },
+      { op: 'placePoint', name: 'fOutKnee', x: 'crotchFront+(hipQ+hemHalf)/2', y: 'rise+legLen/2' },
+      { op: 'placePoint', name: 'fOutHem', x: 'crotchFront+hemHalf', y: 'rise+legLen' },
+      { op: 'placePoint', name: 'fInHem', x: 'crotchFront', y: 'rise+legLen' },
+      { op: 'placePoint', name: 'fInKnee', x: 'crotchFront/2', y: 'rise+legLen/2' },
+      { op: 'placePoint', name: 'fCrotch', x: '0', y: 'rise' },
+      { op: 'placePoint', name: 'fCfHip', x: 'crotchFront', y: 'rise*0.72' },
+      { op: 'placePoint', name: 'fCfWaist', x: 'crotchFront', y: '0' },
+      { op: 'placePoint', name: 'fGrainTop', x: 'crotchFront+hemHalf/2', y: 'rise+4' },
+      { op: 'placePoint', name: 'fGrainBottom', x: 'crotchFront+hemHalf/2', y: 'rise+legLen-4' },
+      { op: 'lineBetween', name: 'frontOutseam', from: 'fOutWaist', to: 'fOutHem' },
+      { op: 'lineBetween', name: 'frontInseam', from: 'fInHem', to: 'fCrotch' },
+      {
+        op: 'promotePiece',
+        id: 'front',
+        name: 'Basic woven trouser front leg',
+        nameAr: 'الساق الأمامية لبنطلون منسوج أساسي',
+        pointLoop: ['fOutWaist', 'fOutHip', 'fOutKnee', 'fOutHem', 'fInHem', 'fInKnee', 'fCrotch', 'fCfHip', 'fCfWaist'],
+        grain: ['fGrainTop', 'fGrainBottom'],
+      },
+      { op: 'setPieceRole', piece: 'front', role: 'trouser-front', cutOnFold: false, quantity: 2 },
+      {
+        op: 'setPieceConstruction',
+        piece: 'front',
+        notchPoints: ['fOutKnee', 'fInKnee'],
+        edges: [
+          { from: 'fOutWaist', to: 'fOutHem', seamId: 'trouser-outseam' },
+          { from: 'fInHem', to: 'fCrotch', seamId: 'trouser-inseam' },
+        ],
+      },
+
+      { op: 'placePoint', name: 'bOutWaist', x: 'xBack+crotchFront+waistQ+2', y: '0' },
+      { op: 'placePoint', name: 'bOutHip', x: 'xBack+crotchFront+hipQ+2', y: 'rise' },
+      { op: 'placePoint', name: 'bOutKnee', x: 'xBack+crotchFront+2+(hipQ+hemHalf)/2', y: 'rise+legLen/2' },
+      { op: 'placePoint', name: 'bOutHem', x: 'xBack+crotchFront+hemHalf+2', y: 'rise+legLen' },
+      { op: 'placePoint', name: 'bInHem', x: 'xBack+crotchFront', y: 'rise+legLen' },
+      { op: 'placePoint', name: 'bInKnee', x: 'xBack+crotchFront/2', y: 'rise+legLen/2' },
+      { op: 'placePoint', name: 'bCrotch', x: 'xBack', y: 'rise' },
+      { op: 'placePoint', name: 'bCbHip', x: 'xBack+crotchFront', y: 'rise*0.68' },
+      { op: 'placePoint', name: 'bCbWaist', x: 'xBack+crotchFront+0.5', y: '-2' },
+      { op: 'placePoint', name: 'bGrainTop', x: 'xBack+crotchFront+1+hemHalf/2', y: 'rise+4' },
+      { op: 'placePoint', name: 'bGrainBottom', x: 'xBack+crotchFront+1+hemHalf/2', y: 'rise+legLen-4' },
+      { op: 'lineBetween', name: 'backOutseam', from: 'bOutWaist', to: 'bOutHem' },
+      { op: 'lineBetween', name: 'backInseam', from: 'bInHem', to: 'bCrotch' },
+      {
+        op: 'promotePiece',
+        id: 'back',
+        name: 'Basic woven trouser back leg',
+        nameAr: 'الساق الخلفية لبنطلون منسوج أساسي',
+        pointLoop: ['bOutWaist', 'bOutHip', 'bOutKnee', 'bOutHem', 'bInHem', 'bInKnee', 'bCrotch', 'bCbHip', 'bCbWaist'],
+        grain: ['bGrainTop', 'bGrainBottom'],
+      },
+      { op: 'setPieceRole', piece: 'back', role: 'trouser-back', cutOnFold: false, quantity: 2 },
+      {
+        op: 'setPieceConstruction',
+        piece: 'back',
+        notchPoints: ['bOutKnee', 'bInKnee'],
+        edges: [
+          { from: 'bOutWaist', to: 'bOutHem', seamId: 'trouser-outseam' },
+          { from: 'bInHem', to: 'bCrotch', seamId: 'trouser-inseam' },
+        ],
+      },
+
+      { op: 'placePoint', name: 'wbTL', x: '0', y: 'rise+legLen+14' },
+      { op: 'placePoint', name: 'wbTR', x: 'waist/2+2', y: 'rise+legLen+14' },
+      { op: 'placePoint', name: 'wbBR', x: 'waist/2+2', y: 'rise+legLen+18' },
+      { op: 'placePoint', name: 'wbBL', x: '0', y: 'rise+legLen+18' },
+      { op: 'placePoint', name: 'wbGrainL', x: '3', y: 'rise+legLen+16' },
+      { op: 'placePoint', name: 'wbGrainR', x: 'waist/2-1', y: 'rise+legLen+16' },
+      {
+        op: 'promotePiece',
+        id: 'waistband',
+        name: 'Waistband',
+        nameAr: 'حزام الخصر',
+        pointLoop: ['wbTL', 'wbTR', 'wbBR', 'wbBL'],
+        grain: ['wbGrainL', 'wbGrainR'],
+      },
+      { op: 'setPieceRole', piece: 'waistband', role: 'waistband', cutOnFold: false, quantity: 2 },
+    ],
+  };
 }

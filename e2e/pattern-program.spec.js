@@ -79,3 +79,25 @@ test('a basic woven dress brief reviews its selected length before acceptance',a
   expect(state.patternConfiguration).toMatchObject({family:'woven-basic-dress',length:'long'});
   expect(state.pieces.map(piece=>piece.role)).toEqual(['bodice-front','bodice-back','skirt-front','skirt-back']);
 });
+
+test('a basic woven trousers brief previews length diff, declared seams, and persists after reload',async({page})=>{
+  await start(page);
+  const brief=page.locator('.design-brief');
+  await brief.locator('#briefMessage').fill('regular-length woven trousers, waist 76 cm, hips 100 cm, inseam 78 cm');
+  await brief.getByRole('button',{name:'Update brief',exact:true}).click();
+  const program=page.locator('.pattern-program');
+  await expect(program.getByText('Ready to create a typed basic woven trousers program.',{exact:true})).toBeVisible();
+  await program.locator('select[name="pattern-length"]').selectOption('long');
+  await program.getByRole('button',{name:'Preview trousers program',exact:true}).click();
+  await expect(page.getByText('Configuration changes',{exact:true})).toBeVisible();
+  await expect(page.getByText('Length: Full length (1.0× inseam) → Tall (+6 cm inseam)',{exact:true})).toBeVisible();
+  await expect(page.getByText(/Declared outseam and inseam lengths match\./)).toBeVisible();
+  await page.getByRole('button',{name:'Accept as new project',exact:true}).click();
+  const state=await page.evaluate(()=>window.Canvas.snapshotState());
+  expect(state.patternProgram.family).toBe('woven-basic-trousers');
+  expect(state.patternConfiguration).toMatchObject({family:'woven-basic-trousers',length:'long',silhouette:'straight'});
+  expect(state.pieces.map(piece=>piece.role)).toEqual(['trouser-front','trouser-back','waistband']);
+  await page.reload();
+  await expect.poll(()=>page.evaluate(()=>window.Canvas.snapshotState().patternProgram?.family)).toBe('woven-basic-trousers');
+  await expect.poll(()=>page.evaluate(()=>window.Canvas.snapshotState().patternConfiguration?.family)).toBe('woven-basic-trousers');
+});

@@ -1,5 +1,5 @@
 /* BerryStudio — service worker (offline-capable, update-friendly) */
-const CACHE = "berrystudio-v93";
+const CACHE = "berrystudio-v94";
 const ASSETS = [
   "./", "./index.html",
   "./css/styles.css",
@@ -11,7 +11,7 @@ const ASSETS = [
   "./js/design-brief.js", "./js/design-brief-panel.js",
   "./js/image-studio.js", "./js/image-studio-panel.js",
   "./js/multimodal-proposal.js",
-  "./js/pattern-program.js", "./js/skirt-configurator.js", "./js/pattern-program-panel.js",
+  "./js/pattern-program.js", "./js/skirt-configurator.js", "./js/bodice-configurator.js", "./js/dress-configurator.js", "./js/trouser-configurator.js", "./js/pattern-program-panel.js",
   "./js/construction-acceptance.js",
   "./js/construction-packet.js",
   "./js/construction-evidence-record.js",

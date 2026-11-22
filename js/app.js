@@ -24,7 +24,7 @@ import { mountDesignBrief } from './design-brief-panel.js';
 import { mountImageStudio } from './image-studio-panel.js';
 import { mountPatternProgram } from './pattern-program-panel.js';
 import { briefMatchesStyle } from './design-brief.js';
-import { assessWovenSkirtConstruction } from './construction-acceptance.js';
+import { assessWovenSkirtConstruction, assessWovenTrouserConstruction } from './construction-acceptance.js';
 import { createConstructionEvidenceRecord } from './construction-evidence-record.js';
 import { Billboard } from './billboard.js';
 import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, exports nothing
@@ -2821,6 +2821,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const decisionKey={
       'side-seam-checked':'constructionEvidenceChecked',
       'declared-seams-checked':'constructionEvidenceDeclaredChecked',
+      'trouser-seams-checked':'constructionEvidenceTrouserChecked',
       'needs-construction-evidence':'constructionEvidenceMissing',
       'not-applicable':'constructionEvidenceUnavailable',
     }[report.assessment.decision] || 'constructionEvidenceMissing';
@@ -3028,14 +3029,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const body=$("#genericModal .modal-body");
     const hint=el("p"); hint.textContent=T("reviewGeneratedHint");
     const summary=el("p"); summary.textContent=typeof res.summary==='string'?res.summary:'';
-    const acceptance=(res.style?.type==='skirt' || res.patternProgram?.family==='woven-a-line-skirt') ? assessWovenSkirtConstruction(draft.pieces) : null;
+    const acceptance=(res.style?.type==='skirt' || res.patternProgram?.family==='woven-a-line-skirt') ? assessWovenSkirtConstruction(draft.pieces) : (res.patternProgram?.family==='woven-basic-trousers' ? assessWovenTrouserConstruction(draft.pieces) : null);
     body.append(hint, summary);
     if(res.patternConfiguration) {
       const configuration=el('section','help-note');
       const title=el('strong'); title.textContent=T('configurationReviewTitle'); configuration.append(title);
       const changes=res.configurationDiff||[];
       if(!changes.length) configuration.append(el('p','',T('configurationReviewBaseline')));
-      for(const change of changes) configuration.append(el('p','',`${T(`configurationField_${change.field}`)}: ${T(`programLength_${change.before}`)} → ${T(`programLength_${change.after}`)}`));
+      const valPrefix=res.patternConfiguration.family==='woven-basic-trousers' ? 'programTrouserLength_' : 'programLength_';
+      for(const change of changes) configuration.append(el('p','',`${T(`configurationField_${change.field}`)}: ${T(`${valPrefix}${change.before}`)} → ${T(`${valPrefix}${change.after}`)}`));
       body.append(configuration);
     }
     if(res.multimodalProposal?.reference) {
@@ -3049,7 +3051,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     }
     if(acceptance) {
       const evidence=el("p","help-note");
-      evidence.textContent=acceptance.decision==='side-seam-checked' ? T('constructionEvidenceReady') : `${T('constructionEvidenceMissing')}: ${acceptance.blockers.map(key=>T(key)).join(', ')}`;
+      evidence.textContent=acceptance.decision==='side-seam-checked' ? T('constructionEvidenceReady') : acceptance.decision==='trouser-seams-checked' ? T('constructionEvidenceTrouserReady') : `${T('constructionEvidenceMissing')}: ${acceptance.blockers.map(key=>T(key)).join(', ')}`;
       body.append(evidence);
     }
     body.append(patternPreview(draft.pieces));
