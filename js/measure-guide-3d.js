@@ -306,9 +306,14 @@ export async function mountMeasureGuide3D(hostEl, initialOpts = {}) {
 
   let activeKey = opts.activeKey;
   let paused = false;
-  let autoSpin = activeKey == null;
+  let autoSpin = false;
+  let pointerHovering = false;
   let disposed = false;
   let rafId = null;
+  const onHostPointerEnter = () => { pointerHovering = true; };
+  const onHostPointerLeave = () => { pointerHovering = false; };
+  hostEl.addEventListener("pointerenter", onHostPointerEnter);
+  hostEl.addEventListener("pointerleave", onHostPointerLeave);
 
   // Smooth camera fly-to target state
   const camAnim = {
@@ -674,7 +679,7 @@ export async function mountMeasureGuide3D(hostEl, initialOpts = {}) {
       const sph = new THREE.Spherical(r, phi, theta);
       camera.position.setFromSpherical(sph).add(controls.target);
       if (camAnim.t >= 1) camAnim.active = false;
-    } else if (autoSpin && !reduceMotion) {
+    } else if (autoSpin && !reduceMotion && !pointerHovering) {
       const offset = camera.position.clone().sub(controls.target);
       const sph = new THREE.Spherical().setFromVector3(offset);
       sph.theta += dt * 0.32;
@@ -756,6 +761,8 @@ export async function mountMeasureGuide3D(hostEl, initialOpts = {}) {
       disposed = true;
       if (rafId != null) cancelAnimationFrame(rafId);
       if (resizeObs) resizeObs.disconnect();
+      hostEl.removeEventListener("pointerenter", onHostPointerEnter);
+      hostEl.removeEventListener("pointerleave", onHostPointerLeave);
       controls.dispose();
       disposeObject3D(modelGroup);
       disposeObject3D(tapeGroup);
