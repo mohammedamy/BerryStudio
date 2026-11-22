@@ -9,6 +9,7 @@ import SolverHUD, { isSolverHUDEnabled } from './ui/SolverHUD'
 import Scene from './scene/Scene'
 import { DEFAULT_MEASUREMENTS } from './state/measurements'
 import { getMannequinFor, normalizeMannequinSize } from '../../js/mannequin-catalog.js'
+import { resolveMannequinStyling } from '../../js/mannequin-styling.js'
 import { computeBodyDims } from './body/computeBodyDims'
 import { DEFAULT_FABRIC } from './cloth/fabricPresets'
 import { QUALITY_TIER_DEFAULT } from './cloth/ClothSimulation'
@@ -84,6 +85,19 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   const [qualityTier, setQualityTier] = useState(QUALITY_TIER_DEFAULT)
   const [mannequinSize, setMannequinSize] = useState(pattern?.mannequinSize ? normalizeMannequinSize(pattern.mannequinSize) : 'M')
   const [skinToneId, setSkinToneId] = useState(null)
+  const [stylingByCategory, setStylingByCategory] = useState(() => {
+    const mq = pattern?.mannequin
+    if (!mq || !pattern?.category) return {}
+    return {
+      [pattern.category]: {
+        hairStyle: mq.hairStyle,
+        hairType: mq.hairType,
+        hairColor: mq.hairColor ?? mq.hairHex,
+        headwear: mq.headwear,
+        headwearColor: mq.headwearColor ?? mq.headwearHex,
+      },
+    }
+  })
   const [poseId, setPoseId] = useState(DEFAULT_POSE)
   // Surfaced from deep inside GLBAvatar (see its own header comment) —
   // unrecognized rig, VRM, no walk clip, no leg rig for "seated". null when
@@ -132,8 +146,40 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   const [garmentVersion, setGarmentVersion] = useState(0)
 
   const activeMannequin = useMemo(() => getMannequinFor(category, mannequinSize), [category, mannequinSize])
+  const stylingSpec = useMemo(
+    () => resolveMannequinStyling(category, activeMannequin, stylingByCategory[category]),
+    [category, activeMannequin, stylingByCategory],
+  )
+  const styledMannequin = useMemo(
+    () => ({
+      ...activeMannequin,
+      hairStyle: stylingSpec.hairStyle,
+      hairType: stylingSpec.hairType,
+      hairHex: stylingSpec.hairHex,
+      hairColor: stylingSpec.hairColor,
+      headwear: stylingSpec.headwear,
+      headwearHex: stylingSpec.headwearHex,
+      headwearColor: stylingSpec.headwearColor,
+    }),
+    [activeMannequin, stylingSpec],
+  )
   const measurements = measurementsByCategory[category]
   const dims = useMemo(() => computeBodyDims(measurements, category, activeMannequin?.morph || null), [measurements, category, activeMannequin])
+
+  function handleStylingChange(patch) {
+    if (!patch) {
+      setStylingByCategory(prev => {
+        const next = { ...prev }
+        delete next[category]
+        return next
+      })
+      return
+    }
+    setStylingByCategory(prev => ({
+      ...prev,
+      [category]: { ...(prev[category] || {}), ...patch },
+    }))
+  }
 
   function handleSelectMannequinSize(nextSize) {
     const mq = getMannequinFor(category, nextSize)
@@ -171,6 +217,19 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
     if (payload.mannequinId && payload.mannequinId !== lastMannequinIdRef.current) {
       lastMannequinIdRef.current = payload.mannequinId
       setSkinToneId(null)
+    }
+    if (payload.mannequin && payload.category) {
+      const mq = payload.mannequin
+      setStylingByCategory(prev => ({
+        ...prev,
+        [payload.category]: {
+          hairStyle: mq.hairStyle,
+          hairType: mq.hairType,
+          hairColor: mq.hairColor ?? mq.hairHex,
+          headwear: mq.headwear,
+          headwearColor: mq.headwearColor ?? mq.headwearHex,
+        },
+      }))
     }
     setMeasurementsByCategory(prev => ({ ...prev, [payload.category]: payload.measurements }))
     setFabricId(resolveDefaultPatternFabric(payload))
@@ -277,7 +336,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
         key={garmentVersion}
         bodyOnly={bodyOnly} lang={lang} step={step} onStep={goTo} onStepForce={setStep}
         view={view} onViewChange={setView}
-        category={category} mannequinSize={mannequinSize} mannequin={activeMannequin} onMannequinSizeChange={handleSelectMannequinSize}
+        category={category} mannequinSize={mannequinSize} mannequin={styledMannequin} styling={stylingSpec} onStylingChange={handleStylingChange} onMannequinSizeChange={handleSelectMannequinSize}
         dims={dims} measurements={measurements}
         onMeasurementsChange={(next) => setMeasurementsByCategory((prev) => ({ ...prev, [category]: next }))}
         fabricId={fabricId} onFabricChange={setFabricId}
@@ -316,7 +375,7 @@ const TABS = [
 // Try-on canvas — split out from App so the whole thing can be remounted
 // (via App's key={garmentVersion}) as a unit whenever a new garment import
 // needs a fresh seam-editor rather than picking up on top of a stale one.
-function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChange, category, mannequinSize, mannequin, onMannequinSizeChange, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, qualityTier, onQualityTierChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, garment, print = null, notice, onNotice, imported, restored, onEditorChange, avatarGLBUrl, onSimulate }) {
+function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChange, category, mannequinSize, mannequin, styling, onStylingChange, onMannequinSizeChange, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, qualityTier, onQualityTierChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, garment, print = null, notice, onNotice, imported, restored, onEditorChange, avatarGLBUrl, onSimulate }) {
   const ar = lang === 'ar', text = (en, arabic) => ar ? arabic : en
   const rawPieces = imported ? imported.rawPieces : []
   const roles = imported ? imported.roles : {}
@@ -421,7 +480,7 @@ function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChan
           // three short panels stay visible together (no tabs hiding Export).
           <div className="cl-tabpanel cl-stack">
             <MeasurementPanel lang={lang} category={category} mannequinSize={mannequinSize} measurements={measurements} onChange={onMeasurementsChange} />
-            <AvatarPanel lang={lang} category={category} mannequinSize={mannequinSize} onMannequinSizeChange={onMannequinSizeChange} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />
+            <AvatarPanel lang={lang} category={category} mannequinSize={mannequinSize} onMannequinSizeChange={onMannequinSizeChange} styling={styling} onStylingChange={onStylingChange} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />
             <ExportPanel lang={lang} exportRef={exportRef} />
           </div>
         ) : <>
@@ -431,7 +490,7 @@ function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChan
           <div className="cl-tabpanel" role="tabpanel">
             {tab === 'fabric' && <FabricPanel lang={lang} fabricId={fabricId} onChange={onFabricChange} qualityTier={qualityTier} onQualityTierChange={onQualityTierChange} />}
             {tab === 'body' && <MeasurementPanel lang={lang} category={category} mannequinSize={mannequinSize} onMannequinSizeChange={onMannequinSizeChange} measurements={measurements} onChange={onMeasurementsChange} />}
-            {tab === 'look' && <AvatarPanel lang={lang} category={category} mannequinSize={mannequinSize} onMannequinSizeChange={onMannequinSizeChange} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />}
+            {tab === 'look' && <AvatarPanel lang={lang} category={category} mannequinSize={mannequinSize} onMannequinSizeChange={onMannequinSizeChange} styling={styling} onStylingChange={onStylingChange} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />}
             {tab === 'export' && <ExportPanel lang={lang} exportRef={exportRef} />}
           </div>
         </>}

@@ -407,7 +407,6 @@ export async function mountMeasureGuide3D(hostEl, initialOpts = {}) {
     scene.add(modelGroup);
 
     const bbox = new THREE.Box3().setFromObject(built.bodyMesh);
-    if (built.headGroup) bbox.expandByObject(built.headGroup);
     const bodyBounds = { minY: bbox.min.y, maxY: bbox.max.y };
     currentHeightM = Math.max(0.85, bbox.max.y - bbox.min.y);
 

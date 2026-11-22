@@ -1,5 +1,13 @@
 # Changelog
 
+## Mannequin Hair Customization & 3D Hijabs, Ghutra, Shemagh & Hat Studio (`berrystudio-v97`)
+
+Adds full interactive mannequin hair and headwear customization across BerryStudio's 3D Preview, Cloth Lab (`Look` tab & BodyForm), and the Interactive 3D Measurement Teaching Studio:
+
+- **Unified Styling Registry (`js/mannequin-styling.js`)**: Defines curated category-aware haircuts (including `long_straight`, `long_wavy`, `curly_afro`, `long_men`, `curly_fade`, `man_bun`, and `bald` alongside all 44 preset cuts), 5 procedural hair textures (`straight`, `wavy`, `curly`, `coily`, `braided`), 12 salon hair color swatches + custom color picker, and category-specific headwear catalogs for Women/Girls and Men/Boys.
+- **Procedural Textured Hair & Sculpted 3D Headwear Engine (`js/human-mannequin.js`, `js/three-view.js`)**: Modulates cranial strand depth, helical curl displacement, braided ribs, dynamic hair sheen, and sculpted draping locks (`addFlowingBackCurtain`, `addFrontShoulderLocks`), and builds skull-fitted 3D headwear anchored to `skullRadiusAlongDir`: Women's/Girls' Classic Draped Hijab, Turkish Silk Hijab, Pleated Turban Hijab, Gulf Shayla, Long Modest Khimar, Hijab & Niqab, Sport Pull-On Hijab, and Wide-Brim Sun Hat; Men's/Boys' White Ghutra & Double-Coil Iqal, procedural Red & Black Shemagh & Iqal, Hamdaniyah Wrapped Ghutra, Embroidered Taqiyah, Heritage Wrapped Shawl, Tailored Fedora, Baseball Cap; plus shared Beret and Ribbed Knit Beanie.
+- **3D Studio, Cloth Lab, BodyForm & Measurement Guide Sync (`index.html`, `js/app.js`, `css/styles.css`, `js/i18n.js`, `js/body-page.js`, `js/measure-guide-3d.js`, `cloth-lab/src/...`)**: Adds a zero-overflow `Hair & Headwear` tab inside `#v3dMannequinPanel`, matching controls in Cloth Lab's `AvatarPanel.jsx`, persistent per-category `localStorage` state (`mannequinStyling`), strict anatomical `bodyMesh` height bounds in `measure-guide-3d.js` even with tall hats/iqal, and `berrystudio-v97` offline caching.
+
 ## Interactive 3D Measurement Teaching Studio (`berrystudio-v96`)
 
 Upgrades the body measurement guide in both the main studio Measures pane and `body.html` from a static 2D diagram into an **interactive 3D Measurement Teaching Studio** powered by the live watertight mannequin:

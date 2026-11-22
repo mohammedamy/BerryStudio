@@ -282,7 +282,7 @@
             </div>
           </div>
 
-          <!-- Floating 44-Mannequin Studio Catalog Panel -->
+          <!-- Floating 44-Mannequin Studio Catalog & Hair/Headwear Panel -->
           <div id="v3dMannequinPanel" class="v3d-floating-panel v3d-mannequin-panel hidden" aria-labelledby="v3dMannequinPanelTitle">
             <div class="v3d-panel-head">
               <div>
@@ -291,15 +291,22 @@
               </div>
               <button id="v3dMannequinClose" class="v3d-panel-close" title="Close" aria-label="Close">&times;</button>
             </div>
-            <div class="v3d-mannequin-tabs" id="v3dMannequinTabs" role="tablist">
-              <button type="button" class="v3d-mq-tab active" data-mq-cat="all" data-i18n="mannequinAllCount">All (44)</button>
-              <button type="button" class="v3d-mq-tab" data-mq-cat="women" data-i18n="women">Women</button>
-              <button type="button" class="v3d-mq-tab" data-mq-cat="girls" data-i18n="girls">Girls</button>
-              <button type="button" class="v3d-mq-tab" data-mq-cat="men" data-i18n="men">Men</button>
-              <button type="button" class="v3d-mq-tab" data-mq-cat="boys" data-i18n="boys">Boys</button>
+            <div class="v3d-mq-mode-bar" id="v3dMannequinModeBar" role="tablist">
+              <button type="button" class="v3d-mq-mode-btn active" data-mq-mode="catalog" data-i18n="mannequinModeModels">Models (44)</button>
+              <button type="button" class="v3d-mq-mode-btn" data-mq-mode="styling" data-i18n="mannequinModeStyling">Hair &amp; Headwear</button>
             </div>
-            <div id="v3dMannequinGrid" class="v3d-mannequin-grid"></div>
-            <div class="v3d-mannequin-future" data-i18n="mannequinFutureNote">Full range active: XXS – 6XL</div>
+            <div id="v3dMannequinCatalogView">
+              <div class="v3d-mannequin-tabs" id="v3dMannequinTabs" role="tablist">
+                <button type="button" class="v3d-mq-tab active" data-mq-cat="all" data-i18n="mannequinAllCount">All (44)</button>
+                <button type="button" class="v3d-mq-tab" data-mq-cat="women" data-i18n="women">Women</button>
+                <button type="button" class="v3d-mq-tab" data-mq-cat="girls" data-i18n="girls">Girls</button>
+                <button type="button" class="v3d-mq-tab" data-mq-cat="men" data-i18n="men">Men</button>
+                <button type="button" class="v3d-mq-tab" data-mq-cat="boys" data-i18n="boys">Boys</button>
+              </div>
+              <div id="v3dMannequinGrid" class="v3d-mannequin-grid"></div>
+              <div class="v3d-mannequin-future" data-i18n="mannequinFutureNote">Full range active: XXS – 6XL</div>
+            </div>
+            <div id="v3dMannequinStylingView" class="v3d-mq-styling hidden"></div>
           </div>
 
           <!-- Floating Accessories Drawer / Panel -->

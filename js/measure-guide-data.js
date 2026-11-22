@@ -490,7 +490,7 @@ export function applyConvexBridge(points, mode = "front") {
   if (xMax - xMin < 1e-4) return out;
 
   for (let i = 0; i < out.length; i++) {
-    const [x, y, z] = out[i];
+    const [x, , z] = out[i];
     if (z * signZ <= 0 || x <= xMin || x >= xMax) continue;
     const u = (x - a[0]) / (b[0] - a[0]);
     const chordZ = a[2] + (b[2] - a[2]) * u;

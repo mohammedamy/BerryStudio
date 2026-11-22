@@ -10,6 +10,7 @@
 import { I18N } from './i18n.js';
 import { SIZES, KIDS_AGES, computeMeasurements } from './data.js';
 import { getMannequinsByCategory, getMannequinFor, isActiveMannequinSize, normalizeMannequinSize, resolveMannequinMeasurements, toPatternSize } from './mannequin-catalog.js';
+import { resolveMannequinStyling } from './mannequin-styling.js';
 import { renderMeasureFields } from './measure-form.js';
 import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
 
@@ -130,10 +131,24 @@ import { saveBodyFormHandoff, HANDOFF_URL_FLAG } from './body-handoff.js';
   function buildBodyPayload() {
     const mqSize = isActiveMannequinSize(size) ? normalizeMannequinSize(size) : "M";
     const mq = getMannequinFor(category, mqSize);
+    const styling = resolveMannequinStyling(category, mq, saved?.mannequinStyling?.[category]);
     return {
       category,
       mannequinSize: mq.size,
-      mannequin: { id: mq.id, category: mq.category, size: mq.size, skinHex: mq.skinHex, hairHex: mq.hairHex, hairStyle: mq.hairStyle, morph: mq.morph },
+      mannequin: {
+        id: mq.id,
+        category: mq.category,
+        size: mq.size,
+        skinHex: mq.skinHex,
+        hairHex: styling.hairHex,
+        hairColor: styling.hairColor,
+        hairStyle: styling.hairStyle,
+        hairType: styling.hairType,
+        headwear: styling.headwear,
+        headwearHex: styling.headwearHex,
+        headwearColor: styling.headwearColor,
+        morph: mq.morph,
+      },
       measurements: currentMeas(),
       pieces: [],
     };

@@ -28,8 +28,11 @@ export default function Scene({ paused = false, dims, lang = 'en', debugView, fa
   // orbit input mid-capture.
   const turntableGroupRef = useRef(null)
   const skinColor = skinToneId ? resolveSkinToneHex(skinToneId) : (mannequin?.skinHex || resolveSkinToneHex())
-  const hairColor = mannequin?.hairColor ?? null
+  const hairColor = mannequin?.hairColor ?? mannequin?.hairHex ?? null
   const hairStyle = mannequin?.hairStyle ?? null
+  const hairType = mannequin?.hairType ?? 'straight'
+  const headwear = mannequin?.headwear ?? 'none'
+  const headwearColor = mannequin?.headwearColor ?? mannequin?.headwearHex ?? null
 
   return (
     <>
@@ -53,7 +56,7 @@ export default function Scene({ paused = false, dims, lang = 'en', debugView, fa
 
       <group ref={turntableGroupRef}>
         {debugView !== 'seams' && (
-          <BodyAvatar dims={dims} lang={lang} url={avatarGLBUrl} collisionRigRef={meshFitRigRef} bodyColliderRef={bodyColliderRef} skinColor={skinColor} hairColor={hairColor} hairStyle={hairStyle} pose={poseId} paused={paused} onPoseWarning={onPoseWarning} />
+          <BodyAvatar dims={dims} lang={lang} url={avatarGLBUrl} collisionRigRef={meshFitRigRef} bodyColliderRef={bodyColliderRef} skinColor={skinColor} hairColor={hairColor} hairStyle={hairStyle} hairType={hairType} headwear={headwear} headwearColor={headwearColor} pose={poseId} paused={paused} onPoseWarning={onPoseWarning} />
         )}
         {debugView === 'pieces' && <StaticPiecesDebug dims={dims} pose={poseId} pieces={garment?.pieces} seams={garment?.seams} />}
         {debugView === 'weld' && <WeldDebugView dims={dims} pose={poseId} pieces={garment?.pieces} seams={garment?.seams} />}

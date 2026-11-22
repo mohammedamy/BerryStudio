@@ -29,7 +29,7 @@ function disposeGroup(group) {
   mats.forEach((m) => m.dispose())
 }
 
-export default function Avatar({ dims, skinColor = '#dca98e', hairColor = null, hairStyle = null, pose = 'standing', paused = false, bodyColliderRef = null }) {
+export default function Avatar({ dims, skinColor = '#dca98e', hairColor = null, hairStyle = null, hairType = 'straight', headwear = 'none', headwearColor = null, pose = 'standing', paused = false, bodyColliderRef = null }) {
   const category = categoryOf(dims.female, dims.kid)
   const walkTimeRef = useRef(0)
 
@@ -43,6 +43,9 @@ export default function Avatar({ dims, skinColor = '#dca98e', hairColor = null, 
       skinColor,
       hairColor,
       hairStyle,
+      hairType,
+      headwear,
+      headwearColor,
       morph: dims.morph || null,
       pose: isWalk ? 'standing' : pose,
       bakeStatic: !isWalk,
@@ -68,7 +71,7 @@ export default function Avatar({ dims, skinColor = '#dca98e', hairColor = null, 
     }
 
     return built
-  }, [category, dims, skinColor, hairColor, hairStyle, pose, bodyColliderRef])
+  }, [category, dims, skinColor, hairColor, hairStyle, hairType, headwear, headwearColor, pose, bodyColliderRef])
 
   useFrame((_, delta) => {
     if (pose !== 'walk' || paused || !mannequin.skeleton) return

@@ -17,6 +17,14 @@ import {
   resolveMannequinMeasurements,
   toPatternSize,
 } from './mannequin-catalog.js';
+import {
+  HAIR_TYPES,
+  HAIR_COLOR_PRESETS,
+  HEADWEAR_COLOR_PRESETS,
+  getHaircutsForCategory,
+  getHeadwearForCategory,
+  resolveMannequinStyling,
+} from './mannequin-styling.js';
 import { Canvas } from './canvas.js';
 import { View3D } from './three-view.js';
 import { AIGen } from './ai.js';
@@ -164,6 +172,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     // stay one global "which size am I looking at" control, not
     // per-document — reasonable for how this app is actually used, and a
     // clearly separable follow-up if that turns out wrong in practice).
+    mannequinStyling: {},
     projects: [], activeProjectId: null,
   };
   let savedRaw = {};
@@ -804,7 +813,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     renderMeasureFields(fieldsWrap, {
       measurements: currentMeas(), T, icon: IC.measure,
       category: guideCat,
-      mannequin: getMannequinFor(guideCat, effectiveAvatarSize()),
+      mannequin: getStyledMannequinFor(guideCat, effectiveAvatarSize()),
       lang: state.lang || "en",
       showDiagram: state.showMeasDiagram,
       onToggleDiagram: (v)=>{ state.showMeasDiagram=v; save(); },
@@ -4491,6 +4500,100 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   }
 
   let activeMannequinFilterCat = "all";
+  let activeMannequinPanelMode = "catalog";
+  function getStyledMannequinFor(cat, size){
+    const base = getMannequinFor(cat, size);
+    const ov = state.mannequinStyling && state.mannequinStyling[base.category];
+    const resolved = resolveMannequinStyling(base.category, base, ov);
+    return Object.assign({}, base, {
+      hairStyle: resolved.hairStyle,
+      hairType: resolved.hairType,
+      hairHex: resolved.hairHex,
+      hairColor: resolved.hairColor,
+      headwear: resolved.headwear,
+      headwearHex: resolved.headwearHex,
+      headwearColor: resolved.headwearColor,
+      styling: resolved,
+    });
+  }
+  function setMannequinPanelMode(mode){
+    activeMannequinPanelMode = mode === "styling" ? "styling" : "catalog";
+    const catView = $("#v3dMannequinCatalogView");
+    const styView = $("#v3dMannequinStylingView");
+    if (catView) catView.classList.toggle("hidden", activeMannequinPanelMode !== "catalog");
+    if (styView) styView.classList.toggle("hidden", activeMannequinPanelMode !== "styling");
+    $$("#v3dMannequinModeBar [data-mq-mode]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.mqMode === activeMannequinPanelMode);
+    });
+    if (activeMannequinPanelMode === "styling") renderMannequinStylingPanel();
+    else renderMannequinCatalogPanel();
+  }
+  function updateMannequinStyling(patch, { notify = false } = {}){
+    const cat = state.avatarCategory || state.category || "women";
+    if (!state.mannequinStyling || typeof state.mannequinStyling !== "object" || Array.isArray(state.mannequinStyling)) {
+      state.mannequinStyling = {};
+    }
+    if (patch === null) {
+      delete state.mannequinStyling[cat];
+    } else {
+      state.mannequinStyling[cat] = Object.assign({}, state.mannequinStyling[cat] || {}, patch);
+    }
+    save();
+    renderMannequinStylingPanel();
+    renderMannequinCatalogPanel();
+    if (is3DActive()) build3D();
+    if (state.view === "clothlab") syncClothLab(true);
+    if (state.pane === "measure") renderMeasurePane();
+    if (notify) toast(patch === null ? T("stylingResetDone") : T("stylingApplied"));
+  }
+  function renderMannequinStylingPanel(){
+    const host = $("#v3dMannequinStylingView");
+    if (!host) return;
+    const cat = state.avatarCategory || state.category || "women";
+    const effSize = effectiveAvatarSize();
+    const styled = getStyledMannequinFor(cat, effSize);
+    const haircuts = getHaircutsForCategory(cat);
+    const headwears = getHeadwearForCategory(cat);
+    const femaleCat = cat === "women" || cat === "girls";
+    const catLabelMap = {
+      women: T("mannequinWomen"),
+      men: T("mannequinMen"),
+      girls: T("mannequinGirls"),
+      boys: T("mannequinBoys"),
+    };
+    const ar = state.lang === "ar";
+    const hairCutOpts = haircuts.map((c) => `<option value="${c.id}"${c.id === styled.hairStyle ? " selected" : ""}>${ar ? c.label.ar : c.label.en}</option>`).join("");
+    const typePills = HAIR_TYPES.map((ht) => `<button type="button" class="v3d-style-pill${ht.id === styled.hairType ? " active" : ""}" data-hair-type="${ht.id}" aria-pressed="${ht.id === styled.hairType}">${ar ? ht.label.ar : ht.label.en}</button>`).join("");
+    const hairSwatches = HAIR_COLOR_PRESETS.slice(0, 12).map((sw) => `<button type="button" class="v3d-style-swatch${sw.hex === styled.hairHex ? " active" : ""}" data-hair-color="${sw.hex}" title="${ar ? sw.label.ar : sw.label.en}" aria-label="${ar ? sw.label.ar : sw.label.en}" style="background:${sw.hex}"></button>`).join("");
+    const hwChips = headwears.map((hw) => `<button type="button" class="v3d-style-chip${hw.id === styled.headwear ? " active" : ""}" data-headwear-id="${hw.id}" aria-pressed="${hw.id === styled.headwear}">${ar ? hw.label.ar : hw.label.en}</button>`).join("");
+    const hwSwatches = HEADWEAR_COLOR_PRESETS.slice(0, 12).map((sw) => `<button type="button" class="v3d-style-swatch${sw.hex === styled.headwearHex ? " active" : ""}" data-headwear-color="${sw.hex}" title="${ar ? sw.label.ar : sw.label.en}" aria-label="${ar ? sw.label.ar : sw.label.en}" style="background:${sw.hex}"></button>`).join("");
+    const showHwColor = styled.headwear && styled.headwear !== "none";
+    host.innerHTML = `<div class="v3d-style-header"><span class="v3d-style-cat-pill">${catLabelMap[cat] || cat} · ${styled.size}</span>${styled.styling.hasOverrides ? `<button type="button" class="v3d-style-reset" id="v3dStylingResetBtn">${T("stylingReset")}</button>` : ""}</div><div class="v3d-style-group"><div class="v3d-style-label">${T("stylingHaircut")}</div><select id="v3dHaircutSelect" class="v3d-style-select" aria-label="${T("stylingHaircut")}">${hairCutOpts}</select></div><div class="v3d-style-group"><div class="v3d-style-label">${T("stylingHairType")}</div><div class="v3d-style-pills">${typePills}</div></div><div class="v3d-style-group"><div class="v3d-style-label-row"><span class="v3d-style-label">${T("stylingHairColor")}</span><button type="button" class="v3d-style-reset" id="v3dHairColorAutoBtn">${T("stylingAuto")}</button></div><div class="v3d-style-swatches">${hairSwatches}<input type="color" id="v3dHairColorPicker" class="v3d-style-color-input" value="${styled.hairHex}" title="${T("stylingCustomColor")}" aria-label="${T("stylingCustomColor")}"></div></div><div class="v3d-style-group"><div class="v3d-style-label">${femaleCat ? T("stylingHijabHeadwear") : T("stylingHeadwear")}</div><div class="v3d-style-headwear-grid">${hwChips}</div></div>${showHwColor ? `<div class="v3d-style-group"><div class="v3d-style-label-row"><span class="v3d-style-label">${T("stylingHeadwearColor")}</span><button type="button" class="v3d-style-reset" id="v3dHwColorAutoBtn">${T("stylingAuto")}</button></div><div class="v3d-style-swatches">${hwSwatches}<input type="color" id="v3dHeadwearColorPicker" class="v3d-style-color-input" value="${styled.headwearHex || "#f3ece4"}" title="${T("stylingCustomColor")}" aria-label="${T("stylingCustomColor")}"></div></div>` : ""}`;
+    const resetBtn = $("#v3dStylingResetBtn");
+    if (resetBtn) resetBtn.onclick = () => updateMannequinStyling(null, { notify: true });
+    const cutSel = $("#v3dHaircutSelect");
+    if (cutSel) cutSel.onchange = (e) => updateMannequinStyling({ hairStyle: e.target.value });
+    $$("#v3dMannequinStylingView [data-hair-type]").forEach((b) => {
+      b.onclick = () => updateMannequinStyling({ hairType: b.dataset.hairType });
+    });
+    $$("#v3dMannequinStylingView [data-hair-color]").forEach((b) => {
+      b.onclick = () => updateMannequinStyling({ hairColor: b.dataset.hairColor });
+    });
+    const hAuto = $("#v3dHairColorAutoBtn");
+    if (hAuto) hAuto.onclick = () => updateMannequinStyling({ hairColor: null });
+    const hPick = $("#v3dHairColorPicker");
+    if (hPick) hPick.onchange = (e) => updateMannequinStyling({ hairColor: e.target.value });
+    $$("#v3dMannequinStylingView [data-headwear-id]").forEach((b) => {
+      b.onclick = () => updateMannequinStyling({ headwear: b.dataset.headwearId, headwearColor: null }, { notify: true });
+    });
+    $$("#v3dMannequinStylingView [data-headwear-color]").forEach((b) => {
+      b.onclick = () => updateMannequinStyling({ headwearColor: b.dataset.headwearColor });
+    });
+    const hwAuto = $("#v3dHwColorAutoBtn");
+    if (hwAuto) hwAuto.onclick = () => updateMannequinStyling({ headwearColor: null });
+    const hwPick = $("#v3dHeadwearColorPicker");
+    if (hwPick) hwPick.onchange = (e) => updateMannequinStyling({ headwearColor: e.target.value });
+  }
   function syncMannequinSelectorsUI(){
     const avatarCat = state.avatarCategory || state.category || "women";
     const modelSel = $("#v3dModelSelect");
@@ -4568,6 +4671,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     }
     syncMannequinSelectorsUI();
     renderMannequinCatalogPanel();
+    if (activeMannequinPanelMode === "styling") renderMannequinStylingPanel();
     if (toastNotify) toast(`${T("mannequinApplied")} · ${L(mq.name)} (${mq.measurements.height} cm)`);
   }
 
@@ -4683,7 +4787,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
   function build3D(colorInt, extraOpts){
     const avatarCat = state.avatarCategory || state.category || "women";
     const effSize = effectiveAvatarSize();
-    const mannequin = getMannequinFor(avatarCat, effSize);
+    const mannequin = getStyledMannequinFor(avatarCat, effSize);
     const m = avatarMeas(avatarCat);
     const pieces = Canvas.getPieces();
     const parts = partsFabric();
@@ -4691,6 +4795,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const col = colorInt!=null ? colorInt : (leadPiece ? colorToInt(leadPiece.color) : cssHex("--brand"));
     syncMannequinSelectorsUI();
     renderMannequinCatalogPanel();
+    if (activeMannequinPanelMode === "styling") renderMannequinStylingPanel();
     const fabricSelect = $("#v3dFabricSelect");
     if (fabricSelect && fabricSelect.value !== (state.fabric3d || "cotton")) {
       fabricSelect.value = state.fabric3d || "cotton";
@@ -4937,7 +5042,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const lbStyle = state.loaded ? getPatternLookbookStyle(state.loaded, loadedMeta, pieces) : null;
     const lookbookPrint = (lbStyle?.print && pieces.some(p => p.lookbookColor)) ? lbStyle.print : null;
     const activeMqSize = (!state.kids && (state.avatarSizeExplicit ? state.avatarSize : state.size)) || state.size || "M";
-    const activeMq = getMannequinFor(state.category, activeMqSize);
+    const activeMq = getStyledMannequinFor(state.category, activeMqSize);
     return {
       designId: String(state.activeProjectId || "current"),
       patternId: state.loaded || null,
@@ -4954,7 +5059,12 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         size: activeMq.size,
         skinHex: activeMq.skinHex,
         hairHex: activeMq.hairHex,
+        hairColor: activeMq.hairColor,
         hairStyle: activeMq.hairStyle,
+        hairType: activeMq.hairType,
+        headwear: activeMq.headwear,
+        headwearHex: activeMq.headwearHex,
+        headwearColor: activeMq.headwearColor,
         morph: activeMq.morph,
       },
       fabricId: dominantFabricId(),
@@ -5128,6 +5238,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     Canvas.render();
     syncMannequinSelectorsUI();
     renderMannequinCatalogPanel();
+    if (activeMannequinPanelMode === "styling") renderMannequinStylingPanel();
     update3DStatusPill();
     // Cloth Lab only re-reads `lang` from a resent payload (it has no
     // language toggle of its own — it mirrors this app's) — without this,
@@ -6567,7 +6678,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         mqPanel.classList.toggle("hidden", !opening);
         mqCatalogBtn.classList.toggle("active", opening);
         if (opening) {
-          renderMannequinCatalogPanel();
+          setMannequinPanelMode(activeMannequinPanelMode);
           $("#v3dAccPanel")?.classList.add("hidden");
           $("#v3dAccBtn")?.classList.remove("active");
           $("#v3dPrintsPanel")?.classList.add("hidden");
@@ -6581,6 +6692,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         mqCatalogBtn?.classList.remove("active");
       };
     }
+    $$("#v3dMannequinModeBar [data-mq-mode]").forEach(btn => {
+      btn.onclick = () => setMannequinPanelMode(btn.dataset.mqMode);
+    });
     $$("#v3dMannequinTabs [data-mq-cat]").forEach(btn => {
       btn.onclick = () => {
         activeMannequinFilterCat = btn.dataset.mqCat || "all";

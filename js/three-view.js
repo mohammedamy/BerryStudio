@@ -658,6 +658,9 @@ export const View3D = (() => {
       morph: mannequinPreset?.morph,
       hairColor: mannequinPreset?.hairColor,
       hairStyle: mannequinPreset?.hairStyle,
+      hairType: mannequinPreset?.hairType,
+      headwear: mannequinPreset?.headwear,
+      headwearColor: mannequinPreset?.headwearColor,
       pose: "standing",
       lowPower: isSoftwareGL,
     });
