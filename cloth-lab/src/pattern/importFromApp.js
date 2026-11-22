@@ -577,14 +577,15 @@ function deriveTorsoEdgeInstructions(outline, { includeTop, necklineEndIdx, side
   const rightSideEnd = sideEndIdx != null ? sideEndIdx : rightHemIdx
   const leftSideStart = sideEndIdx != null ? n - sideEndIdx : leftHemIdx
   const h = Math.max(1, rightHemY - outline[0][1])
+  const cx0 = outline[0][0]
   const hasNeckStep = includeTop &&
     necklineEndIdx == null &&
     rightSideEnd >= 3 &&
-    Math.abs(outline[0][0]) <= 2 &&
-    outline[1][0] > outline[0][0] + 2 &&
+    Math.abs(outline[half][0] - cx0) <= Math.max(2, Math.abs(outline[1][0] - cx0) * 0.35) &&
+    outline[1][0] > cx0 + 2 &&
     outline[2][0] > outline[1][0] + 4 &&
     Math.abs(outline[2][1] - outline[0][1]) <= h * 0.16 &&
-    Math.abs(outline[1][0] + outline[n - 1][0]) < 1
+    Math.abs((outline[1][0] - cx0) + (outline[n - 1][0] - cx0)) < 1
 
   const rightTopFrom = hasNeckStep ? 1 : 0
   const rightTopTo = hasNeckStep ? 2 : 1
@@ -627,9 +628,30 @@ function deriveSleevedTorsoEdges(outline, { includeTop, necklineEndIdx, sideEndI
   const h = Math.max(1, maxY - minY)
 
   let crownIdx = 0, shoulderIdx = 1
+  const cx0 = outline[0][0]
+  const dx1 = outline[1][0] - cx0
+  const dxLast = outline[n - 1][0] - cx0
+  const unfoldedSymmetric = Math.abs(dx1 + dxLast) < Math.max(1, Math.abs(dx1) * 0.2) &&
+    Math.abs(outline[1][1] - outline[n - 1][1]) < 1 &&
+    Math.abs(outline[half][0] - cx0) < Math.max(1, Math.abs(dx1) * 0.35)
+  const earlyDeclaredSide = (edges || []).find((e) => e && e.seamId && e.toIdx === rightSideEnd && e.fromIdx >= 0 && e.fromIdx < rightSideEnd)
+  let declaredUnderarmOverride = null
+
   if (necklineEndIdx != null) {
     crownIdx = necklineEndIdx
     shoulderIdx = necklineEndIdx
+    if (
+      earlyDeclaredSide?.seamId === 'leotardSide' &&
+      earlyDeclaredSide.fromIdx === crownIdx + 1 &&
+      crownIdx + 2 < rightSideEnd
+    ) {
+      const p0 = outline[crownIdx], p1 = outline[crownIdx + 1], p2 = outline[crownIdx + 2]
+      const sdx = p1[0] - p0[0], sdy = Math.abs(p1[1] - p0[1])
+      if (sdx >= 3.0 && sdx > sdy * 1.35 && turnAngleDeg(p0, p1, p2) >= 26) {
+        shoulderIdx = crownIdx + 1
+        declaredUnderarmOverride = shoulderIdx + 1
+      }
+    }
   } else {
     let minIdx = 0
     for (let i = 1; i < rightSideEnd; i++) {
@@ -651,12 +673,11 @@ function deriveSleevedTorsoEdges(outline, { includeTop, necklineEndIdx, sideEndI
         crownIdx = minIdx - 1
       }
     } else if (
+      unfoldedSymmetric &&
       rightSideEnd >= 3 &&
-      Math.abs(outline[0][0]) <= 2 &&
-      outline[1][0] > outline[0][0] + 2 &&
+      dx1 > 2 &&
       outline[2][0] > outline[1][0] + 4 &&
-      Math.abs(outline[2][1] - outline[0][1]) <= h * 0.16 &&
-      Math.abs(outline[1][0] + outline[n - 1][0]) < 1
+      Math.abs(outline[2][1] - outline[0][1]) <= h * 0.16
     ) {
       // Leave 0 -> 1 (and n-1 -> 0) open as the neck hole; sew 1 -> 2 (and n-2 -> n-1) as shoulder seams
       crownIdx = 1
@@ -669,9 +690,11 @@ function deriveSleevedTorsoEdges(outline, { includeTop, necklineEndIdx, sideEndI
 
   // Locate underarmIdx along shoulderIdx + 1 .. rightSideEnd - 1:
   // 1) Authoritative declared side seam ending at rightSideEnd (library.js, leotards, ref_b_tee).
-  let underarmIdx = null
-  const declaredSide = (edges || []).find((e) => e && e.seamId && e.toIdx === rightSideEnd && e.fromIdx >= shoulderIdx && e.fromIdx < rightSideEnd)
-  if (declaredSide) {
+  let underarmIdx = declaredUnderarmOverride
+  const declaredSide = earlyDeclaredSide && earlyDeclaredSide.fromIdx >= shoulderIdx
+    ? earlyDeclaredSide
+    : null
+  if (underarmIdx == null && declaredSide) {
     underarmIdx = declaredSide.fromIdx
   }
   // 2) If declaredSide starts right at shoulderIdx (e.g. lower body below a separate yoke),
@@ -699,7 +722,7 @@ function deriveSleevedTorsoEdges(outline, { includeTop, necklineEndIdx, sideEndI
         if (!cands.length) {
           underarmIdx = shoulderIdx + 1
         } else {
-          const peak = cands.find((i) => outline[i + 1][0] <= outline[i][0] + 0.5)
+          const peak = cands.find((i) => outline[i + 1][0] <= outline[i][0] + 0.5 && outline[i][1] > outline[shoulderIdx][1] + 2.0)
           const subdividedRobeUnderarm = peak == null && cands.length >= 2 &&
             outline[cands[0]][1] - outline[shoulderIdx][1] >= 12 &&
             outline[cands[0]][1] - outline[shoulderIdx][1] <= 26 &&
@@ -725,11 +748,7 @@ function deriveSleevedTorsoEdges(outline, { includeTop, necklineEndIdx, sideEndI
 
   // Mirror right-side landmarks to the left half. Unfolded fold pieces satisfy
   // mirror(i) = n - i (with 0 -> 0); full-width symmetric rectangles (e.g. 6-pt
-  // subdivided rectangle) map shoulder(1)->0? Wait: on a 6-pt full rect
-  // [topL(0), topR(1), underarmR(2), botR(3), botL(4), underarmL(5)],
-  // leftSide is 4->5 and leftArmhole is 5->0!
-  const unfoldedSymmetric = Math.abs(outline[1][0] + outline[n - 1][0]) < Math.max(1, Math.abs(outline[1][0]) * 0.2) &&
-    Math.abs(outline[1][1] - outline[n - 1][1]) < 1
+  // subdivided rectangle) map leftSide (4->5) and leftArmhole (5->0).
   let leftUnderarmIdx, leftShoulderIdx, leftCrownIdx
   if (unfoldedSymmetric) {
     leftUnderarmIdx = n - underarmIdx
@@ -866,6 +885,27 @@ function deriveSportBraSideEdges(outline) {
     { name: 'rightSide', from: underarmIdx, to: rightHemIdx },
     { name: 'leftSide', from: leftHemIdx, to: leftUnderarmIdx },
   ]
+}
+
+// Picks the vertex `k` along `fromIdx .. toIdx - minTailSegs` whose cumulative
+// Euclidean arc length is closest to `totalArc * targetFrac`.
+function pickArcSplitIndex(outline, fromIdx, toIdx, targetFrac, minTailSegs = 1) {
+  if (!outline?.length || toIdx - fromIdx < 2) return fromIdx + 1
+  const maxIdx = Math.max(fromIdx + 1, toIdx - minTailSegs)
+  const cum = [0]
+  for (let i = fromIdx; i < toIdx; i++) {
+    const a = outline[i], b = outline[i + 1]
+    cum.push(cum[cum.length - 1] + (a && b ? Math.hypot(b[0] - a[0], b[1] - a[1]) : 0))
+  }
+  const total = cum[cum.length - 1]
+  if (!(total > 1e-4)) return fromIdx + Math.max(1, Math.round((toIdx - fromIdx) * targetFrac))
+  const want = total * targetFrac
+  let bestIdx = fromIdx + 1, bestErr = Infinity
+  for (let k = fromIdx + 1; k <= maxIdx; k++) {
+    const err = Math.abs(cum[k - fromIdx] - want)
+    if (err < bestErr) { bestErr = err; bestIdx = k }
+  }
+  return bestIdx
 }
 
 // Inserts sorted fractional intermediate vertices `tList` in `(0, 1)` along
@@ -1367,6 +1407,8 @@ export function convertAppPattern(payload) {
       const authoredNeckEdge = edges?.find((e) => e?.seamId && /Neck(?:Back)?(?:_[RL])?$/.test(e.seamId) && e.fromIdx === 0)
       const canSubdivideJacketBack = hasSleeves && !isVestPiece && schemaRole !== 'lining' && placement === 'backPanel' &&
         authoredSideEdge && authoredNeckEdge && authoredSideEdge.fromIdx === authoredNeckEdge.toIdx + 1
+      const canSubdivideSleevelessJacketBack = (isVestPiece || !hasSleeves) && schemaRole !== 'lining' && placement === 'backPanel' &&
+        authoredSideEdge && authoredNeckEdge && authoredSideEdge.fromIdx === authoredNeckEdge.toIdx + 1
       const isShirtBack1SegArmhole = hasSleeves && hasSleeveUnder && !isVestPiece && !isPrincessCenter &&
         schemaRole !== 'lining' && placement === 'backPanel' &&
         authoredSideEdge && !authoredNeckEdge && authoredSideEdge.fromIdx === 2 && edges.length === 1
@@ -1375,6 +1417,7 @@ export function convertAppPattern(payload) {
       let workEdges = edges
       let wrapSubAdded = 0
       let jacketBackSubAdded = 0
+      let sleevelessBackSubAdded = 0
 
       if (isWrapBackPiece && hasSleeves && edges[0]?.fromIdx === 1) {
         const sub = insertSegmentSubdivisions(workLocal, workEdges, 0, hasSleeveUnder ? [0.24, 0.56, 0.84] : [0.24, 0.58])
@@ -1382,8 +1425,13 @@ export function convertAppPattern(payload) {
         workLocal = sub.outline
         workEdges = sub.edges
       } else if (canSubdivideJacketBack) {
-        const sub = insertSegmentSubdivisions(workLocal, workEdges, authoredNeckEdge.toIdx, hasSleeveUnder ? [0.40, 0.80] : [0.40])
+        const sub = insertSegmentSubdivisions(workLocal, workEdges, authoredNeckEdge.toIdx, hasSleeveUnder ? [0.38, 0.78] : [0.40])
         jacketBackSubAdded = sub.outline.length - workLocal.length
+        workLocal = sub.outline
+        workEdges = sub.edges
+      } else if (canSubdivideSleevelessJacketBack) {
+        const sub = insertSegmentSubdivisions(workLocal, workEdges, authoredNeckEdge.toIdx, [0.42])
+        sleevelessBackSubAdded = sub.outline.length - workLocal.length
         workLocal = sub.outline
         workEdges = sub.edges
       } else if (isShirtBack1SegArmhole) {
@@ -1394,14 +1442,40 @@ export function convertAppPattern(payload) {
 
       const canSubdivideArmhole = isUpperPanel && !isSportBraPanel && !isPrincessCenter && !workEdges?.length && necklineEndIdx == null && sideEndIdx == null
       const armholeLocal = canSubdivideArmhole && hasSleeves ? subdivideFoldBodiceArmhole(workLocal) : workLocal
-      const canSubdivideNeck = isUpperPanel && !isSportBraPanel && !isPrincessCenter && !wrapSubAdded && !jacketBackSubAdded &&
+      const canSubdivideNeck = isUpperPanel && !isSportBraPanel && !isPrincessCenter && !wrapSubAdded && !jacketBackSubAdded && !sleevelessBackSubAdded &&
         necklineEndIdx == null && sideEndIdx == null &&
         (!workEdges?.length || workEdges.every((e) => e && e.fromIdx >= 1 && e.toIdx >= 1))
-      const baseLocal = canSubdivideNeck ? subdivideFoldBodiceNeckOpening(armholeLocal) : armholeLocal
+      let baseLocal = canSubdivideNeck ? subdivideFoldBodiceNeckOpening(armholeLocal) : armholeLocal
       const neckAdded = baseLocal.length - armholeLocal.length
-      const adjEdges = neckAdded > 0 && workEdges?.length
+      let adjEdges = neckAdded > 0 && workEdges?.length
         ? workEdges.map((e) => ({ ...e, fromIdx: e.fromIdx + neckAdded, toIdx: e.toIdx + neckAdded }))
         : workEdges
+
+      // Yoked shirt/shirtdress backs (`m03, m04, ref_m_shirt`, etc.): after neck subdivision,
+      // split the flat wide horizontal yoke-base line into shoulder + armhole top at t = 0.50.
+      if (
+        neckAdded === 1 &&
+        placement === 'backPanel' &&
+        hasSleeves &&
+        !isVestPiece &&
+        !isPrincessCenter &&
+        schemaRole !== 'lining' &&
+        !wrapSubAdded &&
+        !jacketBackSubAdded &&
+        !sleevelessBackSubAdded &&
+        baseLocal.length >= 5 &&
+        Math.abs(baseLocal[0][1] - baseLocal[1][1]) < 0.25 &&
+        Math.abs(baseLocal[1][1] - baseLocal[2][1]) < 0.25 &&
+        baseLocal[2][0] - baseLocal[1][0] >= 12.5 &&
+        baseLocal[2][0] - baseLocal[1][0] > (baseLocal[1][0] - baseLocal[0][0]) * 1.55 &&
+        baseLocal[3][1] - baseLocal[2][1] >= 4 &&
+        baseLocal[3][1] - baseLocal[2][1] <= 14
+      ) {
+        const shSub = insertSegmentSubdivisions(baseLocal, adjEdges, 1, [0.50])
+        baseLocal = shSub.outline
+        adjEdges = shSub.edges
+      }
+
       const outline = unfoldPiece(baseLocal)
       rawPieces.push({ id: p.id, label: p.label, outline, color: p.color, darts: p.darts })
       roles[p.id] = placement
@@ -1521,8 +1595,8 @@ export function convertAppPattern(payload) {
             const N = outline.length
             const nEnd = authoredNeckEdge.toIdx + neckAdded
             const sStart = authoredSideEdge.fromIdx + neckAdded
-            const shIdx = nEnd + Math.max(1, Math.round((sStart - nEnd) * 0.42))
-            const armMid = sStart - shIdx >= 2 ? sStart - 1 : shIdx
+            const shIdx = pickArcSplitIndex(outline, nEnd, sStart, 0.50, hasSleeveUnder ? 2 : 1)
+            const armMid = (hasSleeveUnder && sStart - shIdx >= 2) ? pickArcSplitIndex(outline, shIdx, sStart, 0.65, 1) : shIdx
             pushClaimedEdge(p.id, 'rightTop', nEnd, shIdx, N)
             pushClaimedEdge(p.id, 'leftTop', N - shIdx, N - nEnd, N)
             if (hasSleeveUnder && armMid > shIdx) {
@@ -1544,11 +1618,11 @@ export function convertAppPattern(payload) {
               lArmEdge: hasSleeveUnder && armMid > shIdx ? 'leftArmholeUpper' : 'leftArmhole',
               lArmLowerEdge: hasSleeveUnder && armMid > shIdx ? 'leftArmholeLower' : null,
             }
-          } else if (isVestPiece && schemaRole !== 'lining' && placement === 'backPanel' &&
+          } else if (!canSubdivideJacketBack && (isVestPiece || !hasSleeves) && schemaRole !== 'lining' && placement === 'backPanel' &&
             authoredSideEdge && authoredNeckEdge && authoredSideEdge.fromIdx > authoredNeckEdge.toIdx) {
             const N = outline.length
             const sBase = authoredNeckEdge.toIdx + neckAdded
-            const shIdx = authoredSideEdge.fromIdx + neckAdded
+            const shIdx = sleevelessBackSubAdded >= 1 ? (sBase + 1) : (authoredSideEdge.fromIdx + neckAdded)
             if (!hasInteriorOverlap(p.id, N, sBase, shIdx)) {
               pushClaimedEdge(p.id, 'rightTop', sBase, shIdx, N)
               pushClaimedEdge(p.id, 'leftTop', N - shIdx, N - sBase, N)
@@ -1789,8 +1863,8 @@ export function convertAppPattern(payload) {
         const nEdge = edges.find((e) => e?.seamId && /Neck/i.test(e.seamId) && e.fromIdx === 0)
         const sEdge = edges.find((e) => e?.seamId && /Side/i.test(e.seamId))
         if (nEdge && sEdge && sEdge.fromIdx - nEdge.toIdx >= 3) {
-          const shIdx = nEdge.toIdx + Math.max(1, Math.round((sEdge.fromIdx - nEdge.toIdx) * 0.42))
-          const armMid = sEdge.fromIdx - shIdx >= 2 ? sEdge.fromIdx - 1 : shIdx
+          const shIdx = pickArcSplitIndex(local, nEdge.toIdx, sEdge.fromIdx, 0.50, hasSleeveUnder ? 2 : 1)
+          const armMid = (hasSleeveUnder && sEdge.fromIdx - shIdx >= 2) ? pickArcSplitIndex(local, shIdx, sEdge.fromIdx, 0.65, 1) : shIdx
           const defs = [{ name: 'rightTop', fromIdx: nEdge.toIdx, toIdx: shIdx }]
           if (hasSleeveUnder && armMid > shIdx) {
             defs.push(
@@ -1843,8 +1917,9 @@ export function convertAppPattern(payload) {
 
       const nEdge = edges.find((e) => e?.seamId && /Neck/i.test(e.seamId) && e.fromIdx === 0)
       const sEdge = edges.find((e) => e?.seamId && e.seamId === 'jacketSide')
-      if (isVestFrontPiece && nEdge && sEdge && sEdge.fromIdx > nEdge.toIdx) {
-        const shIdx = nEdge.toIdx + Math.max(1, Math.round((sEdge.fromIdx - nEdge.toIdx) * 0.38))
+      const isSleevelessJacketFront = isVestFrontPiece || (!hasSleeves && !jacketOuterFront)
+      if (isSleevelessJacketFront && nEdge && sEdge && sEdge.fromIdx > nEdge.toIdx) {
+        const shIdx = pickArcSplitIndex(local, nEdge.toIdx, sEdge.fromIdx, 0.48, 1)
         if (!hasInteriorOverlap(rId, n, nEdge.toIdx, shIdx)) {
           const shM = mirrorEdgeIndices([{ name: 'leftTop', fromIdx: nEdge.toIdx, toIdx: shIdx }], n)[0]
           pushClaimedEdge(rId, 'rightTop', nEdge.toIdx, shIdx, n)
@@ -1867,8 +1942,8 @@ export function convertAppPattern(payload) {
         }
       }
       if (hasSleeves && !isVestFrontPiece && !jacketOuterFront && nEdge && sEdge && sEdge.fromIdx - nEdge.toIdx >= 3) {
-        const shIdx = nEdge.toIdx + Math.max(1, Math.round((sEdge.fromIdx - nEdge.toIdx) * 0.42))
-        const armMid = sEdge.fromIdx - shIdx >= 2 ? sEdge.fromIdx - 1 : shIdx
+        const shIdx = pickArcSplitIndex(local, nEdge.toIdx, sEdge.fromIdx, 0.50, hasSleeveUnder ? 2 : 1)
+        const armMid = (hasSleeveUnder && sEdge.fromIdx - shIdx >= 2) ? pickArcSplitIndex(local, shIdx, sEdge.fromIdx, 0.65, 1) : shIdx
         const defs = [{ name: 'rightTop', fromIdx: nEdge.toIdx, toIdx: shIdx }]
         if (hasSleeveUnder && armMid > shIdx) {
           defs.push(
@@ -2343,13 +2418,13 @@ export function convertAppPattern(payload) {
 
   // Outer jacket / wrap-coat shoulder seams (connect front shoulder <-> back shoulder on R & L)
   if (jacketOuterFront && jacketOuterBack) {
-    addOrientedSeam('jacketShoulder_R', jacketOuterFront.rId, jacketOuterFront.rShoulderEdge, jacketOuterBack.pieceId, jacketOuterBack.rShoulderEdge, false, true)
-    addOrientedSeam('jacketShoulder_L', jacketOuterFront.lId, jacketOuterFront.lShoulderEdge, jacketOuterBack.pieceId, jacketOuterBack.lShoulderEdge, false, true)
+    addOrientedSeam('jacketShoulder_R', jacketOuterFront.rId, jacketOuterFront.rShoulderEdge, jacketOuterBack.pieceId, jacketOuterBack.rShoulderEdge, null, true)
+    addOrientedSeam('jacketShoulder_L', jacketOuterFront.lId, jacketOuterFront.lShoulderEdge, jacketOuterBack.pieceId, jacketOuterBack.lShoulderEdge, null, true)
   }
   if (vestFronts.length === 1 && vestBacks.length === 1) {
     const vf = vestFronts[0], vb = vestBacks[0]
-    addOrientedSeam('vestShoulder_R', vf.rId, vf.rShoulderEdge, vb.pieceId, vb.rShoulderEdge, false, true)
-    addOrientedSeam('vestShoulder_L', vf.lId, vf.lShoulderEdge, vb.pieceId, vb.lShoulderEdge, false, true)
+    addOrientedSeam('vestShoulder_R', vf.rId, vf.rShoulderEdge, vb.pieceId, vb.rShoulderEdge, null, true)
+    addOrientedSeam('vestShoulder_L', vf.lId, vf.lShoulderEdge, vb.pieceId, vb.lShoulderEdge, null, true)
   }
   closedBlazerFrontPairs.forEach((cf, idx) => {
     addOrientedSeam(idx === 0 ? 'blazerCenterFront' : `blazerCenterFront_${idx}`, cf.rId, cf.edge, cf.lId, cf.edge, null, false)
@@ -2372,10 +2447,10 @@ export function convertAppPattern(payload) {
     }
   }
   if (wrapCoatFrontR && wrapCoatBack) {
-    addOrientedSeam('wrapCoatShoulder_R', wrapCoatFrontR.pieceId, wrapCoatFrontR.shoulderEdge, wrapCoatBack.pieceId, wrapCoatBack.rShoulderEdge, false, true)
+    addOrientedSeam('wrapCoatShoulder_R', wrapCoatFrontR.pieceId, wrapCoatFrontR.shoulderEdge, wrapCoatBack.pieceId, wrapCoatBack.rShoulderEdge, null, true)
   }
   if (wrapCoatFrontL && wrapCoatBack) {
-    addOrientedSeam('wrapCoatShoulder_L', wrapCoatFrontL.pieceId, wrapCoatFrontL.shoulderEdge, wrapCoatBack.pieceId, wrapCoatBack.lShoulderEdge, false, true)
+    addOrientedSeam('wrapCoatShoulder_L', wrapCoatFrontL.pieceId, wrapCoatFrontL.shoulderEdge, wrapCoatBack.pieceId, wrapCoatBack.lShoulderEdge, null, true)
   }
   if (wrapCoatFrontR && wrapCoatFrontL && wrapCoatBack) {
     const rPc = rawPieces.find((rp) => rp.id === wrapCoatFrontR.pieceId)

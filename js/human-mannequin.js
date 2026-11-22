@@ -928,19 +928,23 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     const by = positions[backIdx * 3 + 1];
     const bArm = side > 0 ? BONE_IDX.armL : BONE_IDX.armR;
     // Rounded human acromion-to-deltoid cap curving seamlessly from shoulderSeamRx into lateral deltoid
-    const outerAcromionX = (lm.shoulderPivotX + upperR * 0.78) * radCap;
-    const zArm = upperR * 0.98 * radCap;
-    const acromionTargetY = shoulderY - span * 0.014;
+    const outerAcromionX = (lm.shoulderPivotX + upperR * 0.80) * radCap;
+    const zArm = upperR * 0.99 * radCap;
+    const acromionTargetY = shoulderY - span * 0.011;
     const saddle = [];
     for (let j = 1; j <= 13; j++) {
       const u = j / 14; // 0 = front seam, 0.5 = lateral acromion dome, 1 = back seam
       const sinU = Math.sin(Math.PI * u);
       const cosU = Math.cos(Math.PI * u);
-      const x = side * (shoulderSeamRx + (outerAcromionX - shoulderSeamRx) * Math.pow(sinU, 0.82));
+      const x = side * (shoulderSeamRx + (outerAcromionX - shoulderSeamRx) * Math.pow(sinU, 0.78));
       const baseLineY = fy * (1 - u) + by * u;
-      const y = baseLineY * (1 - sinU) + acromionTargetY * sinU;
+      const acromionCrown = upperR * 0.075 * Math.pow(sinU, 1.35);
+      const y = baseLineY * (1 - sinU) + (acromionTargetY + acromionCrown) * sinU;
       const z = zArm * cosU;
-      saddle.push(addVertex(x, y, z, 0.86, [[BONE_IDX.chest, 0.52], [bArm, 0.42], [BONE_IDX.neck, 0.06]], false));
+      const wArm = 0.34 + 0.14 * sinU;
+      const wNeck = 0.06 * (1 - 0.5 * sinU);
+      const wChest = 1 - wArm - wNeck;
+      saddle.push(addVertex(x, y, z, 0.85, [[BONE_IDX.chest, wChest], [bArm, wArm], [BONE_IDX.neck, wNeck]], false));
     }
     return saddle;
   }
@@ -977,8 +981,8 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     const upperLen = lm.upperArmLen;
     const foreLen = lm.forearmLen;
 
-    if (dyDown < 0.048) {
-      const f = smoothstep(-0.035, 0.048, dyDown);
+    if (dyDown < 0.056) {
+      const f = smoothstep(-0.040, 0.056, dyDown);
       return [[BONE_IDX.chest, 1 - f], [bArm, f]];
     }
     if (dyDown < upperLen + 0.042) {
@@ -1008,8 +1012,8 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     // Strictly convex lateral deltoid contour expanding smoothly from sloped acromion -> deltoid belly -> 3 elbow loops -> anatomical wrist & metacarpal palm
     const armStops = [
       // [dyDown, rMedLat, rAntPost, xShiftOut, zShift, sw, tiltScale]
-      [0.016, upperR * 0.90, upperR * 1.00, side * upperR * 0.025, 0.001, 0.86, 0.30],         // proximal deltoid cap blend
-      [upperLen * 0.13, upperR * 0.96, upperR * 1.01, side * upperR * 0.03, 0.001, 0.62, 0.14], // lateral deltoid roundness
+      [0.015, upperR * 0.92, upperR * 1.01, side * upperR * 0.030, 0.001, 0.84, 0.34],         // proximal deltoid cap blend
+      [upperLen * 0.13, upperR * 0.98, upperR * 1.02, side * upperR * 0.034, 0.001, 0.58, 0.16], // lateral deltoid roundness
       [upperLen * 0.26, upperR * 0.95, upperR * 0.99, side * upperR * 0.02, 0.001, 0.40, 0.07], // deltoid tuberosity
       [upperLen * 0.50, upperR * 0.90, upperR * 0.96, side * upperR * 0.015, 0.002, 0.24, 0.0], // bicep / tricep belly
       [upperLen * 0.78, upperR * 0.80, upperR * 0.82, side * upperR * 0.01, 0.001, 0.22, 0.0], // distal brachium
@@ -1259,12 +1263,14 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       const baseVid = neckBaseRing[k] * 3;
       const bx0 = positions[baseVid], by0 = positions[baseVid + 1], bz0 = positions[baseVid + 2];
       const phi = headAzimuth(k, 0.14 * trapFrac);
+      const cosP = Math.cos(phi);
       const tx = neckR * 1.10 * Math.sin(phi);
-      const tz = 0.002 + neckR * 1.06 * Math.cos(phi);
+      const tz = 0.002 + neckR * 1.06 * cosP;
       const x = bx0 * (1 - trapFrac) + tx * trapFrac;
       // Natural slightly concave human trapezius slope from acromion up to side of neck
       const trapArch = Math.pow(trapFrac, 0.92);
-      const y = by0 * (1 - trapArch) + targetNy * trapArch;
+      const postTrapLift = span * 0.004 * Math.max(0, -cosP) * (1 - trapFrac);
+      const y = by0 * (1 - trapArch) + targetNy * trapArch + postTrapLift;
       const z = bz0 * (1 - trapFrac) + tz * trapFrac;
       const bArm = x >= 0 ? BONE_IDX.armL : BONE_IDX.armR;
       const latRatio = clamp((Math.abs(x) - neckR * 1.15) / Math.max(0.04, shoulderHalf * 0.8), 0, 1);
@@ -4033,20 +4039,31 @@ export function applyNaturalHumanMotion(limbs, dims, landmarks, opts = {}) {
       limbs["foot-1"].rotation.x = lerpAngle(limbs["foot-1"].rotation.x, R.footX);
     }
 
-    // Counter-swinging arms with garment-safe outward abduction
-    const armSwingAmp = strideAmp * (isWoman ? 0.58 : 0.64);
-    const armLX = -Math.sin(phase) * armSwingAmp - 0.02;
-    const armRX = Math.sin(phase) * armSwingAmp - 0.02;
+    // Counter-swinging arms with phase-lagged humeral shoulder swing, subtle internal rotation & garment-safe abduction
+    const armPhase = phase - 0.12;
+    const sArm = Math.sin(armPhase);
+    const armSwingAmp = strideAmp * (isWoman ? 0.62 : (isKid ? 0.66 : 0.68));
+    const armLX = -sArm * armSwingAmp - 0.028 - 0.024 * Math.sin(2 * armPhase);
+    const armRX = sArm * armSwingAmp - 0.028 + 0.024 * Math.sin(2 * armPhase);
     limbs.arm1.rotation.x = lerpAngle(limbs.arm1.rotation.x, armLX);
     limbs["arm-1"].rotation.x = lerpAngle(limbs["arm-1"].rotation.x, armRX);
 
-    const dynamicAbduct = Math.max(0.095, minArmAbduct) + 0.022 * Math.abs(Math.sin(phase));
-    limbs.arm1.rotation.z = lerpAngle(limbs.arm1.rotation.z, dynamicAbduct);
-    limbs["arm-1"].rotation.z = lerpAngle(limbs["arm-1"].rotation.z, -dynamicAbduct);
+    const baseAbduct = Math.max(0.095, minArmAbduct);
+    const abductL = baseAbduct + 0.028 * Math.abs(sArm) + 0.012 * Math.max(0, armLX);
+    const abductR = baseAbduct + 0.028 * Math.abs(sArm) + 0.012 * Math.max(0, armRX);
+    limbs.arm1.rotation.z = lerpAngle(limbs.arm1.rotation.z, abductL);
+    limbs["arm-1"].rotation.z = lerpAngle(limbs["arm-1"].rotation.z, -abductR);
+
+    // Natural anatomical humeral internal/external rotation: arm curves gently medially on forward swing
+    const humeralYawScale = isWoman ? 0.22 : 0.18;
+    const armLY = armLX * humeralYawScale;
+    const armRY = -armRX * humeralYawScale;
+    limbs.arm1.rotation.y = lerpAngle(limbs.arm1.rotation.y || 0, armLY);
+    limbs["arm-1"].rotation.y = lerpAngle(limbs["arm-1"].rotation.y || 0, armRY);
 
     if (limbs.elbow1 && limbs["elbow-1"]) {
-      const elbL = -0.14 - Math.max(0, -armLX) * 0.52 - 0.04 * Math.abs(Math.sin(phase));
-      const elbR = -0.14 - Math.max(0, -armRX) * 0.52 - 0.04 * Math.abs(Math.sin(phase));
+      const elbL = -0.14 - Math.max(0, -armLX) * 0.58 - 0.035 * Math.abs(Math.sin(armPhase - 0.18));
+      const elbR = -0.14 - Math.max(0, -armRX) * 0.58 - 0.035 * Math.abs(Math.sin(armPhase - 0.18));
       limbs.elbow1.rotation.x = lerpAngle(limbs.elbow1.rotation.x, elbL);
       limbs["elbow-1"].rotation.x = lerpAngle(limbs["elbow-1"].rotation.x, elbR);
       // Slight outward forearm carry when clearing flared skirts
@@ -4056,8 +4073,8 @@ export function applyNaturalHumanMotion(limbs, dims, landmarks, opts = {}) {
     }
 
     if (limbs.hand1 && limbs["hand-1"]) {
-      limbs.hand1.rotation.x = lerpAngle(limbs.hand1.rotation.x, armLX * 0.22);
-      limbs["hand-1"].rotation.x = lerpAngle(limbs["hand-1"].rotation.x, armRX * 0.22);
+      limbs.hand1.rotation.x = lerpAngle(limbs.hand1.rotation.x, armLX * 0.26 + 0.025 * Math.cos(armPhase));
+      limbs["hand-1"].rotation.x = lerpAngle(limbs["hand-1"].rotation.x, armRX * 0.26 - 0.025 * Math.cos(armPhase));
     }
 
     // 3D Pelvis, Spine, Chest, Neck & Head counter-rotation
@@ -4094,16 +4111,16 @@ export function applyNaturalHumanMotion(limbs, dims, landmarks, opts = {}) {
       limbs.spine.rotation.x = lerpAngle(limbs.spine.rotation.x, -0.010);
     }
     if (limbs.chest) {
-      limbs.chest.rotation.z = lerpAngle(limbs.chest.rotation.z, -pelvRoll * 0.42);
-      limbs.chest.rotation.y = lerpAngle(limbs.chest.rotation.y, -pelvYaw * 0.78);
+      limbs.chest.rotation.z = lerpAngle(limbs.chest.rotation.z, -pelvRoll * 0.48);
+      limbs.chest.rotation.y = lerpAngle(limbs.chest.rotation.y, -pelvYaw * 0.86);
       limbs.chest.rotation.x = lerpAngle(limbs.chest.rotation.x, 0.008 * Math.sin(2 * phase));
     }
     if (limbs.neck) {
-      limbs.neck.rotation.y = lerpAngle(limbs.neck.rotation.y, pelvYaw * 0.22);
+      limbs.neck.rotation.y = lerpAngle(limbs.neck.rotation.y, pelvYaw * 0.26);
       limbs.neck.rotation.z = lerpAngle(limbs.neck.rotation.z, pelvRoll * 0.12);
     }
     if (limbs.head) {
-      limbs.head.rotation.y = lerpAngle(limbs.head.rotation.y, pelvYaw * 0.18);
+      limbs.head.rotation.y = lerpAngle(limbs.head.rotation.y, pelvYaw * 0.20);
       limbs.head.rotation.z = lerpAngle(limbs.head.rotation.z, -pelvRoll * 0.10);
       limbs.head.rotation.x = lerpAngle(limbs.head.rotation.x, -0.008);
     }
@@ -4134,6 +4151,8 @@ export function applyNaturalHumanMotion(limbs, dims, landmarks, opts = {}) {
   limbs["arm-1"].rotation.x = dampTo(limbs["arm-1"].rotation.x, -0.015 + breath * 0.006);
   limbs.arm1.rotation.z = dampTo(limbs.arm1.rotation.z, idleAbduct);
   limbs["arm-1"].rotation.z = dampTo(limbs["arm-1"].rotation.z, -idleAbduct);
+  limbs.arm1.rotation.y = dampTo(limbs.arm1.rotation.y || 0, reduceMotion ? 0 : -0.03);
+  limbs["arm-1"].rotation.y = dampTo(limbs["arm-1"].rotation.y || 0, reduceMotion ? 0 : 0.03);
   if (limbs.elbow1 && limbs["elbow-1"]) {
     const elbowOut = Math.max(0, minArmAbduct - 0.11) * 0.35;
     limbs.elbow1.rotation.x = dampTo(limbs.elbow1.rotation.x, -0.11 - breath * 0.008);

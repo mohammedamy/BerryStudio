@@ -185,6 +185,9 @@ test('Unified Human Mannequin: natural asymmetric gait, plantar floor grounding,
     const freq = (cat === 'girls' || cat === 'boys') ? 3.35 : 2.95;
 
     let maxKneeFlex = 0;
+    let minArmLY = Infinity;
+    let maxArmLY = -Infinity;
+    let oppositeArmYawSeen = false;
     for (let step = 0; step < 24; step++) {
       const t = (step / 24) * ((2 * Math.PI) / freq);
       applyNaturalHumanMotion(limbs, dims, landmarks, {
@@ -206,6 +209,18 @@ test('Unified Human Mannequin: natural asymmetric gait, plantar floor grounding,
       assert.ok(limbs.arm1.rotation.z >= 0.239, `${cat}: arm1 respects minArmAbduct (${limbs.arm1.rotation.z})`);
       assert.ok(limbs['arm-1'].rotation.z <= -0.239, `${cat}: arm-1 respects minArmAbduct (${limbs['arm-1'].rotation.z})`);
 
+      // Natural counter-phased humeral rotation accompanies forward/back shoulder swing
+      const arm1Y = limbs.arm1.rotation.y || 0;
+      const armNegY = limbs['arm-1'].rotation.y || 0;
+      if (arm1Y < minArmLY) minArmLY = arm1Y;
+      if (arm1Y > maxArmLY) maxArmLY = arm1Y;
+      if (Math.abs(limbs.arm1.rotation.x + 0.028) > 0.04) {
+        assert.equal(Math.sign(limbs.arm1.rotation.x - (-0.028)), -Math.sign(limbs['arm-1'].rotation.x - (-0.028)), `${cat}: left/right shoulders counter-swing`);
+      }
+      if (Math.abs(arm1Y) > 0.015 && Math.abs(armNegY) > 0.015 && Math.sign(arm1Y) === Math.sign(armNegY)) {
+        oppositeArmYawSeen = true;
+      }
+
       // Counter-rotating pelvis & ribcage during active stride
       if (Math.abs(limbs.pelvis.rotation.y) > 0.01) {
         assert.equal(Math.sign(limbs.chest.rotation.y), -Math.sign(limbs.pelvis.rotation.y), `${cat}: chest counter-rotates pelvis yaw`);
@@ -222,10 +237,14 @@ test('Unified Human Mannequin: natural asymmetric gait, plantar floor grounding,
       assert.ok(minY >= -0.015 && minY <= 0.018, `${cat} step ${step}: plantar sole stays grounded near y=0 (got ${minY.toFixed(4)}m)`);
     }
     assert.ok(maxKneeFlex > 0.35, `${cat}: swing-phase knee clearance flexion reaches natural amplitude (${maxKneeFlex.toFixed(3)} rad)`);
+    assert.ok(maxArmLY - minArmLY > 0.03, `${cat}: walking arm swing produces natural humeral rotation (${(maxArmLY - minArmLY).toFixed(3)} rad)`);
+    assert.ok(oppositeArmYawSeen, `${cat}: counter-swinging arms rotate harmoniously across stride`);
 
     // Living idle posture: gentle breathing & weight shift while feet stay planted
     applyNaturalHumanMotion(limbs, dims, landmarks, { time: 0.0, walking: false, category: cat, blend: 1.0 });
     const chestPitch0 = limbs.chest.rotation.x;
+    assert.ok(Math.abs(limbs.arm1.rotation.y + 0.03) < 1e-4, `${cat}: idle arm1 rests with gentle natural inward poise`);
+    assert.ok(Math.abs(limbs['arm-1'].rotation.y - 0.03) < 1e-4, `${cat}: idle arm-1 rests with mirrored inward poise`);
     applyNaturalHumanMotion(limbs, dims, landmarks, { time: 1.15, walking: false, category: cat, blend: 1.0 });
     const chestPitch1 = limbs.chest.rotation.x;
     assert.notEqual(chestPitch0, chestPitch1, `${cat}: idle breathing gently animates thoracic posture`);

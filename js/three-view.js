@@ -803,6 +803,40 @@ export const View3D = (() => {
     return ySkin + extraLift;
   }
 
+  function smoothShoulderCrestNormals(geo, totalRows, halfCols, neckHalfW, shoulderTipX, shoulderTopY, shoulderAcromionY) {
+    const nAttr = geo.attributes.normal;
+    const pAttr = geo.attributes.position;
+    if (!nAttr || !pAttr) return;
+    const slopeX = Math.max(0.02, shoulderTipX - neckHalfW);
+    const slopeY = shoulderAcromionY - shoulderTopY;
+    const stride = halfCols * 2;
+    for (const [r, blend] of [[totalRows, 0.82], [totalRows - 1, 0.32]]) {
+      if (r < 0 || r > totalRows) continue;
+      for (let c = 0; c < stride; c++) {
+        const vi = r * stride + c;
+        if (vi >= pAttr.count) continue;
+        const x = pAttr.getX(vi);
+        if (Math.abs(x) < neckHalfW * 0.92) continue;
+        const sideSign = x >= 0 ? 1 : -1;
+        // Outward perpendicular to trapezius-to-acromion shoulder crest in X-Y plane
+        let tx = -sideSign * slopeY;
+        let ty = slopeX;
+        const tl = Math.hypot(tx, ty) || 1;
+        tx /= tl;
+        ty /= tl;
+        const nx = nAttr.getX(vi);
+        const ny = nAttr.getY(vi);
+        const nz = nAttr.getZ(vi);
+        const bx = nx * (1 - blend) + tx * blend;
+        const by = ny * (1 - blend) + ty * blend;
+        const bz = nz * (1 - blend);
+        const bl = Math.hypot(bx, by, bz) || 1;
+        nAttr.setXYZ(vi, bx / bl, by / bl, bz / bl);
+      }
+    }
+    nAttr.needsUpdate = true;
+  }
+
   /**
    * Builds a tailored bodice / blouse / shirt / jacket / robe with watertight
    * side seams, contoured armholes, sculpted neckline, and optional collar.
@@ -900,7 +934,7 @@ export const View3D = (() => {
         // Smooth super-elliptical shoulder arch: climbs chest wall, rolls smoothly over top seam
         const thetaArch = (Math.PI * 0.5) * upperFrac;
         const yArchFrac = Math.pow(Math.sin(thetaArch), 0.85);
-        const zArchScale = Math.pow(Math.cos(thetaArch), 0.52);
+        const zArchScale = Math.pow(Math.cos(thetaArch), 0.58);
         const armholeZBlend = smoothstep(0.0, 0.36, upperFrac);
 
         let y;
@@ -971,7 +1005,8 @@ export const View3D = (() => {
             if (!isStrapless && upperFrac > 0) {
               const shoulderSpanFrac = clamp((xMag - neckHalfW) / Math.max(0.025, shoulderTipX - neckHalfW), 0, 1);
               const sCurve = Math.pow(shoulderSpanFrac, 1.08);
-              const ySeam = shoulderTopY * (1 - sCurve) + shoulderAcromionY * sCurve;
+              const trapArch = 0.0030 * Math.sin(Math.PI * shoulderSpanFrac);
+              const ySeam = shoulderTopY * (1 - sCurve) + shoulderAcromionY * sCurve + trapArch;
               yFinal = underarmY * (1 - yArchFrac) + ySeam * yArchFrac;
               ySampleZ = Math.min(yFinal, underarmY + span * 0.04);
             }
@@ -987,7 +1022,7 @@ export const View3D = (() => {
               const neckCylZ = (isFront ? 1 : -1) * (neckR * 1.14 + 0.008) * Math.sqrt(Math.max(0, 1 - neckRatio * neckRatio));
               zSurf = neckCylZ + (zSurf - neckCylZ) * zArchScale;
               const armOpenHalfZ = d.upperR * (hasSleeves ? 1.08 : 1.04);
-              const armOpen = armOpenHalfZ * Math.sin(Math.PI * upperFrac) * Math.pow(tCol, 1.5);
+              const armOpen = armOpenHalfZ * Math.pow(Math.sin(Math.PI * upperFrac), 0.88) * Math.pow(tCol, 1.45);
               zSurf = isFront ? Math.max(zSurf, armOpen) : Math.min(zSurf, -armOpen);
             }
 
@@ -1027,6 +1062,9 @@ export const View3D = (() => {
       geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(skinWgt, 4));
       geo.setIndex(indices);
       geo.computeVertexNormals();
+      if (!isStrapless) {
+        smoothShoulderCrestNormals(geo, totalRows, HALF_COLS, neckHalfW, shoulderTipX, shoulderTopY, shoulderAcromionY);
+      }
       geo.userData.gridMeta = {
         rows: totalRows + 1,
         cols: HALF_COLS * 2,
@@ -1923,7 +1961,10 @@ export const View3D = (() => {
     const waistY = hipY + span * 0.44;
     const underarmY = shoulderY - span * 0.09;
     const shoulderTopY = shoulderY + span * (d.kid ? 0.058 : 0.047);
-    const shoulderAcromionY = shoulderY + span * 0.002;
+    const isNarrowStrap = ol.style === "pinafore";
+    const isVest = ol.style === "vest" || ol.style === "pinafore";
+    const isStructuredTailored = !isVest && ol.style !== "bisht" && ol.style !== "cape";
+    const shoulderAcromionY = shoulderY + span * (isStructuredTailored ? 0.0055 : 0.002);
     const innerEase = 0.015 + Math.max(-0.002, ((pm.bodice?.easeRatio || 1.0) - 1.0) * 0.042);
     const outerEase = Math.max(0.026 + Math.max(0, ((pm.bodice.easeRatio || 1.04) - 1.0) * 0.040), innerEase + 0.014);
 
@@ -1936,9 +1977,7 @@ export const View3D = (() => {
     const waistRelax = (ol.lengthStyle === "robe" || ol.style === "bisht") ? 0.78 : (ol.lengthStyle === "coat" || ol.style === "trench" ? 0.25 : 0.08);
     const neckHalfW = neckR * 1.24;
     const frontBreakY = ol.openFront ? waistY + span * 0.08 : (ol.style === "pinafore" ? hipY + span * 0.72 : shoulderY - span * 0.16);
-    const isNarrowStrap = ol.style === "pinafore";
-    const isVest = ol.style === "vest" || ol.style === "pinafore";
-    const shoulderTipX = isNarrowStrap ? neckHalfW * 1.55 : (isVest ? shoulderHalf * 0.83 : shoulderHalf * 0.89);
+    const shoulderTipX = isNarrowStrap ? neckHalfW * 1.55 : (isVest ? shoulderHalf * 0.83 : (isStructuredTailored ? shoulderHalf * 0.905 : shoulderHalf * 0.89));
 
     function computeOuterFracs(rowsU, snapY) {
       const fracs = [];
@@ -1969,7 +2008,7 @@ export const View3D = (() => {
         const upperFrac = r <= ROWS_L ? 0 : upperFracs[r - ROWS_L - 1];
         const thetaArch = (Math.PI * 0.5) * upperFrac;
         const yArchFrac = Math.pow(Math.sin(thetaArch), 0.85);
-        const zArchScale = Math.pow(Math.cos(thetaArch), 0.56);
+        const zArchScale = Math.pow(Math.cos(thetaArch), isStructuredTailored ? 0.60 : 0.56);
 
         const y = r <= ROWS_L
           ? hemY * (1 - r / ROWS_L) + underarmY * (r / ROWS_L)
@@ -2017,7 +2056,8 @@ export const View3D = (() => {
             if (upperFrac > 0) {
               const sFrac = clamp((xMag - neckHalfW) / Math.max(0.025, shoulderTipX - neckHalfW), 0, 1);
               const sCurve = Math.pow(sFrac, 1.08);
-              yFinal = underarmY * (1 - yArchFrac) + (shoulderTopY * (1 - sCurve) + shoulderAcromionY * sCurve) * yArchFrac;
+              const padArch = (isStructuredTailored ? 0.0042 : 0.0022) * Math.sin(Math.PI * sFrac);
+              yFinal = underarmY * (1 - yArchFrac) + (shoulderTopY * (1 - sCurve) + shoulderAcromionY * sCurve + padArch) * yArchFrac;
               ySample = Math.min(yFinal, underarmY + span * 0.04);
             }
             const oCapEase = upperFrac > 0 ? outerEase + 0.005 * Math.sin(Math.PI * upperFrac) : outerEase;
@@ -2027,8 +2067,8 @@ export const View3D = (() => {
               const neckRatio = Math.min(1, xMag / Math.max(0.02, neckHalfW));
               const neckCylZ = (isFront ? 1 : -1) * (neckR * 1.18 + 0.012) * Math.sqrt(Math.max(0, 1 - neckRatio * neckRatio));
               zSurf = neckCylZ + (zSurf - neckCylZ) * zArchScale;
-              const oArmOpenHalfZ = (!isVest) ? (d.upperR * 1.12) : (d.upperR * 1.04);
-              const oArmOpen = oArmOpenHalfZ * Math.sin(Math.PI * upperFrac) * Math.pow(tCol, 1.5);
+              const oArmOpenHalfZ = (!isVest) ? (d.upperR * (isStructuredTailored ? 1.15 : 1.12)) : (d.upperR * 1.04);
+              const oArmOpen = oArmOpenHalfZ * Math.pow(Math.sin(Math.PI * upperFrac), 0.88) * Math.pow(tCol, 1.45);
               zSurf = isFront ? Math.max(zSurf, oArmOpen) : Math.min(zSurf, -oArmOpen);
             }
             const id = positions.length / 3;
@@ -2060,6 +2100,7 @@ export const View3D = (() => {
       geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(skinWgt, 4));
       geo.setIndex(indices);
       geo.computeVertexNormals();
+      smoothShoulderCrestNormals(geo, totalRows, HALF_COLS, neckHalfW, shoulderTipX, shoulderTopY, shoulderAcromionY);
       geo.userData.gridMeta = { rows: totalRows + 1, cols: HALF_COLS * 2, lowerRows: ROWS_L, hemY, waistY, style: ol.lengthStyle || "hip", hemFlare: flareF };
       return createGarmentMesh(geo, fabricMat("outer", isFront ? "front" : "back"), "outer", isFront ? "front" : "back", skeleton);
     }
@@ -2176,8 +2217,11 @@ export const View3D = (() => {
     const totalSlLen = armLen * clamp(sSpec.lengthFrac, 0.16, 1.02);
 
     // Match the active upper garment (outer coat/blazer vs bodice vs leotard) armhole ring seamlessly
-    const activeTipX = hasOuterSleeved ? shoulderHalf * 0.88 : (isLeo ? shoulderHalf * 0.84 : shoulderHalf * 0.86);
-    const activeAcromionY = shoulderY + span * (hasOuterSleeved ? 0.002 : (isLeo ? -0.006 : -0.004));
+    const isOuterTailored = hasOuterSleeved && ol.style !== "bisht" && ol.style !== "cape";
+    const activeTipX = isOuterTailored
+      ? shoulderHalf * 0.905
+      : (hasOuterSleeved ? shoulderHalf * 0.89 : (isLeo ? shoulderHalf * 0.84 : shoulderHalf * 0.86));
+    const activeAcromionY = shoulderY + span * (isOuterTailored ? 0.0055 : (hasOuterSleeved ? 0.002 : (isLeo ? -0.006 : -0.004)));
     const activeEase = hasOuterSleeved
       ? (0.026 + Math.max(0, ((pm.bodice?.easeRatio || 1.04) - 1.0) * 0.040))
       : (0.015 + Math.max(-0.002, ((pm.bodice?.easeRatio || 1.0) - 1.0) * 0.042));
@@ -2188,7 +2232,7 @@ export const View3D = (() => {
     const armscyeBotY = shoulderY - span * (sSpec.isOffShoulder ? 0.125 : 0.090);
     const armscyeMidY = 0.5 * (armscyeTopY + armscyeBotY);
     const armscyeHalfH = 0.5 * (armscyeTopY - armscyeBotY);
-    const armscyeDepthZ = upperR * (hasOuterSleeved ? 1.14 : 1.10) + 0.006;
+    const armscyeDepthZ = upperR * (isOuterTailored ? 1.15 : (hasOuterSleeved ? 1.14 : 1.10)) + 0.006;
     const capHeight = Math.max(0.075, Math.min(totalSlLen * 0.82, upperArmLen * 0.44));
 
     const N_SEG = 28;
@@ -2244,9 +2288,9 @@ export const View3D = (() => {
         const bElbow = side > 0 ? BONE_IDX.elbowL : BONE_IDX.elbowR;
         const bHand = side > 0 ? BONE_IDX.handL : BONE_IDX.handR;
         let weights;
-        if (dyBase < capHeight) {
-          const fArm = smoothstep(0.0, capHeight, dyBase);
-          const wChest = 0.68 * (1 - fArm);
+        if (dyBase < capHeight * 1.05) {
+          const fArm = smoothstep(0.0, capHeight * 1.05, dyBase);
+          const wChest = 0.78 * (1 - fArm);
           weights = [[BONE_IDX.chest, wChest], [bArm, 1 - wChest]];
         } else if (dyBase < upperArmLen + 0.042) {
           const fElb = smoothstep(upperArmLen - 0.042, upperArmLen + 0.042, dyBase);
@@ -2258,7 +2302,7 @@ export const View3D = (() => {
         const [bi, bw] = packSkinWeights(weights);
 
         const fCap = clamp(dyBase / capHeight, 0, 1);
-        const capBlendX = Math.pow(1 - clamp(dyBase / (capHeight * 0.78), 0, 1), 1.45);
+        const capBlendX = Math.pow(1 - clamp(dyBase / (capHeight * 0.82), 0, 1), 1.38);
         const capBlendY = Math.pow(Math.cos((Math.PI * 0.5) * fCap), 0.72);
         const capBlendZ = Math.pow(1 - fCap, 1.4);
         const deltoidArc = Math.sin(Math.PI * clamp(dyBase / Math.max(0.08, upperArmLen * 0.52), 0, 1));
@@ -2271,11 +2315,12 @@ export const View3D = (() => {
 
           const gatherFlute = sSpec.style === "puff" ? 0.003 * Math.sin(theta * 10) * Math.sin(Math.PI * f) : 0;
           const deltoidSwell = upperR * (sSpec.style === "puff" ? 0.28 : 0.08) * deltoidArc * Math.max(0, sCrown + 0.25);
-          const rEff = sleeveR + gatherFlute + deltoidSwell;
+          const sleeveHeadFullness = 0.0032 * Math.pow(Math.max(0, sCrown), 1.5) * (1 - fCap);
+          const rEff = sleeveR + gatherFlute + deltoidSwell + sleeveHeadFullness;
 
           const crownFrac = 0.5 * (1 + sCrown);
           const xArmscye = side * (armscyeBotX * (1 - crownFrac) + armscyeTopX * crownFrac);
-          const yArmscye = armscyeMidY + armscyeHalfH * sCrown + 0.004 * Math.max(0, sCrown);
+          const yArmscye = armscyeMidY + armscyeHalfH * sCrown + 0.004 * Math.max(0, sCrown) + sleeveHeadFullness;
           const zArmscye = (armscyeDepthZ + gatherFlute) * Math.sign(cFront) * Math.pow(Math.abs(cFront), 0.82);
 
           const xTube = sx + side * rEff * sCrown;
@@ -2318,6 +2363,21 @@ export const View3D = (() => {
       geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(skinWgt, 4));
       geo.setIndex(indices);
       geo.computeVertexNormals();
+      // Gently align top sleeve-cap seam normals with the bodice armhole crown
+      const nAttr = geo.attributes.normal;
+      for (let k = 0; k <= N_SEG; k++) {
+        const theta = (k / N_SEG) * 2 * Math.PI;
+        const sCrown = Math.sin(theta);
+        if (sCrown <= 0) continue;
+        const nx = nAttr.getX(k), ny = nAttr.getY(k), nz = nAttr.getZ(k);
+        const wBlend = 0.28 * sCrown;
+        const bx = nx * (1 - wBlend) + side * 0.85 * wBlend;
+        const by = ny * (1 - wBlend) + 0.52 * wBlend;
+        const bz = nz * (1 - wBlend);
+        const bl = Math.hypot(bx, by, bz) || 1;
+        nAttr.setXYZ(k, bx / bl, by / bl, bz / bl);
+      }
+      nAttr.needsUpdate = true;
       geo.userData.gridMeta = {
         rows: N_RINGS + 1,
         cols: N_SEG + 1,

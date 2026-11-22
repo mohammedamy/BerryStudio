@@ -139,6 +139,43 @@ function sampleFlaredSkirtRadius(rCurrent, dims, worldY, yCm, minY, panelHeightC
   return { r: lerp(rCurrent, Math.max(rCurrent, targetR), startFlare), rowHalfW, startFlare }
 }
 
+function computeTopShoulderProfile(positions2D, minX, maxX, minY, cx, splitSide) {
+  const BINS = 16
+  const binTopY = new Float32Array(BINS).fill(Infinity)
+  const spanX = Math.max(1e-4, splitSide !== 0 ? (maxX - minX) : Math.max(Math.abs(minX - cx), Math.abs(maxX - cx)))
+  for (const [x, y] of positions2D) {
+    const absX = Math.abs(x - cx)
+    const b = clamp(Math.floor((absX / spanX) * (BINS - 1)), 0, BINS - 1)
+    if (y < binTopY[b]) binTopY[b] = y
+  }
+  for (let pass = 0; pass < 4; pass++) {
+    for (let b = 0; b < BINS; b++) {
+      if (!Number.isFinite(binTopY[b])) {
+        const prev = b > 0 && Number.isFinite(binTopY[b - 1]) ? binTopY[b - 1] : Infinity
+        const next = b + 1 < BINS && Number.isFinite(binTopY[b + 1]) ? binTopY[b + 1] : Infinity
+        if (Number.isFinite(prev) && Number.isFinite(next)) binTopY[b] = 0.5 * (prev + next)
+        else if (Number.isFinite(prev)) binTopY[b] = prev
+        else if (Number.isFinite(next)) binTopY[b] = next
+      }
+    }
+  }
+  for (let b = 0; b < BINS; b++) {
+    if (!Number.isFinite(binTopY[b])) binTopY[b] = minY
+  }
+  // Monotonic clamping prevents isolated deep V-neck inner vertices from pulling
+  // adjacent shoulder-strap columns upward.
+  return { binTopY, spanX }
+}
+
+function sampleTopShoulderY(profile, absX, fallbackY) {
+  if (!profile) return fallbackY
+  const { binTopY, spanX } = profile
+  const f = clamp((absX / spanX) * (binTopY.length - 1), 0, binTopY.length - 1)
+  const b0 = Math.floor(f)
+  const b1 = Math.min(binTopY.length - 1, b0 + 1)
+  return lerp(binTopY[b0], binTopY[b1], f - b0)
+}
+
 export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, angleSpan = Math.PI * 0.94, pose = 'standing', splitSide = 0, princessSide = 0, hint = null } = {}) {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
   for (const [x, y] of positions2D) {
@@ -180,6 +217,7 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
   const halfSpanCm = splitSide !== 0 ? Math.max(0, maxX - minX) : Math.max(0, (maxX - minX) * 0.5)
   const useRowWidth = !isLeotardFull && princessSide === 0
   const binHalfW = useRowWidth ? computeSmoothedRowHalfWidths(positions2D, minY, panelHeightCm, cx) : null
+  const topProfile = computeTopShoulderProfile(positions2D, minX, maxX, minY, cx, splitSide)
   const maxDropCm = Math.max(20, (topWorldY - 0.025) * 100)
   const yScale = (Number.isFinite(maxY) && maxY > maxDropCm && minY >= -1)
     ? maxDropCm / Math.max(1e-4, maxY)
@@ -210,10 +248,18 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
       const halfCirc = startFlare > 0 ? lerp(rowCircMin, flaredHalfCirc, startFlare) : rowCircMin
       theta = clamp((cm(xCm - cx) / Math.max(1e-4, halfCirc)) * angleSpan, -Math.PI * 0.50, Math.PI * 0.50)
     }
-    const shNearTop = smoothstep(5.5, 0.0, yCm - minY)
-    const shSlope = smoothstep(0.14 * Math.PI, 0.44 * Math.PI, Math.abs(theta))
-    const shArch = shNearTop * smoothstep(0.04 * Math.PI, 0.22 * Math.PI, Math.abs(theta))
-    const worldY = worldYBase - dims.span * 0.034 * shNearTop * shSlope
+    const colTopY = sampleTopShoulderY(topProfile, Math.abs(xCm - cx), minY)
+    const colIsUpperShoulder = smoothstep(13.5, 9.0, colTopY - minY)
+    const dyFromShoulder = Math.max(0, yCm - colTopY)
+    const shNearSeam = smoothstep(6.5, 0.0, dyFromShoulder) * colIsUpperShoulder
+    const neckTheta = Math.asin(clamp((dims.neckR * 0.85) / Math.max(0.08, r), 0.08, 0.45))
+    const shOutsideNeck = smoothstep(neckTheta * 0.72, neckTheta * 1.18, Math.abs(theta))
+    const notCenterLine = smoothstep(0.8, 2.2, Math.abs(xCm - cx))
+    const collarDropLift = Math.min(0.044, Math.max(0, colTopY - minY - 1.5) * 0.0055) * shNearSeam * notCenterLine
+    const shSlope = smoothstep(0.14 * Math.PI, 0.46 * Math.PI, Math.abs(theta))
+    const worldY = worldYBase + collarDropLift - dims.span * 0.030 * shNearSeam * shSlope
+    const shWorldLift = smoothstep(dims.shoulderY - dims.span * 0.14, dims.shoulderY - dims.span * 0.015, worldY)
+    const shArch = shNearSeam * shOutsideNeck * shWorldLift
     const excessRatio = isLooseTorso ? (cm(halfSpanCm) / Math.max(0.14, Math.PI * r * 0.5)) : 1.0
     const waveDrop = isLooseTorso ? smoothstep(dims.hipY + dims.span * 0.16, dims.hipY - dims.span * 0.45, worldYBase) : 0
     const zDrapeWave = excessRatio > 1.35
@@ -221,7 +267,12 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
       : 1.0
     const x = r * Math.sin(theta)
     const zBase = zSign * r * effZScale * Math.cos(theta) * zDrapeWave
-    const z = zBase * lerp(1.0, 0.12, shArch)
+    // Pull inner top shoulder points (inside neckTheta on high-collar jackets/vests) toward
+    // the neck-ring surface instead of leaving them out at full chest depth.
+    const neckTuck = shNearSeam * shWorldLift * (1 - shOutsideNeck) * notCenterLine
+    const neckGuardZ = zSign * Math.max(dims.neckR * 1.24, Math.sqrt(Math.max(0, Math.pow(dims.neckR * 1.22 + 0.012, 2) - x * x)))
+    const zWithNeckTuck = lerp(zBase, neckGuardZ, neckTuck * 0.92)
+    const z = zWithNeckTuck * lerp(1.0, 0.06, shArch)
     return applySeatedSkirtDrape(x, worldY, z, dims, zSign, pose)
   })
 }
@@ -585,8 +636,8 @@ export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */,
   const arm = joints.arms[side]
 
   const capRoot = [
-    arm.shoulder[0] + side * dims.upperR * 0.04,
-    arm.shoulder[1] + dims.span * 0.002,
+    arm.shoulder[0] - side * dims.upperR * 0.06,
+    arm.shoulder[1] + dims.span * 0.014,
     arm.shoulder[2],
   ]
   const upperSegLen = Math.hypot(
@@ -674,10 +725,13 @@ export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */,
     }
     // Taper the upper sleeve cap smoothly inward toward the shoulder seam (`capRoot`)
     // instead of sticking out horizontally past the deltoid cap and buckling upward.
-    const uCap = smoothstep(0.0, Math.max(0.08, dims.armLen * 0.18), alongArm)
-    const cOut = radius * Math.cos(alpha) * (0.28 + 0.72 * uCap)
-    const cFront = -side * radius * Math.sin(alpha)
-    const crownLift = dims.upperR * 0.14 * (1 - uCap) * Math.max(0, Math.cos(alpha))
+    const uCap = smoothstep(0.0, Math.max(0.085, dims.armLen * 0.20), alongArm)
+    const cosA = Math.cos(alpha)
+    const capOutScale = cosA >= 0 ? lerp(0.18, 1.0, uCap) : lerp(0.42, 1.0, uCap)
+    const capFrontScale = lerp(0.76, 1.0, uCap)
+    const cOut = radius * cosA * capOutScale
+    const cFront = -side * radius * Math.sin(alpha) * capFrontScale
+    const crownLift = dims.upperR * 0.16 * (1 - uCap) * Math.max(0, cosA)
     return [
       center[0] + cOut * out[0] + cFront * front[0],
       center[1] + crownLift + cOut * out[1] + cFront * front[1],

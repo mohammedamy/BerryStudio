@@ -1,5 +1,19 @@
 # Changelog
 
+## Comprehensive Shoulder Sewing, 3D Drape & Mannequin Shoulder Motion Upgrade (`berrystudio-v99`)
+
+Upgrades shoulder sewing accuracy, frame-0 3D shoulder/armscye placement, 3D Preview garment shoulder silhouette & shading, and mannequin shoulder anatomy/motion across the entire studio:
+
+- **Cloth Lab 340-Pattern Shoulder Sewing Fixes (`cloth-lab/src/pattern/importFromApp.js`)**:
+  - Replaces hardcoded `x = 0` symmetry checks in `deriveSleevedTorsoEdges()` and `deriveTorsoEdgeInstructions()` with `cx0`-relative symmetry and guards flat-corner underarm detection so all 7 robes/kaftans/thobes (`w08`, `w21`, `m07`, `m16`, `m21`, `b11`, `b22`) emit matched shoulder seams instead of swallowing necklines into armhole loops.
+  - Detects declared `leotardSide` shoulder straps in `deriveSleevedTorsoEdges()`, giving all 100 girls' leotards (`gy001`–`gy100`) clean front-to-back shoulder strap seams while separating real vertical armholes from torso side seams.
+  - Subdivides wide horizontal yoke-base lines on yoked shirts/shirtdresses (`m03`, `m04`, `m05`, `m17`, `m23`, `b01`, `b02`, `b15`, `ref_*_shirt*`) to restore matched shoulder seams alongside sleeves.
+  - Auto-orients `jacketShoulder_*`, `vestShoulder_*`, and `wrapCoatShoulder_*` seam directions (`forceReverse = null`) to eliminate twisted left wrap-coat shoulder seams (`wf04`, `mf04`, `wf07`, `mf10`), adds arc-length-based `pickArcSplitIndex()` matching on jacket/vest fronts and backs (`mf02`, `mf05`, `bf04`, `bf06`, `wf06`, `wf12`, etc.), and wires sleeveless `wf14`/`gf13` shoulder seams cleanly.
+- **Cloth Lab 3D Shoulder & Sleeve-Cap Placement (`cloth-lab/src/pattern/placement.js`)**: Adds a 16-bin top-edge profile (`computeTopShoulderProfile`) in `placeTorsoPanel()` so sloped shoulder edges arch cleanly together across `Z ≈ 0` even on high-collar and lapel garments, and aligns `placeSleeve()` cap roots and upper-cap taper to the anatomical acromion crest.
+- **3D Preview Bodice, Outer Jacket & Sleeve-Cap Appearance (`js/three-view.js`)**: Refines upper shoulder arch curves, structured blazer/jacket shoulder-pad contour, sleeve-head fullness and chest-to-arm skinning blend, and adds `smoothShoulderCrestNormals()` along upper bodice/jacket/sleeve ridges for seamless tailoring highlights.
+- **Mannequin Shoulder Anatomy & Natural Walk Arm Swinging (`js/human-mannequin.js`)**: Rounds the acromion saddle crown, blends shoulder skin weights across the deltoid cap, adds subtle posterior trapezius support, and enriches `applyNaturalHumanMotion()` with phase-lagged humeral internal/external rotation, dynamic garment-safe abduction, and counter-phased thoracic shoulder swing.
+- **Verification & Cache (`cloth-lab/src/pattern/shoulderSewing.test.js`, `test/human-mannequin.test.js`, `sw.js`)**: Adds full 340-pattern shoulder sewing/parity/gap regression tests and walk humeral rotation tests, and bumps offline precache to `berrystudio-v99`.
+
 ## Proportionally Responsive Mannequin Head Sizing (`berrystudio-v98`)
 
 Replaces static size-inverted adult head ratios with a unified size- and frame-responsive cranial proportion system shared across 3D Preview, Cloth Lab, BodyForm, and the 3D Measurement Teaching Studio:
