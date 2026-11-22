@@ -146,17 +146,65 @@ export function maleTorsoZBump(y, phi, d) {
   return dz;
 }
 
+const HEAD_PROPORTION_REF = Object.freeze({
+  women: { height: 167, shoulder: 39, neck: 37, chest: 88, baseRatio: 0.130, widthScale: 0.78, depthScale: 0.92, defaultShoulderYFrac: 0.822 },
+  men:   { height: 178, shoulder: 46, neck: 40, chest: 100, baseRatio: 0.130, widthScale: 0.81, depthScale: 0.92, defaultShoulderYFrac: 0.822 },
+  girls: { height: 134, shoulder: 31, neck: 30, chest: 68, baseRatio: 0.142, widthScale: 0.82, depthScale: 0.92, defaultShoulderYFrac: 0.805 },
+  boys:  { height: 138, shoulder: 32, neck: 31, chest: 70, baseRatio: 0.142, widthScale: 0.82, depthScale: 0.92, defaultShoulderYFrac: 0.805 },
+});
+
+/**
+ * Computes proportionally responsive head height, head-to-stature ratio, and
+ * cranial width/depth scales driven by both height and torso/frame measurements
+ * (`shoulder`, `neck`, `chest`) plus pediatric developmental ratios for kids.
+ */
+export function computeResponsiveHeadDims(category, opts = {}) {
+  const ref = HEAD_PROPORTION_REF[category] || HEAD_PROPORTION_REF.women;
+  const kid = category === "girls" || category === "boys";
+  const heightCm = Number(opts.heightCm) || ref.height;
+  const shoulderCm = Number(opts.shoulderCm) || ref.shoulder;
+  const neckCm = Number(opts.neckCm) || ref.neck;
+  const chestCm = Number(opts.chestCm) || ref.chest;
+  const morph = opts.morph || null;
+  const shoulderYFrac = opts.shoulderYFrac ?? ref.defaultShoulderYFrac;
+
+  const H = cm(heightCm);
+  const hFac = heightCm / ref.height;
+  const gFac = 0.42 * (shoulderCm / ref.shoulder) + 0.33 * (neckCm / ref.neck) + 0.25 * (chestCm / ref.chest);
+  const girthRel = clamp(gFac / Math.max(0.5, hFac), 0.78, 1.38);
+
+  let baseRatio = ref.baseRatio;
+  if (morph && morph.headRatio > 0) {
+    baseRatio = morph.headRatio;
+  } else if (kid) {
+    baseRatio = clamp(0.142 - 0.046 * ((heightCm - ref.height) / 100), 0.131, 0.162);
+  }
+
+  const maxRatio = (1 - shoulderYFrac) - (kid ? 0.032 : 0.038);
+  const headRatio = clamp(baseRatio * Math.pow(girthRel, 0.34), 0.118, maxRatio);
+  const headH = H * headRatio;
+  const headWidthScale = ref.widthScale * clamp(Math.pow(girthRel, 0.28), 0.93, 1.12);
+  const headDepthScale = ref.depthScale * clamp(Math.pow(girthRel, 0.20), 0.95, 1.08);
+  return { headH, headRatio, headWidthScale, headDepthScale };
+}
+
 /**
  * Normalizes either raw measurements (in cm) or pre-computed dims (in meters)
  * into a complete anatomical dimensions object in meters.
  */
 export function computeHumanBodyDims(category, measurementsOrDims, landmarks, morph = null) {
-  if (measurementsOrDims && typeof measurementsOrDims.H === "number" && typeof measurementsOrDims.hipY === "number") {
-    return (morph && !measurementsOrDims.morph) ? { ...measurementsOrDims, morph } : measurementsOrDims;
-  }
-  const m = measurementsOrDims || {};
   const female = category === "women" || category === "girls";
   const kid = category === "girls" || category === "boys";
+  if (measurementsOrDims && typeof measurementsOrDims.H === "number" && typeof measurementsOrDims.hipY === "number") {
+    const out = (morph && !measurementsOrDims.morph) ? { ...measurementsOrDims, morph } : { ...measurementsOrDims };
+    if (out.headWidthScale == null || out.headDepthScale == null) {
+      const ref = HEAD_PROPORTION_REF[category] || HEAD_PROPORTION_REF.women;
+      out.headWidthScale = out.headWidthScale ?? ref.widthScale;
+      out.headDepthScale = out.headDepthScale ?? ref.depthScale;
+    }
+    return out;
+  }
+  const m = measurementsOrDims || {};
   const activeMorph = morph || m.morph || null;
 
   const heightCm = Number(m.height) || (kid ? 136 : female ? 167 : 178);
@@ -169,9 +217,17 @@ export function computeHumanBodyDims(category, measurementsOrDims, landmarks, mo
   const thighCm = Number(m.thigh) || (kid ? 38.5 : female ? 52 : 55);
 
   const H = cm(heightCm);
-  const headH = H * (activeMorph && activeMorph.headRatio > 0 ? activeMorph.headRatio : (kid ? 0.142 : 0.130));
+  const shoulderYFrac = landmarks ? landmarks.shoulderYFrac : (kid ? 0.805 : 0.822);
+  const { headH, headWidthScale, headDepthScale } = computeResponsiveHeadDims(category, {
+    heightCm,
+    shoulderCm,
+    neckCm,
+    chestCm,
+    shoulderYFrac,
+    morph: activeMorph,
+  });
   const neckTopY = H - headH;
-  const shoulderY = H * (landmarks ? landmarks.shoulderYFrac : (kid ? 0.805 : 0.822));
+  const shoulderY = H * shoulderYFrac;
   const hipY = H * (landmarks ? landmarks.hipYFrac : (kid ? 0.485 : 0.520));
 
   let chestR = radiusFromCirc(chestCm);
@@ -207,7 +263,7 @@ export function computeHumanBodyDims(category, measurementsOrDims, landmarks, mo
   const thighR = radiusFromCirc(thighCm) * (female ? 0.86 : 0.85);
 
   return {
-    female, kid, H, headH, neckTopY, shoulderY, hipY, span,
+    female, kid, H, headH, headWidthScale, headDepthScale, neckTopY, shoulderY, hipY, span,
     chestR, waistR, hipR, shoulderHalf, neckR, armLen, upperR, legLen, thighR,
     morph: activeMorph,
   };
@@ -1172,7 +1228,7 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
   // =========================================================================
   // 5. NECK -> SUBMENTAL TUCK -> SCULPTED HUMAN JAW, FACE, EARS & CRANIUM (N = 48)
   // =========================================================================
-  const neckSpan = Math.max(0.04, neckTopY - shoulderY);
+  const neckSpan = Math.max(H * 0.025, neckTopY - shoulderY);
   const headCenterY = neckTopY + headH * 0.50;
 
   // Smooth equilateral anterior azimuth (d(phi)/d(theta) >= 0.74 -> zero sliver triangles & zero x=0 normal crease!)
@@ -1253,10 +1309,10 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
   // Authentic Classical Human Craniofacial Profile (Loomis / Bammes canon):
   // Flat-bottomed central chin pad (|phi| < 0.32) transitions into a diagonal mandibular
   // border rising to gonial jaw corner (-0.27) and occipital skull base (-0.13).
-  const headWidthScale = kid ? 0.82 : (female ? 0.78 : 0.81);
-  const headDepthScale = 0.92;
-  const neckRxFrac = clamp((neckR * 0.89) / headH, 0.175, 0.235);
-  const neckRzFrac = clamp((neckR * 0.93) / headH, 0.185, 0.245);
+  const headWidthScale = d.headWidthScale ?? (kid ? 0.82 : (female ? 0.78 : 0.81));
+  const headDepthScale = d.headDepthScale ?? 0.92;
+  const neckRxFrac = clamp((neckR * 0.89) / headH, 0.165, 0.255);
+  const neckRzFrac = clamp((neckR * 0.93) / headH, 0.175, 0.265);
 
   const headSlices = [
     // [yFrac, craniumFrac, sw]
@@ -1570,8 +1626,8 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
 function populateHeadFeatures(THREE, headBone, headH, category, customHairColor, bodyGeo = null, headCenterY = 0, lowPower = false, customSkinColor = null, hairStyle = null, styleOptions = {}) {
   const female = category === "women" || category === "girls";
   const kid = category === "girls" || category === "boys";
-  const headWidthScale = kid ? 0.82 : (female ? 0.78 : 0.81);
-  const headDepthScale = 0.92;
+  const headWidthScale = styleOptions?.headWidthScale ?? (kid ? 0.82 : (female ? 0.78 : 0.81));
+  const headDepthScale = styleOptions?.headDepthScale ?? 0.92;
   const hairTypeSpec = getHairTypeSpec(styleOptions?.hairType);
   const headwearSpec = getHeadwearSpec(styleOptions?.headwear);
   const hasHeadwear = headwearSpec.id !== "none";
@@ -4223,6 +4279,8 @@ export function buildHumanMannequin(THREE, category = "women", measurementsOrDim
       hairType: resolvedHairType,
       headwear: resolvedHeadwear,
       headwearColor: resolvedHeadwearColor,
+      headWidthScale: dims.headWidthScale,
+      headDepthScale: dims.headDepthScale,
     }
   );
   applyMannequinPose(rig.limbs, options.pose || "standing", dims);

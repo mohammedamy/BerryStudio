@@ -115,3 +115,21 @@ describe('torsoProfile / armProfile / legProfile', () => {
     expect(shoulderBase[0]).toBeCloseTo(dims.chestR * 0.9, 10) // women's multiplier
   })
 })
+
+describe('Proportionally responsive mannequin head sizing', () => {
+  it('scales headH, headWidthScale, and headDepthScale proportionally with body size and frame', () => {
+    const petite = computeBodyDims({ ...WOMEN_M, chest: 76, shoulder: 36, neck: 34.6, height: 158 }, 'women')
+    const base = computeBodyDims(WOMEN_M, 'women')
+    const plus = computeBodyDims({ ...WOMEN_M, chest: 126, shoulder: 47.4, neck: 44.3, height: 180 }, 'women')
+    expect(petite.headH).toBeLessThan(base.headH)
+    expect(base.headH).toBeLessThan(plus.headH)
+    expect(petite.headWidthScale).toBeLessThan(base.headWidthScale)
+    expect(base.headWidthScale).toBeLessThan(plus.headWidthScale)
+    expect(base.headDepthScale).toBeLessThan(plus.headDepthScale)
+
+    // At identical stature, a broader shoulder/chest/neck frame yields a proportionally fuller head
+    const broadSameHeight = computeBodyDims({ ...WOMEN_M, chest: 114, shoulder: 45, neck: 42 }, 'women')
+    expect(broadSameHeight.headH).toBeGreaterThan(base.headH)
+    expect(broadSameHeight.headWidthScale).toBeGreaterThan(base.headWidthScale)
+  })
+})

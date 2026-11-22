@@ -306,13 +306,15 @@ export function deriveCollisionRig(dims, pose = 'standing', precomputedJoints = 
     zScale: 1,
   })
 
-  // 9: Head & Cranium
+  // 9: Head & Cranium (scaled proportionally with responsive headWidthScale)
+  const baseHeadW = kid ? 0.82 : (female ? 0.78 : 0.81)
+  const headWidthRatio = Math.max(1, (dims.headWidthScale || baseHeadW) / baseHeadW)
   const jawPos = lerp3(joints.neckPos, joints.headPos, 0.55)
   primitives.push({
     a: [jawPos[0], jawPos[1], jawPos[2] + headH * 0.02],
     b: joints.crownPos,
-    ra: headH * 0.39 + SKIN_CLEARANCE,
-    rb: headH * 0.44 + SKIN_CLEARANCE,
+    ra: headH * 0.39 * headWidthRatio + SKIN_CLEARANCE,
+    rb: headH * 0.44 * headWidthRatio + SKIN_CLEARANCE,
     zScale: 1,
   })
 

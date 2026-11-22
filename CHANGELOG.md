@@ -1,5 +1,12 @@
 # Changelog
 
+## Proportionally Responsive Mannequin Head Sizing (`berrystudio-v98`)
+
+Replaces static size-inverted adult head ratios with a unified size- and frame-responsive cranial proportion system shared across 3D Preview, Cloth Lab, BodyForm, and the 3D Measurement Teaching Studio:
+
+- **Proportional Head Height, Width & Depth Scaling (`js/human-mannequin.js`, `js/mannequin-catalog.js`)**: Adds `computeResponsiveHeadDims()` driven by stature (`height`) together with torso/frame build (`shoulder`, `neck`, `chest`), plus smooth pediatric head-to-body scaling (`~0.162` toddler -> `0.142` 8–9Y -> `~0.130` teen/adult) and adaptive cranial width/depth scaling (`headWidthScale`, `headDepthScale`). Clears the hardcoded `headRatio` overrides across all 44 `XXS–6XL` mannequins so head height and cranial width scale strictly monotonically with size while preserving shoulder-to-head proportions and natural neck length.
+- **Cloth Lab & Headwear Parity (`cloth-lab/src/body/computeBodyDims.js`, `cloth-lab/src/body/collisionRig.js`, `sw.js`)**: Imports `computeResponsiveHeadDims()` directly into Cloth Lab, scales the cranial collision capsule proportionally via `headWidthScale`, propagates responsive head scales to hair/hijab/headwear builders, expands root & Cloth Lab unit tests (`test/mannequin-catalog.test.js`, `cloth-lab/src/body/computeBodyDims.test.js`), and bumps `sw.js` cache to `berrystudio-v98`.
+
 ## Mannequin Hair Customization & 3D Hijabs, Ghutra, Shemagh & Hat Studio (`berrystudio-v97`)
 
 Adds full interactive mannequin hair and headwear customization across BerryStudio's 3D Preview, Cloth Lab (`Look` tab & BodyForm), and the Interactive 3D Measurement Teaching Studio:

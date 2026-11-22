@@ -206,3 +206,39 @@ test('All 44 Mannequins build watertight genus-0 meshes, smiling faces, grounded
     }
   }
 });
+
+test('Mannequin head size scales proportionally with size and body frame across all 44 models', () => {
+  for (const cat of MANNEQUIN_CATEGORIES) {
+    const list = getMannequinsByCategory(cat);
+    let prevHeadH = 0;
+    let prevHeadW = 0;
+    for (const mq of list) {
+      const dims = computeHumanBodyDims(cat, mq.measurements, null, mq.morph);
+      const headW = 2 * 0.412 * dims.headWidthScale * dims.headH * 100;
+      assert.ok(
+        dims.headH > prevHeadH,
+        `${mq.id}: headH (${dims.headH.toFixed(4)}m) must increase monotonically above previous size (${prevHeadH.toFixed(4)}m)`
+      );
+      assert.ok(
+        headW > prevHeadW,
+        `${mq.id}: cranial width (${headW.toFixed(2)}cm) must increase monotonically above previous size (${prevHeadW.toFixed(2)}cm)`
+      );
+      prevHeadH = dims.headH;
+      prevHeadW = headW;
+      if (cat === 'women' || cat === 'men') {
+        const wOverSh = headW / mq.measurements.shoulder;
+        assert.ok(
+          wOverSh >= 0.32 && wOverSh <= 0.37,
+          `${mq.id}: adult head-to-shoulder ratio stays balanced (${wOverSh.toFixed(3)})`
+        );
+      }
+    }
+  }
+
+  // At identical height, a broader body frame gets a proportionally fuller head
+  const baseM = getMannequinFor('women', 'M').measurements;
+  const slimSameH = computeHumanBodyDims('women', { ...baseM, chest: 78, shoulder: 36, neck: 34.5 });
+  const broadSameH = computeHumanBodyDims('women', { ...baseM, chest: 112, shoulder: 45, neck: 42 });
+  assert.ok(broadSameH.headH > slimSameH.headH, 'broader frame has taller headH at equal height');
+  assert.ok(broadSameH.headWidthScale > slimSameH.headWidthScale, 'broader frame has wider cranium at equal height');
+});

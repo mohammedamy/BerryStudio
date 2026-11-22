@@ -7,6 +7,8 @@
 // All lengths are meters (SI) — the whole app after this boundary stays in
 // meters/kg/seconds so plain gravity (0,-9.81,0) applies with no hidden
 // scale factor (a classic "cloth explodes / doesn't move" bug class).
+import { computeResponsiveHeadDims } from '../../../js/human-mannequin.js'
+
 const cm = (v) => v * 0.01
 const radiusFromCirc = (circ) => cm(circ) / (2 * Math.PI)
 
@@ -17,9 +19,17 @@ export function computeBodyDims(measurements, category, morph = null) {
   const kid = category === 'girls' || category === 'boys'
 
   const H = cm(m.height)
-  const headH = H * (activeMorph && activeMorph.headRatio > 0 ? activeMorph.headRatio : (kid ? 0.16 : 0.128))
+  const shoulderYFrac = kid ? 0.80 : 0.82
+  const { headH, headWidthScale, headDepthScale } = computeResponsiveHeadDims(category, {
+    heightCm: m.height,
+    shoulderCm: m.shoulder,
+    neckCm: m.neck,
+    chestCm: m.chest,
+    shoulderYFrac,
+    morph: activeMorph,
+  })
   const neckTopY = H - headH
-  const shoulderY = H * (kid ? 0.80 : 0.82)
+  const shoulderY = H * shoulderYFrac
   const hipY = H * (kid ? 0.47 : 0.52)
 
   let chestR = radiusFromCirc(m.chest)
@@ -55,7 +65,7 @@ export function computeBodyDims(measurements, category, morph = null) {
   const thighR = radiusFromCirc(m.thigh) * (female ? 0.86 : 0.85)
 
   return {
-    female, kid, H, headH, neckTopY, shoulderY, hipY, span,
+    female, kid, H, headH, headWidthScale, headDepthScale, neckTopY, shoulderY, hipY, span,
     chestR, waistR, hipR, shoulderHalf, neckR, armLen, upperR, legLen, thighR,
     morph: activeMorph,
   }
