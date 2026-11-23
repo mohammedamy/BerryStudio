@@ -106,7 +106,7 @@ describe.each(TROUSER_IDS)('%s trousers', (id) => {
 
     const involves = (pid) => result.seamInstructions.filter((s) => s.a.piece === pid || s.b.piece === pid)
     for (const pid of legPieceIds) {
-      expect(involves(pid).length, `${pid} should have exactly 3 real seams (outseam + inseam + waist)`).toBe(3)
+      expect(involves(pid).length, `${pid} should have exactly 4 real seams (outseam + inseam + crotch-rise + waist)`).toBe(4)
     }
   })
 })

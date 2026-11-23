@@ -132,11 +132,18 @@ export function classifyPiecePhysics(tp, dims = null) {
     role === 'attachBust'
   )
   if (isBikiniIntimate) {
-    const restScale = (hint.isSportBra || hint.isFittedIntimate) ? 0.93 : 0.915
+    const restScale = role === 'sleeve'
+      ? 0.965
+      : ((role === 'legFront' || role === 'legBack')
+        ? 0.92
+        : ((hint.isSportBra || hint.isFittedIntimate) ? 0.905 : 0.915))
+    const skinOffset = role === 'sleeve'
+      ? -0.0004 + siblingOffset
+      : ((role === 'legFront' || role === 'legBack') ? -0.0018 + siblingOffset : -0.0034 + siblingOffset)
     return {
       physClass: PHYS_CLASS.BIKINI_INTIMATE,
       restScale,
-      skinOffset: -0.0034 + siblingOffset,
+      skinOffset,
       isElastic: false,
       isIntimateKnit: true,
       isLoose: false,
@@ -162,14 +169,36 @@ export function classifyPiecePhysics(tp, dims = null) {
     }
   }
 
+  if (hint.isStretchFitted && !hint.isLooseGarment) {
+    const restScale = role === 'sleeve'
+      ? 0.975
+      : ((role === 'legFront' || role === 'legBack') ? 0.955 : 0.945)
+    const skinOffset = role === 'sleeve'
+      ? siblingOffset
+      : ((role === 'legFront' || role === 'legBack') ? -0.0014 + siblingOffset : -0.0024 + siblingOffset)
+    return {
+      physClass: PHYS_CLASS.BIKINI_INTIMATE,
+      restScale,
+      skinOffset,
+      isElastic: false,
+      isIntimateKnit: true,
+      isLoose: false,
+      flareFactor: 0,
+    }
+  }
+
   const prof = measure2DProfile(tp?.positions2D)
-  const hipWidthCm = dims?.hipR ? dims.hipR * 200 : 32
+  const hipHalfCircCm = dims?.hipR ? dims.hipR * Math.PI * 100 : 50
   const thighWidthCm = dims?.thighR ? dims.thighR * 200 : 17
   const hasLowerFlare =
+    !hint.isFittedIntimate &&
+    !hint.isStretchFitted &&
     (role === 'hipPanelFront' || role === 'hipPanelBack' || role === 'frontPanel' || role === 'backPanel') &&
     prof.heightCm > 38 &&
-    (prof.botWidth > Math.max(1e-4, prof.topWidth) * 1.16 || (prof.heightCm > 52 && prof.botWidth > hipWidthCm * 1.08))
+    (prof.botWidth > Math.max(1e-4, prof.topWidth) * 1.18 || (prof.heightCm > 52 && prof.botWidth > hipHalfCircCm * 1.15))
   const isWideTrouser =
+    !hint.isFittedIntimate &&
+    !hint.isStretchFitted &&
     (role === 'legFront' || role === 'legBack') &&
     prof.heightCm > 45 &&
     prof.botWidth > thighWidthCm * 1.25
@@ -180,15 +209,17 @@ export function classifyPiecePhysics(tp, dims = null) {
     prof.botWidth > 26
 
   const isLoose = Boolean(
-    role.startsWith('gore') ||
-    hint.isSkirtTier ||
-    hint.isLooseGarment ||
-    hint.neckKind === 'cape' ||
-    hint.neckKind === 'cape-overlay' ||
-    LOOSE_SCHEMA_ROLES.has(schemaRole) ||
-    hasLowerFlare ||
-    isWideTrouser ||
-    isWideSleeve
+    (!hint.isFittedIntimate && !hint.isStretchFitted) && (
+      role.startsWith('gore') ||
+      hint.isSkirtTier ||
+      hint.isLooseGarment ||
+      hint.neckKind === 'cape' ||
+      hint.neckKind === 'cape-overlay' ||
+      LOOSE_SCHEMA_ROLES.has(schemaRole) ||
+      hasLowerFlare ||
+      isWideTrouser ||
+      isWideSleeve
+    )
   )
   if (isLoose) {
     const rawFlare = prof.topWidth > 1 ? clamp((prof.botWidth / prof.topWidth - 1.0) * 0.8, 0.25, 1.0) : 0.7

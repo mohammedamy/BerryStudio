@@ -1810,8 +1810,10 @@ export function convertAppPattern(payload) {
         const ms = edges?.find((e) => e?.mirrorSelf)
         let crotchYCm = null
         if (ms && local[ms.fromIdx] && local[ms.toIdx]) {
-          crotchYCm = Math.max(local[ms.fromIdx][1], local[ms.toIdx][1]) - lMinY
-        } else {
+          const cand = Math.max(local[ms.fromIdx][1], local[ms.toIdx][1]) - lMinY
+          if (cand <= lH * 0.56) crotchYCm = cand
+        }
+        if (!Number.isFinite(crotchYCm)) {
           let bestX = Infinity
           for (const [lx, ly] of local) {
             const fy = (ly - lMinY) / lH
@@ -2899,33 +2901,72 @@ export function convertAppPattern(payload) {
 
   const fabricId = FABRIC_NAME_TO_ID.has(payload.fabricId) ? payload.fabricId : null
 
-  // Enrich per-piece physics metadata (schemaRole, elastic trims, fitted intimates,
-  // structured outerwear trims, and loose flowing silhouettes) for Cloth Lab's
-  // multi-zone GPU cloth solver.
+  // Enrich per-piece physics metadata (schemaRole, elastic trims, second-skin
+  // stretch/intimates, fitted knit/contoured silhouettes, structured outerwear
+  // trims, and loose flowing silhouettes) for Cloth Lab's multi-zone GPU solver.
   const designText = `${payload.designId || payload.patternId || ''} ${payload.designName || ''}`
-  const isLooseDesign = /abaya|thobe|kaftan|robe|kimono|cape|poncho|palazzo|flared|tiered|circle|bisht|tunic|عباية|ثوب|قفطان|روب|كيمونو|كيب|كلوش|بشت|فضفاض|تونيك/i.test(designText)
-  const isFittedIntimateDesign = /leotard|swimsuit|bikini|bodysuit|brief|trunk|boxer|\bbra\b|bralette|bandeau|مايوه|بكيني|ليوتارد/i.test(designText)
+  const visiblePieceTexts = []
+  let hasLegOpenBinding = false
+  let hasCrotchGussetPiece = false
+  for (const p of allInputPieces) {
+    if (p.visible === false) continue
+    const txt = `${p.id || ''} ${(p.label && p.label.en) || ''} ${(p.label && p.label.ar) || ''}`
+    visiblePieceTexts.push(txt)
+    if (/leg\s*opening|تحبيك\s*فتحة\s*الساق/i.test(txt)) hasLegOpenBinding = true
+    if (/crotch\s*gusset|قطعة\s*الحجر/i.test(txt)) hasCrotchGussetPiece = true
+  }
+  const hasLeotardPieces = hasLegOpenBinding || (hasCrotchGussetPiece && bySlot.frontPanel.length > 0 && bySlot.backPanel.length > 0)
+  const garmentText = `${designText} ${visiblePieceTexts.join(' ')}`
+  const isLooseDesign = /abaya|thobe|kaftan|robe|kimono|cape|poncho|palazzo|flared|tiered|circle|bisht|tunic|batwing|hoodie|relaxed|wide|oversized|عباية|ثوب|قفطان|روب|كيمونو|كيب|كلوش|بشت|فضفاض|تونيك|هودي/i.test(garmentText)
+  const isSecondSkinDesign = hasLeotardPieces || /leotard|swimsuit|bikini|bodysuit|unitard|catsuit|bodycon|legging|leggings|tights|shapewear|compression|brief|trunk|boxer|\bbra\b|bralette|bandeau|مايوه|بكيني|ليوتارد|بودي\s*كون|ليجنز|كيلوت|بوكسر|حمالة/i.test(garmentText)
+  const isLeotardGarment = hasLeotardPieces || /leotard|swimsuit|bodysuit|unitard|ليوتارد|مايوه/i.test(garmentText)
+  const isStretchFittedDesign = !isSecondSkinDesign && !isLooseDesign && /corset|bustier|mermaid|pencil|fitted|slim|skinny|jogger|tank\s*top|vest\s*top|cropped?\s*top|polo|crew-neck\s*tee|ribbed|sheath|كورسيه|بنسل|ضيق|سليم/i.test(garmentText)
+  const isCorsetOrMermaidGown = /corset|mermaid|peplum|كورسيه/i.test(garmentText)
+  const isJoggerDesign = /jogger/i.test(garmentText)
   for (const p of allInputPieces) {
     if (p.visible === false) continue
     const schemaRole = resolveSchemaRole(p.role)?.role || null
     const nameText = `${p.id || ''} ${(p.label && p.label.en) || ''} ${(p.label && p.label.ar) || ''}`
-    const isElasticTrim = schemaRole === 'elastic-band' || schemaRole === 'rib-cuff' || schemaRole === 'hem-band' || schemaRole === 'strap' || (schemaRole === 'band' && !(p.cutOnFold ?? false))
+    const isFlowingSubPiece =
+      schemaRole === 'tier' ||
+      schemaRole === 'godet' ||
+      schemaRole === 'peplum-front' ||
+      schemaRole === 'peplum-back' ||
+      schemaRole === 'puff-sleeve' ||
+      schemaRole === 'butterfly-sleeve' ||
+      schemaRole === 'cape' ||
+      schemaRole === 'cape-overlay' ||
+      /ballet\s*skirt|tutu|flounce|ruffle|train|trumpet|godet|peplum|تنورة\s*باليه/i.test(nameText)
+    const isPencilPiece = /pencil|بنسل/i.test(nameText)
+    const isElasticTrim = schemaRole === 'elastic-band' || schemaRole === 'rib-cuff' || schemaRole === 'hem-band' || schemaRole === 'strap' || (schemaRole === 'band' && !(p.cutOnFold ?? false)) || (schemaRole === 'waistband' && (isSecondSkinDesign || isJoggerDesign))
     const isStructuredOuter = /collar|lapel|facing|yoke|blazer|jacket|waistcoat|trench|ياقة|طية|جاكيت|بليزر|صديري/i.test(nameText)
     for (const pid of [p.id, p.id + '_r', p.id + '_l']) {
       if (!roles[pid]) continue
       const existing = placementHints[pid]
       const needSchema = Boolean(schemaRole && (!existing || !existing.schemaRole))
       const isSport = pid === sportBraFrontId || pid === sportBraBackId
-      if (!needSchema && !isElasticTrim && !isSport && !isFittedIntimateDesign && !isStructuredOuter && !isLooseDesign) {
+      const pieceRole = roles[pid]
+      const isNonFittedSkirtInGown = isCorsetOrMermaidGown && !isPencilPiece && (
+        pieceRole === 'goreFront' || pieceRole === 'goreBack' ||
+        pieceRole === 'goreSideLeft' || pieceRole === 'goreSideRight' ||
+        pieceRole === 'hipPanelFront' || pieceRole === 'hipPanelBack'
+      )
+      const secondSkinPiece = isSecondSkinDesign && !isFlowingSubPiece
+      const isLeotardBody = isLeotardGarment && (pieceRole === 'frontPanel' || pieceRole === 'backPanel')
+      const stretchFittedPiece = isStretchFittedDesign && !isFlowingSubPiece && !isNonFittedSkirtInGown
+      const loosePiece = isLooseDesign || (isSecondSkinDesign && isFlowingSubPiece)
+      if (!needSchema && !isElasticTrim && !isSport && !secondSkinPiece && !isLeotardBody && !stretchFittedPiece && !isStructuredOuter && !loosePiece) {
         continue
       }
       const h = (placementHints[pid] ||= {})
       if (needSchema) h.schemaRole = schemaRole
       if (isElasticTrim) h.isElasticTrim = true
       if (isSport) h.isSportBra = true
-      if (isFittedIntimateDesign) h.isFittedIntimate = true
+      if (secondSkinPiece) h.isFittedIntimate = true
+      if (isLeotardBody) h.isLeotardBody = true
+      if (stretchFittedPiece) h.isStretchFitted = true
       if (isStructuredOuter) h.isStructuredOuter = true
-      if (isLooseDesign) h.isLooseGarment = true
+      if (loosePiece) h.isLooseGarment = true
     }
   }
 

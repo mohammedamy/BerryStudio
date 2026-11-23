@@ -380,7 +380,7 @@ export function princessPanel(opts) {
     ];
     withCurves(outline, curves);
     outline.princessFromIdx = off;
-    outline.princessToIdx = off + princess.points.length - 1;
+    outline.princessToIdx = off + princess.points.length;
     outline.bustNotchIdx = off + 6; // princess.points[6] == bustPt (see princessCurve)
     outline.waistNotchIdx = off + 11; // princess.points[11] == waistPt
     return outline;
@@ -389,12 +389,12 @@ export function princessPanel(opts) {
   function sidePanel(centerOutline) {
     const shoulderPt = [shoulderX, topY];
     const princessFwd = centerOutline.slice(centerOutline.princessFromIdx, centerOutline.princessToIdx + 1);
-    const princessRev = princessFwd.slice().reverse(); // side's own left edge: hip->...->shoulder
+    const princessRev = princessFwd.slice().reverse(); // side's own left edge: hem->hip->...->shoulder
     const underarmPt = [sideX, bustY * 0.52];
     const armSeg = [shoulderPt, [(shoulderX + sideX) / 2, topY - 1], underarmPt];
     const armPts = qBez(...armSeg, 6);
     const sideWaistPt = [sideX * 0.98, waistY], sideHipPt = [sideX * 1.0, hipY];
-    const sideHemPt = [centerOutline[centerOutline.princessToIdx][0] + (sideX * 1.0 - centerOutline[centerOutline.princessToIdx][0]), hemY];
+    const sideHemPt = [sideX * 1.0, hemY];
     const outline = [...princessRev, ...armPts, sideWaistPt, sideHipPt, sideHemPt];
     const armFromIdx = princessRev.length - 1;
     withCurves(outline, [{ fromIdx: armFromIdx, toIdx: armFromIdx + armPts.length, ...qBezToCubic(...armSeg) }]);
@@ -402,6 +402,8 @@ export function princessPanel(opts) {
     outline.armholeToIdx = armFromIdx + armPts.length;
     outline.princessFromIdx = 0;
     outline.princessToIdx = princessRev.length - 1;
+    outline.waistNotchIdx = princessRev.length - 1 - 11;
+    outline.bustNotchIdx = princessRev.length - 1 - 6;
     return outline;
   }
 
@@ -542,7 +544,10 @@ export function sideGorePanel(waistW, hipW, hemW, waistToHip, hipToHem) {
 // same length).
 export function legPanel(waistW, hipW, hemW, riseLen, inseamLen, isFront) {
   const floorY = riseLen + inseamLen;
-  const crotchDepth = isFront ? riseLen * 0.9 : riseLen * 1.15;
+  // Front and back inseams meet at the same anatomical crotch depth (riseLen)
+  // so hemIn -> crotchIdx matches in length on both pieces; the back crotch curve
+  // achieves its deeper seat extension horizontally via crotchExt instead.
+  const crotchDepth = riseLen;
   const crotchExt = isFront ? hipW * 0.22 : hipW * 0.32;
   const waistInX = waistW * 0.2;
   const riseBottom = [waistInX - crotchExt, crotchDepth];

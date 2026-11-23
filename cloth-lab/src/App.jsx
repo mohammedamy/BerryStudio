@@ -52,13 +52,16 @@ function patternSignature(payload) { return designKey(payload) }
 // measurements. It reuses debugView's existing 'off' state (Scene.jsx
 // already renders nothing but BodyAvatar for any debugView other than
 // pieces/weld/cloth/seams) rather than adding a new rendering path.
+const STRETCH_DEFAULT_RE = /leotard|swimsuit|bikini|bodysuit|bodycon|legging|brief|trunk|boxer|\bbra\b|bralette|bandeau|ليوتارد|مايوه|بودي\s*كون|ليجنز|كيلوت|بوكسر|حمالة/i
+
 function resolveDefaultPatternFabric(p) {
   if (p?.fabricId && p.fabricId !== 'cotton') return p.fabricId
   const pieces = p?.pieces
-  if (Array.isArray(pieces) && pieces.some((pc) => pc?.visible !== false && (
+  const txt = `${p?.patternId || ''} ${p?.designName || ''} ${(pieces || []).filter(pc => pc?.visible !== false).map(pc => `${pc?.id || ''} ${pc?.label?.en || ''} ${pc?.label?.ar || ''}`).join(' ')}`
+  if (STRETCH_DEFAULT_RE.test(txt) || (Array.isArray(pieces) && pieces.some((pc) => pc?.visible !== false && (
     pc.role === 'brief-front' || pc.role === 'brief-back' ||
     pc.role === 'leotard-front' || pc.role === 'cup'
-  ))) {
+  )))) {
     return 'jersey'
   }
   return p?.fabricId || DEFAULT_FABRIC

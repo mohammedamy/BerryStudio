@@ -878,17 +878,17 @@ void main() {
   bool isLoose   = physClass > 2.5 && physClass < 3.5;
   bool isStruct  = physClass > 3.5;
 
-  float effDamping = isElastic ? min(uDamping, 0.940)
-    : (isBikini ? min(uDamping, 0.948)
+  float effDamping = isElastic ? min(uDamping, 0.936)
+    : (isBikini ? min(uDamping, 0.942)
     : (isLoose ? mix(uDamping, min(0.978, uDamping + 0.008), flowW) : uDamping));
-  float effFriction = isElastic ? clamp(uFriction * 1.12, 0.92, 0.99)
-    : (isBikini ? max(uFriction, 0.92)
+  float effFriction = isElastic ? clamp(uFriction * 1.12, 0.94, 0.99)
+    : (isBikini ? max(uFriction, 0.94)
     : (isLoose ? uFriction * mix(0.92, 0.44, flowW) : uFriction));
   float effStructStiff = isElastic ? max(uStructStiff, 0.98)
-    : (isBikini ? mix(uStructStiff, 0.955, 0.65)
+    : (isBikini ? mix(uStructStiff, 0.968, 0.72)
     : (isStruct ? max(uStructStiff, 0.97) : uStructStiff));
-  float effMaxStrain = isElastic ? 1.14
-    : (isBikini ? 1.12
+  float effMaxStrain = isElastic ? 1.22
+    : (isBikini ? 1.18
     : (isStruct ? min(uMaxStrain, 1.03) : uMaxStrain));
   float effBendScale = isElastic ? 1.35
     : (isBikini ? 0.78

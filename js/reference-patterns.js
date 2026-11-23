@@ -453,7 +453,8 @@ import {
           role: 'trouser-front', bilateral: true,
           edges: [
             { fromIdx: 0, toIdx: front.hemOutIdx, seamId: 'trouserOutseam', reverse: false },
-            { fromIdx: front.hemInIdx, toIdx: front.length - 1, mirrorSelf: true },
+            { fromIdx: front.hemInIdx, toIdx: front.crotchIdx, seamId: 'trouserInseam', reverse: false },
+            { fromIdx: front.crotchIdx, toIdx: front.length - 1, mirrorSelf: true },
             { fromIdx: front.length - 1, toIdx: 0, seamId: 'trouserWaistFront', reverse: false },
           ],
         },
@@ -465,7 +466,8 @@ import {
           role: 'trouser-back', bilateral: true,
           edges: [
             { fromIdx: 0, toIdx: back.hemOutIdx, seamId: 'trouserOutseam', reverse: false },
-            { fromIdx: back.hemInIdx, toIdx: back.length - 1, mirrorSelf: true },
+            { fromIdx: back.hemInIdx, toIdx: back.crotchIdx, seamId: 'trouserInseam', reverse: false },
+            { fromIdx: back.crotchIdx, toIdx: back.length - 1, mirrorSelf: true },
             { fromIdx: back.length - 1, toIdx: 0, seamId: 'trouserWaistBack' },
           ],
         },
@@ -1011,7 +1013,8 @@ import {
           role: 'trouser-front', bilateral: true,
           edges: [
             { fromIdx: 0, toIdx: front.hemOutIdx, seamId: 'shortsOutseam', reverse: false },
-            { fromIdx: front.hemInIdx, toIdx: front.length - 1, mirrorSelf: true },
+            { fromIdx: front.hemInIdx, toIdx: front.crotchIdx, seamId: 'shortsInseam', reverse: false },
+            { fromIdx: front.crotchIdx, toIdx: front.length - 1, mirrorSelf: true },
             { fromIdx: front.length - 1, toIdx: 0, seamId: 'shortsWaistFront', reverse: false },
           ],
         },
@@ -1023,7 +1026,8 @@ import {
           role: 'trouser-back', bilateral: true,
           edges: [
             { fromIdx: 0, toIdx: back.hemOutIdx, seamId: 'shortsOutseam', reverse: false },
-            { fromIdx: back.hemInIdx, toIdx: back.length - 1, mirrorSelf: true },
+            { fromIdx: back.hemInIdx, toIdx: back.crotchIdx, seamId: 'shortsInseam', reverse: false },
+            { fromIdx: back.crotchIdx, toIdx: back.length - 1, mirrorSelf: true },
             { fromIdx: back.length - 1, toIdx: 0, seamId: 'shortsWaistBack' },
           ],
         },

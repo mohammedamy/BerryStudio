@@ -101,11 +101,14 @@ export function computeSubdivisions(pieces, seams, targetSpacingCm) {
     }
   }
   // Free (unpaired) edges — e.g. neckline/hem/cuff — get their own count.
+  // Narrow sleeves need >= 8 circumferential segments around the arm tube so
+  // chordal sagitta does not dip inside the collision arm mesh.
   for (const p of pieces) {
+    const minSub = p.role === 'sleeve' ? 8 : 2
     for (const edgeName of p.edgeOrder) {
       if (paired.has(`${p.id}.${edgeName}`)) continue
       const len = polylineLength(edgeRawPoints(p, edgeName))
-      subdiv[p.id][edgeName] = Math.max(2, Math.round(len / targetSpacingCm))
+      subdiv[p.id][edgeName] = Math.max(minSub, Math.round(len / targetSpacingCm))
     }
   }
   return subdiv
@@ -172,7 +175,9 @@ export function triangulatePiece(piece, subdivForPiece, targetSpacingCm) {
   const wSpan = maxX - minX, hSpan = maxY - minY
   const interior = []
   const clearance = Math.min(0.6 * targetSpacingCm, Math.min(wSpan, hSpan) * 0.30)
-  const stepX = wSpan > 0 && wSpan < targetSpacingCm * 1.4 && hSpan > targetSpacingCm * 2 ? Math.max(0.5, wSpan * 0.45) : targetSpacingCm
+  const stepX = piece.role === 'sleeve' && wSpan > 0
+    ? Math.min(targetSpacingCm, Math.max(0.9, wSpan / 8))
+    : (wSpan > 0 && wSpan < targetSpacingCm * 1.4 && hSpan > targetSpacingCm * 2 ? Math.max(0.5, wSpan * 0.45) : targetSpacingCm)
   const stepY = hSpan > 0 && hSpan < targetSpacingCm * 1.4 && wSpan > targetSpacingCm * 2 ? Math.max(0.5, hSpan * 0.45) : targetSpacingCm
   for (let x = minX; x <= maxX; x += stepX) {
     for (let y = minY; y <= maxY; y += stepY) {

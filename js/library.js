@@ -120,7 +120,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
           grain: [[b.shoulderX * 0.4, 8], [b.shoulderX * 0.4, b.hemY - 8]], role: 'bodice-front-center', cutOnFold: true,
           edges: [{ fromIdx: b.frontCenter.princessFromIdx, toIdx: b.frontCenter.princessToIdx, seamId: `${seamId}PrincessFront` }] },
         { key: 'front_side', name: { en: `${opts.nameEn} Front Side`, ar: `جانب مقدمة ${opts.nameAr}` }, desc: { en: 'Side-front panel joining the armhole to the princess seam.', ar: 'لوحة الجانب الأمامي، تصل فتحة الإبط بخط الأميرة.' },
-          outline: b.frontSide, darts: [], notches: [b.frontSide[5], b.frontSide[10]], grain: [[b.sideX * 0.9, 10], [b.sideX * 0.9, b.hemY - 10]], role: 'bodice-front-side', bilateral: true,
+          outline: b.frontSide, darts: [], notches: [b.frontSide[b.frontSide.waistNotchIdx], b.frontSide[b.frontSide.bustNotchIdx]], grain: [[b.sideX * 0.9, 10], [b.sideX * 0.9, b.hemY - 10]], role: 'bodice-front-side', bilateral: true,
           // Only the princess seamId is declared here, not the outer
           // side-seam edge too: front-side/back-side use different bust/
           // waist/hip proportions BY DESIGN (real patternmaking — front
@@ -135,7 +135,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
           grain: [[b.shoulderX * 0.4, 8], [b.shoulderX * 0.4, b.hemY - 8]], role: 'bodice-back-center', cutOnFold: true,
           edges: [{ fromIdx: b.backCenter.princessFromIdx, toIdx: b.backCenter.princessToIdx, seamId: `${seamId}PrincessBack` }] },
         { key: 'back_side', name: { en: `${opts.nameEn} Back Side`, ar: `جانب خلفية ${opts.nameAr}` }, desc: { en: 'Side-back panel joining the armhole to the princess seam.', ar: 'لوحة الجانب الخلفي، تصل فتحة الإبط بخط الأميرة.' },
-          outline: b.backSide, darts: [], notches: [b.backSide[5], b.backSide[10]], grain: [[b.sideX * 0.9, 10], [b.sideX * 0.9, b.hemY - 10]], role: 'bodice-back-side', bilateral: true,
+          outline: b.backSide, darts: [], notches: [b.backSide[b.backSide.waistNotchIdx], b.backSide[b.backSide.bustNotchIdx]], grain: [[b.sideX * 0.9, 10], [b.sideX * 0.9, b.hemY - 10]], role: 'bodice-back-side', bilateral: true,
           edges: [{ fromIdx: b.backSide.princessFromIdx, toIdx: b.backSide.princessToIdx, seamId: `${seamId}PrincessBack` }] },
       );
     } else {
@@ -294,7 +294,8 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         // that's only for a cutOnFold piece like Waistband itself.
         edges: [
           { fromIdx: 0, toIdx: front.hemOutIdx, seamId: `${opts.id}Outseam`, reverse: false },
-          { fromIdx: front.hemInIdx, toIdx: front.length - 1, mirrorSelf: true },
+          { fromIdx: front.hemInIdx, toIdx: front.crotchIdx, seamId: `${opts.id}Inseam`, reverse: false },
+          { fromIdx: front.crotchIdx, toIdx: front.length - 1, mirrorSelf: true },
           { fromIdx: front.length - 1, toIdx: 0, seamId: `${opts.id}WaistFront`, reverse: false },
         ] },
       { key: 'back', name: { en: `${opts.nameEn} Back`, ar: `خلفية ${opts.nameAr}` }, desc: { en: 'Back leg panel with a deeper curved crotch seam, per real block convention.', ar: 'لوحة الساق الخلفية بخط تفصيل منحنٍ أعمق، حسب القاعدة الحقيقية.' },
@@ -302,7 +303,8 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         grain: [[qt * 0.6, riseLen + legLen * 0.2], [qt * 0.6, riseLen + legLen * 0.8]], role: 'trouser-back', bilateral: true,
         edges: [
           { fromIdx: 0, toIdx: back.hemOutIdx, seamId: `${opts.id}Outseam`, reverse: false },
-          { fromIdx: back.hemInIdx, toIdx: back.length - 1, mirrorSelf: true },
+          { fromIdx: back.hemInIdx, toIdx: back.crotchIdx, seamId: `${opts.id}Inseam`, reverse: false },
+          { fromIdx: back.crotchIdx, toIdx: back.length - 1, mirrorSelf: true },
           { fromIdx: back.length - 1, toIdx: 0, seamId: `${opts.id}WaistBack` },
         ] },
       // WP-63: the previous plain-rectangle `bandPc()` outline gave

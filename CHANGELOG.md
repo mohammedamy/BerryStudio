@@ -1,5 +1,17 @@
 # Changelog
 
+## Elastic & Stretch Garment Fit Across 3D Preview and Cloth Lab (`berrystudio-v102`)
+
+- **Stretch / Fitted Classification (`fitTier`) in 3D Metrics & Preview ([`pattern-3d-metrics.js`](js/pattern-3d-metrics.js), [`three-view.js`](js/three-view.js)):**
+  - Added per-part `fitTier` (`"second-skin" | "fitted" | "regular" | "loose"`) distinguishing second-skin elastic garments (`w11` bodycon, `g11` leggings, `gy001..gy100` leotards, bras, briefs/trunks/boxers) and close-fitting knits/tailored silhouettes (`w07` pencil skirt, `m10`, `ref_m_tee`, `m09`, `b05`, `m02`, `b12`, corset/mermaid bodices) from relaxed/flared styles (`abaya`, `thobe`, `w06`, `w22`, `b06`, `b08`, ballet skirts).
+  - Updated `buildTailoredBodice`, `buildTailoredLeotard`, `buildTailoredTrousers`, `buildTailoredSkirt`, and `buildTailoredSleeves` plus `enforceBindPoseBodyClearance` and `updateGarmentDynamics` collision margins/flutter scaling so stretched garments contour closely to torso, limbs, and muscles without blowing back out or floating.
+- **Trouser/Legging Inseam & Crotch Topology Fix ([`library.js`](js/library.js), [`reference-patterns.js`](js/reference-patterns.js), [`importFromApp.js`](cloth-lab/src/pattern/importFromApp.js)):**
+  - Split `trouserFamily`, `ref_m_trousers`, and `ref_b_shorts` combined inner leg/crotch edges at `crotchIdx` into distinct `Inseam` seams (front-to-back per leg) plus `mirrorSelf` crotch-rise seams, eliminating ankle-to-ankle cross-sewing and fixing anatomical `crotchYCm` detection (`g11` leggings).
+- **Cloth Lab Stretch Placement & Elastic Solver Calibration ([`importFromApp.js`](cloth-lab/src/pattern/importFromApp.js), [`piecePhysics.js`](cloth-lab/src/cloth/piecePhysics.js), [`placement.js`](cloth-lab/src/pattern/placement.js), [`ClothSimulation.js`](cloth-lab/src/cloth/ClothSimulation.js), [`fabricPresets.js`](cloth-lab/src/cloth/fabricPresets.js), [`App.jsx`](cloth-lab/src/App.jsx)):**
+  - Fixed half-circumference flare detection in `piecePhysics.js` (`hipR * Math.PI * 100`), routed stretch garments into tight elastic/intimate contraction profiles (`restScale < 1`, snug negative `skinOffset`), kept flowing ballet skirts/godets/peplums in `LOOSE_FLOW`, tightened initial stretch placement across torso/hip/leg/sleeve/waistband panels, and tuned GPU elastic strain/damping/friction bounds.
+- **Tests & Service Worker Cache ([`stretch-elastic-fit.test.js`](test/stretch-elastic-fit.test.js), [`stretchElasticFit.test.js`](cloth-lab/src/cloth/stretchElasticFit.test.js), [`importFromApp.library.test.js`](cloth-lab/src/pattern/importFromApp.library.test.js), [`sw.js`](sw.js)):**
+  - Added regression suites for 3D metrics and Cloth Lab zero-penetration/contour checks across stretch garments and all 100 leotards; bumped service worker cache to `berrystudio-v102`.
+
 ## Realistic Cloth Lab Physics, Snug Underwear Fit & Seamless PBR Fabric Textures (`berrystudio-v101`)
 
 - **Explosion-Proof & Realistic Cloth Lab Simulation ([`ClothSimulation.js`](cloth-lab/src/cloth/ClothSimulation.js), [`fabricPresets.js`](cloth-lab/src/cloth/fabricPresets.js), [`collisionRig.js`](cloth-lab/src/body/collisionRig.js)):**

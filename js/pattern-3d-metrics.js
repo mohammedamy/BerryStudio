@@ -34,6 +34,11 @@ const LOWER_TRIM_ROLES = new Set([
 const CONTEXT_TRIM_NAME_RE = /waistband|pocket|gusset|\bfly\b|belt\s*loop|elastic|drawstring|placket|facing|lining|hem\s*band|sash|wrap\s*tie|حزام|كمر|جيب|دكة|سحاب|أستك|مطاط|مرد|بطانة|سجاف/i;
 const BRA_NAME_RE = /\bbra\b|bralette|bandeau|bustier|حمالة|براليت/i;
 const BRIEF_NAME_RE = /brief|panties|bikini|thong|hipster|كيلوت|سروال داخلي/i;
+const EXPLICIT_LOOSE_RE = /\b(loose|relaxed|oversized|wide|batwing|hoodie|abaya|kaftan|thobe|kandura|jubba|bisht|poncho|cape|palazzo|culotte|shift|tiered|flared|a-line|ball\s*gown|cargo|play\s*pants|play\s*shorts|trench|overcoat|parka|duffle|safari)\b|فضفاض|واسع|عباية|ثوب|قفطان|بشت|كيمونو|هودي/i;
+const SECOND_SKIN_BODICE_RE = /\b(bodycon|bodysuit|swimsuit|unitard|catsuit|shapewear|compression|bikini)\b|بودي\s*كون|ليوتارد|مايوه|بكيني/i;
+const SECOND_SKIN_TROUSER_RE = /\b(legging|leggings|tights|jeggings|bike\s*short|cycling\s*short|compression)\b|ليجنز/i;
+const FITTED_BODICE_RE = /\b(corset|bustier|mermaid|fitted|slim|skinny|tank\s*top|vest\s*top|cropped?\s*top|polo|crew-neck\s*tee|sheath|tube|ribbed)\b|كورسيه|ضيق|بولو/i;
+const FITTED_TROUSER_RE = /\b(slim|skinny|jogger|fitted|tapered)\b|ضيق|سليم/i;
 
 function clamp(v, lo, hi) {
   return v < lo ? lo : v > hi ? hi : v;
@@ -366,6 +371,7 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     patternMeta?.desc?.en || patternMeta?.desc || "",
     ...visible.map(getPieceSearchText),
   ].join(" ");
+  const effFabric = String(patternMeta?.fabricId || lookbookStyle?.fabric || visible[0]?.material || "").toLowerCase();
 
   // ---------- 1. BODICE / TOP / ROBE / OUTERWEAR METRICS ----------
   const hasSeparateSkirt = byPart.skirt.length > 0;
@@ -524,10 +530,34 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
       skirtFlare = clamp(rawRatio * 1.15, 1.28, 1.75);
       skirtPleats = 4;
     }
-  } else if (bodiceStyle === "robe") {
+  }
+  const isLooseGarmentText = EXPLICIT_LOOSE_RE.test(allText);
+  const bodiceFitTier = (isBra || isLeotard || SECOND_SKIN_BODICE_RE.test(allText))
+    ? "second-skin"
+    : (isLooseGarmentText
+      ? "loose"
+      : (!lbSil.outerLayer?.enabled && (FITTED_BODICE_RE.test(allText) || ((effFabric === "jersey" || effFabric === "scuba") && bodiceEaseRatio <= 1.09 && !/\b(bomber|jacket|blazer|coat|vest|twirl|dress)\b/i.test(allText))))
+        ? "fitted"
+        : "regular");
+
+  if (bodicePanels.length > 0 && bodiceFitTier === "second-skin") {
+    skirtPleats = 0;
+  } else if (bodiceStyle === "robe" && bodiceFitTier !== "second-skin") {
     skirtPleats = /abaya|thobe|kaftan|kandura|bisht|عباية|ثوب|قفطان|بشت/i.test(allText) ? 6 : 0;
   }
   if (lbSil.pleats != null) skirtPleats = lbSil.pleats;
+
+  const sleeveFitTier = (sleeveStyle === "puff" || sleeveStyle === "bell" || sleeveStyle === "bishop" || hasCape)
+    ? "loose"
+    : ((bodiceFitTier === "second-skin" && (sleeveStyle === "fitted" || sleeveStyle === "cap"))
+      ? "second-skin"
+      : ((bodiceFitTier === "fitted" && (sleeveStyle === "fitted" || sleeveStyle === "cap")) ? "fitted" : "regular"));
+
+  const skirtFitTier = (!isLooseGarmentText && skirtFlare <= 1.08 && /\b(bodycon|stretch\s*pencil)\b|بودي\s*كون/i.test(allText))
+    ? "second-skin"
+    : ((!isLooseGarmentText && skirtFlare <= 1.08)
+      ? "fitted"
+      : ((skirtFlare >= 1.35 || isLooseGarmentText) ? "loose" : "regular"));
 
   // ---------- 4. TROUSER / SHORTS / BRIEFS METRICS ----------
   const isBrief = byPart.trousers.some((p) => p.role === "brief-front" || p.role === "brief-back" || BRIEF_NAME_RE.test(getPieceSearchText(p)));
@@ -551,15 +581,22 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
       trouserInseamFrac = 0.28;
     }
 
-    const taperRatio = tb.bottomWidth / Math.max(10, tb.topWidth);
-    if (/palazzo|wide|culotte|flare|واسع|شارلستون/i.test(tText) || taperRatio > 1.05) {
+    const upperWidth = Math.max(tb.topWidth, tb.midWidth, 10);
+    const taperRatio = tb.bottomWidth / upperWidth;
+    if (/palazzo|wide|culotte|flare|واسع|شارلستون/i.test(tText) || (!FITTED_TROUSER_RE.test(allText) && taperRatio > 1.12)) {
       trouserHemMult = 1.34;
-    } else if (/skinny|legging|slim|jogger|ضيق|ليجنز/i.test(tText) || taperRatio < 0.68) {
+    } else if (/skinny|legging|slim|jogger|ضيق|ليجنز|سليم/i.test(tText) || taperRatio < 0.68) {
       trouserHemMult = 0.78;
     } else {
       trouserHemMult = clamp(0.75 + taperRatio * 0.28, 0.84, 1.12);
     }
   }
+
+  const trousersFitTier = (isBrief || SECOND_SKIN_TROUSER_RE.test(allText))
+    ? "second-skin"
+    : ((isLooseGarmentText || trouserHemMult >= 1.2)
+      ? "loose"
+      : ((FITTED_TROUSER_RE.test(allText) || trouserHemMult <= 0.82) ? "fitted" : "regular"));
 
   return {
     present: {
@@ -570,6 +607,7 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     },
     bodice: {
       style: bodiceStyle, // 'bra' | 'crop' | 'waist' | 'hip' | 'tunic' | 'robe' | 'leotard'
+      fitTier: bodiceFitTier,
       lengthCm: bodiceLengthCm,
       easeRatio: bodiceEaseRatio,
       hemFlare: bodiceHemFlare,
@@ -611,6 +649,7 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     sleeve: {
       lengthFrac: sleeveLengthFrac,
       style: sleeveStyle, // 'cap' | 'fitted' | 'puff' | 'bell' | 'bishop'
+      fitTier: sleeveFitTier,
       hemRatio: sleeveHemRatio,
       hasCuffs,
       contrastCuffs: Boolean(lbSil.contrastCuffs),
@@ -622,6 +661,7 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     skirt: {
       lengthCm: skirtLengthCm,
       flare: skirtFlare,
+      fitTier: skirtFitTier,
       pleats: skirtPleats,
       tiers: lbSil.tiers || (visible.filter((p) => p.role === "tier").length),
       isSheerOverlay: Boolean(lbSil.isSheerOverlay),
@@ -630,6 +670,7 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     },
     trousers: {
       isBrief,
+      fitTier: trousersFitTier,
       inseamFrac: trouserInseamFrac, // 0.04 brief, ~0.25 shorts, ~0.48 bermuda, ~0.72 capri, ~0.96 full
       hemMult: trouserHemMult,
       hasWaistband: visible.some((p) => p.role === "waistband" || /waistband|حزام|كمر/i.test(getPieceDisplayName(p))),
