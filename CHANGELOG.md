@@ -1,5 +1,17 @@
 # Changelog
 
+## Continuous 3D Long Hair Engine Across 3D Preview and Cloth Lab (`berrystudio-v103`)
+
+- **Axis-Separated Body Heightfields & Headwear Clearance Fix ([`human-mannequin.js`](js/human-mannequin.js)):**
+  - Replaced bloated spherical `torsoBins` / `fullBins` hair lookups with dedicated `backZGrid`, `frontZGrid`, and `shoulderTopYGrid` body heightfields (`sampleBodyBackZ`, `sampleBodyFrontZ`, `sampleShoulderTopY`, `sampleSkullPoint`, and `projectHairPoint`), eliminating floating temple tendrils beside ears and detached back gaps.
+  - Restricted `fullFallback` lateral shoulder expansion strictly to the anatomical shoulder band with smooth chin-to-trapezius blending, eliminating neck/chin inflation on `hijab_long_khimar` while preserving chest bust-clearance.
+- **Continuous Scalp-to-Tip Sculpted Multi-Ribbon Hair & Fiber Maps ([`human-mannequin.js`](js/human-mannequin.js), [`mannequin-styling.js`](js/mannequin-styling.js)):**
+  - Upgraded procedural hair textures (`createHairTextures`) to paired 512×512 fiber albedo and bump maps with dual Kajiya-Kay sheen bands, and fixed root-to-tip balayage gradient ordering in `buildParametricHairShell`.
+  - Replaced floating curtains/tubes with batched arched-crescent multi-ribbon cascades (`appendSculptedRibbon`, `addScalpToTipUnderMass`, `buildBackRibbonSpine`, `buildFrontShoulderRibbon`, `addSculptedBraid`, `addHighFlowingPonytail`, `addLongHairCascade`) that dynamically sculpt silky straight layers, flowing S-waves, volumetric 3D helical corkscrew curls, coily spirals, and herringbone braids across women, girls, men, and boys cuts.
+  - Expanded `HAIR_LENGTH_PRESETS` multipliers (`{ short: 0.72, natural: 1.0, long: 1.28, extra_long: 1.56 }`) so `extra_long` cascades past the waist toward high hip and raised back/front garment clearances so tops never poke through hair.
+- **Tests & Service Worker Cache ([`mannequin-styling.test.js`](test/mannequin-styling.test.js), [`sw.js`](sw.js)):**
+  - Added geometric regression assertions verifying temple/cheek proximity (`maxEarRatio <= 0.72`), upper-back garment-hugging clearance (`[6 mm, 68 mm]`), `extra_long` waist reach, and curly lateral volume across categories and sizes; bumped service worker cache to `berrystudio-v103`.
+
 ## Elastic & Stretch Garment Fit Across 3D Preview and Cloth Lab (`berrystudio-v102`)
 
 - **Stretch / Fitted Classification (`fitTier`) in 3D Metrics & Preview ([`pattern-3d-metrics.js`](js/pattern-3d-metrics.js), [`three-view.js`](js/three-view.js)):**

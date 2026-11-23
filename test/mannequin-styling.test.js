@@ -384,3 +384,97 @@ test('Customization Presets, Long Hairstyles, Long Islamic Hijabs & Long Niqabs 
   const withoutEyeScreen = buildHumanMannequin(THREE, 'women', mWomenM, { headwear: 'niqab_eye_screen', niqabEyeScreen: false, bakeStatic: true });
   assert.equal(withoutEyeScreen.headGroup.getObjectByName('niqabEyeScreenMesh'), undefined, 'eye screen omitted when niqabEyeScreen=false');
 });
+
+test('3D Long Hair Geometry: zero floating cheek roots, clean back hug, true waist reach, and curly volume', () => {
+  const measureHairGeometry = (category, size, opts) => {
+    const meas = computeMeasurements({ category, size, standard: 'intl' });
+    const built = buildHumanMannequin(THREE, category, meas, { ...opts, bakeStatic: false });
+    const h = built.dims.headH;
+    const hc = built.landmarks.headCenterY;
+    const ySh = built.dims.shoulderY - hc;
+    const yWa = built.dims.hipY + built.dims.span * 0.34 - hc;
+    const hg = built.headGroup.getObjectByName('hairGroup');
+    assert.ok(hg, `${category} ${size} ${opts.hairStyle}: hairGroup present`);
+
+    let maxEarR = 0;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let underMassBackZ = Infinity;
+    hg.traverse((obj) => {
+      if (!obj.isMesh || !obj.geometry?.attributes?.position) return;
+      const pos = obj.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const z = pos.getZ(i);
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y >= -0.15 * h && y <= 0.35 * h) {
+          maxEarR = Math.max(maxEarR, Math.hypot(x, z));
+        }
+        if (obj.name === 'hairUnderMass' && Math.abs(y - (ySh - 0.25 * h)) < 0.035 && Math.abs(x) < built.dims.chestR * 0.55 && z < 0) {
+          if (z < underMassBackZ) underMassBackZ = z;
+        }
+      }
+    });
+
+    let bodyBackZ = Infinity;
+    const bp = built.bodyMesh.geometry.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i);
+      const y = bp.getY(i) - hc;
+      const z = bp.getZ(i);
+      if (Math.abs(y - (ySh - 0.25 * h)) < 0.035 && Math.abs(x) < built.dims.chestR * 0.55 && z < 0) {
+        if (z < bodyBackZ) bodyBackZ = z;
+      }
+    }
+
+    return {
+      headH: h,
+      yWaist: yWa,
+      maxEarRatio: maxEarR / h,
+      minY,
+      xSpan: maxX - minX,
+      backGapMm: (bodyBackZ - underMassBackZ) * 1000,
+      hasUnderMass: Number.isFinite(underMassBackZ),
+    };
+  };
+
+  // 1. Zero floating cheek/ear roots across women XS/M/4XL & girls L for long cuts and textures
+  for (const [cat, sz] of [['women', 'XS'], ['women', 'M'], ['women', 'XXXXL'], ['girls', 'L']]) {
+    for (const style of ['long_straight', 'long_wavy', 'long_waist_straight', 'long_twin_braids']) {
+      for (const hairType of ['straight', 'curly', 'braided']) {
+        const stats = measureHairGeometry(cat, sz, { hairStyle: style, hairType, hairLength: 'extra_long' });
+        assert.ok(
+          stats.maxEarRatio <= 0.72,
+          `${cat} ${sz} ${style} (${hairType}): cheek/ear radius ratio ${stats.maxEarRatio.toFixed(3)} must stay <= 0.72`
+        );
+      }
+    }
+  }
+
+  // 2. Zero floating back shelf ("jetpack") and zero body clipping on upper back across sizes
+  for (const [cat, sz] of [['women', 'XS'], ['women', 'M'], ['women', 'XXXXL'], ['girls', 'L'], ['men', 'M'], ['boys', 'XL']]) {
+    const cut = cat === 'men' || cat === 'boys' ? 'long_men_straight' : 'long_straight';
+    const stats = measureHairGeometry(cat, sz, { hairStyle: cut, hairType: 'straight', hairLength: 'extra_long' });
+    assert.ok(stats.hasUnderMass, `${cat} ${sz} ${cut}: continuous hairUnderMass present`);
+    assert.ok(
+      stats.backGapMm >= 6 && stats.backGapMm <= 68,
+      `${cat} ${sz} ${cut}: upper-back gap ${stats.backGapMm.toFixed(1)}mm must stay within [6mm, 68mm]`
+    );
+  }
+
+  // 3. True waist-reaching extra_long length & distinct curly lateral volume
+  const straightStats = measureHairGeometry('women', 'M', { hairStyle: 'long_straight', hairType: 'straight', hairLength: 'extra_long' });
+  const curlyStats = measureHairGeometry('women', 'M', { hairStyle: 'long_straight', hairType: 'curly', hairLength: 'extra_long' });
+  assert.ok(
+    straightStats.minY <= straightStats.yWaist + 0.06,
+    `extra_long straight reaches near/below waist (${straightStats.minY.toFixed(3)} <= ${(straightStats.yWaist + 0.06).toFixed(3)})`
+  );
+  assert.ok(
+    curlyStats.xSpan >= straightStats.xSpan * 1.12,
+    `curly extra_long X span (${curlyStats.xSpan.toFixed(3)}m) must exceed straight (${straightStats.xSpan.toFixed(3)}m) by >= 12%`
+  );
+});

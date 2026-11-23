@@ -124,10 +124,10 @@ export function getHairTypeSpec(hairType) {
 }
 
 export const HAIR_LENGTH_PRESETS = Object.freeze([
-  { id: "short", label: { en: "Trimmed", ar: "مقصّر" }, dropMult: 0.78 },
+  { id: "short", label: { en: "Trimmed", ar: "مقصّر" }, dropMult: 0.72 },
   { id: "natural", label: { en: "Natural", ar: "طبيعي" }, dropMult: 1.0 },
-  { id: "long", label: { en: "Long", ar: "طويل" }, dropMult: 1.20 },
-  { id: "extra_long", label: { en: "Extra Long", ar: "طويل جداً" }, dropMult: 1.40 },
+  { id: "long", label: { en: "Long", ar: "طويل" }, dropMult: 1.28 },
+  { id: "extra_long", label: { en: "Extra Long", ar: "طويل جداً" }, dropMult: 1.56 },
 ]);
 
 export const HAIR_LENGTH_MAP = Object.freeze(Object.fromEntries(HAIR_LENGTH_PRESETS.map((l) => [l.id, l])));
