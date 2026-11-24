@@ -858,6 +858,49 @@ test('3D Outer Layer & Collar Tailoring: distinct layer clearance margins, smoot
   assert.ok(tvSrc.includes('hasSleevedOuter'), 'inner shirt stays strictly inside sleeved outer jackets');
 });
 
+test('3D Accessories Customization: shape, length, size, color across buttons, zipper, belt, bow, and brooch + bilingual i18n parity', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const [html, tvSrc, i18nSrc] = await Promise.all([
+    readFile(new URL('../index.html', import.meta.url), 'utf8'),
+    readFile(new URL('../js/three-view.js', import.meta.url), 'utf8'),
+    readFile(new URL('../js/i18n.js', import.meta.url), 'utf8'),
+  ]);
+
+  // 1. All 5 accessory sections & shape/length/size/color controls exist in #v3dAccPanel
+  const requiredIds = [
+    'v3dAccPanel', 'v3dAccResetBtn',
+    'v3dBtnToggle', 'v3dBtnShape', 'v3dBtnStyle', 'v3dBtnPlacement', 'v3dBtnLength', 'v3dBtnSize', 'v3dBtnCount', 'v3dBtnColor',
+    'v3dZipToggle', 'v3dZipShape', 'v3dZipStyle', 'v3dZipPlacement', 'v3dZipLength', 'v3dZipSize', 'v3dZipOpen', 'v3dZipColor', 'v3dZipTapeColor',
+    'v3dBeltToggle', 'v3dBeltShape', 'v3dBeltStyle', 'v3dBeltSize', 'v3dBeltLength', 'v3dBeltColor', 'v3dBeltBuckleColor',
+    'v3dBowToggle', 'v3dBowShape', 'v3dBowStyle', 'v3dBowPlacement', 'v3dBowSize', 'v3dBowLength', 'v3dBowColor',
+    'v3dBroochToggle', 'v3dBroochShape', 'v3dBroochStyle', 'v3dBroochPlacement', 'v3dBroochSize', 'v3dBroochLength', 'v3dBroochColor',
+  ];
+  for (const id of requiredIds) {
+    assert.ok(html.includes(`id="${id}"`), `#${id} exists in #v3dAccPanel`);
+  }
+
+  // 2. Every data-i18n key inside #v3dAccPanel exists in both en and ar blocks of js/i18n.js
+  const panelSlice = html.slice(html.indexOf('id="v3dAccPanel"'), html.indexOf('id="v3dStitchPanel"'));
+  const keys = [...panelSlice.matchAll(/data-i18n="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(keys.length >= 45, 'panel declares rich localized keys');
+  const enStart = i18nSrc.indexOf('en: {');
+  const arStart = i18nSrc.indexOf('ar: {');
+  const enBlock = i18nSrc.slice(enStart, arStart);
+  const arBlock = i18nSrc.slice(arStart);
+  for (const k of new Set(keys)) {
+    assert.ok(enBlock.includes(`${k}:`), `EN i18n defines ${k}`);
+    assert.ok(arBlock.includes(`${k}:`), `AR i18n defines ${k}`);
+  }
+
+  // 3. 3D engine supports normalizeAccessoriesState, sampleGarmentSurfaceAbsZ, createBroochMesh, and multi-shape geometry
+  assert.ok(tvSrc.includes('function normalizeAccessoriesState('), 'normalizeAccessoriesState exists in three-view.js');
+  assert.ok(tvSrc.includes('function sampleGarmentSurfaceAbsZ('), 'garment-aware Z surface sampler prevents clipping');
+  assert.ok(tvSrc.includes('function createBroochMesh('), 'createBroochMesh exists in three-view.js');
+  for (const sym of ['domed_shank', 'square_bevel', 'toggle_bar', 'ring_pull', 'invisible_seam', 'double_ring', 'corset_cinch', 'butterfly_double', 'rosette_knot', 'crescent_pearl']) {
+    assert.ok(tvSrc.includes(`"${sym}"`), `three-view.js implements shape variant ${sym}`);
+  }
+});
+
 
 
 

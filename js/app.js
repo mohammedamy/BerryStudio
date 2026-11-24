@@ -4318,43 +4318,135 @@ import {
     return computeMeasurements(opts);
   }
   function currentMeas(){ return computeCatalogAwareMeasurements({category:state.category,size:state.size,standard:state.standard,kids:state.kids,custom:state.custom}); }
-  function syncLookbookControlsUI(lbStyle) {
-    const acc = lbStyle?.accessories || {};
+  function sync3DAccessoriesControlsUI(explicitAcc = null) {
+    const acc = explicitAcc || (typeof View3D.getAccessories === "function" ? View3D.getAccessories() : {});
     const bCfg = acc.buttons || { enabled: false };
     const zCfg = acc.zipper || { enabled: false };
     const beltCfg = acc.belt || { enabled: false };
+    const bowCfg = acc.bow || { enabled: false };
+    const brCfg = acc.brooch || { enabled: false };
+
+    const syncColorField = (inputId, resetId, hexVal, fallbackPreview) => {
+      const inp = $(inputId);
+      const rst = $(resetId);
+      const hasCustom = Boolean(hexVal);
+      if (inp) {
+        inp.value = hasCustom ? hexVal : fallbackPreview;
+        inp.dataset.custom = hasCustom ? "1" : "0";
+      }
+      if (rst) rst.classList.toggle("active", !hasCustom);
+      return hasCustom ? hexVal : null;
+    };
+    const syncSwatchRow = (key, activeHex) => {
+      $$(`.v3d-acc-swatches[data-acc-swatch="${key}"] .v3d-acc-swatch`).forEach((btn) => {
+        btn.classList.toggle("active", Boolean(activeHex && btn.dataset.accHex?.toLowerCase() === activeHex.toLowerCase()));
+      });
+    };
 
     const btnToggle = $("#v3dBtnToggle"), btnControls = $("#v3dBtnControls");
-    const btnStyle = $("#v3dBtnStyle"), btnPlacement = $("#v3dBtnPlacement"), btnCount = $("#v3dBtnCount"), btnCountVal = $("#v3dBtnCountVal");
+    const btnShape = $("#v3dBtnShape"), btnStyle = $("#v3dBtnStyle"), btnPlacement = $("#v3dBtnPlacement");
+    const btnLen = $("#v3dBtnLength"), btnLenVal = $("#v3dBtnLengthVal");
+    const btnSize = $("#v3dBtnSize"), btnSizeVal = $("#v3dBtnSizeVal");
+    const btnCount = $("#v3dBtnCount"), btnCountVal = $("#v3dBtnCountVal");
     if (btnToggle) btnToggle.checked = !!bCfg.enabled;
     if (btnControls) btnControls.classList.toggle("disabled", !bCfg.enabled);
-    if (bCfg.enabled) {
-      const uiBtnStyle = (bCfg.style === "tortoise" || bCfg.style === "wood") ? "horn" : (bCfg.style || "gold");
-      if (btnStyle && [...btnStyle.options].some(o => o.value === uiBtnStyle)) btnStyle.value = uiBtnStyle;
-      if (btnPlacement && bCfg.placement && [...btnPlacement.options].some(o => o.value === bCfg.placement)) btnPlacement.value = bCfg.placement;
-      if (btnCount && bCfg.count != null) { btnCount.value = String(bCfg.count); if (btnCountVal) btnCountVal.textContent = String(bCfg.count); }
+    if (btnShape && bCfg.shape && [...btnShape.options].some(o => o.value === bCfg.shape)) btnShape.value = bCfg.shape;
+    const uiBtnStyle = (bCfg.style === "tortoise") ? "horn" : (bCfg.style || "gold");
+    if (btnStyle && [...btnStyle.options].some(o => o.value === uiBtnStyle)) btnStyle.value = uiBtnStyle;
+    if (btnPlacement && bCfg.placement && [...btnPlacement.options].some(o => o.value === bCfg.placement)) btnPlacement.value = bCfg.placement;
+    const bLen = bCfg.lengthFrac != null ? Number(bCfg.lengthFrac) : 0.5;
+    if (btnLen) { btnLen.value = bLen.toFixed(2); if (btnLenVal) btnLenVal.textContent = Math.round(bLen * 100) + "%"; }
+    const bSz = bCfg.size != null ? Number(bCfg.size) : 1.0;
+    if (btnSize) { btnSize.value = bSz.toFixed(2); if (btnSizeVal) btnSizeVal.textContent = bSz.toFixed(1) + "×"; }
+    if (btnCount) {
+      const cnt = bCfg.count != null ? bCfg.count : 6;
+      btnCount.value = String(cnt);
+      if (btnCountVal) btnCountVal.textContent = String(cnt);
     }
+    syncSwatchRow("buttons", syncColorField("#v3dBtnColor", "#v3dBtnColorReset", bCfg.color || null, "#d4af37"));
 
     const zipToggle = $("#v3dZipToggle"), zipControls = $("#v3dZipControls");
-    const zipStyle = $("#v3dZipStyle"), zipPlacement = $("#v3dZipPlacement"), zipOpen = $("#v3dZipOpen"), zipOpenVal = $("#v3dZipOpenVal");
+    const zipShape = $("#v3dZipShape"), zipStyle = $("#v3dZipStyle"), zipPlacement = $("#v3dZipPlacement");
+    const zipLen = $("#v3dZipLength"), zipLenVal = $("#v3dZipLengthVal");
+    const zipSize = $("#v3dZipSize"), zipSizeVal = $("#v3dZipSizeVal");
+    const zipOpen = $("#v3dZipOpen"), zipOpenVal = $("#v3dZipOpenVal");
     if (zipToggle) zipToggle.checked = !!zCfg.enabled;
     if (zipControls) zipControls.classList.toggle("disabled", !zCfg.enabled);
-    if (zCfg.enabled) {
-      const uiZipStyle = zCfg.style === "matte_black" ? "gunmetal" : (zCfg.style || "silver");
-      if (zipStyle && [...zipStyle.options].some(o => o.value === uiZipStyle)) zipStyle.value = uiZipStyle;
-      if (zipPlacement && zCfg.placement && [...zipPlacement.options].some(o => o.value === zCfg.placement)) zipPlacement.value = zCfg.placement;
-      if (zipOpen && zCfg.openPct != null) { zipOpen.value = String(zCfg.openPct); if (zipOpenVal) zipOpenVal.textContent = Math.round(zCfg.openPct * 100) + "%"; }
-    }
+    if (zipShape && zCfg.shape && [...zipShape.options].some(o => o.value === zCfg.shape)) zipShape.value = zCfg.shape;
+    const uiZipStyle = zCfg.style === "matte_black" ? "gunmetal" : (zCfg.style || "silver");
+    if (zipStyle && [...zipStyle.options].some(o => o.value === uiZipStyle)) zipStyle.value = uiZipStyle;
+    if (zipPlacement && zCfg.placement && [...zipPlacement.options].some(o => o.value === zCfg.placement)) zipPlacement.value = zCfg.placement;
+    const zLen = zCfg.lengthFrac != null ? Number(zCfg.lengthFrac) : 0.5;
+    if (zipLen) { zipLen.value = zLen.toFixed(2); if (zipLenVal) zipLenVal.textContent = Math.round(zLen * 100) + "%"; }
+    const zSz = zCfg.size != null ? Number(zCfg.size) : 1.0;
+    if (zipSize) { zipSize.value = zSz.toFixed(2); if (zipSizeVal) zipSizeVal.textContent = zSz.toFixed(1) + "×"; }
+    const zOp = zCfg.openPct != null ? Number(zCfg.openPct) : 0;
+    if (zipOpen) { zipOpen.value = zOp.toFixed(2); if (zipOpenVal) zipOpenVal.textContent = Math.round(zOp * 100) + "%"; }
+    syncSwatchRow("zipper", syncColorField("#v3dZipColor", "#v3dZipColorReset", zCfg.color || null, "#e0e0e0"));
+    syncColorField("#v3dZipTapeColor", "#v3dZipTapeColorReset", zCfg.tapeColor || null, "#1f2937");
 
     const beltToggle = $("#v3dBeltToggle"), beltControls = $("#v3dBeltControls");
-    const beltStyle = $("#v3dBeltStyle"), beltWidth = $("#v3dBeltWidth");
+    const beltShape = $("#v3dBeltShape"), beltStyle = $("#v3dBeltStyle");
+    const beltSize = $("#v3dBeltSize"), beltSizeVal = $("#v3dBeltSizeVal");
+    const beltLen = $("#v3dBeltLength"), beltLenVal = $("#v3dBeltLengthVal");
     if (beltToggle) beltToggle.checked = !!beltCfg.enabled;
     if (beltControls) beltControls.classList.toggle("disabled", !beltCfg.enabled);
-    if (beltCfg.enabled) {
-      const uiBeltStyle = beltCfg.style === "fabric_sash" ? "matching" : (beltCfg.style || "leather_gold");
-      if (beltStyle && [...beltStyle.options].some(o => o.value === uiBeltStyle)) beltStyle.value = uiBeltStyle;
-      if (beltWidth && beltCfg.width) beltWidth.value = beltCfg.width;
+    const uiBeltShape = beltCfg.shape || (beltCfg.style === "fabric_sash" ? "sash_tie" : "rect_frame");
+    if (beltShape && [...beltShape.options].some(o => o.value === uiBeltShape)) beltShape.value = uiBeltShape;
+    const uiBeltStyle = beltCfg.style || "leather_gold";
+    if (beltStyle && [...beltStyle.options].some(o => o.value === uiBeltStyle)) beltStyle.value = uiBeltStyle;
+    const derivedBeltSize = beltCfg.size != null
+      ? Number(beltCfg.size)
+      : (beltCfg.width === "slim" || beltCfg.width === "narrow" ? 0.68 : (beltCfg.width === "wide" ? 1.55 : 1.0));
+    if (beltSize) {
+      beltSize.value = derivedBeltSize.toFixed(2);
+      if (beltSizeVal) beltSizeVal.textContent = (derivedBeltSize * 3.6).toFixed(1) + "cm";
     }
+    const blLen = beltCfg.length != null ? Number(beltCfg.length) : 0.35;
+    if (beltLen) { beltLen.value = blLen.toFixed(2); if (beltLenVal) beltLenVal.textContent = Math.round(blLen * 100) + "%"; }
+    syncSwatchRow("belt", syncColorField("#v3dBeltColor", "#v3dBeltColorReset", beltCfg.color || null, "#1a1918"));
+    syncColorField("#v3dBeltBuckleColor", "#v3dBeltBuckleColorReset", beltCfg.buckleColor || null, "#d4af37");
+
+    const bowToggle = $("#v3dBowToggle"), bowControls = $("#v3dBowControls");
+    const bowShape = $("#v3dBowShape"), bowStyle = $("#v3dBowStyle"), bowPlacement = $("#v3dBowPlacement");
+    const bowSize = $("#v3dBowSize"), bowSizeVal = $("#v3dBowSizeVal");
+    const bowLen = $("#v3dBowLength"), bowLenVal = $("#v3dBowLengthVal");
+    if (bowToggle) bowToggle.checked = !!bowCfg.enabled;
+    if (bowControls) bowControls.classList.toggle("disabled", !bowCfg.enabled);
+    if (bowShape && bowCfg.shape && [...bowShape.options].some(o => o.value === bowCfg.shape)) bowShape.value = bowCfg.shape;
+    if (bowStyle && bowCfg.style && [...bowStyle.options].some(o => o.value === bowCfg.style)) bowStyle.value = bowCfg.style;
+    if (bowPlacement && bowCfg.placement && [...bowPlacement.options].some(o => o.value === bowCfg.placement)) bowPlacement.value = bowCfg.placement;
+    const bwSz = bowCfg.size != null ? Number(bowCfg.size) : 1.0;
+    if (bowSize) { bowSize.value = bwSz.toFixed(2); if (bowSizeVal) bowSizeVal.textContent = bwSz.toFixed(1) + "×"; }
+    const bwLn = bowCfg.length != null ? Number(bowCfg.length) : 0.40;
+    if (bowLen) { bowLen.value = bwLn.toFixed(2); if (bowLenVal) bowLenVal.textContent = Math.round(bwLn * 100) + "%"; }
+    const bowHex = bowCfg.color && bowCfg.color !== "#f8fafc" ? bowCfg.color : null;
+    syncSwatchRow("bow", syncColorField("#v3dBowColor", "#v3dBowColorReset", bowHex, "#f8fafc"));
+
+    const brToggle = $("#v3dBroochToggle"), brControls = $("#v3dBroochControls");
+    const brShape = $("#v3dBroochShape"), brStyle = $("#v3dBroochStyle"), brPlacement = $("#v3dBroochPlacement");
+    const brSize = $("#v3dBroochSize"), brSizeVal = $("#v3dBroochSizeVal");
+    const brLen = $("#v3dBroochLength"), brLenVal = $("#v3dBroochLengthVal");
+    if (brToggle) brToggle.checked = !!brCfg.enabled;
+    if (brControls) brControls.classList.toggle("disabled", !brCfg.enabled);
+    if (brShape && brCfg.shape && [...brShape.options].some(o => o.value === brCfg.shape)) brShape.value = brCfg.shape;
+    if (brStyle && brCfg.style && [...brStyle.options].some(o => o.value === brCfg.style)) brStyle.value = brCfg.style;
+    if (brPlacement && brCfg.placement && [...brPlacement.options].some(o => o.value === brCfg.placement)) brPlacement.value = brCfg.placement;
+    const brSz = brCfg.size != null ? Number(brCfg.size) : 1.0;
+    if (brSize) { brSize.value = brSz.toFixed(2); if (brSizeVal) brSizeVal.textContent = brSz.toFixed(1) + "×"; }
+    const brLn = brCfg.length != null ? Number(brCfg.length) : 0.35;
+    if (brLen) { brLen.value = brLn.toFixed(2); if (brLenVal) brLenVal.textContent = Math.round(brLn * 100) + "%"; }
+    syncSwatchRow("brooch", syncColorField("#v3dBroochColor", "#v3dBroochColorReset", brCfg.color || null, "#be123c"));
+  }
+  function syncLookbookControlsUI(lbStyle) {
+    const acc = lbStyle?.accessories || {};
+    sync3DAccessoriesControlsUI({
+      buttons: { enabled: false, shape: "classic_round", style: "gold", placement: "front_placket", count: 6, lengthFrac: 0.5, size: 1.0, color: null, ...acc.buttons },
+      zipper: { enabled: false, shape: "classic_tab", style: "silver", placement: "center_front", lengthFrac: 0.5, size: 1.0, openPct: 0, color: null, tapeColor: null, ...acc.zipper },
+      belt: { enabled: false, shape: null, style: "leather_gold", width: "medium", size: null, length: 0.35, color: null, buckleColor: null, ...acc.belt },
+      bow: { enabled: false, shape: "classic_ribbon", style: "satin", placement: "center_chest", size: null, length: null, color: "#f8fafc", ...acc.bow },
+      brooch: { enabled: false, shape: "floral_star", style: "gold", placement: "left_chest", size: 1.0, length: 0.35, color: null, ...acc.brooch },
+    });
 
     const activePreset = lbStyle?.print?.preset || "none";
     $$("#v3dPrintsPanel .v3d-preset-chip").forEach(c => c.classList.toggle("active", c.dataset.preset === activePreset));
@@ -6362,6 +6454,7 @@ import {
             printsPanel.classList.add("hidden");
             printsBtn?.classList.remove("active");
           }
+          sync3DAccessoriesControlsUI();
         }
       };
     }
@@ -6412,92 +6505,212 @@ import {
       };
     }
 
-    // Accessories: Buttons & Zippers
-    function update3DAccessories() {
+    // Accessories: Buttons, Zippers, Belts, Bows & Brooches
+    const ACC_SWATCHES = [
+      "#d4af37", "#e5e7eb", "#e2a898", "#18181b", "#3b2414",
+      "#be123c", "#047857", "#1e3a8a", "#f8fafc", "#f59e0b"
+    ];
+    const readCustomColor = (sel) => {
+      const el = $(sel);
+      return el && el.dataset.custom === "1" ? el.value : null;
+    };
+    const update3DAccessories = () => {
       const btnToggle = $("#v3dBtnToggle");
       const btnControls = $("#v3dBtnControls");
-      const btnStyle = $("#v3dBtnStyle");
-      const btnPlacement = $("#v3dBtnPlacement");
-      const btnCount = $("#v3dBtnCount");
-
       const zipToggle = $("#v3dZipToggle");
       const zipControls = $("#v3dZipControls");
-      const zipStyle = $("#v3dZipStyle");
-      const zipPlacement = $("#v3dZipPlacement");
-      const zipOpen = $("#v3dZipOpen");
-
       const beltToggle = $("#v3dBeltToggle");
       const beltControls = $("#v3dBeltControls");
-      const beltStyle = $("#v3dBeltStyle");
-      const beltWidth = $("#v3dBeltWidth");
+      const bowToggle = $("#v3dBowToggle");
+      const bowControls = $("#v3dBowControls");
+      const brToggle = $("#v3dBroochToggle");
+      const brControls = $("#v3dBroochControls");
 
-      const buttonsOn = !!(btnToggle && btnToggle.checked);
+      const buttonsOn = Boolean(btnToggle?.checked);
       if (btnControls) btnControls.classList.toggle("disabled", !buttonsOn);
 
-      const zipperOn = !!(zipToggle && zipToggle.checked);
+      const zipperOn = Boolean(zipToggle?.checked);
       if (zipControls) zipControls.classList.toggle("disabled", !zipperOn);
 
-      const beltOn = !!(beltToggle && beltToggle.checked);
+      const beltOn = Boolean(beltToggle?.checked);
       if (beltControls) beltControls.classList.toggle("disabled", !beltOn);
 
+      const bowOn = Boolean(bowToggle?.checked);
+      if (bowControls) bowControls.classList.toggle("disabled", !bowOn);
+
+      const broochOn = Boolean(brToggle?.checked);
+      if (brControls) brControls.classList.toggle("disabled", !broochOn);
+
+      const beltSizeNum = parseFloat($("#v3dBeltSize")?.value || "1.0");
       View3D.setAccessories({
         buttons: {
           enabled: buttonsOn,
-          style: btnStyle?.value || "gold",
-          placement: btnPlacement?.value || "front_placket",
-          count: parseInt(btnCount?.value || "6", 10)
+          shape: $("#v3dBtnShape")?.value || "classic_round",
+          style: $("#v3dBtnStyle")?.value || "gold",
+          placement: $("#v3dBtnPlacement")?.value || "front_placket",
+          lengthFrac: parseFloat($("#v3dBtnLength")?.value || "0.5"),
+          size: parseFloat($("#v3dBtnSize")?.value || "1.0"),
+          count: parseInt($("#v3dBtnCount")?.value || "6", 10),
+          color: readCustomColor("#v3dBtnColor"),
         },
         zipper: {
           enabled: zipperOn,
-          style: zipStyle?.value || "silver",
-          placement: zipPlacement?.value || "center_front",
-          openPct: parseFloat(zipOpen?.value || "0")
+          shape: $("#v3dZipShape")?.value || "classic_tab",
+          style: $("#v3dZipStyle")?.value || "silver",
+          placement: $("#v3dZipPlacement")?.value || "center_front",
+          lengthFrac: parseFloat($("#v3dZipLength")?.value || "0.5"),
+          size: parseFloat($("#v3dZipSize")?.value || "1.0"),
+          openPct: parseFloat($("#v3dZipOpen")?.value || "0"),
+          color: readCustomColor("#v3dZipColor"),
+          tapeColor: readCustomColor("#v3dZipTapeColor"),
         },
         belt: {
           enabled: beltOn,
-          style: beltStyle?.value || "leather_gold",
-          width: beltWidth?.value || "medium"
-        }
+          shape: $("#v3dBeltShape")?.value || "rect_frame",
+          style: $("#v3dBeltStyle")?.value || "leather_gold",
+          size: beltSizeNum,
+          length: parseFloat($("#v3dBeltLength")?.value || "0.35"),
+          color: readCustomColor("#v3dBeltColor"),
+          buckleColor: readCustomColor("#v3dBeltBuckleColor"),
+        },
+        bow: {
+          enabled: bowOn,
+          shape: $("#v3dBowShape")?.value || "classic_ribbon",
+          style: $("#v3dBowStyle")?.value || "satin",
+          placement: $("#v3dBowPlacement")?.value || "center_chest",
+          size: parseFloat($("#v3dBowSize")?.value || "1.0"),
+          length: parseFloat($("#v3dBowLength")?.value || "0.4"),
+          color: readCustomColor("#v3dBowColor") || "#f8fafc",
+        },
+        brooch: {
+          enabled: broochOn,
+          shape: $("#v3dBroochShape")?.value || "floral_star",
+          style: $("#v3dBroochStyle")?.value || "gold",
+          placement: $("#v3dBroochPlacement")?.value || "left_chest",
+          size: parseFloat($("#v3dBroochSize")?.value || "1.0"),
+          length: parseFloat($("#v3dBroochLength")?.value || "0.35"),
+          color: readCustomColor("#v3dBroochColor"),
+        },
       });
-    }
+    };
 
-    const btnToggle = $("#v3dBtnToggle");
-    if (btnToggle) btnToggle.onchange = update3DAccessories;
-    const btnStyle = $("#v3dBtnStyle");
-    if (btnStyle) btnStyle.onchange = update3DAccessories;
-    const btnPlacement = $("#v3dBtnPlacement");
-    if (btnPlacement) btnPlacement.onchange = update3DAccessories;
-    const btnCount = $("#v3dBtnCount");
-    const btnCountVal = $("#v3dBtnCountVal");
-    if (btnCount) {
-      btnCount.oninput = e => {
-        if (btnCountVal) btnCountVal.textContent = e.target.value;
-        update3DAccessories();
+    const swatchMap = {
+      buttons: { input: "#v3dBtnColor", reset: "#v3dBtnColorReset", toggle: "#v3dBtnToggle" },
+      zipper: { input: "#v3dZipColor", reset: "#v3dZipColorReset", toggle: "#v3dZipToggle" },
+      belt: { input: "#v3dBeltColor", reset: "#v3dBeltColorReset", toggle: "#v3dBeltToggle" },
+      bow: { input: "#v3dBowColor", reset: "#v3dBowColorReset", toggle: "#v3dBowToggle" },
+      brooch: { input: "#v3dBroochColor", reset: "#v3dBroochColorReset", toggle: "#v3dBroochToggle" },
+    };
+    $$("#v3dAccPanel .v3d-acc-swatches").forEach((row) => {
+      const cat = row.dataset.accSwatch;
+      const meta = swatchMap[cat];
+      if (!meta) return;
+      row.innerHTML = ACC_SWATCHES.map((hex) =>
+        `<button type="button" class="v3d-acc-swatch" data-acc-hex="${hex}" title="${hex}" aria-label="${hex}" style="background:${hex}"></button>`
+      ).join("");
+      row.querySelectorAll(".v3d-acc-swatch").forEach((btn) => {
+        btn.onclick = () => {
+          const inp = $(meta.input);
+          const rst = $(meta.reset);
+          const tog = $(meta.toggle);
+          if (tog && !tog.checked) tog.checked = true;
+          if (inp) {
+            inp.value = btn.dataset.accHex;
+            inp.dataset.custom = "1";
+          }
+          if (rst) rst.classList.remove("active");
+          row.querySelectorAll(".v3d-acc-swatch").forEach((b) => b.classList.toggle("active", b === btn));
+          update3DAccessories();
+        };
+      });
+    });
+
+    const wireColorPair = (inputId, resetId, swatchCat, toggleId, defaultPreview) => {
+      const inp = $(inputId);
+      const rst = $(resetId);
+      if (inp) {
+        inp.oninput = () => {
+          const tog = $(toggleId);
+          if (tog && !tog.checked) tog.checked = true;
+          inp.dataset.custom = "1";
+          if (rst) rst.classList.remove("active");
+          if (swatchCat) {
+            $$(`.v3d-acc-swatches[data-acc-swatch="${swatchCat}"] .v3d-acc-swatch`).forEach((b) =>
+              b.classList.toggle("active", b.dataset.accHex?.toLowerCase() === inp.value.toLowerCase())
+            );
+          }
+          update3DAccessories();
+        };
+      }
+      if (rst) {
+        rst.onclick = () => {
+          if (inp) {
+            inp.dataset.custom = "0";
+            inp.value = defaultPreview;
+          }
+          rst.classList.add("active");
+          if (swatchCat) {
+            $$(`.v3d-acc-swatches[data-acc-swatch="${swatchCat}"] .v3d-acc-swatch`).forEach((b) => b.classList.remove("active"));
+          }
+          update3DAccessories();
+        };
+      }
+    };
+    wireColorPair("#v3dBtnColor", "#v3dBtnColorReset", "buttons", "#v3dBtnToggle", "#d4af37");
+    wireColorPair("#v3dZipColor", "#v3dZipColorReset", "zipper", "#v3dZipToggle", "#e0e0e0");
+    wireColorPair("#v3dZipTapeColor", "#v3dZipTapeColorReset", null, "#v3dZipToggle", "#1f2937");
+    wireColorPair("#v3dBeltColor", "#v3dBeltColorReset", "belt", "#v3dBeltToggle", "#1a1918");
+    wireColorPair("#v3dBeltBuckleColor", "#v3dBeltBuckleColorReset", null, "#v3dBeltToggle", "#d4af37");
+    wireColorPair("#v3dBowColor", "#v3dBowColorReset", "bow", "#v3dBowToggle", "#f8fafc");
+    wireColorPair("#v3dBroochColor", "#v3dBroochColorReset", "brooch", "#v3dBroochToggle", "#be123c");
+
+    const wireSlider = (sliderId, valId, fmt) => {
+      const el = $(sliderId), out = $(valId);
+      if (el) {
+        el.oninput = (e) => {
+          if (out) out.textContent = fmt(parseFloat(e.target.value));
+          update3DAccessories();
+        };
+      }
+    };
+    wireSlider("#v3dBtnCount", "#v3dBtnCountVal", (v) => String(Math.round(v)));
+    wireSlider("#v3dBtnLength", "#v3dBtnLengthVal", (v) => Math.round(v * 100) + "%");
+    wireSlider("#v3dBtnSize", "#v3dBtnSizeVal", (v) => v.toFixed(1) + "×");
+    wireSlider("#v3dZipLength", "#v3dZipLengthVal", (v) => Math.round(v * 100) + "%");
+    wireSlider("#v3dZipSize", "#v3dZipSizeVal", (v) => v.toFixed(1) + "×");
+    wireSlider("#v3dZipOpen", "#v3dZipOpenVal", (v) => Math.round(v * 100) + "%");
+    wireSlider("#v3dBeltSize", "#v3dBeltSizeVal", (v) => (v * 3.6).toFixed(1) + "cm");
+    wireSlider("#v3dBeltLength", "#v3dBeltLengthVal", (v) => Math.round(v * 100) + "%");
+    wireSlider("#v3dBowSize", "#v3dBowSizeVal", (v) => v.toFixed(1) + "×");
+    wireSlider("#v3dBowLength", "#v3dBowLengthVal", (v) => Math.round(v * 100) + "%");
+    wireSlider("#v3dBroochSize", "#v3dBroochSizeVal", (v) => v.toFixed(1) + "×");
+    wireSlider("#v3dBroochLength", "#v3dBroochLengthVal", (v) => Math.round(v * 100) + "%");
+
+    [
+      "#v3dBtnToggle", "#v3dBtnShape", "#v3dBtnStyle", "#v3dBtnPlacement",
+      "#v3dZipToggle", "#v3dZipShape", "#v3dZipStyle", "#v3dZipPlacement",
+      "#v3dBeltToggle", "#v3dBeltShape", "#v3dBeltStyle",
+      "#v3dBowToggle", "#v3dBowShape", "#v3dBowStyle", "#v3dBowPlacement",
+      "#v3dBroochToggle", "#v3dBroochShape", "#v3dBroochStyle", "#v3dBroochPlacement",
+    ].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.onchange = update3DAccessories;
+    });
+
+    const accResetBtn = $("#v3dAccResetBtn");
+    if (accResetBtn) {
+      accResetBtn.onclick = () => {
+        const resetState = {
+          buttons: { enabled: false, shape: "classic_round", style: "gold", placement: "front_placket", lengthFrac: 0.5, size: 1.0, count: 6, color: null },
+          zipper: { enabled: false, shape: "classic_tab", style: "silver", placement: "center_front", lengthFrac: 0.5, size: 1.0, openPct: 0, color: null, tapeColor: null },
+          belt: { enabled: false, shape: "rect_frame", style: "leather_gold", width: "medium", size: null, length: 0.35, color: null, buckleColor: null },
+          bow: { enabled: false, shape: "classic_ribbon", style: "satin", placement: "center_chest", size: 1.0, length: 0.4, color: "#f8fafc" },
+          brooch: { enabled: false, shape: "floral_star", style: "gold", placement: "left_chest", size: 1.0, length: 0.35, color: null },
+        };
+        View3D.setAccessories(resetState);
+        sync3DAccessoriesControlsUI();
       };
     }
-
-    const zipToggle = $("#v3dZipToggle");
-    if (zipToggle) zipToggle.onchange = update3DAccessories;
-    const zipStyle = $("#v3dZipStyle");
-    if (zipStyle) zipStyle.onchange = update3DAccessories;
-    const zipPlacement = $("#v3dZipPlacement");
-    if (zipPlacement) zipPlacement.onchange = update3DAccessories;
-    const zipOpen = $("#v3dZipOpen");
-    const zipOpenVal = $("#v3dZipOpenVal");
-    if (zipOpen) {
-      zipOpen.oninput = e => {
-        const pct = Math.round(parseFloat(e.target.value) * 100);
-        if (zipOpenVal) zipOpenVal.textContent = pct + "%";
-        update3DAccessories();
-      };
-    }
-
-    const beltToggle = $("#v3dBeltToggle");
-    if (beltToggle) beltToggle.onchange = update3DAccessories;
-    const beltStyle = $("#v3dBeltStyle");
-    if (beltStyle) beltStyle.onchange = update3DAccessories;
-    const beltWidth = $("#v3dBeltWidth");
-    if (beltWidth) beltWidth.onchange = update3DAccessories;
 
     // Sewing Stitches & Per-Part External Thread Controls
     const stToggle = $("#v3dStitchToggle");

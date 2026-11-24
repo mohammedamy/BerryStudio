@@ -1,5 +1,10 @@
 # Changelog
 
+## Full 3D Accessories Customization: Shape, Length, Size & Color (`berrystudio-v109`)
+
+- **All-Category Shape, Length, Size & Color Engine ([`three-view.js`](js/three-view.js)):** Upgraded `accessoriesState` and `normalizeAccessoriesState()` across **Buttons**, **Zippers**, **Belts & Sashes**, **Bows & Ribbons**, and new **Brooches & Tassels**, adding multi-shape procedural 3D builders (`classic_round`/`domed_shank`/`square_bevel`/`diamond`/`toggle_bar`/`covered_flor` buttons; `classic_tab`/`ring_pull`/`teardrop`/`chunky_molded`/`invisible_seam` zippers with custom metal & tape colors; `rect_frame`/`round_ring`/`double_ring`/`oval_medallion`/`sash_tie`/`corset_cinch` belts with tailored tongue & runway drop tails and independent strap/buckle colors; `classic_ribbon`/`couture_flat`/`butterfly_double`/`rosette_knot` bows across 5 placements with surface-contoured V-notched ribbon tails; `floral_star`/`geometric_diamond`/`crescent_pearl`/`bar_pin` brooches with flared silk tassels), `resolveGarmentHemY()` / `sampleGarmentSurfaceAbsZ()` cloth-clearance sampling, cuff surface X sampling, and bone-skinned `updateAccessoriesPose()` deformation for long zippers.
+- **Full Bilingual EN/AR Customizer Drawer ([`index.html`](index.html), [`app.js`](js/app.js), [`i18n.js`](js/i18n.js), [`styles.css`](css/styles.css)):** Expanded `#v3dAccPanel` with collapsible per-category sections exposing live shape, finish, placement, length, size, color pickers, curated swatches, per-color Auto reset buttons, and full lookbook preset sync (`test/mannequin-3d-enhancements.test.js`, `e2e/three-view-polish.spec.js`).
+
 ## 3D Khimar & Niqab Seamless Drape & Garment-Aware Clearance (`berrystudio-v108`)
 
 - **Live Garment-Aware Headwear Draping ([`three-view.js`](js/three-view.js)):** Added `fitHeadwearCapeOverGarment()` inside `updateGarmentDynamics()` to build a real-time monotonic garment radial envelope from active 3D garments (including puff sleeves, bodices, outer layers, and skirts) and smoothly clear full khimar/niqab capes and face veils outside active clothing so garments never slice through draped Islamic headwear.

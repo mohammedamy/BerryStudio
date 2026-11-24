@@ -314,14 +314,17 @@
           </div>
 
           <!-- Floating Accessories Drawer / Panel -->
-          <div id="v3dAccPanel" class="v3d-floating-panel hidden" aria-labelledby="v3dAccPanelTitle">
+          <div id="v3dAccPanel" class="v3d-floating-panel v3d-acc-panel hidden" aria-labelledby="v3dAccPanelTitle">
             <div class="v3d-panel-head">
               <h3 id="v3dAccPanelTitle" data-i18n="trimsAndAccessories">Accessories & Trims</h3>
-              <button id="v3dAccCloseBtn" class="v3d-panel-close" title="Close" aria-label="Close">&times;</button>
+              <div class="v3d-panel-head-actions">
+                <button type="button" id="v3dAccResetBtn" class="v3d-mini-btn" data-i18n="accResetAll">Reset</button>
+                <button id="v3dAccCloseBtn" class="v3d-panel-close" title="Close" aria-label="Close">&times;</button>
+              </div>
             </div>
             <div class="v3d-panel-body">
               <!-- Buttons Sub-Section -->
-              <div class="v3d-panel-section">
+              <div class="v3d-panel-section" id="v3dBtnSection">
                 <div class="v3d-section-title">
                   <label class="v3d-checkbox-label">
                     <input type="checkbox" id="v3dBtnToggle">
@@ -330,13 +333,26 @@
                 </div>
                 <div id="v3dBtnControls" class="v3d-sub-controls disabled">
                   <div class="v3d-control-row">
+                    <label for="v3dBtnShape" data-i18n="accShape">Shape</label>
+                    <select id="v3dBtnShape" class="v3d-select sm">
+                      <option value="classic_round" data-i18n="btnShapeRound">Classic 4-Hole</option>
+                      <option value="domed_shank" data-i18n="btnShapeDomed">Domed Shank</option>
+                      <option value="square_bevel" data-i18n="btnShapeSquare">Beveled Square</option>
+                      <option value="diamond" data-i18n="btnShapeDiamond">Jeweled Diamond</option>
+                      <option value="toggle_bar" data-i18n="btnShapeToggle">Toggle Horn</option>
+                      <option value="covered_flor" data-i18n="btnShapeCovered">Petal Rosette</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
                     <label for="v3dBtnStyle" data-i18n="buttonStyle">Finish</label>
                     <select id="v3dBtnStyle" class="v3d-select sm">
                       <option value="gold" data-i18n="buttonGold">Polished Gold</option>
                       <option value="silver" data-i18n="buttonSilver">Polished Silver</option>
+                      <option value="rose_gold" data-i18n="buttonRoseGold">Rose Gold</option>
                       <option value="horn" data-i18n="buttonHorn">Classic Horn</option>
                       <option value="pearl" data-i18n="buttonPearl">Mother of Pearl</option>
                       <option value="matte_black" data-i18n="buttonMatteBlack">Matte Black</option>
+                      <option value="wood" data-i18n="buttonWood">Natural Wood</option>
                       <option value="matching" data-i18n="buttonMatching">Fabric Match</option>
                     </select>
                   </div>
@@ -345,22 +361,46 @@
                     <select id="v3dBtnPlacement" class="v3d-select sm">
                       <option value="front_placket" data-i18n="placementPlacket">Front Placket</option>
                       <option value="double_breasted" data-i18n="placementDoubleBreasted">Double-Breasted</option>
+                      <option value="center_back" data-i18n="placementCenterBack">Center Back</option>
                       <option value="waistband" data-i18n="placementWaistband">Waistband</option>
                       <option value="cuffs" data-i18n="placementCuffs">Sleeve Cuffs</option>
+                      <option value="shoulder_epaulette" data-i18n="placementEpaulette">Shoulder Epaulette</option>
                     </select>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBtnLength" data-i18n="accLength">Length</label>
+                    <div class="v3d-slider-wrap">
+                      <input type="range" id="v3dBtnLength" min="0.20" max="1.00" value="0.50" step="0.05" class="v3d-slider">
+                      <span id="v3dBtnLengthVal" class="v3d-slider-val">50%</span>
+                    </div>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBtnSize" data-i18n="accSize">Size</label>
+                    <div class="v3d-slider-wrap">
+                      <input type="range" id="v3dBtnSize" min="0.50" max="2.00" value="1.00" step="0.05" class="v3d-slider">
+                      <span id="v3dBtnSizeVal" class="v3d-slider-val">1.0×</span>
+                    </div>
                   </div>
                   <div class="v3d-control-row">
                     <label for="v3dBtnCount" data-i18n="buttonCount">Count</label>
                     <div class="v3d-slider-wrap">
-                      <input type="range" id="v3dBtnCount" min="1" max="10" value="6" step="1" class="v3d-slider">
+                      <input type="range" id="v3dBtnCount" min="1" max="14" value="6" step="1" class="v3d-slider">
                       <span id="v3dBtnCountVal" class="v3d-slider-val">6</span>
                     </div>
                   </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBtnColor" data-i18n="accColor">Color</label>
+                    <div class="v3d-acc-color-pick">
+                      <input type="color" id="v3dBtnColor" value="#d4af37" class="v3d-stitch-color-input" aria-label="Button color">
+                      <button type="button" id="v3dBtnColorReset" class="v3d-mini-btn" data-i18n="accAuto">Auto</button>
+                    </div>
+                  </div>
+                  <div class="v3d-acc-swatches" data-acc-swatch="buttons"></div>
                 </div>
               </div>
 
               <!-- Zipper Sub-Section -->
-              <div class="v3d-panel-section">
+              <div class="v3d-panel-section" id="v3dZipSection">
                 <div class="v3d-section-title">
                   <label class="v3d-checkbox-label">
                     <input type="checkbox" id="v3dZipToggle">
@@ -369,10 +409,22 @@
                 </div>
                 <div id="v3dZipControls" class="v3d-sub-controls disabled">
                   <div class="v3d-control-row">
+                    <label for="v3dZipShape" data-i18n="accShape">Shape</label>
+                    <select id="v3dZipShape" class="v3d-select sm">
+                      <option value="classic_tab" data-i18n="zipShapeClassic">Classic Tab</option>
+                      <option value="ring_pull" data-i18n="zipShapeRing">Ring O-Pull</option>
+                      <option value="teardrop" data-i18n="zipShapeTeardrop">Couture Teardrop</option>
+                      <option value="chunky_molded" data-i18n="zipShapeChunky">Chunky Exposed</option>
+                      <option value="invisible_seam" data-i18n="zipShapeInvisible">Invisible Seam</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
                     <label for="v3dZipStyle" data-i18n="zipperStyle">Finish</label>
                     <select id="v3dZipStyle" class="v3d-select sm">
                       <option value="silver" data-i18n="zipperSilver">Polished Silver</option>
+                      <option value="gold" data-i18n="zipperGold">Polished Gold</option>
                       <option value="brass" data-i18n="zipperBrass">Antique Brass</option>
+                      <option value="rose_gold" data-i18n="zipperRoseGold">Rose Gold</option>
                       <option value="gunmetal" data-i18n="zipperGunmetal">Gunmetal Black</option>
                     </select>
                   </div>
@@ -386,17 +438,46 @@
                     </select>
                   </div>
                   <div class="v3d-control-row">
+                    <label for="v3dZipLength" data-i18n="accLength">Length</label>
+                    <div class="v3d-slider-wrap">
+                      <input type="range" id="v3dZipLength" min="0.20" max="1.00" value="0.50" step="0.05" class="v3d-slider">
+                      <span id="v3dZipLengthVal" class="v3d-slider-val">50%</span>
+                    </div>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dZipSize" data-i18n="accSize">Size</label>
+                    <div class="v3d-slider-wrap">
+                      <input type="range" id="v3dZipSize" min="0.60" max="1.80" value="1.00" step="0.05" class="v3d-slider">
+                      <span id="v3dZipSizeVal" class="v3d-slider-val">1.0×</span>
+                    </div>
+                  </div>
+                  <div class="v3d-control-row">
                     <label for="v3dZipOpen" data-i18n="zipperOpen">Open</label>
                     <div class="v3d-slider-wrap">
-                      <input type="range" id="v3dZipOpen" min="0" max="0.5" value="0" step="0.05" class="v3d-slider">
+                      <input type="range" id="v3dZipOpen" min="0" max="0.75" value="0" step="0.05" class="v3d-slider">
                       <span id="v3dZipOpenVal" class="v3d-slider-val">0%</span>
                     </div>
                   </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dZipColor" data-i18n="zipHardwareColor">Metal Color</label>
+                    <div class="v3d-acc-color-pick">
+                      <input type="color" id="v3dZipColor" value="#e0e0e0" class="v3d-stitch-color-input" aria-label="Zipper metal color">
+                      <button type="button" id="v3dZipColorReset" class="v3d-mini-btn" data-i18n="accAuto">Auto</button>
+                    </div>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dZipTapeColor" data-i18n="zipTapeColor">Tape Color</label>
+                    <div class="v3d-acc-color-pick">
+                      <input type="color" id="v3dZipTapeColor" value="#1f2937" class="v3d-stitch-color-input" aria-label="Zipper tape color">
+                      <button type="button" id="v3dZipTapeColorReset" class="v3d-mini-btn" data-i18n="accAuto">Auto</button>
+                    </div>
+                  </div>
+                  <div class="v3d-acc-swatches" data-acc-swatch="zipper"></div>
                 </div>
               </div>
 
-              <!-- Belt & Buckle Sub-Section -->
-              <div class="v3d-panel-section">
+              <!-- Belt & Sash Sub-Section -->
+              <div class="v3d-panel-section" id="v3dBeltSection">
                 <div class="v3d-section-title">
                   <label class="v3d-checkbox-label">
                     <input type="checkbox" id="v3dBeltToggle">
@@ -405,22 +486,181 @@
                 </div>
                 <div id="v3dBeltControls" class="v3d-sub-controls disabled">
                   <div class="v3d-control-row">
+                    <label for="v3dBeltShape" data-i18n="accShape">Shape</label>
+                    <select id="v3dBeltShape" class="v3d-select sm">
+                      <option value="rect_frame" data-i18n="beltShapeRect">Rect Frame</option>
+                      <option value="round_ring" data-i18n="beltShapeRound">Round Ring</option>
+                      <option value="double_ring" data-i18n="beltShapeDouble">Double Ring</option>
+                      <option value="oval_medallion" data-i18n="beltShapeOval">Oval Medallion</option>
+                      <option value="sash_tie" data-i18n="beltShapeSash">Tied Sash</option>
+                      <option value="corset_cinch" data-i18n="beltShapeCorset">Corset Cinch</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
                     <label for="v3dBeltStyle" data-i18n="beltStyle">Style</label>
                     <select id="v3dBeltStyle" class="v3d-select sm">
                       <option value="leather_gold" data-i18n="beltLeatherGold">Black Leather & Gold</option>
                       <option value="leather_silver" data-i18n="beltLeatherSilver">Tan Leather & Silver</option>
+                      <option value="patent_gloss" data-i18n="beltStylePatent">Patent Gloss</option>
                       <option value="matte_black" data-i18n="beltMatteBlack">Stealth Matte Black</option>
+                      <option value="fabric_sash" data-i18n="beltStyleSash">Soft Fabric Sash</option>
                       <option value="matching" data-i18n="beltMatching">Fabric Match</option>
                     </select>
                   </div>
                   <div class="v3d-control-row">
-                    <label for="v3dBeltWidth" data-i18n="beltWidth">Width</label>
-                    <select id="v3dBeltWidth" class="v3d-select sm">
-                      <option value="slim" data-i18n="beltWidthSlim">Slim (2.5 cm)</option>
-                      <option value="medium" selected data-i18n="beltWidthMedium">Classic (4.0 cm)</option>
-                      <option value="wide" data-i18n="beltWidthWide">Statement (6.5 cm)</option>
+                    <label for="v3dBeltSize" data-i18n="beltWidth">Width</label>
+                    <div class="v3d-slider-wrap">
+                      <input type="range" id="v3dBeltSize" min="0.50" max="1.85" value="1.00" step="0.05" class="v3d-slider">
+                      <span id="v3dBeltSizeVal" class="v3d-slider-val">3.6cm</span>
+                    </div>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBeltLength" data-i18n="beltTailLength">Tail Drop</label>
+                    <div class="v3d-slider-wrap">
+                      <input type="range" id="v3dBeltLength" min="0.00" max="1.00" value="0.35" step="0.05" class="v3d-slider">
+                      <span id="v3dBeltLengthVal" class="v3d-slider-val">35%</span>
+                    </div>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBeltColor" data-i18n="beltStrapColor">Strap Color</label>
+                    <div class="v3d-acc-color-pick">
+                      <input type="color" id="v3dBeltColor" value="#1a1918" class="v3d-stitch-color-input" aria-label="Belt strap color">
+                      <button type="button" id="v3dBeltColorReset" class="v3d-mini-btn" data-i18n="accAuto">Auto</button>
+                    </div>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBeltBuckleColor" data-i18n="beltBuckleColor">Buckle Color</label>
+                    <div class="v3d-acc-color-pick">
+                      <input type="color" id="v3dBeltBuckleColor" value="#d4af37" class="v3d-stitch-color-input" aria-label="Belt buckle color">
+                      <button type="button" id="v3dBeltBuckleColorReset" class="v3d-mini-btn" data-i18n="accAuto">Auto</button>
+                    </div>
+                  </div>
+                  <div class="v3d-acc-swatches" data-acc-swatch="belt"></div>
+                </div>
+              </div>
+
+              <!-- Bow & Ribbon Sub-Section -->
+              <div class="v3d-panel-section" id="v3dBowSection">
+                <div class="v3d-section-title">
+                  <label class="v3d-checkbox-label">
+                    <input type="checkbox" id="v3dBowToggle">
+                    <strong data-i18n="enableBow">Add Bow & Ribbon</strong>
+                  </label>
+                </div>
+                <div id="v3dBowControls" class="v3d-sub-controls disabled">
+                  <div class="v3d-control-row">
+                    <label for="v3dBowShape" data-i18n="accShape">Shape</label>
+                    <select id="v3dBowShape" class="v3d-select sm">
+                      <option value="classic_ribbon" data-i18n="bowShapeClassic">Classic Ribbon</option>
+                      <option value="couture_flat" data-i18n="bowShapeFlat">Couture Flat</option>
+                      <option value="butterfly_double" data-i18n="bowShapeButterfly">Butterfly Double</option>
+                      <option value="rosette_knot" data-i18n="bowShapeRosette">Ribbon Rosette</option>
                     </select>
                   </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBowStyle" data-i18n="bowStyle">Texture</label>
+                    <select id="v3dBowStyle" class="v3d-select sm">
+                      <option value="satin" data-i18n="bowStyleSatin">Silk Satin</option>
+                      <option value="velvet" data-i18n="bowStyleVelvet">Plush Velvet</option>
+                      <option value="organza" data-i18n="bowStyleOrganza">Sheer Organza</option>
+                      <option value="matching" data-i18n="bowStyleMatching">Fabric Match</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBowPlacement" data-i18n="buttonPlacement">Placement</label>
+                    <select id="v3dBowPlacement" class="v3d-select sm">
+                      <option value="center_chest" data-i18n="bowPlacementChest">Center Chest</option>
+                      <option value="neck_tie" data-i18n="bowPlacementNeck">Collar / Neckline</option>
+                      <option value="waist" data-i18n="bowPlacementWaist">Front Waist</option>
+                      <option value="back_waist" data-i18n="bowPlacementBackWaist">Back Waist</option>
+                      <option value="left_shoulder" data-i18n="bowPlacementShoulder">Left Shoulder</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBowSize" data-i18n="accSize">Size</label>
+                    <div class="v3d-slider-wrap">
+                      <input type="range" id="v3dBowSize" min="0.40" max="2.20" value="1.00" step="0.05" class="v3d-slider">
+                      <span id="v3dBowSizeVal" class="v3d-slider-val">1.0×</span>
+                    </div>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBowLength" data-i18n="bowTailLength">Ribbon Tails</label>
+                    <div class="v3d-slider-wrap">
+                      <input type="range" id="v3dBowLength" min="0.00" max="1.00" value="0.40" step="0.05" class="v3d-slider">
+                      <span id="v3dBowLengthVal" class="v3d-slider-val">40%</span>
+                    </div>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBowColor" data-i18n="accColor">Color</label>
+                    <div class="v3d-acc-color-pick">
+                      <input type="color" id="v3dBowColor" value="#f8fafc" class="v3d-stitch-color-input" aria-label="Bow color">
+                      <button type="button" id="v3dBowColorReset" class="v3d-mini-btn" data-i18n="accAuto">Auto</button>
+                    </div>
+                  </div>
+                  <div class="v3d-acc-swatches" data-acc-swatch="bow"></div>
+                </div>
+              </div>
+
+              <!-- Brooch & Tassel Sub-Section -->
+              <div class="v3d-panel-section" id="v3dBroochSection">
+                <div class="v3d-section-title">
+                  <label class="v3d-checkbox-label">
+                    <input type="checkbox" id="v3dBroochToggle">
+                    <strong data-i18n="enableBrooch">Add Brooch & Tassel</strong>
+                  </label>
+                </div>
+                <div id="v3dBroochControls" class="v3d-sub-controls disabled">
+                  <div class="v3d-control-row">
+                    <label for="v3dBroochShape" data-i18n="accShape">Shape</label>
+                    <select id="v3dBroochShape" class="v3d-select sm">
+                      <option value="floral_star" data-i18n="broochShapeStar">Starburst Flower</option>
+                      <option value="geometric_diamond" data-i18n="broochShapeDiamond">Art-Deco Diamond</option>
+                      <option value="crescent_pearl" data-i18n="broochShapeCrescent">Pearl Crescent</option>
+                      <option value="bar_pin" data-i18n="broochShapeBar">Tailored Bar Pin</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBroochStyle" data-i18n="broochStyle">Metal</label>
+                    <select id="v3dBroochStyle" class="v3d-select sm">
+                      <option value="gold" data-i18n="buttonGold">Polished Gold</option>
+                      <option value="silver" data-i18n="buttonSilver">Polished Silver</option>
+                      <option value="rose_gold" data-i18n="buttonRoseGold">Rose Gold</option>
+                      <option value="pearl_crystal" data-i18n="broochStylePearlCrystal">Crystal & Pearl</option>
+                      <option value="antique_bronze" data-i18n="broochStyleBronze">Antique Bronze</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBroochPlacement" data-i18n="buttonPlacement">Placement</label>
+                    <select id="v3dBroochPlacement" class="v3d-select sm">
+                      <option value="left_chest" data-i18n="broochPlacementLeftChest">Left Lapel / Chest</option>
+                      <option value="center_neck" data-i18n="broochPlacementNeck">Center Collar</option>
+                      <option value="right_chest" data-i18n="broochPlacementRightChest">Right Chest</option>
+                      <option value="left_shoulder" data-i18n="broochPlacementShoulder">Shoulder</option>
+                      <option value="waist_side" data-i18n="broochPlacementWaist">Waist Side</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBroochSize" data-i18n="accSize">Size</label>
+                    <div class="v3d-slider-wrap">
+                      <input type="range" id="v3dBroochSize" min="0.50" max="2.00" value="1.00" step="0.05" class="v3d-slider">
+                      <span id="v3dBroochSizeVal" class="v3d-slider-val">1.0×</span>
+                    </div>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBroochLength" data-i18n="broochTasselLength">Tassel Drop</label>
+                    <div class="v3d-slider-wrap">
+                      <input type="range" id="v3dBroochLength" min="0.00" max="1.00" value="0.35" step="0.05" class="v3d-slider">
+                      <span id="v3dBroochLengthVal" class="v3d-slider-val">35%</span>
+                    </div>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dBroochColor" data-i18n="broochGemColor">Gem / Tassel</label>
+                    <div class="v3d-acc-color-pick">
+                      <input type="color" id="v3dBroochColor" value="#be123c" class="v3d-stitch-color-input" aria-label="Brooch gem and tassel color">
+                      <button type="button" id="v3dBroochColorReset" class="v3d-mini-btn" data-i18n="accAuto">Auto</button>
+                    </div>
+                  </div>
+                  <div class="v3d-acc-swatches" data-acc-swatch="brooch"></div>
                 </div>
               </div>
             </div>

@@ -1216,6 +1216,64 @@ button { cursor: pointer; border: none; background: none; }
 }
 
 /* 3D Sewing Stitches & Per-Part Thread Panel */
+.v3d-panel-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.v3d-acc-panel {
+  width: 336px;
+}
+.v3d-acc-panel .v3d-sub-controls.disabled {
+  display: none;
+}
+.v3d-mini-btn {
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-2);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .14s ease;
+}
+.v3d-mini-btn:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.v3d-mini-btn.active {
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.v3d-acc-color-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.v3d-acc-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-top: 2px;
+}
+.v3d-acc-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(15, 23, 42, 0.22);
+  cursor: pointer;
+  padding: 0;
+  transition: transform .12s ease, border-color .12s ease;
+}
+.v3d-acc-swatch:hover {
+  transform: scale(1.12);
+}
+.v3d-acc-swatch.active {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 30%, transparent);
+}
 .v3d-stitch-panel {
   width: 332px;
   max-height: calc(100% - 104px);

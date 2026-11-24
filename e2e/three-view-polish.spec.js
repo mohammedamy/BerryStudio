@@ -541,3 +541,116 @@ test('3D Human Motion & Zero-Overlap Guarantee: grounded stride, welded seams, b
   expect(errors).toEqual([]);
 });
 
+test('3D Accessories Customization: live shape, length, size, and color controls across all 5 trim types', async ({ page }, testInfo) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await bootApp(page, testInfo);
+  await open3DReady(page);
+
+  await page.click('#v3dAccBtn');
+  await expect(page.locator('#v3dAccPanel')).toBeVisible();
+
+  const setRange = async (sel, val) => {
+    await page.locator(sel).evaluate((el, v) => {
+      el.value = v;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, String(val));
+  };
+
+  // Enable and customize Buttons (diamond, size 1.7, length 0.90, custom hex emerald #047857)
+  await page.check('#v3dBtnToggle');
+  await page.selectOption('#v3dBtnShape', 'diamond');
+  await setRange('#v3dBtnLength', '0.90');
+  await setRange('#v3dBtnSize', '1.70');
+  await page.locator('#v3dBtnColor').fill('#047857');
+  await page.locator('#v3dBtnColor').dispatchEvent('input');
+
+  const btnMeasureA = await page.evaluate(() => {
+    const acc = window.View3D.getAccessories();
+    const refs = window.View3D.getSceneDebugRefs();
+    const accGroup = refs.garmentGroup.getObjectByName('accessories');
+    const btns = accGroup.children.filter((c) => c.userData.parentPart === 'bodice' || c.userData.parentPart === 'skirt');
+    let minY = Infinity, maxY = -Infinity;
+    btns.forEach((b) => { minY = Math.min(minY, b.position.y); maxY = Math.max(maxY, b.position.y); });
+    return { buttons: acc.buttons, spanY: maxY - minY, childCount: btns.length };
+  });
+  expect(btnMeasureA.buttons.enabled).toBe(true);
+  expect(btnMeasureA.buttons.shape).toBe('diamond');
+  expect(btnMeasureA.buttons.size).toBeCloseTo(1.7, 1);
+  expect(btnMeasureA.buttons.lengthFrac).toBeCloseTo(0.9, 1);
+  expect(btnMeasureA.buttons.color).toBe('#047857');
+  expect(btnMeasureA.childCount).toBe(6);
+
+  // Customize Belt (double_ring, size 1.5, length 0.90, custom crimson #be123c + silver buckle #e5e7eb)
+  await page.check('#v3dBeltToggle');
+  await page.selectOption('#v3dBeltShape', 'double_ring');
+  await setRange('#v3dBeltSize', '1.50');
+  await setRange('#v3dBeltLength', '0.90');
+  await page.locator('#v3dBeltColor').fill('#be123c');
+  await page.locator('#v3dBeltColor').dispatchEvent('input');
+  await page.locator('#v3dBeltBuckleColor').fill('#e5e7eb');
+  await page.locator('#v3dBeltBuckleColor').dispatchEvent('input');
+
+  // Enable Zipper, Bow & Brooch with distinct shapes, sizes, lengths & colors
+  await page.check('#v3dZipToggle');
+  await page.selectOption('#v3dZipShape', 'ring_pull');
+  await page.selectOption('#v3dZipPlacement', 'biker_asymmetric');
+  await setRange('#v3dZipSize', '1.45');
+  await setRange('#v3dZipLength', '0.80');
+
+  await page.check('#v3dBowToggle');
+  await page.selectOption('#v3dBowShape', 'butterfly_double');
+  await page.selectOption('#v3dBowPlacement', 'neck_tie');
+  await setRange('#v3dBowSize', '1.60');
+  await setRange('#v3dBowLength', '0.85');
+  await page.locator('#v3dBowColor').fill('#1e3a8a');
+  await page.locator('#v3dBowColor').dispatchEvent('input');
+
+  await page.check('#v3dBroochToggle');
+  await page.selectOption('#v3dBroochShape', 'floral_star');
+  await setRange('#v3dBroochSize', '1.40');
+  await setRange('#v3dBroochLength', '0.90');
+  await page.locator('#v3dBroochColor').fill('#be123c');
+  await page.locator('#v3dBroochColor').dispatchEvent('input');
+
+  const fullAcc = await page.evaluate(() => {
+    const acc = window.View3D.getAccessories();
+    const refs = window.View3D.getSceneDebugRefs();
+    const accGroup = refs.garmentGroup.getObjectByName('accessories');
+    return {
+      acc,
+      childrenTotal: accGroup ? accGroup.children.length : 0,
+      beltChildCount: accGroup?.children.find((c) => c.userData.parentPart === 'waist')?.children.length || 0,
+    };
+  });
+
+  expect(fullAcc.acc.belt.shape).toBe('double_ring');
+  expect(fullAcc.acc.belt.size).toBeCloseTo(1.5, 1);
+  expect(fullAcc.acc.belt.length).toBeCloseTo(0.9, 1);
+  expect(fullAcc.acc.belt.color).toBe('#be123c');
+  expect(fullAcc.acc.belt.buckleColor).toBe('#e5e7eb');
+  expect(fullAcc.acc.zipper.shape).toBe('ring_pull');
+  expect(fullAcc.acc.bow.shape).toBe('butterfly_double');
+  expect(fullAcc.acc.bow.color).toBe('#1e3a8a');
+  expect(fullAcc.acc.brooch.shape).toBe('floral_star');
+  expect(fullAcc.acc.brooch.color).toBe('#be123c');
+  expect(fullAcc.beltChildCount).toBeGreaterThanOrEqual(5);
+  expect(fullAcc.childrenTotal).toBeGreaterThanOrEqual(10);
+
+  // Shortening button placket must shrink its vertical 3D span
+  await setRange('#v3dBtnLength', '0.25');
+  const btnSpanShort = await page.evaluate(() => {
+    const refs = window.View3D.getSceneDebugRefs();
+    const accGroup = refs.garmentGroup.getObjectByName('accessories');
+    const btns = accGroup.children.filter((c) => c.userData.accType === 'buttons');
+    let minY = Infinity, maxY = -Infinity;
+    btns.forEach((b) => { minY = Math.min(minY, b.position.y); maxY = Math.max(maxY, b.position.y); });
+    return maxY - minY;
+  });
+  expect(btnSpanShort).toBeLessThan(btnMeasureA.spanY - 0.08);
+
+  expect(errors).toEqual([]);
+});
+

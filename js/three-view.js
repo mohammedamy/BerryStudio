@@ -58,12 +58,159 @@ export const View3D = (() => {
   let outerFrontMesh = null, outerBackMesh = null;
   let skirtFrontMesh = null, skirtBackMesh = null;
   let accessoriesGroup = null;
-  let accessoriesState = {
-    buttons: { enabled: false, style: "gold", placement: "front_placket", count: 6 },
-    zipper: { enabled: false, style: "silver", placement: "center_front", openPct: 0 },
-    belt: { enabled: false, style: "leather_gold", width: "medium", color: null },
-    bow: { enabled: false, color: "#f8fafc", placement: "center_chest" },
-  };
+  function createDefaultAccessoriesState() {
+    return {
+      buttons: {
+        enabled: false,
+        shape: "classic_round",
+        style: "gold",
+        placement: "front_placket",
+        count: 6,
+        lengthFrac: 0.5,
+        size: 1.0,
+        color: null,
+      },
+      zipper: {
+        enabled: false,
+        shape: "classic_tab",
+        style: "silver",
+        placement: "center_front",
+        lengthFrac: 0.5,
+        size: 1.0,
+        openPct: 0,
+        color: null,
+        tapeColor: null,
+      },
+      belt: {
+        enabled: false,
+        shape: null,
+        style: "leather_gold",
+        width: "medium",
+        size: null,
+        length: 0.35,
+        color: null,
+        buckleColor: null,
+      },
+      bow: {
+        enabled: false,
+        shape: "classic_ribbon",
+        style: "satin",
+        placement: "center_chest",
+        size: null,
+        length: null,
+        color: "#f8fafc",
+      },
+      brooch: {
+        enabled: false,
+        shape: "floral_star",
+        style: "gold",
+        placement: "left_chest",
+        size: 1.0,
+        length: 0.35,
+        color: null,
+      },
+    };
+  }
+  function normAccHex(v) {
+    if (v == null || v === "") return null;
+    if (typeof v === "number" && Number.isFinite(v)) {
+      return "#" + (v >>> 0 & 0xffffff).toString(16).padStart(6, "0");
+    }
+    const s = String(v).trim();
+    if (/^#[0-9a-f]{6}$/i.test(s)) return s.toLowerCase();
+    if (/^#[0-9a-f]{3}$/i.test(s)) {
+      return ("#" + s[1] + s[1] + s[2] + s[2] + s[3] + s[3]).toLowerCase();
+    }
+    return null;
+  }
+  function normalizeAccessoriesState(base, cfg, isLookbookReset = false) {
+    const out = base ? JSON.parse(JSON.stringify(base)) : createDefaultAccessoriesState();
+    const def = createDefaultAccessoriesState();
+    if (!cfg || typeof cfg !== "object") return out;
+
+    if (cfg.buttons) {
+      const b = { ...out.buttons, ...cfg.buttons };
+      b.enabled = Boolean(b.enabled);
+      b.shape = String(b.shape || def.buttons.shape);
+      b.style = String(b.style || def.buttons.style);
+      b.placement = String(b.placement || def.buttons.placement);
+      b.count = Math.max(1, Math.min(14, Math.round(Number(b.count) || def.buttons.count)));
+      b.lengthFrac = clamp(Number.isFinite(Number(b.lengthFrac)) ? Number(b.lengthFrac) : def.buttons.lengthFrac, 0.2, 1.0);
+      b.size = clamp(Number.isFinite(Number(b.size)) ? Number(b.size) : def.buttons.size, 0.5, 2.0);
+      if ("color" in cfg.buttons) b.color = normAccHex(cfg.buttons.color);
+      else if (isLookbookReset) b.color = null;
+      out.buttons = b;
+    }
+    if (cfg.zipper) {
+      const z = { ...out.zipper, ...cfg.zipper };
+      z.enabled = Boolean(z.enabled);
+      z.shape = String(z.shape || def.zipper.shape);
+      z.style = String(z.style || def.zipper.style);
+      z.placement = String(z.placement || def.zipper.placement);
+      z.lengthFrac = clamp(Number.isFinite(Number(z.lengthFrac)) ? Number(z.lengthFrac) : def.zipper.lengthFrac, 0.2, 1.0);
+      z.size = clamp(Number.isFinite(Number(z.size)) ? Number(z.size) : def.zipper.size, 0.6, 1.8);
+      z.openPct = clamp(Number.isFinite(Number(z.openPct)) ? Number(z.openPct) : 0, 0, 0.75);
+      if ("color" in cfg.zipper) z.color = normAccHex(cfg.zipper.color);
+      else if (isLookbookReset) z.color = null;
+      if ("tapeColor" in cfg.zipper) z.tapeColor = normAccHex(cfg.zipper.tapeColor);
+      else if (isLookbookReset) z.tapeColor = null;
+      out.zipper = z;
+    }
+    if (cfg.belt) {
+      const bl = { ...out.belt, ...cfg.belt };
+      bl.enabled = Boolean(bl.enabled);
+      bl.style = String(bl.style || def.belt.style);
+      if ("shape" in cfg.belt) bl.shape = cfg.belt.shape ? String(cfg.belt.shape) : null;
+      else if (isLookbookReset) bl.shape = null;
+      if ("size" in cfg.belt && cfg.belt.size != null && Number.isFinite(Number(cfg.belt.size))) {
+        bl.size = clamp(Number(cfg.belt.size), 0.5, 1.85);
+        bl.width = bl.size <= 0.8 ? "slim" : (bl.size >= 1.3 ? "wide" : "medium");
+      } else if ("width" in cfg.belt) {
+        bl.width = String(cfg.belt.width || "medium");
+        if (!("size" in cfg.belt)) bl.size = null;
+      }
+      bl.length = clamp(Number.isFinite(Number(bl.length)) ? Number(bl.length) : def.belt.length, 0.0, 1.0);
+      if ("color" in cfg.belt) bl.color = normAccHex(cfg.belt.color);
+      else if (isLookbookReset) bl.color = null;
+      if ("buckleColor" in cfg.belt) bl.buckleColor = normAccHex(cfg.belt.buckleColor);
+      else if (isLookbookReset) bl.buckleColor = null;
+      out.belt = bl;
+    }
+    if (cfg.bow) {
+      const bw = { ...out.bow, ...cfg.bow };
+      bw.enabled = Boolean(bw.enabled);
+      bw.shape = String(bw.shape || def.bow.shape);
+      bw.style = String(bw.style || def.bow.style);
+      bw.placement = String(bw.placement || def.bow.placement);
+      if ("size" in cfg.bow) {
+        bw.size = (cfg.bow.size != null && Number.isFinite(Number(cfg.bow.size)))
+          ? clamp(Number(cfg.bow.size), 0.4, 2.2)
+          : null;
+      } else if (isLookbookReset) bw.size = null;
+      if ("length" in cfg.bow) {
+        bw.length = (cfg.bow.length != null && Number.isFinite(Number(cfg.bow.length)))
+          ? clamp(Number(cfg.bow.length), 0.0, 1.0)
+          : null;
+      } else if (isLookbookReset) bw.length = null;
+      if ("color" in cfg.bow) bw.color = normAccHex(cfg.bow.color) || "#f8fafc";
+      else if (isLookbookReset) bw.color = "#f8fafc";
+      out.bow = bw;
+    }
+    if (cfg.brooch) {
+      const br = { ...out.brooch, ...cfg.brooch };
+      br.enabled = Boolean(br.enabled);
+      br.shape = String(br.shape || def.brooch.shape);
+      br.style = String(br.style || def.brooch.style);
+      br.placement = String(br.placement || def.brooch.placement);
+      br.size = clamp(Number.isFinite(Number(br.size)) ? Number(br.size) : def.brooch.size, 0.5, 2.0);
+      br.length = clamp(Number.isFinite(Number(br.length)) ? Number(br.length) : def.brooch.length, 0.0, 1.0);
+      if ("color" in cfg.brooch) br.color = normAccHex(cfg.brooch.color);
+      else if (isLookbookReset) br.color = null;
+      out.brooch = br;
+    }
+    return out;
+  }
+  let accessoriesState = createDefaultAccessoriesState();
   let stitchesGroup = null;
   let stitchState = createDefaultStitchConfig();
   let stitchMaterialsByPart = {};
@@ -4896,29 +5043,63 @@ export const View3D = (() => {
     obj.matrixAutoUpdate = false;
   }
 
+  function applyAccBoneMatrixToLocal(matOut, weightsIdx, weightsVal) {
+    const te = matOut.elements;
+    for (let k = 0; k < 16; k++) te[k] = 0;
+    for (let slot = 0; slot < 4; slot++) {
+      const w = weightsVal[slot];
+      if (w <= 1e-6) continue;
+      const me = _dynMats[weightsIdx[slot]].elements;
+      for (let k = 0; k < 16; k++) te[k] += w * me[k];
+    }
+    // Orthonormalize upper-left 3x3 basis so rigid buttons/buckles never shear
+    const xLen = Math.hypot(te[0], te[1], te[2]) || 1;
+    te[0] /= xLen; te[1] /= xLen; te[2] /= xLen;
+    const yLen = Math.hypot(te[4], te[5], te[6]) || 1;
+    te[4] /= yLen; te[5] /= yLen; te[6] /= yLen;
+    const zLen = Math.hypot(te[8], te[9], te[10]) || 1;
+    te[8] /= zLen; te[9] /= zLen; te[10] /= zLen;
+    te[15] = 1;
+  }
+
   function updateAccessoriesPose() {
     if (!accessoriesGroup || !_dynMats || !activeMannequin || !activeMannequin.skeleton) return;
     for (const child of accessoriesGroup.children) {
-      if (!child.visible || !child.userData.bindMatrix || !child.userData.skinIdx) continue;
-      const bi = child.userData.skinIdx;
-      const bw = child.userData.skinWgt;
-      const te = _tmpAccMat.elements;
-      for (let k = 0; k < 16; k++) te[k] = 0;
-      for (let slot = 0; slot < 4; slot++) {
-        const w = bw[slot];
-        if (w <= 1e-6) continue;
-        const me = _dynMats[bi[slot]].elements;
-        for (let k = 0; k < 16; k++) te[k] += w * me[k];
+      if (!child.visible) continue;
+      if (child.userData.accSkinnedRoot) {
+        child.matrix.identity();
+        child.matrixWorldNeedsUpdate = true;
+        for (const sub of child.children) {
+          if (sub.userData?.accVertSkin && sub.geometry?.attributes?.position) {
+            const sk = sub.userData.accVertSkin;
+            const pos = sub.geometry.attributes.position;
+            const orig = sk.origPos;
+            const sIdx = sk.skinIdx;
+            const sWgt = sk.skinWgt;
+            for (let i = 0; i < pos.count; i++) {
+              const bx = orig[i * 3], by = orig[i * 3 + 1], bz = orig[i * 3 + 2];
+              let rx = 0, ry = 0, rz = 0;
+              for (let s = 0; s < 4; s++) {
+                const w = sWgt[i * 4 + s];
+                if (w <= 1e-6) continue;
+                const me = _dynMats[sIdx[i * 4 + s]].elements;
+                rx += w * (me[0] * bx + me[4] * by + me[8] * bz + me[12]);
+                ry += w * (me[1] * bx + me[5] * by + me[9] * bz + me[13]);
+                rz += w * (me[2] * bx + me[6] * by + me[10] * bz + me[14]);
+              }
+              pos.setXYZ(i, rx, ry, rz);
+            }
+            pos.needsUpdate = true;
+          } else if (sub.userData?.bindMatrix && sub.userData?.skinIdx) {
+            applyAccBoneMatrixToLocal(_tmpAccMat, sub.userData.skinIdx, sub.userData.skinWgt);
+            sub.matrix.multiplyMatrices(_tmpAccMat, sub.userData.bindMatrix);
+            sub.matrixWorldNeedsUpdate = true;
+          }
+        }
+        continue;
       }
-      // Orthonormalize upper-left 3x3 basis so rigid metal buttons/buckles never shear
-      const xLen = Math.hypot(te[0], te[1], te[2]) || 1;
-      te[0] /= xLen; te[1] /= xLen; te[2] /= xLen;
-      const yLen = Math.hypot(te[4], te[5], te[6]) || 1;
-      te[4] /= yLen; te[5] /= yLen; te[6] /= yLen;
-      const zLen = Math.hypot(te[8], te[9], te[10]) || 1;
-      te[8] /= zLen; te[9] /= zLen; te[10] /= zLen;
-      te[15] = 1;
-
+      if (!child.userData.bindMatrix || !child.userData.skinIdx) continue;
+      applyAccBoneMatrixToLocal(_tmpAccMat, child.userData.skinIdx, child.userData.skinWgt);
       child.matrix.multiplyMatrices(_tmpAccMat, child.userData.bindMatrix);
       child.matrixWorldNeedsUpdate = true;
     }
@@ -5290,102 +5471,308 @@ export const View3D = (() => {
     }
   }
 
-  // ---------- Accessories & Trims: Buttons, Zippers & Belts ----------
-  function createButtonMesh(size, style, baseColor) {
-    const btnG = new THREE.Group();
-    let mat;
-    if (isSoftwareGL) {
-      const colMap = {
-        gold: [0xd4af37, 85],
-        silver: [0xe5e7eb, 90],
-        horn: [0x362112, 48],
-        tortoise: [0x6b3a1b, 65],
-        pearl: [0xf5f3ea, 62],
-        matte_black: [0x18181b, 14],
-        wood: [0x7c4f27, 20],
-      };
-      const [c, sh] = colMap[style] || [baseColor || 0x4f46e5, 32];
-      mat = new THREE.MeshPhongMaterial({ color: c, shininess: sh, specular: 0x666666 });
-    } else if (style === "gold") {
-      mat = new THREE.MeshPhysicalMaterial({ color: 0xd4af37, metalness: 0.94, roughness: 0.22, clearcoat: 0.5 });
-    } else if (style === "silver") {
-      mat = new THREE.MeshPhysicalMaterial({ color: 0xe5e7eb, metalness: 0.95, roughness: 0.18, clearcoat: 0.6 });
-    } else if (style === "horn") {
-      mat = new THREE.MeshPhysicalMaterial({ color: 0x362112, roughness: 0.42, clearcoat: 0.65 });
-    } else if (style === "tortoise") {
-      mat = new THREE.MeshPhysicalMaterial({ color: 0x6b3a1b, roughness: 0.34, clearcoat: 0.72 });
-    } else if (style === "pearl") {
-      mat = new THREE.MeshPhysicalMaterial({ color: 0xf5f3ea, roughness: 0.28, sheen: 0.95, sheenRoughness: 0.4 });
-    } else if (style === "matte_black") {
-      mat = new THREE.MeshPhysicalMaterial({ color: 0x18181b, roughness: 0.78, metalness: 0.08 });
-    } else if (style === "wood") {
-      mat = new THREE.MeshPhysicalMaterial({ color: 0x7c4f27, roughness: 0.68, metalness: 0.02 });
-    } else {
-      mat = new THREE.MeshPhysicalMaterial({ color: baseColor || 0x4f46e5, roughness: 0.5 });
+  // ---------- Accessories & Trims: Buttons, Zippers, Belts, Bows & Brooches ----------
+  function resolveGarmentHemY(d) {
+    const waistYY = d.hipY + d.span * 0.44;
+    let minGarmentY = waistYY - d.span * 0.14;
+    if (!garmentGroup) return Math.max(d.ankleY + 0.06, minGarmentY);
+    const meshes = [];
+    if (isPartCurrentlyShown("outer") && outerFrontMesh) meshes.push(outerFrontMesh);
+    if (isPartCurrentlyShown("skirt") && skirtFrontMesh) meshes.push(skirtFrontMesh);
+    if (isPartCurrentlyShown("bodice") && bodiceFrontMesh) meshes.push(bodiceFrontMesh);
+    for (const m of meshes) {
+      const rest = m.geometry?.userData?.restPos;
+      const pos = m.geometry?.attributes?.position?.array;
+      const arr = rest || pos;
+      if (!arr) continue;
+      for (let i = 1; i < arr.length; i += 3) {
+        if (arr[i] < minGarmentY) minGarmentY = arr[i];
+      }
     }
+    const minAnkleY = Math.max(0.06, (d.H || 1.68) * 0.055);
+    return Math.max(minAnkleY, Math.min(waistYY - 0.03, minGarmentY + 0.04));
+  }
 
-    const r = (size || 1.0) * 0.007;
-    const thick = r * 0.25;
+  function sampleGarmentSurfaceAbsZ(y, x, isFront, d, fallbackEase = 0.017) {
+    const phi = clamp(Math.atan2(x, Math.max(0.06, d.waistR || 0.12)), -1.25, 1.25);
+    const phiSample = isFront ? phi : (Math.PI - phi);
+    const [, zBody] = getBodySurfacePoint(y, phiSample, d, fallbackEase);
+    let bestAbsZ = Math.abs(zBody);
+    if (garmentGroup) {
+      const candidates = [];
+      if (isPartCurrentlyShown("outer")) candidates.push(isFront ? outerFrontMesh : outerBackMesh);
+      if (isPartCurrentlyShown("bodice")) candidates.push(isFront ? bodiceFrontMesh : bodiceBackMesh);
+      if (isPartCurrentlyShown("skirt")) candidates.push(isFront ? skirtFrontMesh : skirtBackMesh);
+      if (isPartCurrentlyShown("trousers")) {
+        garmentGroup.traverse((o) => {
+          if (o.isMesh && o.name === "trousers") candidates.push(o);
+        });
+      }
+      for (const m of candidates) {
+        if (!m || !m.geometry) continue;
+        const arr = m.geometry.userData?.restPos || m.geometry.attributes?.position?.array;
+        if (!arr) continue;
+        for (let i = 0; i < arr.length; i += 3) {
+          const vx = arr[i], vy = arr[i + 1], vz = arr[i + 2];
+          if (isFront ? vz < -0.01 : vz > 0.01) continue;
+          if (Math.abs(vy - y) <= 0.042 && Math.abs(vx - x) <= 0.048) {
+            const az = Math.abs(vz);
+            if (az > bestAbsZ) bestAbsZ = az;
+          }
+        }
+      }
+    }
+    return bestAbsZ;
+  }
 
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(r * 0.88, r * 0.16, 12, 24), mat);
-    rim.castShadow = true;
-    btnG.add(rim);
+  function createAccessorySkinRecord(posAttr, d) {
+    const count = posAttr.count;
+    const origPos = new Float32Array(posAttr.array);
+    const skinIdx = new Uint8Array(count * 4);
+    const skinWgt = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      const x = posAttr.getX(i);
+      const y = posAttr.getY(i);
+      const [bi, bw] = packSkinWeights(torsoGarmentWeights(y, x, d));
+      for (let s = 0; s < 4; s++) {
+        skinIdx[i * 4 + s] = bi[s];
+        skinWgt[i * 4 + s] = bw[s];
+      }
+    }
+    return { origPos, skinIdx, skinWgt };
+  }
 
-    const faceGeom = new THREE.CylinderGeometry(r * 0.85, r * 0.85, thick, 24);
-    faceGeom.rotateX(Math.PI / 2);
-    const face = new THREE.Mesh(faceGeom, mat);
-    face.position.z = -thick * 0.15;
-    face.castShadow = true;
-    btnG.add(face);
-
-    const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
-    const holeR = r * 0.12;
-    const holeOffset = r * 0.32;
-    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([hx, hy]) => {
-      const hole = new THREE.Mesh(new THREE.CircleGeometry(holeR, 10), holeMat);
-      hole.position.set(hx * holeOffset, hy * holeOffset, thick * 0.38);
-      btnG.add(hole);
+  function createAccessoryFinishMaterial(style, customColor, baseColor = 0x4f46e5, kind = "hardware") {
+    const presets = {
+      gold: { color: 0xd4af37, metal: 0.94, rough: 0.20, clear: 0.55, sheen: 0.0, shin: 88 },
+      silver: { color: 0xe5e7eb, metal: 0.95, rough: 0.16, clear: 0.62, sheen: 0.0, shin: 92 },
+      rose_gold: { color: 0xe2a898, metal: 0.92, rough: 0.22, clear: 0.52, sheen: 0.0, shin: 85 },
+      brass: { color: 0xc8963e, metal: 0.88, rough: 0.26, clear: 0.35, sheen: 0.0, shin: 78 },
+      antique_bronze: { color: 0x8b673c, metal: 0.80, rough: 0.36, clear: 0.20, sheen: 0.0, shin: 65 },
+      gunmetal: { color: 0x26262b, metal: 0.85, rough: 0.34, clear: 0.25, sheen: 0.0, shin: 72 },
+      horn: { color: 0x3b2414, metal: 0.04, rough: 0.38, clear: 0.65, sheen: 0.0, shin: 50 },
+      tortoise: { color: 0x6b3a1b, metal: 0.04, rough: 0.32, clear: 0.72, sheen: 0.0, shin: 65 },
+      pearl: { color: 0xf6f3ea, metal: 0.02, rough: 0.24, clear: 0.45, sheen: 0.95, shin: 68 },
+      pearl_crystal: { color: 0xe5e7eb, metal: 0.90, rough: 0.18, clear: 0.70, sheen: 0.25, shin: 90 },
+      matte_black: { color: 0x18181b, metal: 0.08, rough: 0.78, clear: 0.0, sheen: 0.0, shin: 14 },
+      wood: { color: 0x7c4f27, metal: 0.02, rough: 0.68, clear: 0.0, sheen: 0.0, shin: 22 },
+      matching: { color: baseColor || 0x4f46e5, metal: 0.04, rough: 0.48, clear: 0.15, sheen: 0.35, shin: 36 },
+    };
+    const p = presets[style] || presets.matching;
+    const colHex = customColor != null ? customColor : p.color;
+    if (isSoftwareGL) {
+      return new THREE.MeshPhongMaterial({
+        color: colHex,
+        shininess: p.shin,
+        specular: p.metal > 0.5 ? 0x777777 : 0x333333,
+        side: kind === "double" ? THREE.DoubleSide : THREE.FrontSide,
+      });
+    }
+    return new THREE.MeshPhysicalMaterial({
+      color: colHex,
+      metalness: p.metal,
+      roughness: p.rough,
+      clearcoat: p.clear,
+      sheen: p.sheen,
+      sheenRoughness: 0.38,
+      side: kind === "double" ? THREE.DoubleSide : THREE.FrontSide,
     });
+  }
 
-    const threadMat = new THREE.MeshBasicMaterial({ color: style === "matte_black" ? 0x666666 : 0xdddddd });
-    const thread1 = new THREE.Mesh(new THREE.BoxGeometry(holeOffset * 2.1, r * 0.08, r * 0.06), threadMat);
-    thread1.position.z = thick * 0.40;
-    btnG.add(thread1);
-    const thread2 = new THREE.Mesh(new THREE.BoxGeometry(r * 0.08, holeOffset * 2.1, r * 0.06), threadMat);
-    thread2.position.z = thick * 0.40;
-    btnG.add(thread2);
+  function createButtonMesh(size, style, baseColor, shape = "classic_round", customColor = null) {
+    const btnG = new THREE.Group();
+    const effStyle = customColor && (style === "gold" || style === "silver" || style === "rose_gold")
+      ? style
+      : (style || "gold");
+    const resolvedCustom = customColor != null ? new THREE.Color(customColor).getHex() : null;
+    const mat = createAccessoryFinishMaterial(effStyle, resolvedCustom, baseColor);
+
+    const sc = clamp(Number(size) || 1.0, 0.5, 2.0);
+    const r = sc * 0.0072;
+    const thick = r * 0.28;
+    const threadColor = (effStyle === "matte_black" || (resolvedCustom != null && resolvedCustom < 0x333333)) ? 0x888888 : 0xdddddd;
+
+    if (shape === "domed_shank") {
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(r * 0.92, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.58), mat);
+      cap.rotation.x = Math.PI * 0.5;
+      cap.scale.set(1, 0.68, 1);
+      cap.castShadow = true;
+      btnG.add(cap);
+      const collar = new THREE.Mesh(new THREE.TorusGeometry(r * 0.88, r * 0.12, 10, 22), mat);
+      collar.position.z = thick * 0.08;
+      btnG.add(collar);
+    } else if (shape === "square_bevel") {
+      const hw = r * 0.86;
+      const cr = r * 0.18;
+      const sq = new THREE.Shape();
+      sq.moveTo(-hw + cr, -hw);
+      sq.lineTo(hw - cr, -hw);
+      sq.quadraticCurveTo(hw, -hw, hw, -hw + cr);
+      sq.lineTo(hw, hw - cr);
+      sq.quadraticCurveTo(hw, hw, hw - cr, hw);
+      sq.lineTo(-hw + cr, hw);
+      sq.quadraticCurveTo(-hw, hw, -hw, hw - cr);
+      sq.lineTo(-hw, -hw + cr);
+      sq.quadraticCurveTo(-hw, -hw, -hw + cr, -hw);
+      const sqGeo = new THREE.ExtrudeGeometry(sq, {
+        depth: thick,
+        bevelEnabled: true,
+        bevelThickness: thick * 0.35,
+        bevelSize: r * 0.10,
+        bevelSegments: 2,
+      });
+      sqGeo.center();
+      const sqMesh = new THREE.Mesh(sqGeo, mat);
+      sqMesh.castShadow = true;
+      btnG.add(sqMesh);
+      const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
+      const holeOffset = r * 0.30;
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([hx, hy]) => {
+        const hole = new THREE.Mesh(new THREE.CircleGeometry(r * 0.10, 8), holeMat);
+        hole.position.set(hx * holeOffset, hy * holeOffset, thick * 0.88);
+        btnG.add(hole);
+      });
+      const tMat = new THREE.MeshBasicMaterial({ color: threadColor });
+      const t1 = new THREE.Mesh(new THREE.BoxGeometry(holeOffset * 2.0, r * 0.08, r * 0.05), tMat);
+      t1.position.z = thick * 0.90;
+      btnG.add(t1);
+    } else if (shape === "diamond") {
+      const dm = new THREE.Shape();
+      dm.moveTo(0, r * 1.12);
+      dm.lineTo(r * 0.88, 0);
+      dm.lineTo(0, -r * 1.12);
+      dm.lineTo(-r * 0.88, 0);
+      dm.closePath();
+      const bezelGeo = new THREE.ExtrudeGeometry(dm, {
+        depth: thick * 0.9,
+        bevelEnabled: true,
+        bevelThickness: thick * 0.38,
+        bevelSize: r * 0.12,
+        bevelSegments: 2,
+      });
+      bezelGeo.center();
+      const bezel = new THREE.Mesh(bezelGeo, mat);
+      bezel.castShadow = true;
+      btnG.add(bezel);
+      const gemMat = createAccessoryFinishMaterial(
+        resolvedCustom != null ? "pearl" : "pearl_crystal",
+        resolvedCustom != null ? resolvedCustom : 0xf8fafc,
+        baseColor
+      );
+      const gem = new THREE.Mesh(new THREE.OctahedronGeometry(r * 0.56, 0), gemMat);
+      gem.scale.set(0.85, 1.05, 0.52);
+      gem.position.z = thick * 0.95;
+      btnG.add(gem);
+    } else if (shape === "toggle_bar") {
+      const toggleMat = createAccessoryFinishMaterial(
+        style === "gold" || style === "silver" ? style : (style || "horn"),
+        resolvedCustom,
+        baseColor
+      );
+      const barGeo = new THREE.CylinderGeometry(r * 0.34, r * 0.28, r * 2.9, 14);
+      barGeo.rotateZ(Math.PI * 0.5);
+      const bar = new THREE.Mesh(barGeo, toggleMat);
+      bar.castShadow = true;
+      btnG.add(bar);
+      const tipCapGeo = new THREE.SphereGeometry(r * 0.34, 10, 10);
+      [-1, 1].forEach((s) => {
+        const cap = new THREE.Mesh(tipCapGeo, toggleMat);
+        cap.position.set(s * r * 1.45, 0, 0);
+        cap.scale.set(0.75, s > 0 ? 1 : 0.82, 1);
+        btnG.add(cap);
+      });
+      const cordMat = createAccessoryFinishMaterial("matte_black", 0x1e293b, baseColor);
+      const loop = new THREE.Mesh(new THREE.TorusGeometry(r * 0.48, r * 0.09, 8, 18), cordMat);
+      loop.rotation.y = Math.PI * 0.5;
+      loop.position.set(0, 0, -r * 0.18);
+      btnG.add(loop);
+    } else if (shape === "covered_flor") {
+      const petalMat = createAccessoryFinishMaterial("matching", resolvedCustom, baseColor);
+      for (let p = 0; p < 6; p++) {
+        const ang = (p / 6) * Math.PI * 2;
+        const petal = new THREE.Mesh(new THREE.SphereGeometry(r * 0.44, 12, 10), petalMat);
+        petal.scale.set(1.0, 1.0, 0.42);
+        petal.position.set(Math.cos(ang) * r * 0.56, Math.sin(ang) * r * 0.56, 0);
+        petal.castShadow = true;
+        btnG.add(petal);
+      }
+      const centerPearl = new THREE.Mesh(
+        new THREE.SphereGeometry(r * 0.36, 12, 10),
+        createAccessoryFinishMaterial(style === "matte_black" ? "matte_black" : "pearl", null, baseColor)
+      );
+      centerPearl.scale.set(1, 1, 0.72);
+      centerPearl.position.z = thick * 0.65;
+      btnG.add(centerPearl);
+    } else {
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(r * 0.88, r * 0.16, 12, 24), mat);
+      rim.castShadow = true;
+      btnG.add(rim);
+
+      const faceGeom = new THREE.CylinderGeometry(r * 0.85, r * 0.85, thick, 24);
+      faceGeom.rotateX(Math.PI / 2);
+      const face = new THREE.Mesh(faceGeom, mat);
+      face.position.z = -thick * 0.15;
+      face.castShadow = true;
+      btnG.add(face);
+
+      const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
+      const holeR = r * 0.12;
+      const holeOffset = r * 0.32;
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([hx, hy]) => {
+        const hole = new THREE.Mesh(new THREE.CircleGeometry(holeR, 10), holeMat);
+        hole.position.set(hx * holeOffset, hy * holeOffset, thick * 0.38);
+        btnG.add(hole);
+      });
+
+      const threadMat = new THREE.MeshBasicMaterial({ color: threadColor });
+      const thread1 = new THREE.Mesh(new THREE.BoxGeometry(holeOffset * 2.1, r * 0.08, r * 0.06), threadMat);
+      thread1.position.z = thick * 0.40;
+      btnG.add(thread1);
+      const thread2 = new THREE.Mesh(new THREE.BoxGeometry(r * 0.08, holeOffset * 2.1, r * 0.06), threadMat);
+      thread2.position.z = thick * 0.40;
+      btnG.add(thread2);
+    }
 
     return btnG;
   }
 
-  function createZipperMesh(startY, endY, radiusOrZFn, style, openPct = 0) {
+  function createZipperMesh(startY, endY, radiusOrZFn, style, openPct = 0, opts = {}) {
     const zipG = new THREE.Group();
     const getZ = typeof radiusOrZFn === "function" ? radiusOrZFn : () => radiusOrZFn;
-    let teethMat;
-    if (isSoftwareGL) {
-      const zCol = style === "silver" ? 0xe0e0e0 : (style === "brass" ? 0xc8963e : (style === "gunmetal" ? 0x222226 : 0x888888));
-      teethMat = new THREE.MeshPhongMaterial({ color: zCol, shininess: 78, specular: 0x777777 });
-    } else if (style === "silver") {
-      teethMat = new THREE.MeshPhysicalMaterial({ color: 0xe0e0e0, metalness: 0.95, roughness: 0.2 });
-    } else if (style === "brass") {
-      teethMat = new THREE.MeshPhysicalMaterial({ color: 0xc8963e, metalness: 0.88, roughness: 0.28 });
-    } else if (style === "gunmetal") {
-      teethMat = new THREE.MeshPhysicalMaterial({ color: 0x222226, metalness: 0.85, roughness: 0.35 });
-    } else {
-      teethMat = new THREE.MeshPhysicalMaterial({ color: 0x888888, metalness: 0.7, roughness: 0.3 });
-    }
-    const tapeMat = isSoftwareGL
-      ? new THREE.MeshPhongMaterial({ color: 0x1f2937, shininess: 10, side: THREE.DoubleSide })
-      : new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.85, side: THREE.DoubleSide });
+    const shape = opts.shape || "classic_tab";
+    const sc = clamp(Number(opts.size) || 1.0, 0.6, 1.8);
+    const customCol = opts.customColor != null ? new THREE.Color(opts.customColor).getHex() : null;
+    const tapeCol = opts.tapeColor != null
+      ? new THREE.Color(opts.tapeColor).getHex()
+      : (shape === "invisible_seam" ? (opts.fabricCol ?? 0x1f2937) : 0x1f2937);
 
-    const len = Math.abs(startY - endY);
-    const TAPE_SEGS = 16;
+    const teethMat = createAccessoryFinishMaterial(style || "silver", customCol, 0x888888);
+    const tapeMat = isSoftwareGL
+      ? new THREE.MeshPhongMaterial({ color: tapeCol, shininess: 10, side: THREE.DoubleSide })
+      : new THREE.MeshStandardMaterial({ color: tapeCol, roughness: 0.85, side: THREE.DoubleSide });
+
+    const isInvisible = shape === "invisible_seam";
+    const isChunky = shape === "chunky_molded";
+    const isBack = Boolean(opts.isBack);
+    const zSign = isBack ? -1 : 1;
+    const xC = Number(opts.xCenter) || 0;
+    const tapeHalfW = (isInvisible ? 0.0045 : isChunky ? 0.016 : 0.012) * sc;
+    const toothLen = (isChunky ? 0.0055 : 0.004) * sc;
+    const toothThick = (isChunky ? 0.0034 : 0.002) * sc;
+    const toothW = (isChunky ? 0.011 : isInvisible ? 0.0026 : 0.0072) * sc;
+
+    const len = Math.max(0.05, Math.abs(startY - endY));
+    const TAPE_SEGS = Math.max(16, Math.round(len / 0.018));
     const tPos = [];
     const tIdx = [];
     for (let r = 0; r <= TAPE_SEGS; r++) {
       const ty = startY + (endY - startY) * (r / TAPE_SEGS);
-      const z = getZ(ty) + 0.0045;
-      tPos.push(-0.012, ty, z, 0.012, ty, z);
+      const z = zSign * (getZ(ty) + 0.0045);
+      if (isBack) {
+        tPos.push(xC + tapeHalfW, ty, z, xC - tapeHalfW, ty, z);
+      } else {
+        tPos.push(xC - tapeHalfW, ty, z, xC + tapeHalfW, ty, z);
+      }
       if (r > 0) {
         const p = (r - 1) * 2;
         const c = r * 2;
@@ -5397,72 +5784,152 @@ export const View3D = (() => {
     tapeGeo.setIndex(tIdx);
     tapeGeo.computeVertexNormals();
     const tape = new THREE.Mesh(tapeGeo, tapeMat);
+    if (opts.skinD) {
+      tape.userData.accVertSkin = createAccessorySkinRecord(tapeGeo.attributes.position, opts.skinD);
+    }
     zipG.add(tape);
 
-    const teethCount = Math.max(12, Math.round(len / 0.008));
-    const closedLimitY = startY - (startY - endY) * Math.min(0.5, openPct);
+    const teethStep = isChunky ? 0.0095 * sc : 0.008 * Math.max(0.8, sc * 0.9);
+    const teethCount = Math.max(10, Math.round(len / teethStep));
+    const clampedOpen = clamp(Number(openPct) || 0, 0, 0.75);
+    const closedLimitY = startY - (startY - endY) * clampedOpen;
 
-    for (let i = 0; i < teethCount; i++) {
-      const frac = i / teethCount;
-      const ty = startY + (endY - startY) * frac;
-      const toothLen = 0.004;
-      const toothThick = 0.002;
-      const toothW = 0.007;
-      const tz = getZ(ty) + 0.0065;
+    const attachToothAnchor = (mesh, ty) => {
+      if (!opts.skinD) return;
+      const w = opts.weightsFn ? opts.weightsFn(ty) : torsoGarmentWeights(ty, xC, opts.skinD);
+      attachAccessoryRigAnchor(mesh, w);
+    };
 
-      if (ty < closedLimitY) {
-        const tooth = new THREE.Mesh(new THREE.BoxGeometry(toothW, toothLen, toothThick), teethMat);
-        tooth.position.set(0, ty, tz);
-        zipG.add(tooth);
-      } else {
-        const spread = (ty - closedLimitY) * 0.25;
-        const toothL = new THREE.Mesh(new THREE.BoxGeometry(toothW * 0.5, toothLen, toothThick), teethMat);
-        toothL.position.set(-spread - 0.003, ty, tz);
-        const toothR = new THREE.Mesh(new THREE.BoxGeometry(toothW * 0.5, toothLen, toothThick), teethMat);
-        toothR.position.set(spread + 0.003, ty, tz);
-        zipG.add(toothL, toothR);
+    if (isInvisible) {
+      // Subtle seam welt piping + concealed slim top slider only
+      const seamLineGeo = new THREE.CylinderGeometry(0.0011 * sc, 0.0011 * sc, len, 8);
+      const seamY = (startY + endY) * 0.5;
+      const seamLine = new THREE.Mesh(seamLineGeo, tapeMat);
+      seamLine.position.set(xC, seamY, zSign * (getZ(seamY) + 0.0052));
+      attachToothAnchor(seamLine, seamY);
+      zipG.add(seamLine);
+    } else {
+      for (let i = 0; i < teethCount; i++) {
+        const frac = i / teethCount;
+        const ty = startY + (endY - startY) * frac;
+        const tz = zSign * (getZ(ty) + 0.0065);
+
+        if (ty < closedLimitY) {
+          const tooth = new THREE.Mesh(new THREE.BoxGeometry(toothW, toothLen, toothThick), teethMat);
+          tooth.position.set(xC, ty, tz);
+          attachToothAnchor(tooth, ty);
+          zipG.add(tooth);
+        } else {
+          const spread = (ty - closedLimitY) * 0.25;
+          const toothL = new THREE.Mesh(new THREE.BoxGeometry(toothW * 0.5, toothLen, toothThick), teethMat);
+          toothL.position.set(xC - spread - 0.003 * sc, ty, tz);
+          attachToothAnchor(toothL, ty);
+          const toothR = new THREE.Mesh(new THREE.BoxGeometry(toothW * 0.5, toothLen, toothThick), teethMat);
+          toothR.position.set(xC + spread + 0.003 * sc, ty, tz);
+          attachToothAnchor(toothR, ty);
+          zipG.add(toothL, toothR);
+        }
       }
     }
 
     const sliderG = new THREE.Group();
-    const sliderBody = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.016, 0.008), teethMat);
+    const sScale = isInvisible ? sc * 0.65 : isChunky ? sc * 1.25 : sc;
+    const sliderBody = new THREE.Mesh(new THREE.BoxGeometry(0.013 * sScale, 0.015 * sScale, 0.0075 * sScale), teethMat);
     sliderG.add(sliderBody);
 
-    const pullTab = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.028, 0.002), teethMat);
-    pullTab.position.set(0, -0.018, 0.004);
-    pullTab.rotation.x = 0.15;
-    sliderG.add(pullTab);
+    if (shape === "ring_pull") {
+      const loopBridge = new THREE.Mesh(new THREE.BoxGeometry(0.005 * sScale, 0.006 * sScale, 0.004 * sScale), teethMat);
+      loopBridge.position.set(0, -0.007 * sScale, 0.004 * sScale);
+      sliderG.add(loopBridge);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0115 * sScale, 0.0022 * sScale, 10, 24), teethMat);
+      ring.position.set(0, -0.0185 * sScale, 0.0045 * sScale);
+      ring.rotation.x = 0.14;
+      sliderG.add(ring);
+    } else if (shape === "teardrop" || isInvisible) {
+      const td = new THREE.Shape();
+      const tw = 0.0052 * sScale;
+      const th = 0.022 * sScale;
+      td.moveTo(0, 0);
+      td.bezierCurveTo(tw, -th * 0.42, tw * 1.15, -th, 0, -th);
+      td.bezierCurveTo(-tw * 1.15, -th, -tw, -th * 0.42, 0, 0);
+      const tdGeo = new THREE.ExtrudeGeometry(td, { depth: 0.0022 * sScale, bevelEnabled: true, bevelThickness: 0.0008, bevelSize: 0.0008, bevelSegments: 1 });
+      const pullMesh = new THREE.Mesh(tdGeo, teethMat);
+      pullMesh.position.set(0, -0.004 * sScale, 0.003 * sScale);
+      pullMesh.rotation.x = 0.14;
+      sliderG.add(pullMesh);
+    } else {
+      const pullW = (isChunky ? 0.0105 : 0.008) * sScale;
+      const pullH = (isChunky ? 0.030 : 0.026) * sScale;
+      const pullTab = new THREE.Mesh(new THREE.BoxGeometry(pullW, pullH, 0.0024 * sScale), teethMat);
+      pullTab.position.set(0, -0.018 * sScale, 0.004 * sScale);
+      pullTab.rotation.x = 0.15;
+      sliderG.add(pullTab);
+    }
 
-    sliderG.position.set(0, closedLimitY, getZ(closedLimitY) + 0.0105);
+    sliderG.position.set(xC, closedLimitY, zSign * (getZ(closedLimitY) + (isInvisible ? 0.0082 : 0.0105)));
+    if (isBack) sliderG.rotation.y = Math.PI;
+    attachToothAnchor(sliderG, closedLimitY);
     zipG.add(sliderG);
+
+    if (opts.skinD) {
+      zipG.userData.accSkinnedRoot = true;
+    }
 
     return zipG;
   }
 
-  function createBeltMesh(waistY, waistR, zScale, style, width = "medium", baseCol = 0x4f46e5, d = null, waistEase = 0.020, customColor = null) {
+  function createBeltMesh(waistY, waistR, zScale, style, width = "medium", baseCol = 0x4f46e5, d = null, waistEase = 0.020, customColor = null, opts = {}) {
     const beltG = new THREE.Group();
-    const h = (width === "slim" || width === "narrow") ? 0.024 : (width === "wide" ? 0.056 : 0.036);
-    const strapThick = 0.004;
-    const sashCol = customColor != null ? customColor : baseCol;
+    const effSize = opts.size != null && Number.isFinite(Number(opts.size))
+      ? clamp(Number(opts.size), 0.5, 1.85)
+      : ((width === "slim" || width === "narrow") ? 0.68 : (width === "wide" ? 1.55 : 1.0));
+    const h = 0.036 * effSize;
+    const strapThick = 0.0042;
+    const shape = opts.shape || (style === "fabric_sash" ? "sash_tie" : "rect_frame");
+    const lengthNorm = clamp(opts.length != null && Number.isFinite(Number(opts.length)) ? Number(opts.length) : 0.35, 0.0, 1.0);
+
+    const strapPresetCols = {
+      leather_gold: 0x1a1918,
+      leather_silver: 0x54392b,
+      matte_black: 0x111112,
+      patent_gloss: 0x141416,
+      fabric_sash: baseCol,
+      matching: baseCol,
+    };
+    const resolvedStrapCol = customColor != null ? customColor : (strapPresetCols[style] ?? baseCol);
+    const bucklePresetCols = {
+      leather_gold: 0xd4af37,
+      leather_silver: 0xe0e4e8,
+      patent_gloss: 0xe0e4e8,
+      matte_black: 0x26262b,
+      fabric_sash: 0xd4af37,
+      matching: 0xd4af37,
+    };
+    const resolvedBuckleCol = opts.buckleColor != null
+      ? new THREE.Color(opts.buckleColor).getHex()
+      : (bucklePresetCols[style] ?? 0xd4af37);
 
     let strapMat, buckleMat;
     if (isSoftwareGL) {
-      const sCol = style === "leather_gold" ? 0x1a1918 : (style === "leather_silver" ? 0x54392b : (style === "matte_black" ? 0x111112 : sashCol));
-      const bCol = style === "leather_silver" ? 0xe0e4e8 : (style === "matte_black" ? 0x222224 : 0xd4af37);
-      strapMat = new THREE.MeshPhongMaterial({ color: sCol, shininess: 32, specular: 0x333333, side: THREE.DoubleSide });
-      buckleMat = new THREE.MeshPhongMaterial({ color: bCol, shininess: 85, specular: 0x888888 });
-    } else if (style === "leather_gold") {
-      strapMat = new THREE.MeshStandardMaterial({ color: 0x1a1918, roughness: 0.38, metalness: 0.05, side: THREE.DoubleSide });
-      buckleMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.22, metalness: 0.92 });
-    } else if (style === "leather_silver") {
-      strapMat = new THREE.MeshStandardMaterial({ color: 0x54392b, roughness: 0.42, metalness: 0.05, side: THREE.DoubleSide });
-      buckleMat = new THREE.MeshStandardMaterial({ color: 0xe0e4e8, roughness: 0.18, metalness: 0.90 });
+      strapMat = new THREE.MeshPhongMaterial({
+        color: resolvedStrapCol,
+        shininess: style === "patent_gloss" ? 90 : (style === "matte_black" ? 12 : 34),
+        specular: style === "patent_gloss" ? 0x888888 : 0x333333,
+        side: THREE.DoubleSide,
+      });
+      buckleMat = new THREE.MeshPhongMaterial({ color: resolvedBuckleCol, shininess: 85, specular: 0x888888 });
+    } else if (style === "patent_gloss") {
+      strapMat = new THREE.MeshPhysicalMaterial({ color: resolvedStrapCol, roughness: 0.14, metalness: 0.04, clearcoat: 0.92, clearcoatRoughness: 0.12, side: THREE.DoubleSide });
+      buckleMat = new THREE.MeshStandardMaterial({ color: resolvedBuckleCol, roughness: 0.18, metalness: 0.92 });
     } else if (style === "matte_black") {
-      strapMat = new THREE.MeshStandardMaterial({ color: 0x111112, roughness: 0.65, metalness: 0.02, side: THREE.DoubleSide });
-      buckleMat = new THREE.MeshStandardMaterial({ color: 0x222224, roughness: 0.45, metalness: 0.70 });
+      strapMat = new THREE.MeshStandardMaterial({ color: resolvedStrapCol, roughness: 0.68, metalness: 0.02, side: THREE.DoubleSide });
+      buckleMat = new THREE.MeshStandardMaterial({ color: resolvedBuckleCol, roughness: 0.42, metalness: 0.72 });
+    } else if (style === "fabric_sash" || style === "matching") {
+      strapMat = new THREE.MeshStandardMaterial({ color: resolvedStrapCol, roughness: 0.52, metalness: 0.04, side: THREE.DoubleSide });
+      buckleMat = new THREE.MeshStandardMaterial({ color: resolvedBuckleCol, roughness: 0.22, metalness: 0.92 });
     } else {
-      strapMat = new THREE.MeshStandardMaterial({ color: sashCol, roughness: 0.50, metalness: 0.05, side: THREE.DoubleSide });
-      buckleMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.22, metalness: 0.92 });
+      strapMat = new THREE.MeshStandardMaterial({ color: resolvedStrapCol, roughness: 0.38, metalness: 0.06, side: THREE.DoubleSide });
+      buckleMat = new THREE.MeshStandardMaterial({ color: resolvedBuckleCol, roughness: 0.20, metalness: 0.92 });
     }
 
     const N = 48;
@@ -5470,15 +5937,28 @@ export const View3D = (() => {
     const sIdx = [];
     const yBot = waistY - h * 0.5;
     const yTop = waistY + h * 0.5;
+    const corsetFrontMul = shape === "corset_cinch" ? 1.85 : 1.0;
     let frontOuterZ = (waistR * 1.035 + 0.024) * zScale;
+    let sideStrapAbsX = waistR * 0.85;
     for (let k = 0; k <= N; k++) {
       const phi = (k / N) * Math.PI * 2;
+      const frontBell = Math.exp(-Math.pow(Math.sin(phi * 0.5), 2) * 14);
+      const localHalfH = h * 0.5 * (1 + (corsetFrontMul - 1) * frontBell);
+      const lyBot = waistY - localHalfH;
+      const lyTop = waistY + localHalfH;
+
       let xiB, ziB, xoB, zoB, xiT, ziT, xoT, zoT;
       if (d) {
-        [xiB, ziB] = getBodySurfacePoint(yBot, phi, d, waistEase + 0.006);
-        [xoB, zoB] = getBodySurfacePoint(yBot, phi, d, waistEase + 0.006 + strapThick);
-        [xiT, ziT] = getBodySurfacePoint(yTop, phi, d, waistEase + 0.006);
-        [xoT, zoT] = getBodySurfacePoint(yTop, phi, d, waistEase + 0.006 + strapThick);
+        [xiB, ziB] = getBodySurfacePoint(lyBot, phi, d, waistEase + 0.006);
+        [xoB, zoB] = getBodySurfacePoint(lyBot, phi, d, waistEase + 0.006 + strapThick);
+        [xiT, ziT] = getBodySurfacePoint(lyTop, phi, d, waistEase + 0.006);
+        [xoT, zoT] = getBodySurfacePoint(lyTop, phi, d, waistEase + 0.006 + strapThick);
+        const surfZ = sampleGarmentSurfaceAbsZ(waistY, xoB, Math.cos(phi) >= 0, d, waistEase + 0.006);
+        if (Math.cos(phi) >= 0.45 && surfZ + 0.003 > zoB) {
+          const push = surfZ + 0.003 - zoB;
+          zoB += push; ziB += push;
+          zoT += push; ziT += push;
+        }
       } else {
         const rIn = waistR * 1.03 + waistEase;
         const rOut = rIn + strapThick;
@@ -5488,8 +5968,8 @@ export const View3D = (() => {
         zoB = zoT = rOut * zScale * Math.cos(phi);
       }
       if (k === 0) frontOuterZ = Math.max(zoB, zoT);
-      // 4 vertices per slice: 0=outerBot, 1=outerTop, 2=innerTop, 3=innerBot
-      sPos.push(xoB, yBot, zoB, xoT, yTop, zoT, xiT, yTop, ziT, xiB, yBot, ziB);
+      if (Math.abs(phi - Math.PI * 0.5) < 0.16) sideStrapAbsX = Math.max(sideStrapAbsX, Math.abs(xoB));
+      sPos.push(xoB, lyBot, zoB, xoT, lyTop, zoT, xiT, lyTop, ziT, xiB, lyBot, ziB);
     }
     for (let k = 0; k < N; k++) {
       const a = k * 4;
@@ -5504,34 +5984,40 @@ export const View3D = (() => {
     strapGeo.setIndex(sIdx);
     strapGeo.computeVertexNormals();
     const strapMesh = new THREE.Mesh(strapGeo, strapMat);
+    // INVARIANT: beltG.children[0] MUST remain strapMesh for dynamic stride tracker
     beltG.add(strapMesh);
 
     const bW = h * 1.45;
     const bH = h * 1.25;
     const bThick = 0.006;
-    if (style === "fabric_sash") {
+
+    if (shape === "sash_tie" || (opts.shape == null && style === "fabric_sash")) {
+      const knotG = new THREE.Group();
+      knotG.position.set(0.012, waistY, frontOuterZ + 0.006);
       const knot = new THREE.Mesh(new THREE.SphereGeometry(h * 0.52, 14, 12), strapMat);
       knot.scale.set(1.15, 0.95, 0.75);
-      knot.position.set(0.012, waistY, frontOuterZ + 0.006);
-      beltG.add(knot);
+      knotG.add(knot);
+      // INVARIANT: beltG.children[1] MUST remain center waist knot/buckle anchor
+      beltG.add(knotG);
+
       [-1, 1].forEach((side) => {
-        const tieLen = h * 3.8;
-        const R_SEGS = 10;
+        const tieLen = h * (1.8 + lengthNorm * 9.5);
+        const R_SEGS = Math.max(10, Math.round(tieLen / 0.025));
         const halfW = h * 0.375;
         const rPos = [];
         const rIdx = [];
         for (let r = 0; r <= R_SEGS; r++) {
           const u = r / R_SEGS;
           const y = waistY - u * tieLen;
-          const cx = 0.012 + side * (h * 0.35 + u * tieLen * 0.16);
+          const cx = 0.012 + side * (h * 0.35 + u * Math.min(0.075, tieLen * 0.16));
           const xL = cx - halfW;
           const xR = cx + halfW;
           let zIn = frontOuterZ + 0.005;
           if (d) {
-            const z0 = Math.abs(getBodySurfacePoint(y, 0, d, waistEase + 0.010)[1]);
-            const zL = Math.abs(getBodySurfacePoint(y, clamp(xL / Math.max(0.08, d.waistR), -0.65, 0.65), d, waistEase + 0.010)[1]);
-            const zR = Math.abs(getBodySurfacePoint(y, clamp(xR / Math.max(0.08, d.waistR), -0.65, 0.65), d, waistEase + 0.010)[1]);
-            zIn = Math.max(frontOuterZ + 0.005, Math.max(z0, zL, zR) + 0.006);
+            const zMid = sampleGarmentSurfaceAbsZ(y, cx, true, d, waistEase + 0.010);
+            const zLeft = sampleGarmentSurfaceAbsZ(y, xL, true, d, waistEase + 0.010);
+            const zRight = sampleGarmentSurfaceAbsZ(y, xR, true, d, waistEase + 0.010);
+            zIn = Math.max(frontOuterZ * 0.85, Math.max(zMid, zLeft, zRight) + 0.006);
           }
           const zOut = zIn + 0.004;
           rPos.push(xL, y, zOut, xR, y, zOut, xR, y, zIn, xL, y, zIn);
@@ -5552,54 +6038,441 @@ export const View3D = (() => {
       });
     } else {
       const buckleG = new THREE.Group();
-      buckleG.position.set(0, waistY, frontOuterZ + 0.004);
+      buckleG.position.set(0, waistY, frontOuterZ + 0.0045);
 
-      const shape = new THREE.Shape();
-      shape.moveTo(-bW / 2, -bH / 2);
-      shape.lineTo(bW / 2, -bH / 2);
-      shape.lineTo(bW / 2, bH / 2);
-      shape.lineTo(-bW / 2, bH / 2);
-      shape.closePath();
+      if (shape === "round_ring") {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(bH * 0.56, bH * 0.13, 14, 28), buckleMat);
+        buckleG.add(ring);
+        const bar = new THREE.Mesh(new THREE.CylinderGeometry(bH * 0.075, bH * 0.075, bH * 1.05, 8), buckleMat);
+        bar.position.z = 0.001;
+        buckleG.add(bar);
+      } else if (shape === "double_ring") {
+        [-1, 1].forEach((side) => {
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(bH * 0.48, bH * 0.11, 12, 24), buckleMat);
+          ring.position.set(side * bH * 0.34, 0, side * 0.002);
+          ring.rotation.y = side * 0.18;
+          buckleG.add(ring);
+        });
+      } else if (shape === "oval_medallion") {
+        const ov = new THREE.Shape();
+        ov.absellipse(0, 0, bW * 0.56, bH * 0.54, 0, Math.PI * 2, false, 0);
+        const plaqueGeo = new THREE.ExtrudeGeometry(ov, { depth: bThick * 0.85, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 2 });
+        const plaque = new THREE.Mesh(plaqueGeo, buckleMat);
+        plaque.position.z = -bThick * 0.4;
+        buckleG.add(plaque);
+        const innerRing = new THREE.Mesh(new THREE.TorusGeometry(bH * 0.36, bH * 0.06, 10, 24), strapMat);
+        innerRing.scale.set(bW / bH, 1, 1);
+        innerRing.position.z = bThick * 0.65;
+        buckleG.add(innerRing);
+      } else if (shape === "corset_cinch") {
+        const barW = bW * 0.46;
+        const barH = bH * 1.75;
+        [-1, 1].forEach((side) => {
+          const bar = new THREE.Mesh(new THREE.BoxGeometry(barW * 0.24, barH, bThick), buckleMat);
+          bar.position.set(side * barW * 0.42, 0, 0);
+          buckleG.add(bar);
+        });
+        for (let r = -1; r <= 1; r++) {
+          const brace = new THREE.Mesh(new THREE.BoxGeometry(barW * 0.95, 0.004, 0.004), buckleMat);
+          brace.position.set(0, r * barH * 0.30, bThick * 0.35);
+          buckleG.add(brace);
+        }
+      } else {
+        const bShape = new THREE.Shape();
+        bShape.moveTo(-bW / 2, -bH / 2);
+        bShape.lineTo(bW / 2, -bH / 2);
+        bShape.lineTo(bW / 2, bH / 2);
+        bShape.lineTo(-bW / 2, bH / 2);
+        bShape.closePath();
 
-      const hole = new THREE.Path();
-      const inset = bH * 0.25;
-      hole.moveTo(-bW / 2 + inset, -bH / 2 + inset);
-      hole.lineTo(bW / 2 - inset, -bH / 2 + inset);
-      hole.lineTo(bW / 2 - inset, bH / 2 - inset);
-      hole.lineTo(-bW / 2 + inset, bH / 2 - inset);
-      hole.closePath();
-      shape.holes.push(hole);
+        const hole = new THREE.Path();
+        const inset = bH * 0.25;
+        hole.moveTo(-bW / 2 + inset, -bH / 2 + inset);
+        hole.lineTo(bW / 2 - inset, -bH / 2 + inset);
+        hole.lineTo(bW / 2 - inset, bH / 2 - inset);
+        hole.lineTo(-bW / 2 + inset, bH / 2 - inset);
+        hole.closePath();
+        bShape.holes.push(hole);
 
-      const buckleGeo = new THREE.ExtrudeGeometry(shape, { depth: bThick, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 2 });
-      const buckleMesh = new THREE.Mesh(buckleGeo, buckleMat);
-      buckleMesh.position.z = -bThick / 2;
-      buckleG.add(buckleMesh);
+        const buckleGeo = new THREE.ExtrudeGeometry(bShape, { depth: bThick, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 2 });
+        const buckleMesh = new THREE.Mesh(buckleGeo, buckleMat);
+        buckleMesh.position.z = -bThick / 2;
+        buckleG.add(buckleMesh);
 
-      const prongGeo = new THREE.CylinderGeometry(0.002, 0.002, bH * 0.82, 8);
-      const prongMesh = new THREE.Mesh(prongGeo, buckleMat);
-      prongMesh.position.set(0, 0, bThick * 0.5);
-      buckleG.add(prongMesh);
+        const prongGeo = new THREE.CylinderGeometry(0.002, 0.002, bH * 0.82, 8);
+        const prongMesh = new THREE.Mesh(prongGeo, buckleMat);
+        prongMesh.position.set(0, 0, bThick * 0.5);
+        buckleG.add(prongMesh);
+      }
 
+      // INVARIANT: beltG.children[1] MUST remain buckleG for dynamic stride tracker
       beltG.add(buckleG);
+
+      // Tailored belt keeper loop + horizontal wrap tongue / runway hanging drop tail
+      if (lengthNorm > 0.03) {
+        const keeperPhi = clamp(0.055 / Math.max(0.10, sideStrapAbsX), 0.15, 0.65);
+        const [, kSurfZ] = d ? getBodySurfacePoint(waistY, keeperPhi, d, waistEase + 0.011) : [0, frontOuterZ];
+        const keeperZ = Math.max(frontOuterZ * Math.cos(keeperPhi), kSurfZ) + 0.003;
+        const keeper = new THREE.Mesh(new THREE.BoxGeometry(0.012, h * 1.18, strapThick * 2.2), strapMat);
+        keeper.position.set(Math.sin(keeperPhi) * sideStrapAbsX * 0.72, waistY, keeperZ);
+        keeper.rotation.y = keeperPhi * 0.75;
+        beltG.add(keeper);
+
+        // Horizontal belt tongue wrapping around waist up to lengthNorm = 0.35
+        const wrapSpanPhi = clamp(lengthNorm, 0, 0.40) * 1.45;
+        const W_SEGS = 10;
+        const tPos = [];
+        const tIdx = [];
+        const tyB = waistY - h * 0.44;
+        const tyT = waistY + h * 0.44;
+        for (let i = 0; i <= W_SEGS; i++) {
+          const u = i / W_SEGS;
+          const phi = 0.04 + u * wrapSpanPhi;
+          const surfZ = d
+            ? sampleGarmentSurfaceAbsZ(waistY, Math.sin(phi) * sideStrapAbsX, true, d, waistEase + 0.013)
+            : (waistR * 1.06 + waistEase) * zScale * Math.cos(phi);
+          const tx = Math.sin(phi) * (sideStrapAbsX * 0.96);
+          const zIn = surfZ + 0.0055;
+          const zOut = zIn + strapThick;
+          tPos.push(tx, tyB, zOut, tx, tyT, zOut, tx, tyT, zIn, tx, tyB, zIn);
+          if (i > 0) {
+            const a = (i - 1) * 4;
+            const b = i * 4;
+            for (let s = 0; s < 4; s++) {
+              const s1 = (s + 1) % 4;
+              tIdx.push(a + s, b + s, b + s1, a + s, b + s1, a + s1);
+            }
+          }
+        }
+        const tongueGeo = new THREE.BufferGeometry();
+        tongueGeo.setAttribute("position", new THREE.Float32BufferAttribute(tPos, 3));
+        tongueGeo.setIndex(tIdx);
+        tongueGeo.computeVertexNormals();
+        beltG.add(new THREE.Mesh(tongueGeo, strapMat));
+
+        // Vertical runway hanging tail when lengthNorm > 0.35
+        if (lengthNorm > 0.35) {
+          const dropFrac = (lengthNorm - 0.35) / 0.65;
+          const dropLen = 0.06 + dropFrac * 0.38;
+          const anchorX = Math.sin(0.04 + wrapSpanPhi) * (sideStrapAbsX * 0.92);
+          const halfW = h * 0.44;
+          const D_SEGS = Math.max(8, Math.round(dropLen / 0.03));
+          const dPos = [];
+          const dIdx = [];
+          for (let r = 0; r <= D_SEGS; r++) {
+            const u = r / D_SEGS;
+            const y = waistY - u * dropLen;
+            const taper = u > 0.88 ? (1 - (u - 0.88) / 0.14) : 1.0;
+            const cx = anchorX + u * 0.018;
+            const xL = cx - halfW * taper;
+            const xR = cx + halfW * taper;
+            const zMid = d ? sampleGarmentSurfaceAbsZ(y, cx, true, d, waistEase + 0.014) : frontOuterZ;
+            const zL = d ? sampleGarmentSurfaceAbsZ(y, xL, true, d, waistEase + 0.014) : frontOuterZ;
+            const zR = d ? sampleGarmentSurfaceAbsZ(y, xR, true, d, waistEase + 0.014) : frontOuterZ;
+            const zIn = Math.max(frontOuterZ * 0.82, Math.max(zMid, zL, zR) + 0.008);
+            const zOut = zIn + strapThick;
+            dPos.push(xL, y, zOut, xR, y, zOut, xR, y, zIn, xL, y, zIn);
+            if (r > 0) {
+              const a = (r - 1) * 4;
+              const b = r * 4;
+              for (let s = 0; s < 4; s++) {
+                const s1 = (s + 1) % 4;
+                dIdx.push(a + s, b + s, b + s1, a + s, b + s1, a + s1);
+              }
+            }
+          }
+          const dropGeo = new THREE.BufferGeometry();
+          dropGeo.setAttribute("position", new THREE.Float32BufferAttribute(dPos, 3));
+          dropGeo.setIndex(dIdx);
+          dropGeo.computeVertexNormals();
+          const dropMesh = new THREE.Mesh(dropGeo, strapMat);
+          beltG.add(dropMesh);
+
+          // Metallic tip cap at bottom of belt tail
+          const tipY = waistY - dropLen;
+          const tipZ = (d ? sampleGarmentSurfaceAbsZ(tipY, anchorX + 0.018, true, d, waistEase + 0.014) : frontOuterZ) + 0.010;
+          const tipCap = new THREE.Mesh(new THREE.BoxGeometry(halfW * 1.15, 0.011, strapThick * 1.4), buckleMat);
+          tipCap.position.set(anchorX + 0.018, tipY + 0.004, tipZ);
+          beltG.add(tipCap);
+        }
+      }
     }
     return beltG;
   }
 
-  function createBowMesh(colorHex = "#f8fafc", scale = 1.0) {
+  function createBowTailRibbonMesh(side, tailLen, halfW, bowPos, isFront, d, accEase, mat) {
+    const segs = Math.max(8, Math.round(tailLen / 0.025));
+    const rPos = [];
+    const rIdx = [];
+    for (let r = 0; r <= segs; r++) {
+      const u = r / segs;
+      const y = bowPos.y - u * tailLen;
+      const splay = side * (halfW * 1.05 + u * tailLen * 0.34);
+      const cx = bowPos.x + splay;
+      const flare = 1 + u * 0.25;
+      const xL = cx - halfW * flare;
+      const xR = cx + halfW * flare;
+      const zMid = d ? sampleGarmentSurfaceAbsZ(y, cx, isFront, d, accEase + 0.006) : Math.abs(bowPos.z);
+      const zL = d ? sampleGarmentSurfaceAbsZ(y, xL, isFront, d, accEase + 0.006) : Math.abs(bowPos.z);
+      const zR = d ? sampleGarmentSurfaceAbsZ(y, xR, isFront, d, accEase + 0.006) : Math.abs(bowPos.z);
+      const absZ = Math.max(Math.abs(bowPos.z) * 0.85, Math.max(zMid, zL, zR) + 0.006);
+      const signZ = isFront ? 1 : -1;
+      const zFront = signZ * (absZ + 0.003);
+      const zBack = signZ * absZ;
+      if (r === segs) {
+        // V-notched swallowtail ends
+        const notchY = y + halfW * 0.95;
+        rPos.push(xL, y, zFront, cx, notchY, zFront, xR, y, zFront);
+      } else {
+        rPos.push(xL, y, zFront, cx, y, zFront, xR, y, zFront);
+      }
+      if (r > 0) {
+        const a = (r - 1) * 3;
+        const b = r * 3;
+        if (isFront) {
+          rIdx.push(a, b, b + 1, a, b + 1, a + 1, a + 1, b + 1, b + 2, a + 1, b + 2, a + 2);
+        } else {
+          rIdx.push(a, b + 1, b, a, a + 1, b + 1, a + 1, b + 2, b + 1, a + 1, a + 2, b + 2);
+        }
+      }
+      void zBack;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(rPos, 3));
+    geo.setIndex(rIdx);
+    geo.computeVertexNormals();
+    return new THREE.Mesh(geo, mat);
+  }
+
+  function createBowMesh(cfg, bowPos, isFront, d, accEase, fabricCol = 0x4f46e5) {
     const g = new THREE.Group();
+    const shape = cfg.shape || "classic_ribbon";
+    const style = cfg.style || "satin";
+    const sc = clamp(Number(cfg.size) || 1.0, 0.4, 2.2);
+    const lenNorm = clamp(Number(cfg.length) || 0.0, 0.0, 1.0);
+    const colHex = style === "matching" && !cfg._explicitColor
+      ? fabricCol
+      : (cfg.color || "#f8fafc");
+
     const mat = isSoftwareGL
-      ? new THREE.MeshPhongMaterial({ color: colorHex, shininess: 48, specular: 0x444444 })
-      : new THREE.MeshPhysicalMaterial({ color: colorHex, roughness: 0.35, sheen: 0.8 });
-    const knot = new THREE.Mesh(new THREE.SphereGeometry(0.005 * scale, 10, 10), mat);
-    g.add(knot);
-    [-1, 1].forEach((side) => {
-      const loop = new THREE.Mesh(new THREE.ConeGeometry(0.006 * scale, 0.015 * scale, 10), mat);
-      loop.rotation.z = side * Math.PI * 0.5;
-      loop.position.set(side * 0.008 * scale, 0, 0);
-      loop.scale.set(0.65, 1, 0.4);
-      g.add(loop);
-    });
+      ? new THREE.MeshPhongMaterial({ color: colHex, shininess: style === "velvet" ? 16 : 52, specular: 0x444444, side: THREE.DoubleSide })
+      : new THREE.MeshPhysicalMaterial({
+        color: colHex,
+        roughness: style === "velvet" ? 0.84 : (style === "organza" ? 0.42 : 0.28),
+        sheen: style === "velvet" ? 0.95 : 0.82,
+        sheenRoughness: 0.35,
+        transparent: style === "organza",
+        opacity: style === "organza" ? 0.82 : 1.0,
+        side: THREE.DoubleSide,
+      });
+
+    const headG = new THREE.Group();
+    headG.position.set(bowPos.x, bowPos.y, bowPos.z);
+
+    if (shape === "rosette_knot") {
+      const baseDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.020 * sc, 0.022 * sc, 0.006 * sc, 20), mat);
+      baseDisc.rotation.x = Math.PI * 0.5;
+      headG.add(baseDisc);
+      for (let ring = 0; ring < 2; ring++) {
+        const countP = ring === 0 ? 7 : 5;
+        const rad = (ring === 0 ? 0.017 : 0.0095) * sc;
+        for (let i = 0; i < countP; i++) {
+          const ang = (i / countP) * Math.PI * 2 + ring * 0.35;
+          const pet = new THREE.Mesh(new THREE.SphereGeometry(0.0095 * sc, 10, 10), mat);
+          pet.scale.set(1.18, 0.85, 0.58);
+          pet.position.set(Math.cos(ang) * rad, Math.sin(ang) * rad, (ring === 0 ? 0.0025 : 0.006) * sc);
+          pet.rotation.z = ang;
+          headG.add(pet);
+        }
+      }
+      const centerKnot = new THREE.Mesh(new THREE.SphereGeometry(0.0068 * sc, 10, 10), mat);
+      centerKnot.position.z = 0.0085 * sc;
+      headG.add(centerKnot);
+    } else if (shape === "couture_flat") {
+      const barW = 0.058 * sc;
+      const barH = 0.020 * sc;
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(barW, barH, 0.0065 * sc), mat);
+      plate.castShadow = true;
+      headG.add(plate);
+      [-1, 1].forEach((side) => {
+        const fold = new THREE.Mesh(new THREE.BoxGeometry(barW * 0.40, barH * 1.15, 0.0085 * sc), mat);
+        fold.position.set(side * barW * 0.28, 0, 0.0016 * sc);
+        fold.rotation.y = side * -0.14;
+        headG.add(fold);
+      });
+      const wrap = new THREE.Mesh(new THREE.BoxGeometry(0.011 * sc, barH * 1.22, 0.011 * sc), mat);
+      wrap.position.z = 0.002 * sc;
+      headG.add(wrap);
+    } else {
+      const knot = new THREE.Mesh(new THREE.SphereGeometry(0.0078 * sc, 12, 10), mat);
+      knot.scale.set(0.95, 1.15, 0.90);
+      headG.add(knot);
+
+      const drawLoopHalf = (side, wSpan, hSpan, tiltZ, zOff = 0) => {
+        const s = new THREE.Shape();
+        s.moveTo(0, 0);
+        s.bezierCurveTo(side * wSpan * 0.45, hSpan * 0.78, side * wSpan, hSpan * 0.64, side * wSpan, 0);
+        s.bezierCurveTo(side * wSpan, -hSpan * 0.64, side * wSpan * 0.45, -hSpan * 0.78, 0, 0);
+        const lGeo = new THREE.ExtrudeGeometry(s, {
+          depth: 0.0068 * sc,
+          bevelEnabled: true,
+          bevelThickness: 0.0018 * sc,
+          bevelSize: 0.0018 * sc,
+          bevelSegments: 2,
+        });
+        const lMesh = new THREE.Mesh(lGeo, mat);
+        lMesh.rotation.z = side * tiltZ;
+        lMesh.rotation.y = side * -0.12;
+        lMesh.position.z = -0.002 * sc + zOff;
+        lMesh.castShadow = true;
+        return lMesh;
+      };
+
+      [-1, 1].forEach((side) => {
+        headG.add(drawLoopHalf(side, 0.036 * sc, 0.025 * sc, 0.14, 0));
+        if (shape === "butterfly_double") {
+          headG.add(drawLoopHalf(side, 0.029 * sc, 0.019 * sc, -0.40, 0.0016 * sc));
+        }
+      });
+    }
+
+    if (!isFront) headG.rotation.y = Math.PI;
+    g.add(headG);
+
+    if (lenNorm > 0.02) {
+      const tailLen = lenNorm * (0.28 + 0.14 * clamp(sc, 0.6, 1.5));
+      const halfW = 0.0055 * sc;
+      [-1, 1].forEach((side) => {
+        const rib = createBowTailRibbonMesh(side, tailLen, halfW, bowPos, isFront, d, accEase, mat);
+        g.add(rib);
+      });
+    }
     return g;
+  }
+
+  function createBroochMesh(cfg, posVec, d, accEase, fabricCol = 0x4f46e5) {
+    const brG = new THREE.Group();
+    const shape = cfg.shape || "floral_star";
+    const style = cfg.style || "gold";
+    const sc = clamp(Number(cfg.size) || 1.0, 0.5, 2.0);
+    const lenNorm = clamp(Number(cfg.length) || 0.0, 0.0, 1.0);
+    const metalMat = createAccessoryFinishMaterial(style, null, fabricCol);
+    const defaultAccent = style === "pearl_crystal" ? 0xf8fafc : (style === "silver" ? 0x1d4ed8 : 0xbe123c);
+    const accentHex = cfg.color != null ? new THREE.Color(cfg.color).getHex() : defaultAccent;
+    const gemMat = createAccessoryFinishMaterial("pearl", accentHex, fabricCol);
+    const tasselMat = isSoftwareGL
+      ? new THREE.MeshPhongMaterial({ color: accentHex, shininess: 22, specular: 0x333333, side: THREE.DoubleSide })
+      : new THREE.MeshPhysicalMaterial({ color: accentHex, roughness: 0.42, sheen: 0.75, sheenRoughness: 0.4, side: THREE.DoubleSide });
+
+    const headG = new THREE.Group();
+    headG.position.set(posVec.x, posVec.y, posVec.z);
+
+    const r = 0.014 * sc;
+    if (shape === "geometric_diamond") {
+      const dm = new THREE.Shape();
+      dm.moveTo(0, r * 1.25);
+      dm.lineTo(r * 0.95, 0);
+      dm.lineTo(0, -r * 1.25);
+      dm.lineTo(-r * 0.95, 0);
+      dm.closePath();
+      const hole = new THREE.Path();
+      hole.moveTo(0, r * 0.65);
+      hole.lineTo(r * 0.48, 0);
+      hole.lineTo(0, -r * 0.65);
+      hole.lineTo(-r * 0.48, 0);
+      hole.closePath();
+      dm.holes.push(hole);
+      const frame = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(dm, { depth: 0.003 * sc, bevelEnabled: true, bevelThickness: 0.001, bevelSize: 0.001, bevelSegments: 2 }),
+        metalMat
+      );
+      headG.add(frame);
+      const stone = new THREE.Mesh(new THREE.OctahedronGeometry(r * 0.44, 0), gemMat);
+      stone.scale.set(0.8, 1.1, 0.55);
+      stone.position.z = 0.0035 * sc;
+      headG.add(stone);
+    } else if (shape === "crescent_pearl") {
+      const arc = new THREE.Mesh(new THREE.TorusGeometry(r * 0.85, r * 0.16, 12, 24, Math.PI * 1.35), metalMat);
+      arc.rotation.z = Math.PI * 0.35;
+      headG.add(arc);
+      const pearlMat = createAccessoryFinishMaterial("pearl", 0xf8fafc, fabricCol);
+      for (let i = -2; i <= 2; i++) {
+        const ang = Math.PI * 0.5 + i * 0.32;
+        const pRad = (0.28 - Math.abs(i) * 0.04) * r;
+        const prl = new THREE.Mesh(new THREE.SphereGeometry(pRad, 10, 10), i === 0 ? gemMat : pearlMat);
+        prl.position.set(Math.cos(ang) * r * 0.85, Math.sin(ang) * r * 0.85, 0.002 * sc);
+        headG.add(prl);
+      }
+    } else if (shape === "bar_pin") {
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.14, r * 0.14, r * 3.1, 10), metalMat);
+      bar.rotation.z = Math.PI * 0.5;
+      headG.add(bar);
+      [-1, 1].forEach((s) => {
+        const finial = new THREE.Mesh(new THREE.SphereGeometry(r * 0.25, 10, 10), metalMat);
+        finial.position.set(s * r * 1.55, 0, 0);
+        headG.add(finial);
+      });
+      const solitaire = new THREE.Mesh(new THREE.SphereGeometry(r * 0.42, 12, 12), gemMat);
+      solitaire.scale.set(1, 1, 0.65);
+      solitaire.position.z = 0.0025 * sc;
+      headG.add(solitaire);
+    } else {
+      for (let i = 0; i < 8; i++) {
+        const ang = (i / 8) * Math.PI * 2;
+        const ray = new THREE.Mesh(new THREE.ConeGeometry(r * 0.26, r * 1.05, 6), metalMat);
+        ray.position.set(Math.cos(ang) * r * 0.52, Math.sin(ang) * r * 0.52, 0.001 * sc);
+        ray.rotation.z = ang - Math.PI * 0.5;
+        ray.scale.set(1, 1, 0.35);
+        headG.add(ray);
+      }
+      const stone = new THREE.Mesh(new THREE.SphereGeometry(r * 0.45, 14, 12), gemMat);
+      stone.scale.set(1, 1, 0.58);
+      stone.position.z = 0.003 * sc;
+      headG.add(stone);
+    }
+    brG.add(headG);
+
+    if (lenNorm > 0.02) {
+      const dropLen = 0.025 + lenNorm * 0.22;
+      const capY = posVec.y - r * 1.05;
+      const capZ = (d ? sampleGarmentSurfaceAbsZ(capY, posVec.x, true, d, accEase + 0.005) : posVec.z) + 0.006;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 0.22, r * 0.06, 8, 16), metalMat);
+      ring.position.set(posVec.x, posVec.y - r * 0.78, capZ);
+      brG.add(ring);
+
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(r * 0.38, r * 0.55, 12), metalMat);
+      cap.position.set(posVec.x, capY, capZ);
+      brG.add(cap);
+
+      const SEGS = Math.max(8, Math.round(dropLen / 0.022));
+      const N_SIDES = 10;
+      const tPos = [];
+      const tIdx = [];
+      for (let row = 0; row <= SEGS; row++) {
+        const u = row / SEGS;
+        const y = capY - r * 0.2 - u * dropLen;
+        const rad = r * (0.30 + u * 0.52);
+        const cz = (d ? sampleGarmentSurfaceAbsZ(y, posVec.x, true, d, accEase + 0.006) : posVec.z) + 0.006 + rad * 0.65;
+        for (let k = 0; k <= N_SIDES; k++) {
+          const ang = (k / N_SIDES) * Math.PI * 2;
+          tPos.push(posVec.x + Math.cos(ang) * rad, y, cz + Math.sin(ang) * rad * 0.55);
+        }
+        if (row > 0) {
+          const a = (row - 1) * (N_SIDES + 1);
+          const b = row * (N_SIDES + 1);
+          for (let k = 0; k < N_SIDES; k++) {
+            tIdx.push(a + k, b + k, b + k + 1, a + k, b + k + 1, a + k + 1);
+          }
+        }
+      }
+      const tasselGeo = new THREE.BufferGeometry();
+      tasselGeo.setAttribute("position", new THREE.Float32BufferAttribute(tPos, 3));
+      tasselGeo.setIndex(tIdx);
+      tasselGeo.computeVertexNormals();
+      brG.add(new THREE.Mesh(tasselGeo, tasselMat));
+    }
+
+    return brG;
   }
 
   function buildAccessories(d) {
@@ -5615,54 +6488,112 @@ export const View3D = (() => {
     const bCfg = accessoriesState.buttons;
     const zCfg = accessoriesState.zipper;
     const beltCfg = accessoriesState.belt;
+    const bowCfg = accessoriesState.bow;
+    const broochCfg = accessoriesState.brooch;
     const waistYY = d.hipY + d.span * 0.44;
+    const hemY = resolveGarmentHemY(d);
     const zScale = d.female ? 0.72 : 0.78;
     const easeBodice = 0.017 + Math.max(-0.002, ((curPatternMetrics?.bodice?.easeRatio || 1.04) - 1.0) * 0.042);
     const hasOuterVis = isPartCurrentlyShown("outer") && Boolean(curPatternMetrics?.bodice?.outerLayer?.enabled);
     const accEase = hasOuterVis ? (0.026 + Math.max(0, ((curPatternMetrics.bodice.easeRatio || 1.04) - 1.0) * 0.040)) : easeBodice;
+    const baseCol = fabricState.bodice?.front?.color || 0x4f46e5;
+
+    const spanTargetY = (topY, frac) => {
+      if (frac <= 0.5) {
+        const tLocal = clamp((frac - 0.15) / 0.35, 0.15, 1.0);
+        return topY - (topY - waistYY) * tLocal;
+      }
+      const tExt = clamp((frac - 0.5) / 0.5, 0.0, 1.0);
+      return waistYY - (waistYY - Math.min(waistYY - 0.04, hemY)) * tExt;
+    };
 
     if (bCfg && bCfg.enabled) {
-      const count = Math.max(1, Math.min(12, bCfg.count || 6));
+      const count = Math.max(1, Math.min(14, bCfg.count || 6));
       const style = bCfg.style || "gold";
-      const baseCol = fabricState.bodice?.front?.color || 0x4f46e5;
+      const shape = bCfg.shape || "classic_round";
+      const size = clamp(Number(bCfg.size) || 1.0, 0.5, 2.0);
+      const lenFrac = clamp(Number(bCfg.lengthFrac) || 0.5, 0.2, 1.0);
+      const customCol = bCfg.color || null;
 
+      const btnOutZ = 0.0038 + size * 0.0022;
       if (bCfg.placement === "front_placket") {
-        const startY = d.hipY + d.span * 0.72;
-        const endY = waistYY;
+        const startY = d.hipY + d.span * 0.73;
+        const endY = spanTargetY(startY, lenFrac);
         const step = (startY - endY) / (count + 1);
         for (let i = 1; i <= count; i++) {
           const y = startY - step * i;
-          const [, zFront] = getBodySurfacePoint(y, 0, d, accEase);
-          const btn = createButtonMesh(1.0, style, baseCol);
-          btn.position.set(0, y, zFront + 0.003);
-          btn.userData.parentPart = "bodice";
+          const zFront = sampleGarmentSurfaceAbsZ(y, 0, true, d, accEase);
+          const btn = createButtonMesh(size, style, baseCol, shape, customCol);
+          btn.position.set(0, y, zFront + btnOutZ);
+          btn.userData.parentPart = y < waistYY - 0.03 && isPartCurrentlyShown("skirt") ? "skirt" : "bodice";
+          btn.userData.accType = "buttons";
           attachAccessoryRigAnchor(btn, torsoGarmentWeights(y, 0, d));
           accessoriesGroup.add(btn);
         }
       } else if (bCfg.placement === "double_breasted") {
-        const startY = d.hipY + d.span * 0.72;
-        const endY = waistYY;
+        const startY = d.hipY + d.span * 0.73;
+        const endY = spanTargetY(startY, lenFrac);
         const rows = Math.max(1, Math.round(count / 2));
         const step = (startY - endY) / (rows + 1);
-        const colOffset = 0.042;
+        const colOffset = 0.046;
         for (let i = 1; i <= rows; i++) {
           const y = startY - step * i;
-          const [, zFront] = getBodySurfacePoint(y, 0.28, d, accEase);
+          const zFront = sampleGarmentSurfaceAbsZ(y, colOffset, true, d, accEase);
           [-1, 1].forEach((col) => {
-            const btn = createButtonMesh(1.0, style, baseCol);
-            btn.position.set(col * colOffset, y, zFront + 0.003);
-            btn.userData.parentPart = "bodice";
+            const btn = createButtonMesh(size, style, baseCol, shape, customCol);
+            btn.position.set(col * colOffset, y, zFront + btnOutZ);
+            btn.userData.parentPart = y < waistYY - 0.03 && isPartCurrentlyShown("skirt") ? "skirt" : "bodice";
+            btn.userData.accType = "buttons";
             attachAccessoryRigAnchor(btn, torsoGarmentWeights(y, col * colOffset, d));
             accessoriesGroup.add(btn);
           });
         }
+      } else if (bCfg.placement === "center_back") {
+        const startY = d.hipY + d.span * 0.74;
+        const endY = spanTargetY(startY, lenFrac);
+        const step = (startY - endY) / (count + 1);
+        for (let i = 1; i <= count; i++) {
+          const y = startY - step * i;
+          const zBack = sampleGarmentSurfaceAbsZ(y, 0, false, d, accEase);
+          const btn = createButtonMesh(size, style, baseCol, shape, customCol);
+          btn.position.set(0, y, -(zBack + btnOutZ));
+          btn.rotation.y = Math.PI;
+          btn.userData.parentPart = y < waistYY - 0.03 && isPartCurrentlyShown("skirt") ? "skirt" : "bodice";
+          btn.userData.accType = "buttons";
+          attachAccessoryRigAnchor(btn, torsoGarmentWeights(y, 0, d));
+          accessoriesGroup.add(btn);
+        }
       } else if (bCfg.placement === "waistband") {
-        const [, zFront] = getBodySurfacePoint(waistYY, 0, d, 0.019);
-        const btn = createButtonMesh(1.15, style, baseCol);
-        btn.position.set(0, waistYY, zFront + 0.002);
-        btn.userData.parentPart = "trousers";
-        attachAccessoryRigAnchor(btn, [[BONE_IDX.pelvis, 0.62], [BONE_IDX.spine, 0.38]]);
-        accessoriesGroup.add(btn);
+        const wbCount = Math.min(5, Math.max(1, count > 6 ? 2 : (count >= 4 ? 2 : 1)));
+        const spread = 0.024 + (lenFrac - 0.2) * 0.05;
+        for (let i = 0; i < wbCount; i++) {
+          const bx = wbCount === 1 ? 0 : (i - (wbCount - 1) * 0.5) * spread;
+          const zFront = sampleGarmentSurfaceAbsZ(waistYY, bx, true, d, 0.019);
+          const btn = createButtonMesh(1.15 * size, style, baseCol, shape, customCol);
+          btn.position.set(bx, waistYY, zFront + btnOutZ);
+          btn.userData.parentPart = "trousers";
+          btn.userData.accType = "buttons";
+          attachAccessoryRigAnchor(btn, [[BONE_IDX.pelvis, 0.62], [BONE_IDX.spine, 0.38]]);
+          accessoriesGroup.add(btn);
+        }
+      } else if (bCfg.placement === "shoulder_epaulette") {
+        const perSide = Math.max(1, Math.min(4, Math.round(count / 2)));
+        const spanW = 0.03 + lenFrac * 0.075;
+        [-1, 1].forEach((side) => {
+          for (let i = 0; i < perSide; i++) {
+            const u = perSide === 1 ? 0.5 : i / (perSide - 1);
+            const bx = side * (d.neckR + 0.018 + u * spanW);
+            const by = d.shoulderY - 0.005 - u * 0.016;
+            const zFront = sampleGarmentSurfaceAbsZ(by, bx, true, d, accEase);
+            const btn = createButtonMesh(0.85 * size, style, baseCol, shape, customCol);
+            btn.position.set(bx, by, zFront * 0.25 + 0.008);
+            btn.rotation.x = -Math.PI * 0.42;
+            btn.userData.parentPart = "bodice";
+            btn.userData.accType = "buttons";
+            attachAccessoryRigAnchor(btn, torsoGarmentWeights(by, bx, d));
+            accessoriesGroup.add(btn);
+          }
+        });
       } else if (bCfg.placement === "cuffs") {
         const slFrac = clamp(curPatternMetrics?.sleeve?.lengthFrac || 0.96, 0.16, 1.02);
         const totalSlLen = d.armLen * slFrac;
@@ -5671,22 +6602,41 @@ export const View3D = (() => {
         const upperArmLen = d.armLen * 0.48;
         const wristDist = d.armLen * 0.94;
         const wristR = Math.max(d.upperR * (d.female ? 0.50 : 0.53), d.H * 0.0148);
+        const cuffStep = 0.014 + lenFrac * 0.016;
+        const sleeveMeshes = [];
+        garmentGroup.traverse((o) => {
+          if (o.isMesh && (o.name === "sleeve" || o.userData?.parentPart === "sleeve")) sleeveMeshes.push(o);
+        });
 
         [-1, 1].forEach((s) => {
           const bArm = s > 0 ? BONE_IDX.armL : BONE_IDX.armR;
           const bElbow = s > 0 ? BONE_IDX.elbowL : BONE_IDX.elbowR;
           const bHand = s > 0 ? BONE_IDX.handL : BONE_IDX.handR;
-          const cuffCount = Math.min(3, count);
+          const cuffCount = Math.min(4, count);
           for (let i = 0; i < cuffCount; i++) {
-            const dy = clamp(totalSlLen - 0.018 - i * 0.018, 0.028, totalSlLen - 0.008);
+            const dy = clamp(totalSlLen - 0.018 - i * cuffStep, 0.028, totalSlLen - 0.008);
             const armRad = dy <= upperArmLen
               ? d.upperR * (1.07 * (1 - dy / upperArmLen) + 0.79 * (dy / upperArmLen))
               : d.upperR * (0.79 * (1 - clamp((dy - upperArmLen) / (d.armLen * 0.46), 0, 1)) + (wristR / d.upperR) * 1.18 * clamp((dy - upperArmLen) / (d.armLen * 0.46), 0, 1));
             const cuffR = armRad + 0.016;
-            const btn = createButtonMesh(0.75, style, baseCol);
-            btn.position.set(s * (pivotX + cuffR), pivotY - dy, -0.003);
+            const by = pivotY - dy;
+            let maxAbsX = pivotX + cuffR;
+            for (const sm of sleeveMeshes) {
+              const arr = sm.geometry?.userData?.restPos || sm.geometry?.attributes?.position?.array;
+              if (!arr) continue;
+              for (let vi = 0; vi < arr.length; vi += 3) {
+                const vx = arr[vi], vy = arr[vi + 1], vz = arr[vi + 2];
+                if (vx * s > 0 && Math.abs(vy - by) <= 0.032 && Math.abs(vz) <= 0.028) {
+                  const ax = Math.abs(vx);
+                  if (ax > maxAbsX) maxAbsX = ax;
+                }
+              }
+            }
+            const btn = createButtonMesh(0.75 * size, style, baseCol, shape, customCol);
+            btn.position.set(s * (maxAbsX + 0.0038 + size * 0.0018), by, 0.002);
             btn.rotation.y = (s * Math.PI) / 2;
             btn.userData.parentPart = "sleeve";
+            btn.userData.accType = "buttons";
 
             let cWeights;
             if (dy < upperArmLen) cWeights = [[bArm, 1]];
@@ -5703,54 +6653,75 @@ export const View3D = (() => {
 
     if (zCfg && zCfg.enabled) {
       const style = zCfg.style || "silver";
-      const openPct = zCfg.openPct || 0;
+      const shape = zCfg.shape || "classic_tab";
+      const size = clamp(Number(zCfg.size) || 1.0, 0.6, 1.8);
+      const lenFrac = clamp(Number(zCfg.lengthFrac) || 0.5, 0.2, 1.0);
+      const openPct = clamp(Number(zCfg.openPct) || 0, 0, 0.75);
+      const zOpts = {
+        shape,
+        size,
+        customColor: zCfg.color || null,
+        tapeColor: zCfg.tapeColor || null,
+        fabricCol: baseCol,
+        skinD: d,
+        xCenter: 0,
+      };
 
       if (zCfg.placement === "center_front") {
+        const startY = d.hipY + d.span * 0.73;
+        const endY = spanTargetY(startY, lenFrac);
         const zip = createZipperMesh(
-          d.hipY + d.span * 0.72,
-          waistYY,
-          (y) => Math.abs(getBodySurfacePoint(y, 0, d, accEase + 0.003)[1]),
+          startY,
+          endY,
+          (y) => sampleGarmentSurfaceAbsZ(y, 0, true, d, accEase + 0.003),
           style,
-          openPct
+          openPct,
+          zOpts
         );
         zip.userData.parentPart = "bodice";
-        attachAccessoryRigAnchor(zip, [[BONE_IDX.chest, 0.62], [BONE_IDX.spine, 0.38]]);
         accessoriesGroup.add(zip);
       } else if (zCfg.placement === "center_back") {
+        const startY = d.hipY + d.span * 0.74;
+        const backMid = lenFrac <= 0.5
+          ? startY - (startY - d.hipY) * clamp((lenFrac - 0.15) / 0.35, 0.15, 1.0)
+          : d.hipY - (d.hipY - Math.min(d.hipY - 0.02, hemY)) * clamp((lenFrac - 0.5) / 0.5, 0, 1);
         const zip = createZipperMesh(
-          d.hipY + d.span * 0.74,
-          d.hipY,
-          (y) => Math.abs(getBodySurfacePoint(y, Math.PI, d, accEase + 0.003)[1]),
+          startY,
+          backMid,
+          (y) => sampleGarmentSurfaceAbsZ(y, 0, false, d, accEase + 0.003),
           style,
-          openPct
+          openPct,
+          { ...zOpts, isBack: true }
         );
-        zip.rotation.y = Math.PI;
         zip.userData.parentPart = "bodice";
-        attachAccessoryRigAnchor(zip, [[BONE_IDX.chest, 0.48], [BONE_IDX.spine, 0.34], [BONE_IDX.pelvis, 0.18]]);
         accessoriesGroup.add(zip);
       } else if (zCfg.placement === "biker_asymmetric") {
+        const startY = d.shoulderY - d.span * 0.09;
+        const endY = spanTargetY(startY, lenFrac);
         const zip = createZipperMesh(
-          d.shoulderY - d.span * 0.10,
-          waistYY,
-          (y) => Math.abs(getBodySurfacePoint(y, 0.24, d, accEase + 0.005)[1]),
+          startY,
+          endY,
+          (y) => sampleGarmentSurfaceAbsZ(y, 0.032, true, d, accEase + 0.005),
           style,
-          openPct
+          openPct,
+          { ...zOpts, xCenter: 0.032 }
         );
-        zip.position.x = 0.032;
-        zip.rotation.z = 0;
         zip.userData.parentPart = "bodice";
-        attachAccessoryRigAnchor(zip, [[BONE_IDX.chest, 0.65], [BONE_IDX.spine, 0.35]]);
         accessoriesGroup.add(zip);
       } else if (zCfg.placement === "trouser_fly") {
+        const flyEnd = d.hipY - d.span * (0.04 + lenFrac * 0.14);
         const zip = createZipperMesh(
           waistYY,
-          d.hipY - d.span * 0.11,
-          (y) => Math.abs(getBodySurfacePoint(y, 0, d, 0.022)[1]),
+          flyEnd,
+          (y) => sampleGarmentSurfaceAbsZ(y, 0, true, d, 0.022),
           style,
-          openPct
+          openPct,
+          {
+            ...zOpts,
+            weightsFn: () => [[BONE_IDX.pelvis, 0.85], [BONE_IDX.spine, 0.15]],
+          }
         );
         zip.userData.parentPart = "trousers";
-        attachAccessoryRigAnchor(zip, [[BONE_IDX.pelvis, 0.85], [BONE_IDX.spine, 0.15]]);
         accessoriesGroup.add(zip);
       }
     }
@@ -5759,33 +6730,81 @@ export const View3D = (() => {
       const bStyle = beltCfg.style || "leather_gold";
       const bWidth = beltCfg.width || "medium";
       const customBeltCol = beltCfg.color ? new THREE.Color(beltCfg.color).getHex() : null;
-      const baseCol = customBeltCol || fabricState.bodice?.front?.color || fabricState.skirt?.front?.color || fabricState.trousers?.front?.color || 0x4f46e5;
-      const belt = createBeltMesh(waistYY, d.waistR, zScale, bStyle, bWidth, baseCol, d, accEase, customBeltCol);
+      const beltBaseCol = fabricState.bodice?.front?.color || fabricState.skirt?.front?.color || fabricState.trousers?.front?.color || 0x4f46e5;
+      const belt = createBeltMesh(waistYY, d.waistR, zScale, bStyle, bWidth, beltBaseCol, d, accEase, customBeltCol, {
+        shape: beltCfg.shape || null,
+        size: beltCfg.size,
+        length: beltCfg.length,
+        buckleColor: beltCfg.buckleColor || null,
+      });
       belt.userData.parentPart = "waist";
       attachAccessoryRigAnchor(belt, [[BONE_IDX.pelvis, 0.58], [BONE_IDX.spine, 0.42]]);
       accessoriesGroup.add(belt);
     }
 
-    const bowCfg = accessoriesState.bow;
     if (bowCfg && bowCfg.enabled) {
-      const bowY = bowCfg.placement === "waist"
-        ? (d.hipY + d.span * (curPatternMetrics?.trousers?.briefRise === "high" ? 0.36 : 0.14))
-        : (d.hipY + d.span * 0.67);
-      const [, bowZ] = getBodySurfacePoint(bowY, 0, d, 0.012);
-      const bow = createBowMesh(bowCfg.color || "#f8fafc", 1.0);
-      bow.position.set(0, bowY, bowZ + 0.004);
-      bow.userData.parentPart = bowCfg.placement === "waist" ? "trousers" : "bodice";
-      attachAccessoryRigAnchor(bow, torsoGarmentWeights(bowY, 0, d));
+      const isBrief = Boolean(curPatternMetrics?.trousers?.briefRise);
+      const isIntimate = isBrief || curPatternMetrics?.bodice?.style === "bra";
+      const bowSize = bowCfg.size != null ? clamp(Number(bowCfg.size), 0.4, 2.2) : (isIntimate ? 0.45 : 1.0);
+      const bowLen = bowCfg.length != null ? clamp(Number(bowCfg.length), 0.0, 1.0) : (isIntimate ? 0.15 : 0.40);
+      let bx = 0, by = d.hipY + d.span * 0.67, isFront = true;
+      let parentPart = "bodice";
+      if (bowCfg.placement === "waist") {
+        by = isBrief
+          ? (d.hipY + d.span * (curPatternMetrics.trousers.briefRise === "high" ? 0.36 : 0.14))
+          : waistYY;
+        parentPart = isBrief ? "trousers" : "waist";
+      } else if (bowCfg.placement === "neck_tie") {
+        by = d.hipY + d.span * 0.83;
+      } else if (bowCfg.placement === "back_waist") {
+        by = waistYY;
+        isFront = false;
+        parentPart = "waist";
+      } else if (bowCfg.placement === "left_shoulder") {
+        bx = -d.shoulderHalf * 0.62;
+        by = d.shoulderY - d.span * 0.04;
+      }
+      const surfZ = sampleGarmentSurfaceAbsZ(by, bx, isFront, d, accEase);
+      const bowPos = { x: bx, y: by, z: (isFront ? 1 : -1) * (surfZ + 0.005) };
+      const bow = createBowMesh({
+        ...bowCfg,
+        size: bowSize,
+        length: bowLen,
+        _explicitColor: Boolean(bowCfg.color && bowCfg.color !== "#f8fafc"),
+      }, bowPos, isFront, d, accEase, baseCol);
+      bow.userData.parentPart = parentPart;
+      attachAccessoryRigAnchor(bow, torsoGarmentWeights(by, bx, d));
       accessoriesGroup.add(bow);
+    }
+
+    if (broochCfg && broochCfg.enabled) {
+      let px = d.chestHalf ? d.chestHalf * 0.46 : 0.075;
+      let py = d.hipY + d.span * 0.72;
+      let parentPart = "bodice";
+      if (broochCfg.placement === "center_neck") {
+        px = 0;
+        py = d.hipY + d.span * 0.82;
+      } else if (broochCfg.placement === "right_chest") {
+        px = -(d.chestHalf ? d.chestHalf * 0.46 : 0.075);
+      } else if (broochCfg.placement === "left_shoulder") {
+        px = d.shoulderHalf * 0.56;
+        py = d.shoulderY - d.span * 0.045;
+      } else if (broochCfg.placement === "waist_side") {
+        px = (d.waistR || 0.12) * 0.58;
+        py = waistYY;
+        parentPart = "waist";
+      }
+      const surfZ = sampleGarmentSurfaceAbsZ(py, px, true, d, accEase);
+      const br = createBroochMesh(broochCfg, { x: px, y: py, z: surfZ + 0.005 }, d, accEase, baseCol);
+      br.userData.parentPart = parentPart;
+      attachAccessoryRigAnchor(br, torsoGarmentWeights(py, px, d));
+      accessoriesGroup.add(br);
     }
   }
 
   function setAccessories(cfg) {
     if (!cfg) return;
-    if (cfg.buttons) accessoriesState.buttons = { ...accessoriesState.buttons, ...cfg.buttons };
-    if (cfg.zipper) accessoriesState.zipper = { ...accessoriesState.zipper, ...cfg.zipper };
-    if (cfg.belt) accessoriesState.belt = { ...accessoriesState.belt, ...cfg.belt };
-    if (cfg.bow) accessoriesState.bow = { ...accessoriesState.bow, ...cfg.bow };
+    accessoriesState = normalizeAccessoriesState(accessoriesState, cfg, false);
     if (ready && lastDims) {
       buildAccessories(lastDims);
       applyPieceVisibility();
@@ -7094,10 +8113,7 @@ export const View3D = (() => {
       });
       if (opts.lookbookStyle) {
         const acc = opts.lookbookStyle.accessories || {};
-        accessoriesState.buttons = { enabled: false, style: "gold", placement: "front_placket", count: 6, ...acc.buttons };
-        accessoriesState.zipper = { enabled: false, style: "silver", placement: "center_front", openPct: 0, ...acc.zipper };
-        accessoriesState.belt = { enabled: false, style: "leather_gold", width: "medium", color: null, ...acc.belt };
-        accessoriesState.bow = { enabled: false, color: "#f8fafc", placement: "center_chest", ...acc.bow };
+        accessoriesState = normalizeAccessoriesState(createDefaultAccessoriesState(), acc, true);
         lastLookbookContrastHex = normalizeThreadHex(opts.lookbookStyle?.silhouette?.contrastStitch, null);
       } else {
         lastLookbookContrastHex = null;
