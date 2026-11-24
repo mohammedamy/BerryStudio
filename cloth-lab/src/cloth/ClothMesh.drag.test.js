@@ -2,9 +2,13 @@
 // Exercise the actual listener effect with CPU geometry and a stubbed GPU
 // readback. This verifies cleanup, not GPU rendering or physical drape.
 import source from './ClothMesh.jsx?raw'
+import simSource from './ClothSimulation.js?raw'
 import { describe, it, expect, vi } from 'vitest'
 import * as THREE from 'three'
 import { updateExportGeometry } from '../export/prepareScene'
+import { computeMaxDragExcursion, clampDragDisplacement, DEFAULT_DRAG_RADIUS } from './ClothSimulation.js'
+import { FABRIC_PRESETS } from './fabricPresets.js'
+import { PHYS_CLASS } from './piecePhysics.js'
 
 const effectStart = source.indexOf('  useEffect(() => {', source.indexOf('  const dragRef ='))
 const effectEnd = source.indexOf('\n\n  return <mesh', effectStart)
@@ -62,5 +66,41 @@ describe('cloth drag listener cleanup', () => {
       const calls = h.dragging.mock.calls.length
       h.pointer('pointerdown'); expect(h.dragging.mock.calls).toHaveLength(calls)
     } finally { h.dispose() }
+  })
+})
+
+describe('fabric-realistic drag tether and strain bounds', () => {
+  it('clamps extreme pointer pulls smoothly by fabric stretch and piece drape mobility', () => {
+    const satinBodiceMax = computeMaxDragExcursion({ maxStrain: FABRIC_PRESETS.satin.maxStrain, physClass: PHYS_CLASS.BIKINI_INTIMATE, flowWeight: 0 })
+    const extremeDelta = [-1.5, 0.05, 0]
+    const clampedSatin = clampDragDisplacement(extremeDelta, satinBodiceMax)
+    const clampedLen = Math.hypot(...clampedSatin)
+    expect(satinBodiceMax).toBeLessThan(0.075)
+    expect(clampedLen).toBeLessThan(satinBodiceMax)
+    expect(clampedLen).toBeGreaterThan(0.03)
+
+    const leatherMax = computeMaxDragExcursion({ maxStrain: FABRIC_PRESETS.leather.maxStrain })
+    const denimMax = computeMaxDragExcursion({ maxStrain: FABRIC_PRESETS.denim.maxStrain })
+    const cottonMax = computeMaxDragExcursion({ maxStrain: FABRIC_PRESETS.cotton.maxStrain })
+    const scubaMax = computeMaxDragExcursion({ maxStrain: FABRIC_PRESETS.scuba.maxStrain })
+    const jerseyMax = computeMaxDragExcursion({ maxStrain: FABRIC_PRESETS.jersey.maxStrain })
+    expect(leatherMax).toBeLessThan(denimMax)
+    expect(denimMax).toBeLessThan(cottonMax)
+    expect(cottonMax).toBeLessThan(satinBodiceMax)
+    expect(satinBodiceMax).toBeLessThan(scubaMax)
+    expect(scubaMax).toBeLessThan(jerseyMax)
+
+    const looseSkirtMax = computeMaxDragExcursion({ maxStrain: FABRIC_PRESETS.satin.maxStrain, physClass: PHYS_CLASS.LOOSE_FLOW, flowWeight: 1.0 })
+    expect(looseSkirtMax).toBeGreaterThan(satinBodiceMax)
+    expect(looseSkirtMax).toBeLessThan(0.22)
+    expect(DEFAULT_DRAG_RADIUS).toBeGreaterThan(0.04)
+  })
+
+  it('routes dragged particles through structural springs, soft pinch weights, and two strain-limit passes', () => {
+    expect(simSource).not.toContain('if (myFlatIdx == uDragParticleIndex)')
+    expect(simSource).toContain('uDragAnchorPos')
+    expect(simSource).toContain('uDragRestCenter')
+    expect(simSource).toContain('uDragRadius')
+    expect((simSource.match(/strainLimitCorrection\(/g) || []).length).toBeGreaterThanOrEqual(17)
   })
 })

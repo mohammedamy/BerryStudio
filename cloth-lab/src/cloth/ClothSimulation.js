@@ -34,6 +34,29 @@ const GRAVITY_RAMP_FRAMES = 90
 // (6% stretch ceiling) sits mid-band of the plan's 102-108% target and reads
 // as "resists but isn't rigid" for the default (cotton) fabric.
 const DEFAULT_MAX_STRAIN = 1.06
+export const DEFAULT_DRAG_RADIUS = 0.060
+
+export function computeMaxDragExcursion({ maxStrain = DEFAULT_MAX_STRAIN, physClass = 0, flowWeight = 0 } = {}) {
+  const strainGive = Math.max(0.01, maxStrain - 1.0)
+  const isLoose = physClass > 2.5 && physClass < 3.5
+  const isStruct = physClass > 3.5
+  const baseSlack = isStruct ? 0.022 : 0.038
+  const looseSwing = isLoose ? 0.12 * Math.max(0, Math.min(1, flowWeight)) : 0.0
+  return baseSlack + strainGive * 0.55 + looseSwing
+}
+
+export function clampDragDisplacement(rawDeltaXYZ, maxExcursion) {
+  const dx = rawDeltaXYZ?.[0] || 0
+  const dy = rawDeltaXYZ?.[1] || 0
+  const dz = rawDeltaXYZ?.[2] || 0
+  const rawLen = Math.hypot(dx, dy, dz)
+  if (rawLen <= 1e-8) return [0, 0, 0]
+  const cap = Math.max(maxExcursion, 1e-4)
+  const norm = rawLen / cap
+  const satLen = cap * (norm / Math.sqrt(1 + norm * norm))
+  const s = satLen / rawLen
+  return [dx * s, dy * s, dz * s]
+}
 
 export function textureDimFor(count) {
   return Math.max(2, Math.ceil(Math.sqrt(count)))
@@ -831,6 +854,9 @@ uniform float uSelfCollisionRadius;
 uniform float uSelfCollisionRestThreshold;
 uniform float uDragParticleIndex;
 uniform vec3 uDragTargetPosition;
+uniform vec3 uDragAnchorPos;
+uniform vec3 uDragRestCenter;
+uniform float uDragRadius;
 ${highQuality ? DIHEDRAL_BEND_UNIFORMS_GLSL : ''}
 ${PARTICLE_UV_GLSL}
 ${NEIGHBOR_CORRECTION_GLSL}
@@ -887,9 +913,9 @@ void main() {
   float effStructStiff = isElastic ? max(uStructStiff, 0.98)
     : (isBikini ? mix(uStructStiff, 0.968, 0.72)
     : (isStruct ? max(uStructStiff, 0.97) : uStructStiff));
-  float effMaxStrain = isElastic ? 1.22
-    : (isBikini ? 1.18
-    : (isStruct ? min(uMaxStrain, 1.03) : uMaxStrain));
+  float effMaxStrain = isElastic ? max(uMaxStrain, 1.18)
+    : (isBikini ? max(uMaxStrain, 1.105)
+    : (isStruct ? min(uMaxStrain, 1.025) : uMaxStrain));
   float effBendScale = isElastic ? 1.35
     : (isBikini ? 0.78
     : (isLoose ? mix(0.90, 0.52, flowW) : (isStruct ? 1.35 : 1.0)));
@@ -905,15 +931,6 @@ void main() {
       : pos;
     pinTarget = collideAllBody(pinTarget, pos, effFriction, skinOff);
     gl_FragColor = vec4(pinTarget, 0.0);
-    return;
-  }
-
-  // Grab-and-drag: force this particle to the pointer's live target
-  // instead of running physics on it at all. Checked before the rest of
-  // the step so a dragged particle never fights the solver — its NEIGHBORS
-  // still see it move (via texturePosition) and react normally.
-  if (myFlatIdx == uDragParticleIndex) {
-    gl_FragColor = vec4(collideAllBody(uDragTargetPosition, pos, effFriction, skinOff), 0.0);
     return;
   }
 
@@ -940,6 +957,37 @@ void main() {
     }
   }
   vec3 predicted = pos + velStep * effDamping + uGravity * uGravityRamp * uDt * uDt;
+
+  // Compliant finger-pinch grab-and-drag tether applied BEFORE structural/strain
+  // projection: pulls a smooth circular patch of cloth toward a fabric-strain-
+  // clamped target around the initial touch anchor instead of teleporting one
+  // vertex out past physical fabric limits.
+  if (uDragParticleIndex >= -0.5) {
+    float pinchDist = distance(myRestPos, uDragRestCenter);
+    if (pinchDist < uDragRadius) {
+      float uPinch = pinchDist / max(uDragRadius, 1e-4);
+      float dragPinchW = 1.0 - uPinch * uPinch;
+      dragPinchW *= dragPinchW;
+      vec3 centerCurr = texture2D(texturePosition, particleUV(uDragParticleIndex)).xyz;
+      vec3 rawPull = uDragTargetPosition - uDragAnchorPos;
+      float rawPullLen = length(rawPull);
+      if (rawPullLen > 1e-6) {
+        float strainGive = max(0.01, uMaxStrain - 1.0);
+        float baseSlack = isStruct ? 0.022 : 0.038;
+        float looseSwing = isLoose ? 0.12 * clamp(flowW, 0.0, 1.0) : 0.0;
+        float maxExcursion = baseSlack + strainGive * 0.55 + looseSwing;
+        float normPull = rawPullLen / max(maxExcursion, 1e-4);
+        float satLen = maxExcursion * (normPull * inversesqrt(1.0 + normPull * normPull));
+        rawPull *= satLen / rawPullLen;
+      }
+      vec3 clampedTarget = collideAllBody(uDragAnchorPos + rawPull, centerCurr, 0.0, skinOff);
+      vec3 pullStep = clampedTarget - centerCurr;
+      float pullStepLen = length(pullStep);
+      if (pullStepLen > 0.010) pullStep *= 0.010 / pullStepLen;
+      predicted += pullStep * dragPinchW * 0.78;
+    }
+  }
+
   float invMassSelf = 1.0 / max(uMassDensity * areaShare, 1e-6);
 
   vec4 structAcc = vec4(0.0);
@@ -1008,6 +1056,22 @@ ${highQuality ? DIHEDRAL_BEND_MAIN_GLSL : DEFAULT_BEND_MAIN_GLSL}
     predicted = collideAllBody(predicted, prevPos, effFriction, skinOff);
   }
 
+  // Post-collision & bend strain limit pass so no drag, collision, or bend
+  // impulse leaves an edge over-stretched past effMaxStrain at substep end.
+  vec4 postStrainAcc = vec4(0.0);
+  postStrainAcc += strainLimitCorrection(predicted, sA.x, srA.x, invMassSelf, effMaxStrain);
+  postStrainAcc += strainLimitCorrection(predicted, sA.y, srA.y, invMassSelf, effMaxStrain);
+  postStrainAcc += strainLimitCorrection(predicted, sA.z, srA.z, invMassSelf, effMaxStrain);
+  postStrainAcc += strainLimitCorrection(predicted, sA.w, srA.w, invMassSelf, effMaxStrain);
+  postStrainAcc += strainLimitCorrection(predicted, sB.x, srB.x, invMassSelf, effMaxStrain);
+  postStrainAcc += strainLimitCorrection(predicted, sB.y, srB.y, invMassSelf, effMaxStrain);
+  postStrainAcc += strainLimitCorrection(predicted, sB.z, srB.z, invMassSelf, effMaxStrain);
+  postStrainAcc += strainLimitCorrection(predicted, sB.w, srB.w, invMassSelf, effMaxStrain);
+  if (postStrainAcc.w > 0.5) {
+    predicted -= postStrainAcc.xyz / postStrainAcc.w;
+    predicted = collideAllBody(predicted, prevPos, effFriction, skinOff);
+  }
+
   vec3 netStep = predicted - pos;
   float netLen = length(netStep);
   if (netLen > 0.032) predicted = pos + netStep * (0.032 / netLen);
@@ -1015,7 +1079,7 @@ ${highQuality ? DIHEDRAL_BEND_MAIN_GLSL : DEFAULT_BEND_MAIN_GLSL}
   if (predicted.y < uFloorY) predicted.y = uFloorY;
 
   vec3 fromRest = predicted - myRestPos;
-  if (any(isnan(predicted)) || any(isinf(predicted)) || dot(fromRest, fromRest) > 9.0) {
+  if (any(isnan(predicted)) || any(isinf(predicted)) || dot(fromRest, fromRest) > 0.64) {
     predicted = collideAllBody(myRestPos, myRestPos, effFriction, skinOff);
   }
 
@@ -1200,6 +1264,8 @@ export class ClothSimulation {
   constructor(renderer, cloth, neighbors, fabric, { floorY = 0, collisionRig = [], bodyEnvelope = null, envelopeFrames = null, selfCollision = DEFAULT_SELF_COLLISION, pinnedMask = null, qualityTier = QUALITY_TIER_DEFAULT } = {}) {
     this.frameCount = 0
     this.simParticleCount = cloth.simParticleCount
+    this._simRestPositions = cloth.simRestPositions
+    this._activeDragParticle = -1
     this.texDim = textureDimFor(cloth.simParticleCount)
     this.substeps = SUBSTEPS_START
     this.budget = new FrameBudgetController({ min: SUBSTEPS_MIN, max: SUBSTEPS_MAX, start: SUBSTEPS_START, targetMs: SUBSTEP_TARGET_MS })
@@ -1303,6 +1369,9 @@ export class ClothSimulation {
       uSelfCollisionRestThreshold: { value: selfCollision.restThreshold },
       uDragParticleIndex: { value: -1 },
       uDragTargetPosition: { value: new THREE.Vector3() },
+      uDragAnchorPos: { value: new THREE.Vector3() },
+      uDragRestCenter: { value: new THREE.Vector3() },
+      uDragRadius: { value: DEFAULT_DRAG_RADIUS },
     })
 
     // WP-35: the hinge textures (and uDihedralStiff) only ever get built
@@ -1420,11 +1489,26 @@ export class ClothSimulation {
 
   setDragParticle(particleIndex, targetPosition) {
     const u = this.posVar.material.uniforms
+    if (this._activeDragParticle !== particleIndex) {
+      this._activeDragParticle = particleIndex
+      u.uDragAnchorPos.value.copy(targetPosition)
+      if (this._simRestPositions && particleIndex >= 0 && particleIndex < this.simParticleCount) {
+        const i3 = particleIndex * 3
+        u.uDragRestCenter.value.set(
+          this._simRestPositions[i3],
+          this._simRestPositions[i3 + 1],
+          this._simRestPositions[i3 + 2],
+        )
+      } else {
+        u.uDragRestCenter.value.copy(targetPosition)
+      }
+    }
     u.uDragParticleIndex.value = particleIndex
     u.uDragTargetPosition.value.copy(targetPosition)
   }
 
   clearDrag() {
+    this._activeDragParticle = -1
     this.posVar.material.uniforms.uDragParticleIndex.value = -1
   }
 
