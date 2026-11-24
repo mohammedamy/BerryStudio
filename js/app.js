@@ -88,6 +88,14 @@ import { classifyPiecePart, resolvePartsFabric3D, computePatternMetrics3D } from
 import { getPatternLookbookStyle, applyLookbookPieceColors } from './pattern-lookbook-styles.js';
 import { Auth, isAuthConfigured } from './auth.js';
 import { computeEntitlement, isAllowed } from './entitlement.js';
+import {
+  STITCH_PARTS,
+  THREAD_COLOR_PRESETS,
+  computeAutoContrastThreadHex,
+  createDefaultStitchConfig,
+  normalizeStitchConfig,
+  mapClothPieceToStitchPart,
+} from './stitch-config.js';
 
 (() => {
   "use strict";
@@ -102,7 +110,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     kids: null, custom: {}, unitsCm: true,
     measurementProfiles: [], selectedMeasurementProfileId: null,
     hoverHelp: true, highContrast: false, reduceMotion: false, cloudSync: false,
-    onboarded: false, mine: [], aiEndpoint: "", aiImageEndpoint: "", fabric3d: "cotton", showMeasDiagram: false,
+    onboarded: false, mine: [], aiEndpoint: "", aiImageEndpoint: "", fabric3d: "cotton", showMeasDiagram: false, stitchConfig: createDefaultStitchConfig(),
     // BerryStudio-Upgrade-Plan WP-1: provider layer config. Non-secret only —
     // API keys never live here, see js/ai-keystore.js. aiProviderCfg/
     // aiImageProviderCfg are keyed by provider id: { baseUrl?, model?, visionModel? }.
@@ -4351,6 +4359,112 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const activePreset = lbStyle?.print?.preset || "none";
     $$("#v3dPrintsPanel .v3d-preset-chip").forEach(c => c.classList.toggle("active", c.dataset.preset === activePreset));
   }
+  function getNormalizedStitchConfig() {
+    state.stitchConfig = normalizeStitchConfig(state.stitchConfig);
+    return state.stitchConfig;
+  }
+  function sync3DStitchControlsUI() {
+    const cfg = getNormalizedStitchConfig();
+    const toggle = $("#v3dStitchToggle");
+    const controls = $("#v3dStitchControls");
+    const styleSel = $("#v3dStitchStyle");
+    const scopeSel = $("#v3dStitchScope");
+    const colPick = $("#v3dStitchColor");
+    const autoChk = $("#v3dStitchAutoContrast");
+    if (toggle) toggle.checked = Boolean(cfg.enabled);
+    if (controls) controls.classList.toggle("disabled", !cfg.enabled);
+    if (styleSel && styleSel.value !== cfg.style) styleSel.value = cfg.style;
+    if (scopeSel && scopeSel.value !== cfg.visibility) scopeSel.value = cfg.visibility;
+    if (colPick && colPick.value.toLowerCase() !== cfg.defaultColor.toLowerCase()) colPick.value = cfg.defaultColor;
+    if (autoChk) autoChk.checked = Boolean(cfg.autoContrast);
+    $$("#v3dStitchSwatches .v3d-stitch-swatch").forEach((sw) => {
+      sw.classList.toggle("active", (sw.dataset.threadColor || "").toLowerCase() === cfg.defaultColor.toLowerCase());
+    });
+  }
+  function getActiveGarmentStitchParts() {
+    if (View3D.isReady && View3D.isReady()) {
+      const active = View3D.getActiveStitchParts ? View3D.getActiveStitchParts() : [];
+      if (active.length) return active;
+    }
+    const pcs = Canvas.getPieces();
+    const set = new Set();
+    pcs.forEach((p) => {
+      if (!p || p.visible === false) return;
+      const mapped = mapClothPieceToStitchPart(p);
+      set.add(mapped);
+    });
+    return STITCH_PARTS.map((p) => p.id).filter((id) => set.has(id));
+  }
+  function applyStitchConfigChange(nextCfg, { persistSave = true } = {}) {
+    state.stitchConfig = normalizeStitchConfig(nextCfg);
+    sync3DStitchControlsUI();
+    render3DStitchPartsUI();
+    if (View3D.setStitchConfig) View3D.setStitchConfig(state.stitchConfig);
+    if (state.view === "clothlab") syncClothLab();
+    if (persistSave) save();
+  }
+  function render3DStitchPartsUI() {
+    const host = $("#v3dStitchPartsList");
+    if (!host) return;
+    const cfg = getNormalizedStitchConfig();
+    const parts = getActiveGarmentStitchParts();
+    if (!parts.length) {
+      host.innerHTML = `<div class="v3d-stitch-empty">${T("stitchNoActiveParts")}</div>`;
+      return;
+    }
+    const pieceColors = partsFabric();
+    host.innerHTML = parts.map((partId) => {
+      const partState = cfg.parts[partId] || { enabled: true, color: null };
+      const baseNum = pieceColors?.[partId]?.front?.color ?? pieceColors?.bodice?.front?.color;
+      const baseHex = typeof baseNum === "number" ? ("#" + (baseNum & 0xffffff).toString(16).padStart(6, "0")) : "#4f46e5";
+      const displayHex = partState.color || (cfg.autoContrast ? computeAutoContrastThreadHex(baseHex) : cfg.defaultColor);
+      const labelKey = `stitchPart_${partId}`;
+      const label = T(labelKey) || partId;
+      return `<div class="v3d-stitch-part-row" data-stitch-part="${partId}">
+        <label class="v3d-stitch-part-lbl" title="${label}">
+          <input type="checkbox" class="v3d-stitch-part-chk" data-stitch-part="${partId}"${partState.enabled !== false ? " checked" : ""}>
+          <span>${label}</span>
+        </label>
+        <div class="v3d-stitch-part-actions">
+          <input type="color" class="v3d-stitch-color-input v3d-stitch-part-color" data-stitch-part="${partId}" value="${displayHex}" aria-label="${label}">
+          ${partState.color ? `<button type="button" class="v3d-stitch-reset-btn" data-stitch-reset="${partId}">${T("stitchResetColor") || "Auto"}</button>` : ""}
+        </div>
+      </div>`;
+    }).join("");
+    host.querySelectorAll(".v3d-stitch-part-chk").forEach((chk) => {
+      chk.onchange = () => {
+        const pid = chk.dataset.stitchPart;
+        const cur = getNormalizedStitchConfig();
+        applyStitchConfigChange({
+          ...cur,
+          parts: { ...cur.parts, [pid]: { ...(cur.parts[pid] || {}), enabled: chk.checked } },
+        });
+      };
+    });
+    host.querySelectorAll(".v3d-stitch-part-color").forEach((inp) => {
+      const onCol = (saveNow) => {
+        const pid = inp.dataset.stitchPart;
+        const cur = getNormalizedStitchConfig();
+        applyStitchConfigChange({
+          ...cur,
+          enabled: true,
+          parts: { ...cur.parts, [pid]: { ...(cur.parts[pid] || {}), enabled: true, color: inp.value } },
+        }, { persistSave: saveNow });
+      };
+      inp.oninput = () => onCol(false);
+      inp.onchange = () => onCol(true);
+    });
+    host.querySelectorAll("[data-stitch-reset]").forEach((btn) => {
+      btn.onclick = () => {
+        const pid = btn.dataset.stitchReset;
+        const cur = getNormalizedStitchConfig();
+        applyStitchConfigChange({
+          ...cur,
+          parts: { ...cur.parts, [pid]: { ...(cur.parts[pid] || {}), color: null } },
+        });
+      };
+    });
+  }
   function loadPattern(id){
     state.loaded=id; const p=PATTERNS[id];
     // switch category to match
@@ -4735,6 +4849,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     syncMannequinSelectorsUI();
     renderMannequinCatalogPanel();
     if (activeMannequinPanelMode === "styling") renderMannequinStylingPanel();
+    sync3DStitchControlsUI();
+    render3DStitchPartsUI();
     if (toastNotify) toast(`${T("mannequinApplied")} · ${L(mq.name)} (${mq.measurements.height} cm)`);
   }
 
@@ -4859,6 +4975,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     syncMannequinSelectorsUI();
     renderMannequinCatalogPanel();
     if (activeMannequinPanelMode === "styling") renderMannequinStylingPanel();
+    sync3DStitchControlsUI();
+    render3DStitchPartsUI();
     const fabricSelect = $("#v3dFabricSelect");
     if (fabricSelect && fabricSelect.value !== (state.fabric3d || "cotton")) {
       fabricSelect.value = state.fabric3d || "cotton";
@@ -4878,12 +4996,15 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       parts,
       patternMetrics,
       lookbookStyle: shouldApplyLookbook ? lbStyle : null,
+      stitchConfig: getNormalizedStitchConfig(),
       forceMannequin: true,
       resetPrints: shouldApplyLookbook,
       resetCamera: Boolean(extraOpts && extraOpts.resetCamera),
     });
     if (shouldApplyLookbook && lbStyle) syncLookbookControlsUI(lbStyle);
     sync3DColorUI(col);
+    sync3DStitchControlsUI();
+    render3DStitchPartsUI();
     updateMismatchWarning();
     update3DStatusPill();
   }
@@ -5138,6 +5259,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         morph: activeMq.morph,
       },
       fabricId: dominantFabricId(),
+      stitchConfig: getNormalizedStitchConfig(),
       lookbookPrint,
       avatarGLB: state.avatarGLB || {},
       // cloth-lab was English-only regardless of this app's own language
@@ -5309,6 +5431,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     syncMannequinSelectorsUI();
     renderMannequinCatalogPanel();
     if (activeMannequinPanelMode === "styling") renderMannequinStylingPanel();
+    sync3DStitchControlsUI();
+    render3DStitchPartsUI();
     update3DStatusPill();
     // Cloth Lab only re-reads `lang` from a resent payload (it has no
     // language toggle of its own — it mirrors this app's) — without this,
@@ -6208,6 +6332,9 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const accBtn = $("#v3dAccBtn");
     const accPanel = $("#v3dAccPanel");
     const accClose = $("#v3dAccCloseBtn");
+    const stitchBtn = $("#v3dStitchBtn");
+    const stitchPanel = $("#v3dStitchPanel");
+    const stitchClose = $("#v3dStitchCloseBtn");
     const printsBtn = $("#v3dPrintsBtn");
     const printsPanel = $("#v3dPrintsPanel");
     const printsClose = $("#v3dPrintsCloseBtn");
@@ -6216,6 +6343,10 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     const closeMqPanel = () => {
       if (mqPanel) mqPanel.classList.add("hidden");
       mqBtn?.classList.remove("active");
+    };
+    const closeStitchPanel = () => {
+      if (stitchPanel) stitchPanel.classList.add("hidden");
+      stitchBtn?.classList.remove("active");
     };
 
     // Drawer / Panel Toggles
@@ -6226,6 +6357,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         accBtn.classList.toggle("active", isHidden);
         if (isHidden) {
           closeMqPanel();
+          closeStitchPanel();
           if (printsPanel) {
             printsPanel.classList.add("hidden");
             printsBtn?.classList.remove("active");
@@ -6240,6 +6372,24 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
       };
     }
 
+    if (stitchBtn && stitchPanel) {
+      stitchBtn.onclick = () => {
+        const isHidden = stitchPanel.classList.contains("hidden");
+        stitchPanel.classList.toggle("hidden", !isHidden);
+        stitchBtn.classList.toggle("active", isHidden);
+        if (isHidden) {
+          closeMqPanel();
+          if (accPanel) { accPanel.classList.add("hidden"); accBtn?.classList.remove("active"); }
+          if (printsPanel) { printsPanel.classList.add("hidden"); printsBtn?.classList.remove("active"); }
+          sync3DStitchControlsUI();
+          render3DStitchPartsUI();
+        }
+      };
+    }
+    if (stitchClose && stitchPanel) {
+      stitchClose.onclick = closeStitchPanel;
+    }
+
     if (printsBtn && printsPanel) {
       printsBtn.onclick = () => {
         const isHidden = printsPanel.classList.contains("hidden");
@@ -6247,6 +6397,7 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
         printsBtn.classList.toggle("active", isHidden);
         if (isHidden) {
           closeMqPanel();
+          closeStitchPanel();
           if (accPanel) {
             accPanel.classList.add("hidden");
             accBtn?.classList.remove("active");
@@ -6347,6 +6498,60 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if (beltStyle) beltStyle.onchange = update3DAccessories;
     const beltWidth = $("#v3dBeltWidth");
     if (beltWidth) beltWidth.onchange = update3DAccessories;
+
+    // Sewing Stitches & Per-Part External Thread Controls
+    const stToggle = $("#v3dStitchToggle");
+    const stStyle = $("#v3dStitchStyle");
+    const stScope = $("#v3dStitchScope");
+    const stColor = $("#v3dStitchColor");
+    const stAuto = $("#v3dStitchAutoContrast");
+    const stSwatches = $("#v3dStitchSwatches");
+    if (stSwatches) {
+      stSwatches.innerHTML = THREAD_COLOR_PRESETS.map((sw) => {
+        const title = state.lang === "ar" ? sw.label.ar : sw.label.en;
+        return `<button type="button" class="v3d-stitch-swatch" data-thread-color="${sw.hex}" title="${title}" aria-label="${title}" style="background:${sw.hex}"></button>`;
+      }).join("");
+      stSwatches.querySelectorAll(".v3d-stitch-swatch").forEach((btn) => {
+        btn.onclick = () => {
+          const cur = getNormalizedStitchConfig();
+          applyStitchConfigChange({ ...cur, enabled: true, autoContrast: false, defaultColor: btn.dataset.threadColor });
+        };
+      });
+    }
+    if (stToggle) {
+      stToggle.onchange = () => {
+        const cur = getNormalizedStitchConfig();
+        applyStitchConfigChange({ ...cur, enabled: stToggle.checked });
+      };
+    }
+    if (stStyle) {
+      stStyle.onchange = () => {
+        const cur = getNormalizedStitchConfig();
+        applyStitchConfigChange({ ...cur, enabled: true, style: stStyle.value });
+      };
+    }
+    if (stScope) {
+      stScope.onchange = () => {
+        const cur = getNormalizedStitchConfig();
+        applyStitchConfigChange({ ...cur, visibility: stScope.value });
+      };
+    }
+    if (stColor) {
+      const onGlobalCol = (saveNow) => {
+        const cur = getNormalizedStitchConfig();
+        applyStitchConfigChange({ ...cur, enabled: true, autoContrast: false, defaultColor: stColor.value }, { persistSave: saveNow });
+      };
+      stColor.oninput = () => onGlobalCol(false);
+      stColor.onchange = () => onGlobalCol(true);
+    }
+    if (stAuto) {
+      stAuto.onchange = () => {
+        const cur = getNormalizedStitchConfig();
+        applyStitchConfigChange({ ...cur, enabled: true, autoContrast: stAuto.checked });
+      };
+    }
+    sync3DStitchControlsUI();
+    render3DStitchPartsUI();
 
     // Prints & Artwork Presets
     const printTarget = $("#v3dPrintTarget");
@@ -6751,6 +6956,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
           setMannequinPanelMode(activeMannequinPanelMode);
           $("#v3dAccPanel")?.classList.add("hidden");
           $("#v3dAccBtn")?.classList.remove("active");
+          $("#v3dStitchPanel")?.classList.add("hidden");
+          $("#v3dStitchBtn")?.classList.remove("active");
           $("#v3dPrintsPanel")?.classList.add("hidden");
           $("#v3dPrintsBtn")?.classList.remove("active");
         }
@@ -6821,6 +7028,8 @@ import { computeEntitlement, isAllowed } from './entitlement.js';
     if (printsBtn) tip(printsBtn, T("printsAndArtwork"), "Prints, graphics, and preset fabric textures");
     const accBtn = $("#v3dAccBtn");
     if (accBtn) tip(accBtn, T("trimsAndAccessories"), "Buttons, zippers, belts, and trims");
+    const stTipBtn = $("#v3dStitchBtn");
+    if (stTipBtn) tip(stTipBtn, T("sewingStitches"), "3D sewing stitches and per-part external thread colors");
     View3D.setTensionMetricsCallback(m => {
       const peak = $("#v3dPeakStrain");
       const ease = $("#v3dAvgEase");

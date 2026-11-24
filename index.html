@@ -265,6 +265,10 @@
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="9.5" cy="9.5" r="1.5" fill="currentColor"/><circle cx="14.5" cy="9.5" r="1.5" fill="currentColor"/><circle cx="9.5" cy="14.5" r="1.5" fill="currentColor"/><circle cx="14.5" cy="14.5" r="1.5" fill="currentColor"/></svg>
                 <span data-i18n="v3dAccShort">Trims</span>
               </button>
+              <button id="v3dStitchBtn" class="v3d-btn" title="Sewing Stitches & Thread Colors" aria-label="Sewing Stitches">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h3M9 12h3M15 12h3M21 12h0"/><path d="M5 7c2 0 4 2 7 5s5 5 7 5"/></svg>
+                <span data-i18n="v3dStitchesShort">Stitches</span>
+              </button>
             </div>
 
             <span class="v3d-sep"></span>
@@ -418,6 +422,57 @@
                     </select>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Floating Sewing Stitches & Thread Color Panel -->
+          <div id="v3dStitchPanel" class="v3d-floating-panel v3d-stitch-panel hidden" aria-labelledby="v3dStitchPanelTitle">
+            <div class="v3d-panel-head">
+              <h3 id="v3dStitchPanelTitle" data-i18n="sewingStitches">Sewing Stitches</h3>
+              <button id="v3dStitchCloseBtn" class="v3d-panel-close" title="Close" aria-label="Close">&times;</button>
+            </div>
+            <div class="v3d-panel-body">
+              <div class="v3d-panel-section">
+                <div class="v3d-section-title">
+                  <label class="v3d-checkbox-label">
+                    <input type="checkbox" id="v3dStitchToggle">
+                    <strong data-i18n="enableStitches">Show Sewing Stitches</strong>
+                  </label>
+                </div>
+                <div id="v3dStitchControls" class="v3d-sub-controls disabled">
+                  <div class="v3d-control-row">
+                    <label for="v3dStitchStyle" data-i18n="stitchStyle">Stitch Type</label>
+                    <select id="v3dStitchStyle" class="v3d-select sm">
+                      <option value="lockstitch" data-i18n="stitchLockstitch">Single Topstitch</option>
+                      <option value="twin" data-i18n="stitchTwin">Twin-Needle</option>
+                      <option value="zigzag" data-i18n="stitchZigzag">Zigzag / Overlock</option>
+                      <option value="saddle" data-i18n="stitchSaddle">Bold Saddle</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dStitchScope" data-i18n="stitchScope">Visibility</label>
+                    <select id="v3dStitchScope" class="v3d-select sm">
+                      <option value="external" data-i18n="stitchScopeExternal">External Visible Only</option>
+                      <option value="all" data-i18n="stitchScopeAll">All Seams &amp; Hems</option>
+                    </select>
+                  </div>
+                  <div class="v3d-control-row">
+                    <label for="v3dStitchColor" data-i18n="stitchGlobalColor">Thread Color</label>
+                    <div class="v3d-stitch-global-pick">
+                      <input type="color" id="v3dStitchColor" value="#d99b38" class="v3d-stitch-color-input" aria-label="Default Thread Color">
+                      <label class="v3d-stitch-auto-lbl" title="Auto high-contrast thread vs fabric">
+                        <input type="checkbox" id="v3dStitchAutoContrast">
+                        <span data-i18n="stitchAutoContrast">Auto</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div id="v3dStitchSwatches" class="v3d-stitch-swatches" role="group" aria-label="Thread Presets"></div>
+                </div>
+              </div>
+              <div class="v3d-panel-section">
+                <div class="v3d-section-title" data-i18n="stitchPerPartTitle">Per-Part External Thread Color</div>
+                <div id="v3dStitchPartsList" class="v3d-stitch-parts"></div>
               </div>
             </div>
           </div>

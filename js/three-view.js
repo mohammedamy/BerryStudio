@@ -26,6 +26,14 @@ import {
 import { getMannequinFor } from "./mannequin-catalog.js";
 import { computePatternMetrics3D } from "./pattern-3d-metrics.js";
 import { getFabricTextureSet } from "./fabric-textures.js";
+import {
+  createDefaultStitchConfig,
+  normalizeStitchConfig,
+  normalizeThreadHex,
+  resolveStitchThreadColor,
+  STITCH_PART_INDEX,
+  STITCH_STYLES,
+} from "./stitch-config.js";
 
 export const View3D = (() => {
   let THREE, OrbitControls, GLTFLoader, RGBELoader, cloneSkeleton;
@@ -55,6 +63,10 @@ export const View3D = (() => {
     belt: { enabled: false, style: "leather_gold", width: "medium", color: null },
     bow: { enabled: false, color: "#f8fafc", placement: "center_chest" },
   };
+  let stitchesGroup = null;
+  let stitchState = createDefaultStitchConfig();
+  let stitchMaterialsByPart = {};
+  let lastLookbookContrastHex = null;
   const avatarURLs = {};
 
   // ---------- GLB robustness: timeout, retry, in-memory cache ----------
@@ -4118,18 +4130,20 @@ export const View3D = (() => {
       const count = posAttr.count;
       const part = mesh.name;
       const meta = geo.userData.gridMeta;
-      const isTrousers = part === "trousers";
-      const isSkirt = part === "skirt";
+      const isStitch = Boolean(mesh.userData.isStitch);
+      const isTrousers = part === "trousers" || mesh.userData.parentPart === "trousers";
+      const isSkirt = part === "skirt" || mesh.userData.parentPart === "skirt";
       const isSleeve = part === "sleeve" || mesh.userData.parentPart === "sleeve";
-      const isBodice = part === "bodice" || part === "outer";
-      const isCollar = mesh.userData.garmentType === "collar" || part === "trim";
+      const isBodice = part === "bodice" || part === "outer" || mesh.userData.parentPart === "bodice" || mesh.userData.parentPart === "outer";
+      const isCollar = mesh.userData.garmentType === "collar" || part === "trim" || mesh.userData.parentPart === "trim";
       const isBra = mesh.userData.garmentType === "bra";
       const isBraStrap = Boolean(mesh.userData.isBraStrap);
       const fitTier = mesh.userData.fitTier || (isBra ? "second-skin" : "regular");
       const isTight = fitTier === "second-skin";
       const isFittedTier = fitTier === "fitted";
-      const flutterMult = isTight ? 0.0 : (isFittedTier ? 0.22 : 1.0);
-      const dynEnvMargin = isTight ? 0.0034 : (isFittedTier ? 0.0048 : 0.0068);
+      const flutterMult = isStitch ? 0.0 : (isTight ? 0.0 : (isFittedTier ? 0.22 : 1.0));
+      const baseEnvMargin = isTight ? 0.0034 : (isFittedTier ? 0.0048 : 0.0068);
+      const dynEnvMargin = isStitch ? (baseEnvMargin + 0.0018) : baseEnvMargin;
 
       for (let i = 0; i < count; i++) {
         const i3 = i * 3;
@@ -4232,7 +4246,8 @@ export const View3D = (() => {
           }
         } else if (exactEnv && exactFrames) {
           // Collars, lapels & trim overlays: strict skin surface clearance including neck/chest
-          projectOutsideExactMannequinEnvelope(p, exactEnv, exactFrames, d, isTight ? 0.0036 : 0.0056, { skipShoulderTop: true });
+          const colMargin = isStitch ? 0.0074 : (isTight ? 0.0036 : 0.0056);
+          projectOutsideExactMannequinEnvelope(p, exactEnv, exactFrames, d, colMargin, { skipShoulderTop: true });
         }
 
         // Prevent floor-length skirts/robes from dipping below studio floor y = 0.008
@@ -4631,6 +4646,7 @@ export const View3D = (() => {
     enforceBindPoseBodyClearance(garmentGroup, activeMannequin, d);
 
     buildAccessories(d);
+    buildStitches(d, pm, skeleton);
     applyPieceVisibility();
     if (activeMannequin && limbs && limbs.leg1) {
       applyNaturalHumanMotion(limbs, d, activeMannequin.landmarks, {
@@ -5145,6 +5161,407 @@ export const View3D = (() => {
       buildAccessories(lastDims);
       applyPieceVisibility();
       updateAccessoriesPose();
+    }
+  }
+
+  function resolveGarmentMeshStitchPart(mesh) {
+    if (!mesh) return "bodice";
+    if (mesh.userData?.garmentType === "collar" || mesh.name === "trim") return "trim";
+    if (mesh.name === "outer" || mesh.userData?.parentPart === "outer") return "outer";
+    if (mesh.name === "sleeve" || mesh.userData?.parentPart === "sleeve") return "sleeve";
+    if (mesh.name === "skirt" || mesh.userData?.parentPart === "skirt") return "skirt";
+    if (mesh.name === "trousers" || mesh.userData?.parentPart === "trousers") return "trousers";
+    return "bodice";
+  }
+
+  function getActiveStitchParts() {
+    const present = new Set();
+    if (garmentGroup) {
+      garmentGroup.traverse((o) => {
+        if (!o.isMesh || o.userData?.isStitch || o.name === "accessories") return;
+        let ancestor = o.parent;
+        let isAcc = false;
+        while (ancestor && ancestor !== garmentGroup) {
+          if (ancestor.name === "accessories" || ancestor.name === "stitches") { isAcc = true; break; }
+          ancestor = ancestor.parent;
+        }
+        if (isAcc || !o.visible) return;
+        present.add(resolveGarmentMeshStitchPart(o));
+      });
+    }
+    return Object.keys(STITCH_PART_INDEX).filter((k) => present.has(k));
+  }
+
+  function resolvePartThreadHex(partKey) {
+    const baseNum = fabricState[partKey]?.front?.color ?? fabricState.bodice?.front?.color ?? 0x4f46e5;
+    const baseHex = typeof baseNum === "number" ? ("#" + (baseNum & 0xffffff).toString(16).padStart(6, "0")) : baseNum;
+    return resolveStitchThreadColor({
+      partKey,
+      baseFabricHex: baseHex,
+      stitchConfig: stitchState,
+      lookbookContrastHex: lastLookbookContrastHex,
+    });
+  }
+
+  function extractBoundaryChainsFromMesh(mesh) {
+    const geo = mesh.geometry;
+    const restPos = geo.userData?.restPos;
+    const posArr = restPos || geo.attributes?.position?.array;
+    const indexAttr = geo.index;
+    if (!posArr || !indexAttr) return null;
+
+    const idxArr = indexAttr.array;
+    const normAttr = geo.attributes?.normal || null;
+    const triCount = Math.floor(idxArr.length / 3);
+    const edgeMap = new Map();
+    const recordEdge = (a, b, opp, ti) => {
+      const k = a < b ? `${a}_${b}` : `${b}_${a}`;
+      const existing = edgeMap.get(k);
+      if (existing) existing.count += 1;
+      else edgeMap.set(k, { a, b, opp, ti, count: 1 });
+    };
+    for (let t = 0; t < triCount; t++) {
+      const i0 = idxArr[t * 3], i1 = idxArr[t * 3 + 1], i2 = idxArr[t * 3 + 2];
+      recordEdge(i0, i1, i2, t);
+      recordEdge(i1, i2, i0, t);
+      recordEdge(i2, i0, i1, t);
+    }
+
+    const boundarySegs = [];
+    for (const edge of edgeMap.values()) {
+      if (edge.count !== 1) continue;
+      const a3 = edge.a * 3, b3 = edge.b * 3, c3 = edge.opp * 3;
+      const ax = posArr[a3], ay = posArr[a3 + 1], az = posArr[a3 + 2];
+      const bx = posArr[b3], by = posArr[b3 + 1], bz = posArr[b3 + 2];
+      const cx = posArr[c3], cy = posArr[c3 + 1], cz = posArr[c3 + 2];
+      const dx = bx - ax, dy = by - ay, dz = bz - az;
+      const segLen = Math.hypot(dx, dy, dz);
+      if (segLen < 0.002) continue;
+
+      const u1x = bx - ax, u1y = by - ay, u1z = bz - az;
+      const u2x = cx - ax, u2y = cy - ay, u2z = cz - az;
+      let nx = u1y * u2z - u1z * u2y;
+      let ny = u1z * u2x - u1x * u2z;
+      let nz = u1x * u2y - u1y * u2x;
+      const nLen = Math.hypot(nx, ny, nz) || 1;
+      nx /= nLen; ny /= nLen; nz /= nLen;
+
+      const midX = (ax + bx) * 0.5, midZ = (az + bz) * 0.5;
+      if (normAttr) {
+        const vnx = normAttr.getX(edge.a) + normAttr.getX(edge.b);
+        const vny = normAttr.getY(edge.a) + normAttr.getY(edge.b);
+        const vnz = normAttr.getZ(edge.a) + normAttr.getZ(edge.b);
+        if (Math.hypot(vnx, vny, vnz) > 1e-4) {
+          if (nx * vnx + ny * vny + nz * vnz < 0) {
+            nx = -nx; ny = -ny; nz = -nz;
+          }
+        } else if (Math.hypot(midX, midZ) > 0.02 && (nx * midX + nz * midZ) < 0) {
+          nx = -nx; ny = -ny; nz = -nz;
+        }
+      } else if (Math.hypot(midX, midZ) > 0.02 && (nx * midX + nz * midZ) < 0) {
+        nx = -nx; ny = -ny; nz = -nz;
+      }
+
+      const tx = dx / segLen, ty = dy / segLen, tz = dz / segLen;
+      const mx = (ax + bx) * 0.5, my = (ay + by) * 0.5, mz = (az + bz) * 0.5;
+      let ix = cx - mx, iy = cy - my, iz = cz - mz;
+      const alongT = ix * tx + iy * ty + iz * tz;
+      ix -= tx * alongT; iy -= ty * alongT; iz -= tz * alongT;
+      const alongN = ix * nx + iy * ny + iz * nz;
+      ix -= nx * alongN; iy -= ny * alongN; iz -= nz * alongN;
+      const iLen = Math.hypot(ix, iy, iz) || 1;
+      ix /= iLen; iy /= iLen; iz /= iLen;
+
+      boundarySegs.push({
+        a: edge.a, b: edge.b, segLen,
+        ax, ay, az, bx, by, bz,
+        tx, ty, tz, nx, ny, nz, ix, iy, iz,
+      });
+    }
+    if (!boundarySegs.length) return null;
+
+    // Group unordered boundary segments into connected chains for uniform stitch pitch
+    const adj = new Map();
+    boundarySegs.forEach((s, i) => {
+      if (!adj.has(s.a)) adj.set(s.a, []);
+      if (!adj.has(s.b)) adj.set(s.b, []);
+      adj.get(s.a).push(i);
+      adj.get(s.b).push(i);
+    });
+
+    const used = new Uint8Array(boundarySegs.length);
+    const chains = [];
+    const orderedFirst = [];
+    for (let i = 0; i < boundarySegs.length; i++) {
+      if ((adj.get(boundarySegs[i].a)?.length || 0) === 1 || (adj.get(boundarySegs[i].b)?.length || 0) === 1) {
+        orderedFirst.push(i);
+      }
+    }
+    for (let i = 0; i < boundarySegs.length; i++) orderedFirst.push(i);
+
+    for (const startIdx of orderedFirst) {
+      if (used[startIdx]) continue;
+      let chain = [];
+      let curIdx = startIdx;
+      let forward = (adj.get(boundarySegs[curIdx].a)?.length || 0) === 1 || (adj.get(boundarySegs[curIdx].b)?.length || 0) !== 1;
+      while (curIdx !== -1 && !used[curIdx]) {
+        used[curIdx] = 1;
+        const raw = boundarySegs[curIdx];
+        const seg = forward
+          ? raw
+          : {
+            ...raw,
+            a: raw.b, b: raw.a,
+            ax: raw.bx, ay: raw.by, az: raw.bz,
+            bx: raw.ax, by: raw.ay, bz: raw.az,
+            tx: -raw.tx, ty: -raw.ty, tz: -raw.tz,
+          };
+        if (chain.length > 0) {
+          const prev = chain[chain.length - 1];
+          const dot = prev.tx * seg.tx + prev.ty * seg.ty + prev.tz * seg.tz;
+          if (dot < 0.25) {
+            chains.push(chain);
+            chain = [];
+          }
+        }
+        chain.push(seg);
+        let nextIdx = -1, nextFwd = true;
+        const cands = adj.get(seg.b) || [];
+        for (const cand of cands) {
+          if (used[cand]) continue;
+          nextIdx = cand;
+          nextFwd = boundarySegs[cand].a === seg.b;
+          break;
+        }
+        curIdx = nextIdx;
+        forward = nextFwd;
+      }
+      if (chain.length) chains.push(chain);
+    }
+
+    return { chains, skinIdx: geo.userData?.skinIdx || null, skinWgt: geo.userData?.skinWgt || null };
+  }
+
+  function appendStitchDashQuad(buf, seg, u0, u1, insetM, halfW, liftM, isZig, zigStep, zigAmpM, skinIdx, skinWgt) {
+    const SLICES = 3;
+    const baseVert = buf.pos.length / 3;
+    const endIdx = ((u0 + u1) * 0.5) < 0.5 ? seg.a : seg.b;
+    const skOff = endIdx * 4;
+    const si0 = skinIdx ? skinIdx[skOff] : 0;
+    const si1 = skinIdx ? skinIdx[skOff + 1] : 0;
+    const si2 = skinIdx ? skinIdx[skOff + 2] : 0;
+    const si3 = skinIdx ? skinIdx[skOff + 3] : 0;
+    const sw0 = skinWgt ? skinWgt[skOff] : 1;
+    const sw1 = skinWgt ? skinWgt[skOff + 1] : 0;
+    const sw2 = skinWgt ? skinWgt[skOff + 2] : 0;
+    const sw3 = skinWgt ? skinWgt[skOff + 3] : 0;
+
+    for (let s = 0; s <= SLICES; s++) {
+      const f = s / SLICES;
+      const u = u0 + (u1 - u0) * f;
+      const px = seg.ax + (seg.bx - seg.ax) * u;
+      const py = seg.ay + (seg.by - seg.ay) * u;
+      const pz = seg.az + (seg.bz - seg.az) * u;
+
+      const archLift = (0.00135 + liftM * Math.sin(Math.PI * f));
+      const zag = isZig ? (((zigStep % 2) === 0 ? -1 : 1) * zigAmpM * (f - 0.5) * 2.0) : 0;
+      const offIn = insetM + zag;
+
+      for (const side of [-1, 1]) {
+        const wOff = side * halfW;
+        const vx = px + seg.ix * (offIn + wOff) + seg.nx * archLift;
+        const vy = py + seg.iy * (offIn + wOff) + seg.ny * archLift;
+        const vz = pz + seg.iz * (offIn + wOff) + seg.nz * archLift;
+        buf.pos.push(vx, vy, vz);
+        buf.uvs.push(u, side > 0 ? 1 : 0);
+        buf.si.push(si0, si1, si2, si3);
+        buf.sw.push(sw0, sw1, sw2, sw3);
+      }
+    }
+    for (let s = 0; s < SLICES; s++) {
+      const r0 = baseVert + s * 2;
+      const r1 = r0 + 2;
+      buf.idx.push(r0, r0 + 1, r1 + 1, r0, r1 + 1, r1);
+    }
+  }
+
+  function buildStitches(d, pm, skeleton) {
+    if (stitchesGroup) {
+      if (garmentGroup) garmentGroup.remove(stitchesGroup);
+      disposeObject3D(stitchesGroup);
+    }
+    stitchesGroup = new THREE.Group();
+    stitchesGroup.name = "stitches";
+    stitchMaterialsByPart = {};
+    if (garmentGroup) garmentGroup.add(stitchesGroup);
+
+    if (!stitchState.enabled || !garmentGroup) return;
+
+    const styleSpec = STITCH_STYLES[stitchState.style] || STITCH_STYLES.lockstitch;
+    const dashM = styleSpec.dashMm * 0.001;
+    const gapM = styleSpec.gapMm * 0.001;
+    const pitchM = Math.max(0.0015, dashM + gapM);
+    const halfW = Math.max(0.00105, styleSpec.widthMm * 0.00145);
+    const liftM = styleSpec.liftMm * 0.001 + 0.0004;
+    const isZig = styleSpec.id === "zigzag";
+    const zigAmpM = (styleSpec.amplitudeMm || 0) * 0.001;
+    const rowOffsets = styleSpec.rows === 2
+      ? [
+        (styleSpec.insetMm - (styleSpec.rowSpacingMm || 3.2) * 0.5) * 0.001,
+        (styleSpec.insetMm + (styleSpec.rowSpacingMm || 3.2) * 0.5) * 0.001,
+      ]
+      : [styleSpec.insetMm * 0.001];
+
+    const isClosedOuterCover = Boolean(pm?.bodice?.outerLayer?.enabled && !pm.bodice.outerLayer.isOpenFront);
+    const partBuckets = {};
+
+    const sourceMeshes = [];
+    garmentGroup.traverse((o) => {
+      if (!o.isMesh || o.userData?.isStitch || !o.geometry?.attributes?.position) return;
+      let ancestor = o.parent;
+      while (ancestor && ancestor !== garmentGroup) {
+        if (ancestor.name === "accessories" || ancestor.name === "stitches") return;
+        ancestor = ancestor.parent;
+      }
+      if (o.userData?.isBraStrap) return;
+      sourceMeshes.push(o);
+    });
+
+    for (const srcMesh of sourceMeshes) {
+      const partKey = resolveGarmentMeshStitchPart(srcMesh);
+      if (stitchState.visibility === "external" && srcMesh.userData?.isInternal) continue;
+      if (stitchState.visibility === "external" && partKey === "bodice" && isClosedOuterCover) continue;
+
+      const extracted = extractBoundaryChainsFromMesh(srcMesh);
+      if (!extracted) continue;
+
+      if (!partBuckets[partKey]) {
+        partBuckets[partKey] = {
+          pos: [], uvs: [], si: [], sw: [], idx: [],
+          fitTier: srcMesh.userData?.fitTier || "regular",
+          armSide: srcMesh.userData?.armSide || 0,
+          garmentType: srcMesh.userData?.garmentType || null,
+        };
+      }
+      const bucket = partBuckets[partKey];
+      const { chains, skinIdx, skinWgt } = extracted;
+
+      for (const insetM of rowOffsets) {
+        for (const chain of chains) {
+          let cursor = 0;
+          let stepIdx = 0;
+          let nextDashAt = 0;
+          for (const seg of chain) {
+            const sLen = seg.segLen;
+            while (nextDashAt + dashM * 0.35 < cursor + sLen) {
+              const localStart = Math.max(0, nextDashAt - cursor);
+              const localEnd = Math.min(sLen, (nextDashAt + dashM) - cursor);
+              if (localEnd - localStart > dashM * 0.25) {
+                const u0 = localStart / sLen;
+                const u1 = localEnd / sLen;
+                appendStitchDashQuad(bucket, seg, u0, u1, insetM, halfW, liftM, isZig, stepIdx, zigAmpM, skinIdx, skinWgt);
+              }
+              if (nextDashAt + dashM <= cursor + sLen) {
+                nextDashAt += pitchM;
+                stepIdx++;
+              } else {
+                break;
+              }
+            }
+            cursor += sLen;
+            if (nextDashAt < cursor - dashM) {
+              nextDashAt = cursor;
+            }
+          }
+        }
+      }
+    }
+
+    Object.entries(partBuckets).forEach(([partKey, bucket]) => {
+      if (!bucket.pos.length) return;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(bucket.pos, 3));
+      geo.setAttribute("uv", new THREE.Float32BufferAttribute(bucket.uvs, 2));
+      geo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(bucket.si, 4));
+      geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(bucket.sw, 4));
+      geo.setIndex(bucket.idx);
+      geo.computeVertexNormals();
+      geo.userData.restPos = new Float32Array(bucket.pos);
+      geo.userData.skinIdx = new Uint16Array(bucket.si);
+      geo.userData.skinWgt = new Float32Array(bucket.sw);
+
+      const threadHex = resolvePartThreadHex(partKey);
+      const threadMat = isSoftwareGL
+        ? new THREE.MeshPhongMaterial({
+          color: new THREE.Color(threadHex),
+          emissive: new THREE.Color(threadHex),
+          emissiveIntensity: 0.12,
+          shininess: 24,
+          side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -4,
+          polygonOffsetUnits: -4,
+        })
+        : new THREE.MeshStandardMaterial({
+          color: new THREE.Color(threadHex),
+          emissive: new THREE.Color(threadHex),
+          emissiveIntensity: 0.12,
+          roughness: 0.42,
+          metalness: 0.06,
+          side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -4,
+          polygonOffsetUnits: -4,
+        });
+
+      const sMesh = new THREE.Mesh(geo, threadMat);
+      sMesh.name = `stitch_${partKey}`;
+      sMesh.frustumCulled = false;
+      sMesh.castShadow = false;
+      sMesh.receiveShadow = true;
+      sMesh.userData.isStitch = true;
+      sMesh.userData.parentPart = partKey;
+      sMesh.userData.stitchPart = partKey;
+      sMesh.userData.fitTier = bucket.fitTier;
+      sMesh.userData.armSide = bucket.armSide;
+      if (bucket.garmentType) sMesh.userData.garmentType = bucket.garmentType;
+      sMesh.userData.skinIdx = geo.userData.skinIdx;
+      sMesh.userData.skinWgt = geo.userData.skinWgt;
+      sMesh.userData.cpuSkinned = Boolean(skeleton);
+      sMesh.userData.origMat = threadMat;
+      sMesh.renderOrder = 1;
+
+      stitchMaterialsByPart[partKey] = threadMat;
+      stitchesGroup.add(sMesh);
+    });
+    void skeleton;
+  }
+
+  function setStitchConfig(nextCfg) {
+    const prevEnabled = stitchState.enabled;
+    const prevStyle = stitchState.style;
+    const prevVis = stitchState.visibility;
+    stitchState = normalizeStitchConfig(nextCfg || {});
+    if (!ready || !garmentGroup) return;
+
+    const topologyChanged = prevEnabled !== stitchState.enabled || prevStyle !== stitchState.style || prevVis !== stitchState.visibility;
+    if (topologyChanged || (stitchState.enabled && Object.keys(stitchMaterialsByPart).length === 0)) {
+      buildStitches(lastDims, curPatternMetrics, activeMannequin ? activeMannequin.skeleton : null);
+      if (!walking && activeMannequin && limbs && limbs.leg1) {
+        updateGarmentDynamics(0);
+      } else if (activeMannequin && limbs && limbs.leg1) {
+        updateGarmentDynamics(t);
+      }
+      applyPieceVisibility();
+    } else {
+      Object.entries(stitchMaterialsByPart).forEach(([partKey, mat]) => {
+        if (mat && mat.color) {
+          const hex = resolvePartThreadHex(partKey);
+          mat.color.set(hex);
+          if (mat.emissive) mat.emissive.set(hex);
+        }
+      });
+      applyPieceVisibility();
     }
   }
 
@@ -6052,7 +6469,13 @@ export const View3D = (() => {
         accessoriesState.zipper = { enabled: false, style: "silver", placement: "center_front", openPct: 0, ...acc.zipper };
         accessoriesState.belt = { enabled: false, style: "leather_gold", width: "medium", color: null, ...acc.belt };
         accessoriesState.bow = { enabled: false, color: "#f8fafc", placement: "center_chest", ...acc.bow };
+        lastLookbookContrastHex = normalizeThreadHex(opts.lookbookStyle?.silhouette?.contrastStitch, null);
+      } else {
+        lastLookbookContrastHex = null;
       }
+    }
+    if (opts.stitchConfig) {
+      stitchState = normalizeStitchConfig(opts.stitchConfig);
     }
 
     if (opts.parts) {
@@ -6682,6 +7105,18 @@ export const View3D = (() => {
         }
       });
     }
+
+    if (stitchesGroup) {
+      const stVisited = new Set();
+      stitchesGroup.traverse((o) => {
+        if (stVisited.has(o) || !o.isMesh) return;
+        stVisited.add(o);
+        const sPart = o.userData?.stitchPart || o.userData?.parentPart || "bodice";
+        const partOn = stitchState.enabled && stitchState.parts?.[sPart]?.enabled !== false;
+        const hostOn = sPart === "trim" ? (show("bodice") || show("skirt") || show("trousers") || show("outer")) : show(sPart);
+        o.visible = Boolean(partOn && hostOn);
+      });
+    }
   }
 
   // ---------- Natural Biomechanical Gait, Living Idle Posture & Cloth Loop ----------
@@ -6848,9 +7283,12 @@ export const View3D = (() => {
     getTensionMetrics: () => lastTensionMetrics,
     setTensionMetricsCallback: (cb) => { onTensionMetricsUpdate = cb || (() => { }); },
     exportOBJ,
-    // 3D Accessories
+    // 3D Accessories & Sewing Stitches
     setAccessories,
     getAccessories: () => JSON.parse(JSON.stringify(accessoriesState)),
+    setStitchConfig,
+    getStitchConfig: () => JSON.parse(JSON.stringify(stitchState)),
+    getActiveStitchParts,
     // 3D Prints, Graphics & Drawing
     setGarmentPrint,
     generatePatternPreset,

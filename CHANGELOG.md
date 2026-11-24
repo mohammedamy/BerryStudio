@@ -1,5 +1,11 @@
 # Changelog
 
+## 3D Sewing Stitches & Per-Part External Thread Color Controls (`berrystudio-v106`)
+
+- **Shared Sewing Stitches Configuration (`js/stitch-config.js`):** Added unified stitch presets (`lockstitch`, `twin` twin-needle, `zigzag` overlock, and bold `saddle`), curated contrast thread presets, luminance-aware auto-contrast calculation, external-visibility filtering, and garment/piece part mapping for both all 340 library models and designer-created custom/AI/configurator patterns.
+- **3D Preview Skinned Stitches (`js/three-view.js`):** Built arched volumetric 3D stitch geometry along garment panel seams and hems bound to the mannequin skinning rig, dynamic cloth clearance, and part visibility, with live in-place per-part external thread color and enable/disable updates and floating `#v3dStitchPanel` drawer controls in both English and Arabic RTL.
+- **Cloth Lab GPU-Synchronized Stitches (`cloth-lab/src/`):** Added real-time Cloth Simulation texture-driven stitch meshes synchronized with `uSimPositionTex` (no simulation reset when changing thread colors or stitch styles), camera-facing normal orientation, external vs. all-seams visibility filter, per-part thread color pickers, and expandable per-piece thread overrides synced live from Studio.
+
 ## 3D Hijab Drape, Sleeveless Shoulder & Brief Trim Classification Fix (`berrystudio-v105`)
 
 - **Trim Classifier Phantom-Bodice Fix ([`pattern-3d-metrics.js`](js/pattern-3d-metrics.js)):**

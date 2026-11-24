@@ -10,6 +10,13 @@ import Scene from './scene/Scene'
 import { DEFAULT_MEASUREMENTS } from './state/measurements'
 import { getMannequinFor, normalizeMannequinSize } from '../../js/mannequin-catalog.js'
 import { resolveMannequinStyling } from '../../js/mannequin-styling.js'
+import {
+  createDefaultStitchConfig,
+  isExternalStitchPiece,
+  mapClothPieceToStitchPart,
+  normalizeStitchConfig,
+  STITCH_PARTS,
+} from '../../js/stitch-config.js'
 import { computeBodyDims } from './body/computeBodyDims'
 import { DEFAULT_FABRIC } from './cloth/fabricPresets'
 import { QUALITY_TIER_DEFAULT } from './cloth/ClothSimulation'
@@ -79,6 +86,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   // ('pieces' flat placed panels, 'weld' seam alignment, 'off' body only).
   const [view, setView] = useState(bodyOnly ? 'off' : 'cloth')
   const [fabricId, setFabricId] = useState(resolveDefaultPatternFabric(pattern))
+  const [stitchConfig, setStitchConfig] = useState(() => normalizeStitchConfig(pattern?.stitchConfig || createDefaultStitchConfig()))
   // WP-35: 'default' (unchanged) or 'high' (true dihedral-angle bend) — a
   // real sim rebuild when toggled, not a live uniform swap like fabricId
   // (see ClothMesh.jsx's own comment on why it's a separate effect
@@ -228,6 +236,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   const lastMannequinIdRef = useRef(pattern?.mannequinId || null)
   function applyIncomingPattern(payload) {
     if (payload.lang) setLang(payload.lang)
+    if (payload.stitchConfig) setStitchConfig(normalizeStitchConfig(payload.stitchConfig))
     setCategory(payload.category)
     if (payload.mannequinSize) setMannequinSize(normalizeMannequinSize(payload.mannequinSize))
     if (payload.mannequinId && payload.mannequinId !== lastMannequinIdRef.current) {
@@ -362,6 +371,7 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
         dims={dims} measurements={measurements}
         onMeasurementsChange={(next) => setMeasurementsByCategory((prev) => ({ ...prev, [category]: next }))}
         fabricId={fabricId} onFabricChange={setFabricId}
+        stitchConfig={stitchConfig} onStitchConfigChange={setStitchConfig}
         qualityTier={qualityTier} onQualityTierChange={setQualityTier}
         skinToneId={skinToneId} onSkinToneChange={setSkinToneId}
         poseId={poseId} onPoseChange={setPoseId}
@@ -397,7 +407,7 @@ const TABS = [
 // Try-on canvas — split out from App so the whole thing can be remounted
 // (via App's key={garmentVersion}) as a unit whenever a new garment import
 // needs a fresh seam-editor rather than picking up on top of a stale one.
-function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChange, category, mannequinSize, mannequin, styling, onStylingChange, onMannequinSizeChange, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, qualityTier, onQualityTierChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, garment, print = null, notice, onNotice, imported, restored, onEditorChange, avatarGLBUrl, onSimulate }) {
+function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChange, category, mannequinSize, mannequin, styling, onStylingChange, onMannequinSizeChange, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, stitchConfig, onStitchConfigChange, qualityTier, onQualityTierChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, garment, print = null, notice, onNotice, imported, restored, onEditorChange, avatarGLBUrl, onSimulate }) {
   const ar = lang === 'ar', text = (en, arabic) => ar ? arabic : en
   const rawPieces = imported ? imported.rawPieces : []
   const roles = imported ? imported.roles : {}
@@ -481,6 +491,30 @@ function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChan
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dims])
 
+  const stitchMeta = useMemo(() => {
+    const pcs = garment?.pieces || imported?.rawPieces || []
+    const byPartColor = {}
+    const partSet = new Set()
+    const extPieces = []
+    for (const pc of pcs) {
+      if (!pc || pc.visible === false) continue
+      const partKey = mapClothPieceToStitchPart(pc)
+      partSet.add(partKey)
+      if (!byPartColor[partKey] && pc.color) byPartColor[partKey] = pc.color
+      if (isExternalStitchPiece(pc)) {
+        const lbl = typeof pc.label === 'string'
+          ? pc.label
+          : (ar ? (pc.label?.ar || pc.label?.en || pc.id) : (pc.label?.en || pc.label?.ar || pc.id))
+        extPieces.push({ id: pc.id, partKey, color: pc.color || '#6d5efc', labelText: lbl || pc.id })
+      }
+    }
+    const stitchParts = STITCH_PARTS.filter((p) => partSet.has(p.id)).map((p) => ({
+      id: p.id,
+      baseColor: byPartColor[p.id] || '#6d5efc',
+    }))
+    return { stitchParts, stitchPieces: extPieces }
+  }, [garment, imported, ar])
+
   const seamCount = seamEditor.seams.length, looseCount = (seamEditor.separate || []).length
   if (!bodyOnly && step === 'sew') return <>
     <div className="cl-workspace-sew">
@@ -510,7 +544,19 @@ function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChan
             {TABS.map(([id, en, arabic]) => <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{ar ? arabic : en}</button>)}
           </div>
           <div className="cl-tabpanel" role="tabpanel">
-            {tab === 'fabric' && <FabricPanel lang={lang} fabricId={fabricId} onChange={onFabricChange} qualityTier={qualityTier} onQualityTierChange={onQualityTierChange} />}
+            {tab === 'fabric' && (
+              <FabricPanel
+                lang={lang}
+                fabricId={fabricId}
+                onChange={onFabricChange}
+                qualityTier={qualityTier}
+                onQualityTierChange={onQualityTierChange}
+                stitchConfig={stitchConfig}
+                onStitchConfigChange={onStitchConfigChange}
+                stitchParts={stitchMeta.stitchParts}
+                stitchPieces={stitchMeta.stitchPieces}
+              />
+            )}
             {tab === 'body' && <MeasurementPanel lang={lang} category={category} mannequinSize={mannequinSize} onMannequinSizeChange={onMannequinSizeChange} measurements={measurements} onChange={onMeasurementsChange} />}
             {tab === 'look' && <AvatarPanel lang={lang} category={category} mannequinSize={mannequinSize} onMannequinSizeChange={onMannequinSizeChange} styling={styling} onStylingChange={onStylingChange} skinTone={skinToneId} onChange={onSkinToneChange} pose={poseId} onPoseChange={onPoseChange} />}
             {tab === 'export' && <ExportPanel lang={lang} exportRef={exportRef} />}
@@ -558,7 +604,7 @@ function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChan
           <SceneBoundary key={`${view}-${garment?.pieces?.length}`} lang={lang} onRecover={() => onStep('sew')}>
             <div className="cl-canvas">
               <Canvas key={restartVersion} shadows camera={{ position: [1.6, dims.H * 0.6, 2.2], fov: 40 }}>
-                <Scene dims={dims} lang={lang} debugView={bodyOnly ? 'off' : view} fabricId={fabricId} qualityTier={qualityTier} print={print} skinToneId={skinToneId} mannequin={mannequin} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} controlsRef={controlsRef} paused={paused} />
+                <Scene dims={dims} lang={lang} debugView={bodyOnly ? 'off' : view} fabricId={fabricId} qualityTier={qualityTier} print={print} stitchConfig={stitchConfig} skinToneId={skinToneId} mannequin={mannequin} poseId={poseId} garment={garment} seamEditor={seamEditor} avatarGLBUrl={avatarGLBUrl} statsRef={statsRef} exportRef={exportRef} onPoseWarning={onPoseWarning} controlsRef={controlsRef} paused={paused} />
               </Canvas>
             </div>
           </SceneBoundary>

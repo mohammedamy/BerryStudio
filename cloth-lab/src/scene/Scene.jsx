@@ -12,7 +12,7 @@ import ExportControls from './ExportControls'
 import { getAssetBase } from '../assetBase'
 
 // The actual <Canvas> contents: lighting, ground, avatar, orbit camera.
-export default function Scene({ paused = false, dims, lang = 'en', debugView, fabricId, qualityTier, print = null, skinToneId, mannequin = null, poseId, garment, seamEditor, avatarGLBUrl, statsRef, exportRef, onPoseWarning, controlsRef }) {
+export default function Scene({ paused = false, dims, lang = 'en', debugView, fabricId, qualityTier, print = null, stitchConfig = null, skinToneId, mannequin = null, poseId, garment, seamEditor, avatarGLBUrl, statsRef, exportRef, onPoseWarning, controlsRef }) {
   // Disabled while grabbing a cloth particle — otherwise dragging the mouse
   // to move the pin also orbits the camera at the same time, fighting itself.
   const [dragging, setDragging] = useState(false)
@@ -88,7 +88,7 @@ export default function Scene({ paused = false, dims, lang = 'en', debugView, fa
         {debugView === 'pieces' && <StaticPiecesDebug dims={dims} pose={poseId} pieces={garment?.pieces} seams={garment?.seams} />}
         {debugView === 'weld' && <WeldDebugView dims={dims} pose={poseId} pieces={garment?.pieces} seams={garment?.seams} />}
         {debugView === 'cloth' && (
-          <ClothMesh paused={paused} dims={dims} pose={poseId} fabricId={fabricId} qualityTier={qualityTier} print={print} onDragStateChange={setDragging} pieces={garment?.pieces} seams={garment?.seams} statsRef={statsRef} meshFitRigRef={meshFitRigRef} bodyColliderRef={bodyColliderRef} />
+          <ClothMesh paused={paused} dims={dims} pose={poseId} fabricId={fabricId} qualityTier={qualityTier} print={print} stitchConfig={stitchConfig} onDragStateChange={setDragging} pieces={garment?.pieces} seams={garment?.seams} statsRef={statsRef} meshFitRigRef={meshFitRigRef} bodyColliderRef={bodyColliderRef} />
         )}
         {debugView === 'seams' && <SeamEditorScene editor={seamEditor} />}
       </group>

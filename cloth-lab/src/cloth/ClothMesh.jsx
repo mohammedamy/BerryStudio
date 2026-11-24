@@ -11,6 +11,8 @@ import { updateExportGeometry } from '../export/prepareScene'
 import { SAFE_CLOTH_NORMAL_GLSL } from './surfaceShader'
 import { createEmptyPrintTexture, createPrintOverlayTexture } from './printTextures'
 import { getFabricTextureSet } from '../../../js/fabric-textures.js'
+import { extractClothStitchChains, buildClothStitchGeometry, updateClothStitchColors } from './stitchGeometry'
+import { normalizeStitchConfig } from '../../../js/stitch-config.js'
 
 // Build-order steps 6+: the actual simulated garment. Geometry is built once
 // per `dims`/`pieces`/`seams` change (placement is a pure function of body
@@ -20,7 +22,7 @@ import { getFabricTextureSet } from '../../../js/fabric-textures.js'
 // about the steady-state render loop — grab-and-drag below does a ONE-TIME
 // readback per pointerdown, which is a rare, user-paced event, not a
 // per-frame cost).
-export default function ClothMesh({ paused = false, dims, pose = 'standing', fabricId = DEFAULT_FABRIC, qualityTier = QUALITY_TIER_DEFAULT, print = null, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef, bodyColliderRef }) {
+export default function ClothMesh({ paused = false, dims, pose = 'standing', fabricId = DEFAULT_FABRIC, qualityTier = QUALITY_TIER_DEFAULT, print = null, stitchConfig = null, onDragStateChange, pieces = TSHIRT_PIECES, seams = TSHIRT_SEAMS, statsRef, meshFitRigRef, bodyColliderRef }) {
   const gl = useThree((s) => s.gl)
   const camera = useThree((s) => s.camera)
   // Keep the current texture bound across first compile and fabric-map recompiles.
@@ -38,8 +40,116 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
     const cloth = assembleCloth(triangulated, dims, seams, pose)
     const neighbors = deriveNeighbors(cloth, 8)
     const normalRing = deriveNormalRing(cloth, neighbors, 4)
-    return { triangulated, cloth, neighbors, normalRing }
+    const stitchChains = extractClothStitchChains(pieces, triangulated, seams, cloth)
+    return { triangulated, cloth, neighbors, normalRing, stitchChains }
   }, [dims, pieces, seams, pose])
+
+  const normalizedStitch = useMemo(() => normalizeStitchConfig(stitchConfig), [stitchConfig])
+  const stitchPartUniform = useRef({ value: [1, 1, 1, 1, 1, 1] })
+
+  const stitchGeometry = useMemo(() => {
+    if (!normalizedStitch.enabled || !assembled.stitchChains.length) return null
+    const texDim = textureDimFor(assembled.cloth.simParticleCount)
+    return buildClothStitchGeometry({
+      chains: assembled.stitchChains,
+      cloth: assembled.cloth,
+      texDim,
+      normalRing: assembled.normalRing,
+      stitchConfig: normalizedStitch,
+    })
+    // Color changes are applied in-place below without rebuilding stitch Geometry
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assembled, normalizedStitch.enabled, normalizedStitch.style, normalizedStitch.visibility])
+
+  useEffect(() => () => {
+    stitchGeometry?.dispose?.()
+  }, [stitchGeometry])
+
+  useEffect(() => {
+    if (stitchGeometry) {
+      updateClothStitchColors(stitchGeometry, normalizedStitch)
+    }
+    const p = normalizedStitch.parts
+    stitchPartUniform.current.value = [
+      p.bodice?.enabled === false ? 0.0 : 1.0,
+      p.sleeve?.enabled === false ? 0.0 : 1.0,
+      p.skirt?.enabled === false ? 0.0 : 1.0,
+      p.trousers?.enabled === false ? 0.0 : 1.0,
+      p.outer?.enabled === false ? 0.0 : 1.0,
+      p.trim?.enabled === false ? 0.0 : 1.0,
+    ]
+  }, [stitchGeometry, normalizedStitch])
+
+  const stitchMaterial = useMemo(() => {
+    const sMat = new THREE.MeshStandardMaterial({
+      color: '#ffffff',
+      vertexColors: true,
+      roughness: 0.44,
+      metalness: 0.06,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
+    })
+    sMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uSimPositionTex = positionUniform.current
+      shader.uniforms.uPartEnabled = stitchPartUniform.current
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `attribute vec4 aSimUVPair;
+attribute vec2 aSimUVIn;
+attribute vec4 aNbrUV0;
+attribute vec4 aNbrUV1;
+attribute vec4 aStitchMeta;
+attribute float aStitchPart;
+uniform sampler2D uSimPositionTex;
+uniform float uPartEnabled[6];
+varying float vStitchVis;
+#include <common>
+` + SAFE_CLOTH_NORMAL_GLSL
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `vec3 pos0 = texture2D(uSimPositionTex, aSimUVPair.xy).xyz;
+          vec3 pos1 = texture2D(uSimPositionTex, aSimUVPair.zw).xyz;
+          vec3 posIn = texture2D(uSimPositionTex, aSimUVIn).xyz;
+          vec3 rn0 = texture2D(uSimPositionTex, aNbrUV0.xy).xyz - pos0;
+          vec3 rn1 = texture2D(uSimPositionTex, aNbrUV0.zw).xyz - pos0;
+          vec3 rn2 = texture2D(uSimPositionTex, aNbrUV1.xy).xyz - pos0;
+          vec3 rn3 = texture2D(uSimPositionTex, aNbrUV1.zw).xyz - pos0;
+          vec3 ringN = clothSafeNormal(cross(rn0, rn1) + cross(rn1, rn2) + cross(rn2, rn3) + cross(rn3, rn0), vec3(0.0, 0.0, 1.0));
+          vec3 edgeDir = clothSafeNormal(pos1 - pos0, vec3(1.0, 0.0, 0.0));
+          vec3 toIn = posIn - mix(pos0, pos1, 0.5);
+          vec3 inProj = toIn - edgeDir * dot(toIn, edgeDir) - ringN * dot(toIn, ringN);
+          vec3 inDir = clothSafeNormal(inProj, clothSafeNormal(cross(ringN, edgeDir), vec3(0.0, 1.0, 0.0)));
+          vec3 segPos = mix(pos0, pos1, aStitchMeta.x);
+          vec3 mvSeg = (modelViewMatrix * vec4(segPos, 1.0)).xyz;
+          vec3 surfN = dot(normalMatrix * ringN, -mvSeg) < 0.0 ? -ringN : ringN;
+          vec3 transformed = segPos + inDir * aStitchMeta.y + surfN * aStitchMeta.w;
+          vNormal = clothSafeNormal(normalMatrix * surfN, vec3(0.0, 0.0, 1.0));
+          int pIdx = int(aStitchPart + 0.5);
+          vStitchVis = 1.0;
+          for (int k = 0; k < 6; k++) {
+            if (k == pIdx) vStitchVis = uPartEnabled[k];
+          }`
+        )
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `varying float vStitchVis;
+#include <common>`
+        )
+        .replace(
+          '#include <color_fragment>',
+          `if (vStitchVis < 0.5) discard;
+          #include <color_fragment>`
+        )
+    }
+    return sMat
+  }, [])
+
+  useEffect(() => () => stitchMaterial.dispose(), [stitchMaterial])
 
   const geometry = useMemo(() => {
     const { cloth } = assembled
@@ -421,5 +531,9 @@ varying vec2 vPrintUv;
     }
   }, [gl, camera, assembled, onDragStateChange])
 
-  return <mesh ref={meshRef} geometry={geometry} material={material} frustumCulled={false} castShadow receiveShadow />
+  return <mesh ref={meshRef} geometry={geometry} material={material} frustumCulled={false} castShadow receiveShadow>
+    {normalizedStitch.enabled && stitchGeometry && (
+      <mesh geometry={stitchGeometry} material={stitchMaterial} frustumCulled={false} receiveShadow renderOrder={1} />
+    )}
+  </mesh>
 }
