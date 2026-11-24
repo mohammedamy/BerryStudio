@@ -802,7 +802,7 @@ export const View3D = (() => {
     const hasSleeves = Boolean(pm.present?.sleeve);
     // Natural trapezius slope from High Point Shoulder down to acromion seam
     const shoulderTopY = shoulderY + span * (d.kid ? 0.052 : 0.042);
-    const shoulderAcromionY = shoulderY - span * 0.004;
+    const shoulderAcromionY = shoulderY + span * (hasSleeves ? -0.004 : 0.008);
 
     const bFit = bSpec.fitTier || "regular";
     const isSecondSkin = bFit === "second-skin";
@@ -853,7 +853,7 @@ export const View3D = (() => {
 
     const shoulderTipX = isBra
       ? neckHalfW + (shoulderHalf * 0.74 - neckHalfW) * 0.52
-      : (isHalter ? neckHalfW * 1.14 : shoulderHalf * (hasSleeves ? 0.87 : 0.84));
+      : (isHalter ? neckHalfW * 1.14 : shoulderHalf * (hasSleeves ? 0.87 : 0.74));
 
     function computeUpperFracs(rowsUpper, neckBotY) {
       const fracs = [];
@@ -934,7 +934,7 @@ export const View3D = (() => {
           if (isFront && (bSpec.neckline === "v-neck" || bSpec.neckline === "surplice")) curve = Math.pow(nu, 0.86);
           else if (isFront && bSpec.neckline === "sweetheart") curve = Math.pow(nu, 0.68) * (1 - 0.14 * Math.sin(Math.PI * nu));
           else if (isFront && bSpec.neckline === "square") curve = nu < 0.16 ? nu * 5.2 : 0.84 + (nu - 0.16) * 0.19;
-          else curve = Math.sin(nu * Math.PI * 0.5);
+          else curve = Math.sqrt(Math.max(0, 1 - Math.pow(1 - nu, 2)));
           innerX = Math.max(innerX, neckHalfW * clamp(curve, 0, 1));
         } else if (isOffShoulder && isFront && y > underarmY + span * 0.01) {
           innerX = Math.max(innerX, 0.012 * upperFrac);
@@ -943,7 +943,7 @@ export const View3D = (() => {
         const bodyHalfWAtUnderarm = Math.abs(getBodySurfacePoint(underarmY, Math.PI / 2, d, easeBase, waistRelax)[0]);
         let outerMaxX = Math.abs(getBodySurfacePoint(Math.min(y, underarmY), Math.PI / 2, d, easeBase, waistRelax)[0]) * lowerFlare;
         if (r > ROWS_LOWER && !isStrapless) {
-          const armscyeIndent = Math.sin(Math.PI * upperFrac) * (isBra ? chestR * 0.18 : (isHalter ? chestR * 0.08 : (hasSleeves ? chestR * 0.012 : chestR * 0.016)));
+          const armscyeIndent = Math.sin(Math.PI * upperFrac) * (isBra ? chestR * 0.18 : (isHalter ? chestR * 0.08 : (hasSleeves ? chestR * 0.012 : chestR * 0.036)));
           outerMaxX = bodyHalfWAtUnderarm * (1 - upperFrac) + shoulderTipX * upperFrac - armscyeIndent;
           outerMaxX = Math.max(innerX + (isBra ? 0.016 : 0.028), outerMaxX);
         }

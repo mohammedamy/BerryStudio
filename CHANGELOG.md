@@ -1,5 +1,18 @@
 # Changelog
 
+## 3D Hijab Drape, Sleeveless Shoulder & Brief Trim Classification Fix (`berrystudio-v105`)
+
+- **Trim Classifier Phantom-Bodice Fix ([`pattern-3d-metrics.js`](js/pattern-3d-metrics.js)):**
+  - Restricted the Arabic sleeve keyword check in `classifyDirectOrTrim` with strict word boundaries (`(?:^|[\s\-_/])(?:كم|الكم|أكمام|الأكمام)(?=$|[\s\-_/])`) and `SLEEVE_EXCLUDE_RE`, and routed unmatched `trim:sleeve` trims to active lower-body garments before falling back to bodice — preventing `wu04` ("محكماً") from spawning a phantom sleeveless top over briefs.
+- **Sleeveless Bodice Shoulders & Round Neckline ([`three-view.js`](js/three-view.js)):**
+  - Pulled sleeveless `shoulderTipX` inward (`0.74 * shoulderHalf`) with raised `shoulderAcromionY` (`shoulderY + 0.008 * span`) and deeper armscye contour to eliminate protruding shoulder wings (`w04`), and replaced the linear `sin(nu * pi/2)` bottom neckline curve with circular `sqrt(1 - (1 - nu)^2)` so round/crew necklines never form a V-notch.
+- **3D Hijab Proportions & Crossed Scarf Ribbon ([`human-mannequin.js`](js/human-mannequin.js)):**
+  - Lowered `buildContouredUndercap` loft/drop so dark undercaps stay cleanly above jaw/cheek framing behind white outer hijabs (`hijab_classic`, `hijab_turkish`, `hijab_shayla`, `hijab_sport`).
+  - Smoothed `buildLongIslamicCapeDrape` / `buildNeckAndShoulderDrape` shoulder-to-torso clearance and added `sideHemLiftFrac` for contoured chest/shoulder draping without a stiff horizontal shoulder bar.
+  - Replaced the thick mouth-level `TubeGeometry` in `addCrossedShoulderScarf` with a flat folded cloth ribbon strip resting below the chin and hugging within shoulder contours.
+- **Tests & Service Worker Cache ([`pattern-thumbnail-parity.test.js`](test/pattern-thumbnail-parity.test.js), [`mannequin-styling.test.js`](test/mannequin-styling.test.js), [`sw.js`](sw.js)):**
+  - Added regression assertions across all 24 underwear briefs and 5 hijab drapes; updated service worker cache to `berrystudio-v105`.
+
 ## Full 340-Pattern Geometry, Thumbnail & 3D Parity Audit (`berrystudio-v104`)
 
 - **2D Pattern Geometry & Construction Parity ([`library.js`](js/library.js), [`fancy-patterns.js`](js/fancy-patterns.js), [`girls-leotards.js`](js/girls-leotards.js)):**

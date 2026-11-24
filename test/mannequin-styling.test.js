@@ -478,3 +478,77 @@ test('3D Long Hair Geometry: zero floating cheek roots, clean back hug, true wai
     `curly extra_long X span (${curlyStats.xSpan.toFixed(3)}m) must exceed straight (${straightStats.xSpan.toFixed(3)}m) by >= 12%`
   );
 });
+
+test('3D Hijab Proportions: clear face/mouth, zero cheek undercap poke, and contoured chest drape without shoulder bar', () => {
+  const mWomenM = computeMeasurements({ category: 'women', size: 'M', standard: 'intl' });
+  for (const hwId of ['hijab_classic', 'hijab_turkish', 'hijab_shayla', 'hijab_sport', 'hijab_long_draped']) {
+    const built = buildHumanMannequin(THREE, 'women', mWomenM, {
+      headwear: hwId,
+      headwearColor: '#f8f8f6',
+      undercapColor: '#18191e',
+      bakeStatic: false,
+    });
+    const h = built.dims.headH;
+    const hc = built.landmarks.headCenterY;
+    const yShoulder = built.dims.shoulderY - hc;
+    const hwGroup = built.headGroup.getObjectByName('headwearGroup');
+    assert.ok(hwGroup && hwGroup.children.length >= 2, `${hwId}: headwearGroup children built`);
+
+    // Child 0 = undercap, Child 1 = outer hood
+    const underPos = hwGroup.children[0].geometry.attributes.position;
+    const hoodPos = hwGroup.children[1].geometry.attributes.position;
+    let underMaxR = 0;
+    let hoodMaxR = 0;
+    for (let i = 0; i < underPos.count; i++) {
+      const y = underPos.getY(i);
+      if (y > -0.15 * h && y < 0.25 * h) underMaxR = Math.max(underMaxR, Math.hypot(underPos.getX(i), underPos.getZ(i)));
+    }
+    for (let i = 0; i < hoodPos.count; i++) {
+      const y = hoodPos.getY(i);
+      if (y > -0.15 * h && y < 0.25 * h) hoodMaxR = Math.max(hoodMaxR, Math.hypot(hoodPos.getX(i), hoodPos.getZ(i)));
+    }
+    assert.ok(
+      hoodMaxR >= underMaxR + 0.006 * h,
+      `${hwId}: outer hood (${(hoodMaxR / h).toFixed(3)}h) clears undercap (${(underMaxR / h).toFixed(3)}h) at cheeks`
+    );
+
+    // Child 2 = neck/shoulder drape; Child 3 (when present on classic/shayla/long_draped) = crossed scarf ribbon
+    const drapePos = hwGroup.children[2].geometry.attributes.position;
+    let drapeMaxY = -Infinity;
+    let drapeMinY = Infinity;
+    let drapeMaxAbsX = 0;
+    let drapeMaxFrontZ = -Infinity;
+    for (let i = 0; i < drapePos.count; i++) {
+      const x = drapePos.getX(i);
+      const y = drapePos.getY(i);
+      const z = drapePos.getZ(i);
+      if (y > drapeMaxY) drapeMaxY = y;
+      if (y < drapeMinY) drapeMinY = y;
+      drapeMaxAbsX = Math.max(drapeMaxAbsX, Math.abs(x));
+      if (z > drapeMaxFrontZ) drapeMaxFrontZ = z;
+    }
+    assert.ok(drapeMaxY <= -0.28 * h, `${hwId}: drape stays below mouth/chin (${(drapeMaxY / h).toFixed(3)}h <= -0.28h)`);
+    if (hwId !== 'hijab_sport') {
+      assert.ok(
+        drapeMinY < yShoulder - 0.30 * h,
+        `${hwId}: drape extends well onto upper chest below shoulder line (${(drapeMinY / h).toFixed(3)}h < ${(yShoulder / h - 0.30).toFixed(3)}h)`
+      );
+      assert.ok(
+        drapeMaxAbsX <= built.dims.shoulderHalf * 1.28,
+        `${hwId}: drape width ${(drapeMaxAbsX / built.dims.shoulderHalf).toFixed(2)}x shoulderHalf avoids stiff shoulder shelf`
+      );
+    }
+
+    if (hwId !== 'hijab_sport' && hwGroup.children[3]) {
+      const scarfPos = hwGroup.children[3].geometry.attributes.position;
+      let scarfMaxY = -Infinity;
+      let scarfMaxAbsX = 0;
+      for (let i = 0; i < scarfPos.count; i++) {
+        if (scarfPos.getY(i) > scarfMaxY) scarfMaxY = scarfPos.getY(i);
+        scarfMaxAbsX = Math.max(scarfMaxAbsX, Math.abs(scarfPos.getX(i)));
+      }
+      assert.ok(scarfMaxY <= -0.44 * h, `${hwId}: crossed scarf stays below chin/mouth (${(scarfMaxY / h).toFixed(3)}h <= -0.44h)`);
+      assert.ok(scarfMaxAbsX <= built.dims.shoulderHalf * 1.12, `${hwId}: crossed scarf hugs within shoulder contour`);
+    }
+  }
+});

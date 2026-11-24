@@ -105,7 +105,7 @@ function classifyDirectOrTrim(p, category = "women") {
     if (/underarm|إبط/i.test(fullTxt)) return "bodice";
     if (/trouser|pant|fly|بنطل|سروال/i.test(fullTxt)) return "trim:trousers";
     if (/skirt|تنور/i.test(fullTxt)) return "trim:skirt";
-    if (/sleeve|كم|أكمام/i.test(fullTxt) && !/sleeveless|بدون\s*أكمام|بلا\s*أكمام/i.test(fullTxt)) return "trim:sleeve";
+    if ((/\bsleeves?\b/i.test(fullTxt) || /(?:^|[\s\-_/])(?:كم|الكم|أكمام|الأكمام)(?=$|[\s\-_/])/.test(fullTxt)) && !SLEEVE_EXCLUDE_RE.test(fullTxt)) return "trim:sleeve";
     return "trim:context";
   }
 
@@ -141,7 +141,7 @@ export function classifyPiecePart(piece, allPieces = [], category = "women") {
   }
 
   if (raw === "trim:sleeve") {
-    return present.sleeve ? "sleeve" : "bodice";
+    return present.sleeve ? "sleeve" : (present.bodice ? "bodice" : (present.trousers ? "trousers" : (present.skirt ? "skirt" : "bodice")));
   }
   if (raw === "trim:trousers") {
     return present.trousers ? "trousers" : (present.skirt ? "skirt" : "bodice");

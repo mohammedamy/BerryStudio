@@ -127,3 +127,15 @@ test('girls floor gowns, blazer/coat dresses, jumpsuits, and false-collar guards
     assert.equal(getMetrics(id).met.bodice.hasCollar, expectedCollar, `${id} hasCollar mismatch`);
   }
 });
+
+test('all 24 underwear briefs never invent a phantom upper bodice from Arabic/English trim descriptions', () => {
+  for (const prefix of ['wu', 'mu', 'gu', 'bu']) {
+    for (let i = 1; i <= 6; i++) {
+      const id = `${prefix}${String(i).padStart(2, '0')}`;
+      const { met } = getMetrics(id);
+      assert.equal(met.present.bodice, false, `${id} brief must not classify any trim as bodice`);
+      assert.equal(met.present.trousers, true, `${id} brief must present trousers/brief part`);
+      assert.equal(met.trousers.isBrief, true, `${id} must set isBrief = true`);
+    }
+  }
+});

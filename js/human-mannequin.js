@@ -4868,6 +4868,7 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
       backLoft = 0.068,
       backBunBoost = 0.14,
       pleatAmp = 0.010,
+      baseClearanceFrac = 0.024,
       mat = null,
     }) => {
       const U_SEGS = 76, V_SEGS = 24;
@@ -4900,7 +4901,7 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
           const bunBump = backBunBoost * Math.max(0, -uz) * smoothstep(-0.25, 0.20, uy) * (1 - smoothstep(0.42, 0.85, uy)) * Math.exp(-sinP * sinP * 2.2);
           const arch = archLift * Math.max(0, cosP) * (1 - smoothstep(0.0, 0.45, v)) * Math.exp(-phi * phi * 2.4);
           const loft = headH * (
-            0.018
+            baseClearanceFrac
             + smoothstep(0.0, 0.25, v) * (crownLoft * Math.max(0, uy) + sideLoft * Math.abs(ux) + backLoft * Math.max(0, -uz) + bunBump)
             + arch
             + fold
@@ -4939,34 +4940,36 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
     };
 
     const buildContouredUndercap = (underMat, optsCap = {}) => buildHijabHood({
-      frontYFrac: optsCap.frontYFrac ?? 0.246,
-      cheekDrop: optsCap.cheekDrop ?? 0.13,
-      napeYFrac: optsCap.napeYFrac ?? -0.25,
+      frontYFrac: optsCap.frontYFrac ?? 0.270,
+      cheekDrop: Math.min(0.02, optsCap.cheekDrop ?? 0.015),
+      napeYFrac: optsCap.napeYFrac ?? -0.16,
       archLift: 0.004,
-      crownLoft: 0.015,
-      sideLoft: 0.015,
-      backLoft: 0.023,
+      crownLoft: 0.008,
+      sideLoft: 0.004,
+      backLoft: 0.014,
       backBunBoost: optsCap.backBunBoost ?? 0.06,
       pleatAmp: 0.001,
+      baseClearanceFrac: 0.005,
       mat: underMat,
     });
 
     // Torso- and shoulder-clearing modest cape/drape builder supporting standard, long, and extra-long Islamic silhouettes
     const buildLongIslamicCapeDrape = ({
-      topFrontYFrac = -0.34,
-      topSideYFrac = -0.26,
-      topBackYFrac = -0.32,
+      topFrontYFrac = -0.47,
+      topSideYFrac = -0.34,
+      topBackYFrac = -0.38,
       targetFrontY = null,
       targetBackY = null,
-      topRxFrac = 0.27,
-      topRzFrac = 0.27,
+      topRxFrac = 0.26,
+      topRzFrac = 0.26,
       flareXFrac = 1.02,
-      flareZFrontFrac = 0.62,
-      flareZBackFrac = 0.56,
-      pleatAmpFrac = 0.015,
-      shoulderEaseFrac = 0.065,
-      bustEaseFrac = 0.115,
+      flareZFrontFrac = 0.56,
+      flareZBackFrac = 0.52,
+      pleatAmpFrac = 0.014,
+      shoulderEaseFrac = 0.040,
+      bustEaseFrac = 0.075,
       hemScoopFrac = 0.12,
+      sideHemLiftFrac = 0.0,
       phiStart = -Math.PI,
       phiEnd = Math.PI,
       mat = null,
@@ -4981,7 +4984,7 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
       const pleatAmp = pleatAmpFrac * hwFabricSpec.pleatScale;
       for (let iv = 0; iv <= V; iv++) {
         const v = iv / V;
-        const fEase = Math.pow(v, 0.96);
+        const fEase = Math.pow(v, 0.92);
         for (let iu = 0; iu <= U; iu++) {
           const u = iu / U;
           const phi = lerp(phiStart, phiEnd, u);
@@ -4990,23 +4993,40 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
           const sideW = Math.abs(sinP);
           const yTop = headH * (lerp(topBackYFrac, topFrontYFrac, frontW) + sideW * (topSideYFrac - topBackYFrac) * 0.45);
           const archHem = -headH * hemScoopFrac * (cosP * cosP);
-          const yBot = lerp(finBackY, finFrontY, frontW) + archHem;
-          const y = lerp(yTop, yBot, v);
+          const sideLift = headH * sideHemLiftFrac * (sideW * sideW);
+          const yBot = lerp(finBackY, finFrontY, frontW) + archHem + sideLift;
+          let y = lerp(yTop, yBot, v);
 
           const rxBase = headH * lerp(topRxFrac, flareXFrac, fEase);
           const rzBase = headH * lerp(topRzFrac, cosP >= 0 ? flareZFrontFrac : flareZBackFrac, fEase);
           let ex = sinP * rxBase;
-          let ez = cosP * rzBase - headH * lerp(0.02, -0.025 * frontW, v);
+          let ez = cosP * rzBase - headH * lerp(0.015, -0.020 * frontW, v);
+
+          // Gentle shoulder-top clearance so cape glides naturally over trapezius without jutting horizontally past deltoids
+          if (Math.abs(ex) > defNeckR * 1.15 && y > yShoulder - headH * 0.10 && v < 0.75) {
+            const shTop = sampleShoulderTopY(ex) + headH * 0.025;
+            const shBlend = smoothstep(0.12, 0.42, v) * (1 - smoothstep(0.45, 0.75, v));
+            y = Math.max(y, lerp(y, shTop, shBlend));
+          }
 
           const baseRad = Math.hypot(ex, ez) || 1e-4;
           const phiBody = Math.atan2(ex, ez);
-          const bodyClearR = sampleTorsoClearance(y, phiBody, v < 0.46);
-          const ease = headH * (0.032 + lerp(shoulderEaseFrac, bustEaseFrac, smoothstep(0.08, 0.72, v)));
+          const torsoR = sampleTorsoClearance(y, phiBody, false);
+          const fullR = sampleTorsoClearance(y, phiBody, true);
+          const armBandW = smoothstep(0.45, 0.92, sideW)
+            * smoothstep(yShoulder + headH * 0.24, yShoulder - headH * 0.02, y)
+            * (1 - smoothstep(yShoulder - headH * 0.16, yShoulder - headH * 0.46, y));
+          const bodyClearR = lerp(torsoR, fullR, armBandW * 0.58);
+          const ease = headH * (0.024 + lerp(shoulderEaseFrac, bustEaseFrac, smoothstep(0.10, 0.78, v)));
           const minR = bodyClearR + ease;
           if (baseRad < minR) {
             const s = minR / baseRad;
             ex *= s;
             ez *= s;
+          }
+          if (sideHemLiftFrac > 0 && Math.abs(ex) > defShoulderHalf * 1.08) {
+            const capX = Math.sign(ex) * lerp(Math.abs(ex), defShoulderHalf * 1.08, 0.72);
+            ex = capX;
           }
 
           const fold = pleatAmp * headH * (
@@ -5036,17 +5056,19 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
 
     // Contoured neck-wrap + draped cape helper (preserving short/sport proportions while upgrading long hijabs & khimars)
     const buildNeckAndShoulderDrape = ({
-      topFrontYFrac = -0.34,
-      topSideYFrac = -0.26,
-      topBackYFrac = -0.32,
-      bottomFrontYFrac = -0.88,
-      bottomBackYFrac = -0.92,
-      topRxFrac = 0.26,
-      topRzFrac = 0.27,
-      flareXFrac = 0.86,
-      flareZFrontFrac = 0.56,
-      flareZBackFrac = 0.48,
-      pleatAmpFrac = 0.014,
+      topFrontYFrac = -0.47,
+      topSideYFrac = -0.34,
+      topBackYFrac = -0.38,
+      bottomFrontYFrac = -1.28,
+      bottomBackYFrac = -1.20,
+      topRxFrac = 0.25,
+      topRzFrac = 0.26,
+      flareXFrac = 0.88,
+      flareZFrontFrac = 0.48,
+      flareZBackFrac = 0.44,
+      pleatAmpFrac = 0.013,
+      sideHemLiftFrac = 0.24,
+      hemScoopFrac = 0.18,
       mat = null,
     }) => {
       const targetFrontY = headH * bottomFrontYFrac * hwLengthSpec.dropScale;
@@ -5063,52 +5085,82 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
         flareZFrontFrac,
         flareZBackFrac,
         pleatAmpFrac,
-        shoulderEaseFrac: 0.048,
-        bustEaseFrac: 0.085,
-        hemScoopFrac: 0.08,
+        shoulderEaseFrac: 0.036,
+        bustEaseFrac: 0.064,
+        hemScoopFrac,
+        sideHemLiftFrac,
         mat,
       });
     };
 
-    const addCrossedShoulderScarf = (mat, asymSide = 1, bottomYFrac = -1.04) => {
+    const addCrossedShoulderScarf = (mat, asymSide = 1, bottomYFrac = -1.24) => {
       const scaledBottomY = headH * bottomYFrac * Math.max(0.92, hwLengthSpec.dropScale);
-      const rawPts = [
-        [-asymSide * headH * 0.25, -headH * 0.34, headH * 0.28],
-        [0, -headH * 0.56, headH * 0.42],
-        [asymSide * headH * 0.38, -headH * 0.64, headH * 0.30],
-        [asymSide * headH * 0.46, lerp(-headH * 0.64, scaledBottomY, 0.55), -headH * 0.16],
-        [asymSide * headH * 0.32, scaledBottomY, -headH * 0.44],
+      const pts = [
+        new THREE.Vector3(-asymSide * headH * 0.22, -headH * 0.58, headH * 0.28),
+        new THREE.Vector3(0, -headH * 0.88, headH * 0.46),
+        new THREE.Vector3(asymSide * headH * 0.34, -headH * 0.96, headH * 0.34),
+        new THREE.Vector3(asymSide * headH * 0.44, lerp(-headH * 0.96, scaledBottomY, 0.48), -headH * 0.18),
+        new THREE.Vector3(asymSide * headH * 0.28, scaledBottomY, -headH * 0.45),
       ];
-      const pts = rawPts.map(([px, py, pz], idxPt) => {
-        const phiPt = Math.atan2(px, pz);
-        const rad = Math.hypot(px, pz) || 1e-4;
-        const minR = sampleTorsoClearance(py, phiPt, idxPt <= 2) + headH * 0.11;
-        if (rad < minR) {
-          const s = minR / rad;
-          return new THREE.Vector3(px * s, py, pz * s);
-        }
-        return new THREE.Vector3(px, py, pz);
-      });
       const curve = new THREE.CatmullRomCurve3(pts);
-      const tGeo = new THREE.TubeGeometry(curve, 28, headH * 0.092, 12, false);
-      const tp = tGeo.attributes.position;
-      for (let i = 0; i < tp.count; i++) {
-        const vx = tp.getX(i), vy = tp.getY(i), vz = tp.getZ(i);
-        const f = clamp((headH * -0.34 - vy) / Math.max(0.05, headH * -0.34 - scaledBottomY), 0, 1);
-        const cPt = curve.getPoint(f);
-        let nx = cPt.x + (vx - cPt.x) * 1.32;
-        let nz = cPt.z + (vz - cPt.z) * 0.48;
-        const rad = Math.hypot(nx, nz) || 1e-4;
-        const minR = sampleTorsoClearance(vy, Math.atan2(nx, nz), f < 0.42) + headH * 0.055;
-        if (rad < minR) {
-          const s = minR / rad;
-          nx *= s;
-          nz *= s;
+      const U = 36, W = 7;
+      const pos = [], uvs = [], idx = [];
+      const upRef = new THREE.Vector3(0, 1, 0);
+
+      for (let iu = 0; iu <= U; iu++) {
+        const u = iu / U;
+        const cPt = curve.getPoint(u);
+        const tangent = curve.getTangent(u).normalize();
+        let sideDir = new THREE.Vector3().crossVectors(tangent, upRef);
+        if (sideDir.lengthSq() < 1e-4) sideDir.set(0, 0, 1);
+        sideDir.normalize();
+        const normOut = new THREE.Vector3(cPt.x, 0, cPt.z);
+        if (normOut.lengthSq() < 1e-4) normOut.set(0, 0, 1);
+        normOut.normalize();
+        // Blend ribbon width orientation smoothly from vertical bib over front chest to flat over shoulder top
+        const widthDir = sideDir.clone().lerp(upRef, 0.52 * (1 - Math.abs(tangent.y))).normalize();
+        const halfWidth = headH * (0.095 + 0.025 * Math.sin(Math.PI * u));
+
+        for (let iw = 0; iw <= W; iw++) {
+          const w = (iw / W) * 2 - 1; // -1..+1 across strap width
+          const pleatArch = headH * 0.011 * (1 - w * w) + headH * 0.004 * Math.sin(w * Math.PI * 2 + u * 5.0);
+          let vx = cPt.x + widthDir.x * w * halfWidth + normOut.x * pleatArch;
+          let vy = cPt.y + widthDir.y * w * halfWidth + normOut.y * pleatArch;
+          let vz = cPt.z + widthDir.z * w * halfWidth + normOut.z * pleatArch;
+          // Keep ribbon cleanly below chin/mouth and inside outer shoulder boundary
+          vy = Math.min(vy, -headH * 0.48);
+          if (Math.abs(vx) > defShoulderHalf * 1.02) {
+            vx = Math.sign(vx) * defShoulderHalf * 1.02;
+          }
+          const rad = Math.hypot(vx, vz) || 1e-4;
+          const minR = sampleTorsoClearance(vy, Math.atan2(vx, vz), false) + headH * 0.098;
+          if (rad < minR) {
+            const s = minR / rad;
+            vx *= s;
+            vz *= s;
+          }
+          if (Math.abs(vx) > defShoulderHalf * 1.04) {
+            vx = Math.sign(vx) * defShoulderHalf * 1.04;
+            const needZ = Math.sqrt(Math.max(0, minR * minR - vx * vx));
+            if (Math.abs(vz) < needZ) vz = (vz >= 0 ? 1 : -1) * needZ;
+          }
+          pos.push(vx, vy, vz);
+          uvs.push(u * 2.5, iw / W);
         }
-        tp.setXYZ(i, nx, vy, nz);
       }
-      tGeo.computeVertexNormals();
-      return addHwMesh(new THREE.Mesh(tGeo, mat));
+      const stride = W + 1;
+      for (let iu = 0; iu < U; iu++) {
+        for (let iw = 0; iw < W; iw++) {
+          const a = iu * stride + iw, b = a + 1, c = (iu + 1) * stride + iw, d = c + 1;
+          idx.push(a, c, d, a, d, b);
+        }
+      }
+      const rGeo = new THREE.BufferGeometry();
+      rGeo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      rGeo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+      rGeo.setIndex(idx);
+      rGeo.computeVertexNormals();
+      return addHwMesh(new THREE.Mesh(rGeo, mat));
     };
 
     const buildContouredBrowBand = (bandMat, { topYFrac = 0.228, botYFrac = 0.118, addRearTies = true } = {}) => {
@@ -5517,20 +5569,20 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
     if (headwearSpec.id === "hijab_classic") {
       const underMat = makeClothMat(undercapHex, { roughness: 0.80, sheen: 0.18, applyFabric: false });
       const hijabMat = makeClothMat(hwHex);
-      buildContouredUndercap(underMat, { frontYFrac: 0.245, cheekDrop: 0.12, backBunBoost: 0.06 });
+      buildContouredUndercap(underMat, { frontYFrac: 0.256, cheekDrop: 0.08, backBunBoost: 0.06 });
       buildHijabHood({ frontYFrac: 0.218, cheekDrop: 0.34, napeYFrac: -0.54, archLift: 0.020, crownLoft: 0.036, sideLoft: 0.044, backLoft: 0.065, backBunBoost: 0.15, pleatAmp: 0.010, mat: hijabMat });
-      buildNeckAndShoulderDrape({ bottomFrontYFrac: -0.94, bottomBackYFrac: -0.90, mat: hijabMat });
-      addCrossedShoulderScarf(hijabMat, 1, -1.08);
+      buildNeckAndShoulderDrape({ bottomFrontYFrac: -1.46, bottomBackYFrac: -1.28, flareXFrac: 0.92, flareZFrontFrac: 0.50, flareZBackFrac: 0.46, hemScoopFrac: 0.22, sideHemLiftFrac: 0.34, mat: hijabMat });
+      addCrossedShoulderScarf(hijabMat, 1, -1.28);
     } else if (headwearSpec.id === "hijab_turkish") {
       const silkMat = makeClothMat(hwHex);
       const underMat = makeClothMat(undercapHex, { roughness: 0.78, sheen: 0.18, applyFabric: false });
-      buildContouredUndercap(underMat, { frontYFrac: 0.246, cheekDrop: 0.12, backBunBoost: 0.05 });
+      buildContouredUndercap(underMat, { frontYFrac: 0.256, cheekDrop: 0.08, backBunBoost: 0.05 });
       buildHijabHood({ frontYFrac: 0.222, cheekDrop: 0.35, napeYFrac: -0.50, archLift: 0.044, crownLoft: 0.038, sideLoft: 0.042, backLoft: 0.062, backBunBoost: 0.16, pleatAmp: 0.007, mat: silkMat });
-      buildNeckAndShoulderDrape({ topFrontYFrac: -0.35, bottomFrontYFrac: -0.98, bottomBackYFrac: -0.84, flareXFrac: 0.82, flareZFrontFrac: 0.56, mat: silkMat });
+      buildNeckAndShoulderDrape({ topFrontYFrac: -0.46, bottomFrontYFrac: -1.32, bottomBackYFrac: -1.16, flareXFrac: 0.86, flareZFrontFrac: 0.48, flareZBackFrac: 0.44, sideHemLiftFrac: 0.22, mat: silkMat });
     } else if (headwearSpec.id === "hijab_turban") {
       const underMat = makeClothMat(undercapHex, { roughness: 0.80, sheen: 0.18, applyFabric: false });
       const turbanMat = makeClothMat(hwHex);
-      buildContouredUndercap(underMat, { frontYFrac: 0.240, cheekDrop: 0.10, napeYFrac: -0.20, backBunBoost: 0.08 });
+      buildContouredUndercap(underMat, { frontYFrac: 0.250, cheekDrop: 0.07, napeYFrac: -0.20, backBunBoost: 0.08 });
       buildHijabHood({ frontYFrac: 0.215, cheekDrop: 0.11, napeYFrac: -0.24, archLift: 0.014, crownLoft: 0.048, sideLoft: 0.046, backLoft: 0.072, backBunBoost: 0.18, pleatAmp: 0.016, mat: turbanMat });
       [-1, 1].forEach((s) => {
         const pleatGeo = new THREE.TorusGeometry(headH * 0.385, headH * 0.044, 12, 36, Math.PI * 1.12);
@@ -5542,10 +5594,10 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
     } else if (headwearSpec.id === "hijab_shayla") {
       const shaylaMat = makeClothMat(hwHex);
       const underMat = makeClothMat(undercapHex, { roughness: 0.80, sheen: 0.15, applyFabric: false });
-      buildContouredUndercap(underMat, { frontYFrac: 0.246, cheekDrop: 0.10, backBunBoost: 0.05 });
+      buildContouredUndercap(underMat, { frontYFrac: 0.256, cheekDrop: 0.08, backBunBoost: 0.05 });
       buildHijabHood({ frontYFrac: 0.220, cheekDrop: 0.24, napeYFrac: -0.62, archLift: 0.016, crownLoft: 0.036, sideLoft: 0.056, backLoft: 0.088, backBunBoost: 0.12, pleatAmp: 0.014, mat: shaylaMat });
-      buildNeckAndShoulderDrape({ bottomFrontYFrac: -0.86, bottomBackYFrac: -1.04, flareXFrac: 0.94, flareZFrontFrac: 0.52, flareZBackFrac: 0.58, pleatAmpFrac: 0.018, mat: shaylaMat });
-      addCrossedShoulderScarf(shaylaMat, -1, -1.20);
+      buildNeckAndShoulderDrape({ bottomFrontYFrac: -1.40, bottomBackYFrac: -1.34, flareXFrac: 0.95, flareZFrontFrac: 0.50, flareZBackFrac: 0.50, pleatAmpFrac: 0.016, sideHemLiftFrac: 0.22, mat: shaylaMat });
+      addCrossedShoulderScarf(shaylaMat, -1, -1.36);
     } else if (headwearSpec.id === "hijab_khimar") {
       const khimarMat = makeClothMat(hwHex);
       const underMat = makeClothMat(undercapHex, { roughness: 0.80, sheen: 0.15, applyFabric: false });
@@ -5748,9 +5800,9 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
       const sportMat = makeClothMat(hwHex);
       const underMat = makeClothMat(undercapHex, { roughness: 0.65, sheen: 0.25, applyFabric: false });
       const pipingMat = makeClothMat(undercapHex, { roughness: 0.45, sheen: 0.4, applyFabric: false });
-      buildContouredUndercap(underMat, { frontYFrac: 0.238, cheekDrop: 0.10, backBunBoost: 0.04 });
+      buildContouredUndercap(underMat, { frontYFrac: 0.252, cheekDrop: 0.08, backBunBoost: 0.04 });
       buildHijabHood({ frontYFrac: 0.215, cheekDrop: 0.33, napeYFrac: -0.46, archLift: 0.008, crownLoft: 0.022, sideLoft: 0.024, backLoft: 0.034, backBunBoost: 0.08, pleatAmp: 0.002, mat: sportMat });
-      buildNeckAndShoulderDrape({ topFrontYFrac: -0.34, bottomFrontYFrac: -0.72, bottomBackYFrac: -0.68, flareXFrac: 0.60, flareZFrontFrac: 0.44, flareZBackFrac: 0.40, pleatAmpFrac: 0.004, mat: sportMat });
+      buildNeckAndShoulderDrape({ topFrontYFrac: -0.46, bottomFrontYFrac: -1.04, bottomBackYFrac: -0.96, flareXFrac: 0.72, flareZFrontFrac: 0.42, flareZBackFrac: 0.38, pleatAmpFrac: 0.004, sideHemLiftFrac: 0.12, mat: sportMat });
       const pipeGeo = new THREE.TorusGeometry(headH * 0.355, headH * 0.010, 8, 36, Math.PI * 1.15);
       const pipe = new THREE.Mesh(pipeGeo, pipingMat);
       pipe.position.set(0, headH * 0.05, headH * 0.14);
