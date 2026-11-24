@@ -684,7 +684,7 @@ export const PATTERN_LOOKBOOK_STYLES = {
     partColors: { bodice: "#f8fafc", sleeve: "#141416", trousers: "#141416", outer: "#141416", trim: "#0a0a0c" },
     fabric: "wool",
     silhouette: {
-      outerLayer: { enabled: true, style: "tuxedo", openFront: true, lapelStyle: "shawl", color: "#141416", fabric: "satin", innerColor: "#f8fafc", innerNeckline: "collar", lengthStyle: "hip" },
+      outerLayer: { enabled: true, style: "tuxedo", openFront: true, lapelStyle: "shawl", color: "#141416", fabric: "wool", innerColor: "#f8fafc", innerNeckline: "collar", lengthStyle: "hip" },
     },
     accessories: { buttons: { enabled: true, style: "matte_black", placement: "front_placket", count: 2 } },
   },
@@ -926,7 +926,7 @@ export const PATTERN_LOOKBOOK_STYLES = {
     partColors: { bodice: "#f8fafc", sleeve: "#141416", trousers: "#141416", outer: "#141416" },
     fabric: "wool",
     silhouette: {
-      outerLayer: { enabled: true, style: "tuxedo", openFront: true, lapelStyle: "shawl", color: "#141416", fabric: "satin", innerColor: "#f8fafc", innerNeckline: "collar", lengthStyle: "hip" },
+      outerLayer: { enabled: true, style: "tuxedo", openFront: true, lapelStyle: "shawl", color: "#141416", fabric: "wool", innerColor: "#f8fafc", innerNeckline: "collar", lengthStyle: "hip" },
     },
     accessories: { buttons: { enabled: true, style: "matte_black", placement: "front_placket", count: 2 } },
   },

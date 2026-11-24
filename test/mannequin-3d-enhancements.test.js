@@ -841,6 +841,24 @@ test('Cloth Drawing Board: stroke undo history and artwork restoration lifecycle
   assert.equal(isBufferBlank(paintedBuffer), false, 'pixel with alpha 255 evaluates to non-blank');
 });
 
+test('3D Outer Layer & Collar Tailoring: distinct layer clearance margins, smooth shoulder projection, seam welding, and continuous jacket roll collar', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const tvSrc = await readFile(new URL('../js/three-view.js', import.meta.url), 'utf8');
+  assert.ok(tvSrc.includes('function resolveLayerEnvelopeMargin(mesh, baseFitTier'), 'resolveLayerEnvelopeMargin helper must exist');
+  assert.ok(tvSrc.includes('else if (isOuter) base = 0.0155;'), 'outer layer keeps strict separation above inner bodice');
+  assert.ok(tvSrc.includes('else if (isUnderOuter) base = 0.0034;'), 'inner bodice under outer layer receives lower envelope clearance');
+  assert.ok(tvSrc.includes('topFadeBand = 0'), 'enforceBoneSculptedSurface fades smoothly near upper chest boundary without cliff');
+  assert.ok(tvSrc.includes('const zBlend = 1 - smoothstep(shCrestMaxZ * 0.42, shCrestMaxZ, Math.abs(lz));'), 'shoulder heightfield projection blends smoothly into chest surface without ledge artifact');
+  assert.ok(tvSrc.includes('if (outerFrontMesh && outerBackMesh && outerFrontMesh.visible && outerBackMesh.visible)'), 'outer layer front/back shoulder seams weld and smooth C1 normals');
+  assert.ok(tvSrc.includes('Continuous Back & Side Jacket Roll Collar'), 'structured outer layers include continuous back/side roll collar');
+  assert.ok(tvSrc.includes('evalOuterFrontZ('), 'lapels follow actual outer jacket front contour');
+  assert.ok(tvSrc.includes('skipShoulderTop: isCollar || isLapel || isSleeve'), 'sleeve vertices skip shTop shoulder heightfield so arm caps stay flush without horns');
+  assert.ok(tvSrc.includes('const smax ='), 'smax smooth blend prevents upper chest-to-armhole crease');
+  assert.ok(tvSrc.includes('armPushFade'), 'sleeve armscye seam rows fade capsule push-out so sleeve cap stays locked to shoulder seam');
+  assert.ok(tvSrc.includes('hasSleevedOuter'), 'inner shirt stays strictly inside sleeved outer jackets');
+});
+
+
 
 
 
