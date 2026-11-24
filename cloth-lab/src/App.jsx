@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import Header from './ui/Header'
+import Header, { FullscreenIcon } from './ui/Header'
+import { useFullscreen } from './ui/useFullscreen'
 import MeasurementPanel from './ui/MeasurementPanel'
 import FabricPanel from './ui/FabricPanel'
 import AvatarPanel, { DEFAULT_SKIN_TONE, DEFAULT_POSE } from './ui/AvatarPanel'
@@ -75,6 +76,8 @@ function resolveDefaultPatternFabric(p) {
 }
 
 export default function App({ embedded = false, pattern = null, onReady, bodyOnly = false } = {}) {
+  const rootRef = useRef(null)
+  const { isFullscreen, stageOnly, toggleFullscreen, exitFullscreen, toggleStageOnly } = useFullscreen(rootRef)
   const hostOriginRef = useRef(embedded ? window.location.origin : null)
   const [category, setCategory] = useState(pattern?.category || 'women')
   const [measurementsByCategory, setMeasurementsByCategory] = useState(
@@ -340,11 +343,17 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
   const guessed = plan.inventory.filter(r => r.valid && !r.excluded && r.answer.auto && r.answer.autoFields?.length).length
 
   return (
-    <div className="cloth-lab-root" dir={dirFor(lang)} lang={lang}>
+    <div
+      ref={rootRef}
+      className={`cloth-lab-root${isFullscreen ? ' is-fullscreen' : ''}${isFullscreen && stageOnly ? ' is-stage-only' : ''}`}
+      dir={dirFor(lang)}
+      lang={lang}
+    >
       <Header
         embedded={embedded} bodyOnly={bodyOnly} lang={lang}
         category={category} onCategoryChange={handleCategoryChange} linked={!!source}
         step={step} onStep={goTo}
+        isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen}
       />
       {storageWarning && <div role="status" className="cl-callout tone-warn cl-inline">{ar ? 'تعذر الحفظ المحلي. أبقِ هذه الصفحة مفتوحة.' : 'Local saving failed. Keep this page open to retain your work.'}</div>}
       {!bodyOnly && !source ? <div className="cl-empty">
@@ -381,6 +390,8 @@ export default function App({ embedded = false, pattern = null, onReady, bodyOnl
         onEditorChange={editor => { setSavedEditor(editor); persist(answers, editor); setGarment(null) }}
         avatarGLBUrl={avatarGLBByCategory[category]}
         onSimulate={(result) => setGarment(result)}
+        isFullscreen={isFullscreen} stageOnly={stageOnly}
+        onToggleFullscreen={toggleFullscreen} onExitFullscreen={exitFullscreen} onToggleStageOnly={toggleStageOnly}
       />}
     </div>
   )
@@ -407,7 +418,7 @@ const TABS = [
 // Try-on canvas — split out from App so the whole thing can be remounted
 // (via App's key={garmentVersion}) as a unit whenever a new garment import
 // needs a fresh seam-editor rather than picking up on top of a stale one.
-function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChange, category, mannequinSize, mannequin, styling, onStylingChange, onMannequinSizeChange, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, stitchConfig, onStitchConfigChange, qualityTier, onQualityTierChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, garment, print = null, notice, onNotice, imported, restored, onEditorChange, avatarGLBUrl, onSimulate }) {
+function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChange, category, mannequinSize, mannequin, styling, onStylingChange, onMannequinSizeChange, dims, measurements, onMeasurementsChange, fabricId, onFabricChange, stitchConfig, onStitchConfigChange, qualityTier, onQualityTierChange, skinToneId, onSkinToneChange, poseId, onPoseChange, poseWarning, onPoseWarning, garment, print = null, notice, onNotice, imported, restored, onEditorChange, avatarGLBUrl, onSimulate, isFullscreen = false, stageOnly = false, onToggleFullscreen, onExitFullscreen, onToggleStageOnly }) {
   const ar = lang === 'ar', text = (en, arabic) => ar ? arabic : en
   const rawPieces = imported ? imported.rawPieces : []
   const roles = imported ? imported.roles : {}
@@ -599,6 +610,30 @@ function Workspace({ bodyOnly, lang, step, onStep, onStepForce, view, onViewChan
                 <option value="off">{text('Body only', 'الجسم فقط')}</option>
               </select>
             </label>}
+            {onToggleFullscreen && <div className="cl-tool-group cl-fullscreen-tools">
+              {isFullscreen && onToggleStageOnly && (
+                <button
+                  type="button"
+                  data-testid="cl-stage-only-btn"
+                  aria-pressed={stageOnly}
+                  title={t(lang, 'stageOnlyHint')}
+                  onClick={onToggleStageOnly}
+                >
+                  {t(lang, stageOnly ? 'showControls' : 'hideControls')}
+                </button>
+              )}
+              <button
+                type="button"
+                data-testid="cl-fullscreen-stage-btn"
+                className={`cl-fs-btn${isFullscreen ? ' is-active' : ''}`}
+                aria-pressed={isFullscreen}
+                title={t(lang, isFullscreen ? 'exitFullscreenHint' : 'enterFullscreenHint')}
+                onClick={isFullscreen ? onExitFullscreen : onToggleFullscreen}
+              >
+                <FullscreenIcon exit={isFullscreen} />
+                <span>{t(lang, isFullscreen ? 'exitFullscreen' : 'enterFullscreen')}</span>
+              </button>
+            </div>}
           </div>
           {!bodyOnly && <p className="cl-simulation-note">{t(lang, 'simulationIndicative')}</p>}
           <SceneBoundary key={`${view}-${garment?.pieces?.length}`} lang={lang} onRecover={() => onStep('sew')}>

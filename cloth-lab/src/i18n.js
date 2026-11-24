@@ -122,6 +122,13 @@ export const STRINGS = {
     poseWarnWalkNoClip: 'This avatar has no embedded animation clip — the "Walk" pose renders standing instead.',
     avatarLoadError: 'This custom avatar failed to load — showing the standard body instead.',
     simulationIndicative: 'Simulation is indicative. Confirm material behaviour, construction and fit with a maker and sewn sample.',
+    enterFullscreen: 'Full screen',
+    exitFullscreen: 'Exit full screen',
+    enterFullscreenHint: 'Demonstrate Cloth Lab in full screen (F)',
+    exitFullscreenHint: 'Exit full screen mode (Esc)',
+    hideControls: 'Hide panel',
+    showControls: 'Show panel',
+    stageOnlyHint: 'Toggle side panel & chrome for clean full-screen demonstration',
   },
   ar: {
     title: 'بيري ستوديو ٣D — معمل القماش',
@@ -220,6 +227,13 @@ export const STRINGS = {
     poseWarnWalkNoClip: 'لا يحتوي هذا الشكل على مقطع حركة مضمّن — لذا تُعرض وضعية "المشي" كوضعية وقوف بدلاً من ذلك.',
     avatarLoadError: 'تعذّر تحميل هذا الشكل المخصّص — يتم عرض الجسم الافتراضي بدلاً منه.',
     simulationIndicative: 'المحاكاة استرشادية. أكّد سلوك الخامة والبناء والملاءمة مع صانع الباترون وعينة مخيطة.',
+    enterFullscreen: 'ملء الشاشة',
+    exitFullscreen: 'إنهاء ملء الشاشة',
+    enterFullscreenHint: 'عرض معمل القماش بملء الشاشة (F)',
+    exitFullscreenHint: 'الخروج من وضع ملء الشاشة (Esc)',
+    hideControls: 'إخفاء اللوحة',
+    showControls: 'إظهار اللوحة',
+    stageOnlyHint: 'إخفاء أو إظهار اللوحة الجانبية لعرض كامل على الشاشة',
   },
 }
 

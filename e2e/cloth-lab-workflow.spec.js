@@ -98,3 +98,57 @@ test('sleeved garment auto-wires front/back sleeve cap, closes underarm tube, ke
   expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
 });
 
+test('Cloth Lab full screen demonstration mode expands across full viewport and cleanly exits back', async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(String(err)));
+  page.on('console', (msg) => {
+    if (msg.type() !== 'error') return;
+    if (/Failed to load resource.*404/.test(msg.text())) return;
+    errors.push(msg.text());
+  });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await startSignedIn(page);
+  await page.locator('#viewToggle button[data-v="clothlab"]').click();
+  const root = page.locator('#clothLabEmbed .cloth-lab-root');
+  await expect(root).toBeVisible({ timeout: 15_000 });
+
+  await root.getByRole('button', { name: /Try it on/ }).click();
+  const simCanvas = root.locator('canvas').first();
+  await expect(simCanvas).toBeVisible({ timeout: 15_000 });
+
+  const normalBox = await root.boundingBox();
+  expect(normalBox.y).toBeGreaterThan(40);
+  expect(normalBox.width).toBeLessThan(1200);
+
+  // Enter full screen from the 3D stage toolbar.
+  await root.getByTestId('cl-fullscreen-stage-btn').click();
+  await expect(root).toHaveClass(/is-fullscreen/);
+  const fullBox = await root.boundingBox();
+  expect(fullBox.x).toBe(0);
+  expect(fullBox.y).toBe(0);
+  expect(fullBox.width).toBe(1280);
+  expect(fullBox.height).toBe(800);
+
+  // Hide panel for edge-to-edge stage presentation.
+  await root.getByTestId('cl-stage-only-btn').click();
+  await expect(root).toHaveClass(/is-stage-only/);
+  await expect.poll(async () => (await simCanvas.boundingBox())?.width ?? 0).toBe(1280);
+
+  // Exit full screen via the stage button and verify normal layout returns.
+  await root.getByTestId('cl-fullscreen-stage-btn').click();
+  await expect(root).not.toHaveClass(/is-fullscreen/);
+  const restoredBox = await root.boundingBox();
+  expect(restoredBox.y).toBeGreaterThan(40);
+  expect(restoredBox.width).toBeLessThan(1200);
+
+  // Enter again via header button and verify Escape key exits full screen.
+  await root.getByTestId('cl-fullscreen-header-btn').click();
+  await expect(root).toHaveClass(/is-fullscreen/);
+  await page.keyboard.press('Escape');
+  await expect(root).not.toHaveClass(/is-fullscreen/);
+
+  expect(errors, `Console errors:\n${errors.join('\n')}`).toEqual([]);
+});
+

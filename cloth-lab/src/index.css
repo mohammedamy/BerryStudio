@@ -256,3 +256,62 @@
   .cloth-lab-root .cl-stepper .cl-step-label { display: none; }
   .cloth-lab-root .cl-stepper .is-current .cl-step-label { display: inline; }
 }
+
+/* full screen & presentation mode */
+.cloth-lab-root.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 9999;
+}
+.cloth-lab-root .cl-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+.cloth-lab-root .cl-categories + .cl-header-actions {
+  margin-inline-start: 0;
+}
+.cloth-lab-root .cl-fs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cloth-lab-root .cl-fs-btn svg {
+  flex: none;
+}
+.cloth-lab-root .cl-fs-btn.is-active {
+  background: color-mix(in srgb, var(--amber) 18%, var(--panel-2));
+  border-color: color-mix(in srgb, var(--amber) 72%, var(--border));
+  color: #fff;
+}
+.cloth-lab-root .cl-fs-btn.is-active:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--amber) 28%, var(--panel-2));
+  border-color: var(--amber);
+}
+.cloth-lab-root .cl-fullscreen-tools {
+  margin-inline-start: auto;
+}
+.cloth-lab-root .cl-view-select + .cl-fullscreen-tools {
+  margin-inline-start: 0;
+}
+.cloth-lab-root.is-fullscreen.is-stage-only .cl-header,
+.cloth-lab-root.is-fullscreen.is-stage-only .cl-actionbar,
+.cloth-lab-root.is-fullscreen.is-stage-only .cl-sidebar,
+.cloth-lab-root.is-fullscreen.is-stage-only .cl-simulation-note {
+  display: none;
+}
+.cloth-lab-root.is-fullscreen.is-stage-only .cl-workspace {
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+}
+.cloth-lab-root.is-fullscreen.is-stage-only .cl-preview {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+}

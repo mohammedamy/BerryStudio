@@ -261,6 +261,14 @@ button { cursor: pointer; border: none; background: none; }
 .clothlab-wrap #clothLabEmbed { display: none; }
 .clothlab-wrap.engine-embedded iframe { display: none; }
 .clothlab-wrap.engine-embedded #clothLabEmbed { display: block; }
+body.clothlab-fullscreen-active #viewClothLab.show {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 9999;
+}
 
 /* 3D loading overlay */
 .v3d-loading {
