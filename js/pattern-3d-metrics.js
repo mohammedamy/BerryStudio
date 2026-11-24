@@ -26,7 +26,7 @@ export function isSleevePieceName(name) {
 const SKIRT_NAME_RE = /skirt|peplum|flounce|tier|godet|تنور|كشكش/i;
 const TROUSERS_NAME_RE = /trouser|بنطل|pant|\bleg\s*(?:panel|front|back|seam)|\bleg\b(?!\s*opening)|\blegging\b|brief|panties|boxer|trunk|short|culotte|palazzo|jean|jogger|سروال|شورت|كيلوت/i;
 const CUFF_NAME_RE = /\bcuff\b|أساور|اسورة|إسورة/i;
-const COLLAR_NAME_RE = /collar|lapel|neckband|stand|hood|ياقة|قبة|غطاء رأس/i;
+const COLLAR_NAME_RE = /collar|lapel|neckband|stand|ياقة|قبة/i;
 const LOWER_TRIM_ROLES = new Set([
   "waistband", "pocket", "gusset", "fly", "elastic-band",
   "belt", "sash", "wrap-tie", "hem-band", "placket-facing", "facing", "lining",
@@ -381,11 +381,26 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
       p.role === "cup" || p.role === "band" || p.role === "strap" || BRA_NAME_RE.test(getPieceDisplayName(p))
     )
   );
-  const hasCollar = lbSil.hasCollar != null
-    ? Boolean(lbSil.hasCollar)
-    : (visible.some((p) => p.role === "collar" || p.role === "collar-stand" || p.role === "undercollar" || COLLAR_NAME_RE.test(getPieceDisplayName(p)))
-      || Boolean(lbSil.collarStyle && lbSil.collarStyle !== "none")
-      || /\bshirt\b|collar|polo|blazer|lapel|thobe|kandura|sherwani|nehru|قميص|ثوب|كندورة|بليزر|ياقة/i.test(allText));
+  const isLeotard = lbSil.style === "leotard" || /leotard|bodysuit|swimsuit|مايوه|ليوتارد/i.test(allText);
+  const hasExplicitCollar = (() => {
+    if (isBra || isLeotard) return false;
+    if (lbSil.hasCollar != null) return Boolean(lbSil.hasCollar);
+    if (lbSil.collarStyle && lbSil.collarStyle !== "none") return true;
+    if (visible.some((p) => p.role === "collar" || p.role === "collar-stand" || p.role === "undercollar")) return true;
+    const isCrewNeckTee = /\b(?:crew[-\s]?neck|raglan[-\s]?sleeve)\b.*\btee\b|\bt-shirt\b/i.test(allText);
+    const isHalter = lbSil.neckline === "halter" || /\bhalter\b/i.test(allText);
+    const collarFromBand = visible.some((p) =>
+      p.role !== "sash" &&
+      p.role !== "belt" &&
+      p.role !== "wrap-tie" &&
+      (p.role === "collar-band" || COLLAR_NAME_RE.test(getPieceDisplayName(p)))
+    );
+    if (collarFromBand && !isCrewNeckTee && !isHalter) return true;
+    const titleEn = String(patternMeta?.name?.en || "");
+    const titleAndPcsEn = `${titleEn} ${visible.map((p) => p.name?.en || "").join(" ")}`;
+    return /\b(?:shirt|collar|polo|blazer|trench|thobe|kandura|sherwani|nehru)\b/i.test(titleAndPcsEn);
+  })();
+  const hasCollar = hasExplicitCollar;
   const hasCuffs = visible.some((p) => p.role === "cuff" || p.role === "rib-cuff" || CUFF_NAME_RE.test(getPieceDisplayName(p)));
   const isOpenFront = lbSil.isOpenFront != null
     ? Boolean(lbSil.isOpenFront)
@@ -407,7 +422,7 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
   }
 
   const bodicePanels = byPart.bodice
-    .filter((p) => !COLLAR_NAME_RE.test(getPieceDisplayName(p)) && !CONTEXT_TRIM_NAME_RE.test(getPieceDisplayName(p)))
+    .filter((p) => !COLLAR_NAME_RE.test(getPieceDisplayName(p)) && !CONTEXT_TRIM_NAME_RE.test(getPieceDisplayName(p)) && p.role !== "hood")
     .map((p) => ({ piece: p, box: measureOutlineCm(p.outline) }))
     .filter((x) => x.box && x.box.height > 10);
 
@@ -424,12 +439,12 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     bodiceHemFlare = clamp(mainB.bottomWidth / Math.max(8, mainB.topWidth), 0.88, 1.65);
   }
 
-  const isLeotard = lbSil.style === "leotard" || /leotard|bodysuit|swimsuit|مايوه|ليوتارد/i.test(allText);
-
   const hasPeplum = Boolean(lbSil.hasPeplum || (
     /peplum|بيبلوم/i.test(`${patternMeta?.name?.en || ""} ${patternMeta?.desc?.en || ""} ${visible.map(getPieceDisplayName).join(" ")}`)
     && visible.some((p) => p.role === "peplum-front" || p.role === "peplum-back")
   ));
+  const hasRealSkirt = byPart.skirt.some((p) => p.role !== "peplum-front" && p.role !== "peplum-back");
+  const isPeplumDressOnly = hasPeplum && !hasRealSkirt && /\bdress\b|فستان/i.test(`${patternMeta?.name?.en || ""} ${patternMeta?.name?.ar || ""}`);
 
   const isHipTopShirt = /\b(shirt(?!\s*dress)|blouse|polo|t-shirt|tee|sweater|sweatshirt|hoodie|cardigan|jacket|blazer|vest|waistcoat|gilet|tank|camisole)\b|قميص|بلوزة|توب|بليزر|جاكيت|صديري|فانلة/i.test(allText)
     && !/\b(dress(?!\s*shirt)|shirtdress|tunic|kurta|thobe|kandura|abaya|kaftan|robe|gown|coat|overcoat|trench|sherwani|bisht|longline)\b|فستان|تونيك|ثوب|عباية|قفطان|معطف|بشت/i.test(allText);
@@ -437,7 +452,7 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
   let bodiceStyle = "hip";
   if (isBra) bodiceStyle = "bra";
   else if (isLeotard) bodiceStyle = "leotard";
-  else if (hasSeparateSkirt && !hasPeplum && lbSil.style !== "hip" && lbSil.style !== "tunic") {
+  else if (hasSeparateSkirt && (hasRealSkirt || isPeplumDressOnly) && lbSil.style !== "hip" && lbSil.style !== "tunic") {
     bodiceStyle = "waist";
     bodiceLengthCm = m.backLen + 2;
     bodiceHemFlare = 1.02;
@@ -447,9 +462,9 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     bodiceHemFlare = 1.02;
   } else if (lbSil.style && ["crop", "waist", "hip", "tunic", "robe"].includes(lbSil.style)) {
     bodiceStyle = lbSil.style;
-  } else if (lbSil.outerLayer?.enabled && (lbSil.outerLayer.lengthStyle === "waist" || lbSil.outerLayer.lengthStyle === "hip")) {
-    bodiceStyle = lbSil.outerLayer.lengthStyle;
-    bodiceLengthCm = Math.min(bodiceLengthCm, lbSil.outerLayer.lengthStyle === "waist" ? m.backLen + 1 : m.backLen + 18);
+  } else if (lbSil.outerLayer?.enabled && (lbSil.outerLayer.lengthStyle === "waist" || lbSil.outerLayer.lengthStyle === "hip" || lbSil.outerLayer.lengthStyle === "coat")) {
+    bodiceStyle = lbSil.outerLayer.lengthStyle === "coat" ? "tunic" : lbSil.outerLayer.lengthStyle;
+    bodiceLengthCm = Math.min(bodiceLengthCm, lbSil.outerLayer.lengthStyle === "waist" ? m.backLen + 1 : (lbSil.outerLayer.lengthStyle === "coat" ? m.backLen + 30 : m.backLen + 18));
   } else if (bodiceLengthCm < m.backLen * 0.80) bodiceStyle = "crop";
   else if (bodiceLengthCm <= m.backLen * 1.16) bodiceStyle = "waist";
   else if (bodiceLengthCm <= m.backLen + 26 || isHipTopShirt) bodiceStyle = "hip";
@@ -491,10 +506,11 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     const underarmToHemCm = yBicep != null ? (sb.maxY - yBicep) : (sb.height * 0.86);
     sleeveLengthFrac = clamp(underarmToHemCm / Math.max(24, m.sleeve), 0.18, 1.04);
     sleeveHemRatio = clamp(sb.bottomWidth / Math.max(10, sb.topWidth), 0.50, 1.45);
+    const sleeveMidToHemRatio = clamp(sb.bottomWidth / Math.max(10, sb.midWidth), 0.50, 1.80);
 
     if (sp.role === "puff-sleeve" || /puff|منفوش/i.test(sText)) sleeveStyle = "puff";
     else if (sp.role === "cap-sleeve" || /cap\s*sleeve|كاب/i.test(sText) || sleeveLengthFrac < 0.25) sleeveStyle = "cap";
-    else if (sp.role === "butterfly-sleeve" || /bishop|bell|flare|kimono|butterfly|cape|واسع|جرس|فراشة/i.test(sText) || sleeveHemRatio > 1.02) {
+    else if (sp.role === "butterfly-sleeve" || /bishop|bell|flared?\s*sleeve|kimono|butterfly|cape|wide\s*sleeve|كم\s*واسع|أكمام\s*واسعة|جرس|فراشة/i.test(sText) || sleeveMidToHemRatio > 1.18) {
       sleeveStyle = hasCuffs || /bishop|بأساور/i.test(sText) ? "bishop" : "bell";
     }
   }
@@ -602,7 +618,7 @@ export function computePatternMetrics3D(pieces = [], measurements = {}, category
     present: {
       bodice: byPart.bodice.length > 0,
       sleeve: byPart.sleeve.length > 0,
-      skirt: hasPeplum ? byPart.skirt.some((p) => p.role !== "peplum-front" && p.role !== "peplum-back") : (byPart.skirt.length > 0),
+      skirt: isPeplumDressOnly || (hasPeplum ? hasRealSkirt : (byPart.skirt.length > 0)),
       trousers: byPart.trousers.length > 0,
     },
     bodice: {

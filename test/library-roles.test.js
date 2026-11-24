@@ -87,7 +87,9 @@ const KNOWN_INVALID_ROLE_COUNTS = { 'cape-sleeve': 2 };
 // v85: womens_dress adds matched skirt_back (+1 piece) for full 5-piece Fit & Flare dress.
 // v86: men/boys tops (b10, b17, m10) use tailored darted panels instead of female bust princess seams (-6 pieces).
 // v90: 20 embroidered modest/hijab abayas in js/abaya-collection.js (+101 pieces, all valid roles).
-const BASELINE = { total: 2268, valid: 2264, none: 2, roleslessPatterns: 1 };
+// v104: polo collar+placket on m10/b10 (+4), b06 hood (+1), gy006/gy008 remove extra skirts (-4),
+//       sleeveless conversion on gy037/gy046/gy058/gy074 swaps sleeve for armhole binding (0 net).
+const BASELINE = { total: 2269, valid: 2265, none: 2, roleslessPatterns: 1 };
 
 test('every declared piece role is in the 53-value vocabulary, except the two documented pre-existing exceptions', () => {
   const ids = Object.keys(PATTERNS);

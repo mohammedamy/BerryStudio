@@ -1,5 +1,18 @@
 # Changelog
 
+## Full 340-Pattern Geometry, Thumbnail & 3D Parity Audit (`berrystudio-v104`)
+
+- **2D Pattern Geometry & Construction Parity ([`library.js`](js/library.js), [`fancy-patterns.js`](js/fancy-patterns.js), [`girls-leotards.js`](js/girls-leotards.js)):**
+  - Refined `bodiceFamily`, `shirtFamily`, and `robeFamily` sleeve/body proportions (`w13`, `g23`, `w17`, `w20`, `w23`, `m03`, `m10`, `m15`, `b01`, `b06`, `b10`, `w21`, `m07`, `m16`, `b11`, `b22`, kaftans `w08`/`m21`), adding shirt collars/placket facings on polos and hood panels on pullover hoodies.
+  - Corrected girls' floor/maxi ball gowns (`gf01`, `gf02`, `gf03`, `gf06`, `gf08`, `gf11`, `gf12`, `gf15`) to full ankle/floor skirt length (`m.height * 0.78 - b.hemY`) and fixed bodice/skirt proportions on `wf06`, `wf08`, `wf09`, `gf05`, `gf13`, `gf14`, and `gf16`.
+  - Audited all 100 girls' gymnastics/ballet leotards (`gy001..gy100`) and all 340 thumbnails (`assets/thumbnails/*.jpg`): synced `SLEEVES` ratios and fixed `gy006`, `gy008`, `gy010`, `gy037`, `gy046`, `gy058`, and `gy074`.
+- **Lookbook Metadata, 3D Metrics & Silhouette Rendering ([`pattern-lookbook-styles.js`](js/pattern-lookbook-styles.js), [`pattern-3d-metrics.js`](js/pattern-3d-metrics.js), [`three-view.js`](js/three-view.js)):**
+  - Synced lookbook metadata on `gy006`, `gy008`, `gy037`, `gy046`, `gy058`, `gy074`, `gy081`, tunic/coat tags (`m08`, `m18`, `bf14`), and collared coat `bf10`.
+  - Fixed collar false positives on hoodies, crew-neck tees, bras/leotards, lapel facings, and halter sashes (`wf10`); fixed `w17` tapered sleeve classification (`sleeveMidToHemRatio`); and enabled `present.skirt` + `bodiceStyle` parity for peplum/coat dresses (`wf06`, `wf11`, `gf05`, `gf14`, `gf16`, `bf06`, `bf10`, `bf11`).
+  - Added 3D cold-shoulder sleeve cutouts (`isColdShoulder`) in `buildTailoredSleeves` (`w18`) and refined sleeveless round-neck strap geometry in `buildTailoredLeotard` (`gy046`).
+- **Tests & Service Worker Cache ([`library-roles.test.js`](test/library-roles.test.js), [`pattern-thumbnail-parity.test.js`](test/pattern-thumbnail-parity.test.js), [`sw.js`](sw.js)):**
+  - Added comprehensive 340-pattern thumbnail/geometry/metrics parity regression coverage and updated the service worker cache to `berrystudio-v104`.
+
 ## Continuous 3D Long Hair Engine Across 3D Preview and Cloth Lab (`berrystudio-v103`)
 
 - **Axis-Separated Body Heightfields & Headwear Clearance Fix ([`human-mannequin.js`](js/human-mannequin.js)):**

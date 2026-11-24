@@ -141,44 +141,79 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
     } else {
       const shoulderX = chest * (opts.isTop && !(opts.sleeveLenF > 0) ? 0.235 : 0.27);
       const isShortTop = opts.isTop && (opts.lengthF || 1) < 1.15;
-      const hemY = opts.isTop
-        ? Math.max(m.backLen * 0.84, m.backLen * (0.55 + 0.85 * (opts.lengthF || 0.9)))
-        : (m.backLen + 20 + opts.hemBelowHip);
+      const isCroppedTop = opts.isTop && (opts.lengthF || 1) <= 0.55;
+      const hemY = isCroppedTop
+        ? Math.max(m.backLen * 0.72, m.backLen * (0.48 + 0.50 * (opts.lengthF || 0.5)))
+        : (opts.isTop
+          ? Math.max(m.backLen * 0.84, m.backLen * (0.55 + 0.85 * (opts.lengthF || 0.9)))
+          : (m.backLen + 20 + opts.hemBelowHip));
       const underarmY = m.backLen * (opts.isTop && !(opts.sleeveLenF > 0) ? 0.36 : 0.30);
       const waistY = opts.isTop
-        ? Math.min(m.backLen * (isShortTop ? 0.90 : 0.96), hemY - Math.max(4, (hemY - underarmY) * 0.22))
+        ? Math.min(m.backLen * (isShortTop ? 0.88 : 0.96), hemY - Math.max(3.5, (hemY - underarmY) * 0.22))
         : m.backLen;
       const hipY = opts.isTop
-        ? waistY + Math.max(2.0, (hemY - waistY) * 0.58)
+        ? waistY + Math.max(1.8, (hemY - waistY) * 0.58)
         : (m.backLen + 20);
       const front = plainBodicePanel(shoulderX, necklineDepth, chest + 3, underarmY, waist + 3, waistY, hips + 3, hipY, hips + 3, hemY, opts.squareNeck);
       const back = plainBodicePanel(shoulderX, necklineDepth * 0.45, chest + 2, underarmY, waist + 2, waistY, hips + 2, hipY, hips + 2, hemY, false);
       const darts = suppression === 'darted';
       const dartApexY = Math.max(underarmY + 2, waistY - Math.min(9, (waistY - underarmY) * 0.48));
+      const grainTopY = isCroppedTop ? 6 : 10;
+      const grainBotY = isCroppedTop ? hemY - 5 : hemY - 10;
       pieces.push(
         { key: 'front', name: { en: `${opts.nameEn} Front`, ar: `مقدمة ${opts.nameAr}` }, desc: { en: darts ? 'Center-front panel with a single waist dart.' : 'Center-front panel, deliberately un-darted for a relaxed cut.', ar: darts ? 'لوحة المقدمة مع بنسة خصر واحدة.' : 'لوحة المقدمة بدون بنسة عمدًا لقصة مريحة.' },
           outline: front, darts: darts ? [[[waist * 0.55, dartApexY], [waist * 0.55 - 1.6, waistY], [waist * 0.55 + 1.6, waistY]]] : [],
-          notches: [[front[front.chestIdx][0], front[front.chestIdx][1]]], grain: [[shoulderX * 0.5, 10], [shoulderX * 0.5, hemY - 10]],
+          notches: [[front[front.chestIdx][0], front[front.chestIdx][1]]], grain: [[shoulderX * 0.5, grainTopY], [shoulderX * 0.5, grainBotY]],
           role: 'bodice-front-center', cutOnFold: true, chestEdgeIndices: [front.chestIdx],
           edges: [{ fromIdx: front.chestIdx, toIdx: front.chestIdx + 3, seamId: seamId }] },
         { key: 'back', name: { en: `${opts.nameEn} Back`, ar: `خلفية ${opts.nameAr}` }, desc: { en: darts ? 'Center-back panel with a single waist dart.' : 'Center-back panel, deliberately un-darted for a relaxed cut.', ar: darts ? 'لوحة الخلفية مع بنسة خصر واحدة.' : 'لوحة الخلفية بدون بنسة عمدًا لقصة مريحة.' },
           outline: back, darts: darts ? [[[waist * 0.5, dartApexY], [waist * 0.5 - 1.6, waistY], [waist * 0.5 + 1.6, waistY]]] : [],
-          notches: [[back[back.chestIdx][0], back[back.chestIdx][1]]], grain: [[shoulderX * 0.5, 10], [shoulderX * 0.5, hemY - 10]],
+          notches: [[back[back.chestIdx][0], back[back.chestIdx][1]]], grain: [[shoulderX * 0.5, grainTopY], [shoulderX * 0.5, grainBotY]],
           role: 'bodice-back-center', cutOnFold: true, chestEdgeIndices: [back.chestIdx],
           edges: [{ fromIdx: back.chestIdx, toIdx: back.chestIdx + 3, seamId: seamId }] },
       );
+      if (opts.polo) {
+        const halfNeck = (m.neck || 38) / 2 + 1;
+        const collar = pointedCollar(halfNeck, 3.8, 5.5);
+        const placketH = Math.max(12, hemY * 0.35);
+        pieces.push(
+          { key: 'collar', name: { en: 'Polo Collar', ar: 'ياقة بولو' }, desc: { en: 'Pointed knit polo collar, cut on the fold.', ar: 'ياقة بولو مدببة مقصوصة على الطية.' },
+            outline: collar, darts: [], notches: [collar[collar.shoulderIdx]], grain: [[2, 1.5], [2, 3]], role: 'collar', cutOnFold: true },
+          { key: 'placket', name: { en: 'Polo Placket Facing', ar: 'مرد أزرار البولو' }, desc: { en: 'Front button placket facing strip.', ar: 'شريط بطانة مرد أزرار البولو.' },
+            outline: bandPc(3.5, placketH), darts: [], notches: [[1.75, 0]], grain: [[1.75, 2], [1.75, placketH - 2]], role: 'placket-facing' },
+        );
+      }
+      if (opts.hooded) {
+        const hw = Math.max(18, (m.neck || 34) * 0.56);
+        const depth = Math.max(24, m.height * 0.19);
+        const crownTop = [hw * 0.5, -depth];
+        const seg1 = [[0, 4], [hw * 0.1, -depth * 0.7], crownTop];
+        const seg2 = [crownTop, [hw * 1.05, -depth * 0.5], [hw * 1.15, 2]];
+        const hoodOut = withCurves([[0, 4], ...qBez(...seg1, 7), ...qBez(...seg2, 7), [hw * 0.95, 14]], [
+          { fromIdx: 0, toIdx: 7, ...qBezToCubic(...seg1) },
+          { fromIdx: 7, toIdx: 14, ...qBezToCubic(...seg2) },
+        ]);
+        pieces.push({
+          key: 'hood', name: { en: 'Hood Panel', ar: 'غطاء الرأس (الكابيشو)' }, desc: { en: 'Curved two-piece hood, cut as a mirrored pair.', ar: 'غطاء رأس منحنٍ من قطعتين متطابقتين.' },
+          outline: hoodOut, darts: [], notches: [hoodOut[7]], grain: [[hw * 0.5, -depth * 0.65], [hw * 0.5, 4]], role: 'hood', bilateral: true,
+        });
+      }
     }
 
     if (opts.sleeveLenF > 0) {
       const bicep = q(m.bicep) * 2 * Math.max(0.85, opts.sleeveWideF || 1);
-      const sleeveLen = m.sleeve * opts.sleeveLenF * 0.65;
+      const lenScale = opts.sleeveLenF >= 0.88
+        ? 0.96
+        : (opts.sleeveLenF >= 0.58 ? 0.88 : 0.78);
+      const sleeveLen = Math.max(7, m.sleeve * Math.min(opts.sleeveLenF, 1.0) * lenScale);
       let sleeve, role;
       if ((opts.sleeveWideF || 1) >= 1.45) { sleeve = wideSleevePc(bicep * 0.75, sleeveLen, opts.sleeveWideF); role = 'butterfly-sleeve'; }
       else if ((opts.sleeveWideF || 1) >= 1.2) { sleeve = puffSleevePc(bicep, sleeveLen, 1.4 + (opts.sleeveWideF - 1.2)); role = 'puff-sleeve'; }
       else { sleeve = setInSleeve(bicep, sleeveLen); role = 'sleeve'; }
       const notches = sleeve.frontNotchIdx != null ? [sleeve[sleeve.frontNotchIdx], sleeve[sleeve.backNotchIdx1] || sleeve[sleeve.frontNotchIdx], sleeve[sleeve.backNotchIdx2] || sleeve[sleeve.frontNotchIdx]] : [];
+      const gx = (opts.sleeveWideF || 1) >= 1.45 ? bicep * 0.35 : bicep * 0.25;
       pieces.push({ key: 'sleeve', name: { en: `${opts.nameEn} Sleeve`, ar: `كم ${opts.nameAr}` }, desc: { en: 'Sleeve, cut as a mirrored pair.', ar: 'كم يُقص كزوج متطابق.' },
-        outline: sleeve, darts: [], notches, grain: [[bicep * 0.25, sleeveLen * 0.15], [bicep * 0.25, sleeveLen * 0.85]], role, bilateral: true });
+        outline: sleeve, darts: [], notches, grain: [[gx, sleeveLen * 0.15], [gx, sleeveLen * 0.85]], role, bilateral: true });
     }
     return hoistCurves(pieces);
   }
@@ -401,11 +436,12 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
           outline: bandPc(q(m.bicep) * 1.5, 6), darts: [], notches: [[q(m.bicep) * 0.75, 0]], grain: [[2, 1], [2, 5]], role: 'cuff', bilateral: true },
       );
     } else {
-      const sleeve = setInSleeve(q(m.bicep) * 2, Math.max(8, sleeveLen * 0.4));
+      const shortLen = Math.max(13, m.sleeve * opts.sleeveLenF * 0.74);
+      const sleeve = setInSleeve(q(m.bicep) * 2, shortLen);
       pieces.push(
         { key: 'sleeve', name: { en: 'Short Sleeve', ar: 'كم قصير' }, desc: { en: 'Short set-in sleeve.', ar: 'كم مركّب قصير.' },
           outline: sleeve, darts: [], notches: [sleeve[sleeve.frontNotchIdx], sleeve[sleeve.backNotchIdx1], sleeve[sleeve.backNotchIdx2]],
-          grain: [[q(m.bicep), 3], [q(m.bicep), Math.max(8, sleeveLen * 0.4) - 3]], role: 'sleeve', bilateral: true },
+          grain: [[q(m.bicep), 3], [q(m.bicep), shortLen - 3]], role: 'sleeve', bilateral: true },
         { key: 'hem_band', name: { en: 'Sleeve Hem Band', ar: 'شريط نهاية الكم' }, desc: { en: 'Turned-back band finishing the short sleeve.', ar: 'شريط مطوي يُنهي الكم القصير.' },
           outline: bandPc(q(m.bicep) * 1.6, 3), darts: [], notches: [[q(m.bicep) * 0.8, 0]], grain: [[2, 1], [2, 2]], role: 'hem-band', bilateral: true },
       );
@@ -431,7 +467,14 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
     const front = mirrorHalfToFull(half);
     const back = plainBodicePanel(shoulderX, 4, qc + 1.5, m.backLen * 0.32, qc * 0.98, m.backLen * 1.15, hipX * 0.97, len * 0.65, hemX * 0.98, len);
     const bicep = q(m.bicep) * 2.1 * (opts.sleeveWideF || 1.15);
-    const sleeve = wideSleevePc(bicep * 0.7, m.sleeve * 0.55, 1.15);
+    const isWideKaftan = (opts.sleeveWideF || 1) > 1.25;
+    const sleeveLen = isWideKaftan
+      ? Math.max(14, m.sleeve * Math.min(opts.sleeveLenF || 0.9, 1.0) * 0.76)
+      : Math.max(18, m.sleeve * Math.min(opts.sleeveLenF || 1.0, 1.0) * 0.96);
+    const sleeve = isWideKaftan
+      ? wideSleevePc(bicep * 0.7, sleeveLen, Math.min(opts.sleeveWideF, 1.45))
+      : setInSleeve(bicep * 0.88, sleeveLen);
+    const sleeveGrainX = isWideKaftan ? bicep * 0.35 : bicep * 0.44;
 
     const pieces = [
       { key: 'front', name: { en: `${opts.nameEn} Front`, ar: `مقدمة ${opts.nameAr}` }, desc: { en: 'Open front panel, no center seam — worn open or tied.', ar: 'لوحة أمامية مفتوحة بدون خط وسط — تُلبس مفتوحة أو مربوطة.' },
@@ -439,8 +482,8 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
       { key: 'back', name: { en: `${opts.nameEn} Back`, ar: `خلفية ${opts.nameAr}` }, desc: { en: 'Full back on the fold.', ar: 'ظهر كامل على الطية.' },
         outline: back, darts: [], notches: [[back[back.chestIdx][0], back[back.chestIdx][1]]], grain: [[shoulderX * 0.5, 12], [shoulderX * 0.5, len - 12]],
         role: 'back-panel', cutOnFold: true, chestEdgeIndices: [back.chestIdx] },
-      { key: 'sleeve', name: { en: 'Wide Sleeve', ar: 'كم واسع' }, desc: { en: 'Loose wide sleeve, cut as a mirrored pair.', ar: 'كم واسع مريح، يُقص كزوج متطابق.' },
-        outline: sleeve, darts: [], notches: [sleeve[sleeve.frontNotchIdx], sleeve[sleeve.backNotchIdx1], sleeve[sleeve.backNotchIdx2]], grain: [[bicep * 0.2, 6], [bicep * 0.2, m.sleeve * 0.55 - 6]], role: 'sleeve', bilateral: true },
+      { key: 'sleeve', name: { en: isWideKaftan ? 'Wide Sleeve' : 'Long Sleeve', ar: isWideKaftan ? 'كم واسع' : 'كم طويل' }, desc: { en: isWideKaftan ? 'Loose wide sleeve, cut as a mirrored pair.' : 'Full-length tailored robe sleeve, cut as a mirrored pair.', ar: isWideKaftan ? 'كم واسع مريح، يُقص كزوج متطابق.' : 'كم ثوب طويل كامل، يُقص كزوج متطابق.' },
+        outline: sleeve, darts: [], notches: [sleeve[sleeve.frontNotchIdx], sleeve[sleeve.backNotchIdx1], sleeve[sleeve.backNotchIdx2]], grain: [[sleeveGrainX, 6], [sleeveGrainX, sleeveLen - 6]], role: 'sleeve', bilateral: true },
     ];
     if (opts.tie) {
       pieces.push({ key: 'sash', name: { en: 'Waist Sash', ar: 'حزام الخصر' }, desc: { en: 'Tie sash at the waist.', ar: 'حزام يُربط عند الخصر.' },
@@ -476,13 +519,13 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
     entry("w14", "women", "High-Waist Palazzo Pants", "بنطلون بالاتزو عالي الخصر", { type: "trousers", lengthF: 1.08, flareF: 1.95, fitF: 1.02 }),
     entry("w15", "women", "Chiffon Maxi Skirt", "تنورة شيفون طويلة", { type: "skirt", lengthF: 1.48, flareF: 1.75, fitF: 1.00 }),
     entry("w16", "women", "Tunic Top", "توب تونيك", { type: "top", lengthF: 1.25, flareF: 1.15, fitF: 1.05, sleeveLenF: 1.00, sleeveWideF: 1.05 }),
-    entry("w17", "women", "Fit-and-Flare Dress", "فستان ضيق من فوق واسع من تحت", { type: "dress", lengthF: 1.10, flareF: 1.55, fitF: 0.85, sleeveLenF: 0.60, sleeveWideF: 0.95 }),
+    entry("w17", "women", "Fit-and-Flare Dress", "فستان ضيق من فوق واسع من تحت", { type: "dress", lengthF: 1.10, flareF: 1.55, fitF: 0.85, sleeveLenF: 0.68, sleeveWideF: 0.95 }),
     entry("w18", "women", "Cold-Shoulder Top", "توب بفتحة كتف", { type: "top", lengthF: 0.72, flareF: 1.05, fitF: 0.95, sleeveLenF: 0.95, sleeveWideF: 1.15 }),
     entry("w19", "women", "Straight Midi Dress", "فستان ميدي مستقيم", { type: "dress", lengthF: 1.15, flareF: 0.95, fitF: 0.95, sleeveLenF: 0.45, sleeveWideF: 0.95 }),
-    entry("w20", "women", "Culottes Trousers", "بنطلون كوليت", { type: "trousers", lengthF: 0.82, flareF: 1.55, fitF: 1.05 }),
+    entry("w20", "women", "Culottes Trousers", "بنطلون كوليت", { type: "trousers", lengthF: 0.68, flareF: 1.55, fitF: 1.05 }),
     entry("w21", "women", "Modest Abaya-Style Dress", "فستان بقصة عباية محتشمة", { type: "robe", lengthF: 1.45, flareF: 1.35, fitF: 1.10, sleeveLenF: 1.05, sleeveWideF: 1.10 }),
     entry("w22", "women", "Batwing Top", "توب بأكمام خفاش", { type: "top", lengthF: 0.76, flareF: 1.10, fitF: 1.05, sleeveLenF: 0.95, sleeveWideF: 1.85 }),
-    entry("w23", "women", "Layered Maxi Dress", "فستان طويل بطبقات", { type: "dress", lengthF: 1.45, flareF: 1.50, fitF: 1.00, sleeveLenF: 0.95, sleeveWideF: 1.25 }),
+    entry("w23", "women", "Layered Maxi Dress", "فستان طويل بطبقات", { type: "dress", lengthF: 1.45, flareF: 1.50, fitF: 1.00, sleeveLenF: 0.72, sleeveWideF: 1.25 }),
   ];
 
   /* ---------------- MEN (23 new + mens_shirt + thobe = 25) ---------------- */
@@ -501,7 +544,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
     entry("m12", "men", "Half-Sleeve Casual Top", "توب كاجوال نصف كم", { type: "top", lengthF: 0.92, flareF: 1.05, fitF: 1.12, sleeveLenF: 0.55, sleeveWideF: 1.15 }),
     entry("m13", "men", "Loose Kurta Top", "قميص كورتا واسع", { type: "top", lengthF: 1.20, flareF: 1.12, fitF: 1.10, sleeveLenF: 1.02, sleeveWideF: 1.02 }),
     entry("m14", "men", "Formal Straight Trousers", "بنطلون رسمي مستقيم", { type: "trousers", lengthF: 1.00, flareF: 0.94, fitF: 0.96 }),
-    entry("m15", "men", "Cropped Casual Trousers", "بنطلون كاجوال قصير", { type: "trousers", lengthF: 0.88, flareF: 0.90, fitF: 0.96 }),
+    entry("m15", "men", "Cropped Casual Trousers", "بنطلون كاجوال قصير", { type: "trousers", lengthF: 0.80, flareF: 0.90, fitF: 0.96 }),
     entry("m16", "men", "Long Robe (Jubba)", "جبة طويلة", { type: "robe", lengthF: 1.45, flareF: 1.22, fitF: 1.05, sleeveLenF: 1.05, sleeveWideF: 1.05 }),
     entry("m17", "men", "Relaxed Fit Shirt", "قميص واسع مريح", { type: "shirt", lengthF: 0.95, flareF: 1.08, fitF: 1.10, sleeveLenF: 1.05, sleeveWideF: 1.05 }),
     entry("m18", "men", "Sleeveless Long Tunic", "توب طويل بدون أكمام", { type: "top", lengthF: 1.15, flareF: 1.06, fitF: 1.00, sleeveLenF: 0, sleeveWideF: 1.00 }),
@@ -579,6 +622,8 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
     const cargo = /cargo/i.test(e.name.en);
     const tie = /kaftan|kandura|jubba|abaya/i.test(e.name.en) || idx % 2 === 0;
     const squareNeck = !!s.squareNeck || /square/i.test(e.name.en);
+    const polo = /\bpolo\b/i.test(e.name.en);
+    const hooded = /\bhoodie|hooded\b/i.test(e.name.en);
     PATTERNS[e.id] = {
       id: e.id,
       category: e.category,
@@ -588,7 +633,7 @@ void BASE; // reserved — categories index off computeMeasurements' own m, not 
         ar: `${e.name.ar}: باترون حقيقي مُصمَّم فرديًا (راجع تعليق js/library.js لقواعد اختيار الإنشاء). السماحية والطول والاتساع مُدرَّجة من قياسات الجسم.`,
       },
       pieces: (m) => {
-        const opts = { id: e.id, category: e.category, isTop: s.type === 'top', nameEn: e.name.en, nameAr: e.name.ar, lengthF: s.lengthF, flareF: s.flareF, fitF: s.fitF, sleeveLenF: s.sleeveLenF, sleeveWideF: s.sleeveWideF, wrap, pleated, straight, circle, cargo, tie, squareNeck };
+        const opts = { id: e.id, category: e.category, isTop: s.type === 'top', nameEn: e.name.en, nameAr: e.name.ar, lengthF: s.lengthF, flareF: s.flareF, fitF: s.fitF, sleeveLenF: s.sleeveLenF, sleeveWideF: s.sleeveWideF, wrap, pleated, straight, circle, cargo, tie, squareNeck, polo, hooded };
         if (s.type === 'dress' || s.type === 'top') {
           const hemBelowHip = s.type === 'dress' ? Math.max(20, m.height * 0.28 * s.lengthF) : Math.max(4, m.backLen * 0.35 * s.lengthF);
           return bodiceFamily(m, { ...opts, hemBelowHip });
