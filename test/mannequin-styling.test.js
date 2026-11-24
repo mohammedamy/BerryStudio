@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import * as THREE from '../cloth-lab/node_modules/three/build/three.module.js';
 import { computeMeasurements } from '../js/data.js';
 import { getMannequinFor } from '../js/mannequin-catalog.js';
@@ -551,4 +553,61 @@ test('3D Hijab Proportions: clear face/mouth, zero cheek undercap poke, and cont
       assert.ok(scarfMaxAbsX <= built.dims.shoulderHalf * 1.12, `${hwId}: crossed scarf hugs within shoulder contour`);
     }
   }
+});
+
+test('3D Khimar & Niqab Seamless Drape: monotonic gravity fall, full cheek/jaw wrap, matte sheen, and live cape metadata', () => {
+  const mWomenM = computeMeasurements({ category: 'women', size: 'M', standard: 'intl' });
+  for (const hwId of ['hijab_khimar', 'hijab_long_khimar', 'hijab_french_jilbab', 'niqab_long_saudi', 'niqab_khimar_long']) {
+    const built = buildHumanMannequin(THREE, 'women', mWomenM, {
+      headwear: hwId,
+      headwearColor: '#131418',
+      headwearFabric: 'crepe',
+      headwearLength: 'extra_long',
+      undercapColor: '#131418',
+      bakeStatic: false,
+    });
+    const h = built.dims.headH;
+    const hwGroup = built.headGroup.getObjectByName('headwearGroup');
+    const capes = hwGroup.children.filter((ch) => ch.userData?.isCapeDrape);
+    assert.ok(capes.length >= 1, `${hwId}: at least one cape drape mesh tagged`);
+
+    for (const cape of capes) {
+      assert.equal(cape.userData.isFullCape, true, `${hwId}: cape tagged isFullCape=true`);
+      assert.ok(cape.geometry.userData.baseCapePos instanceof Float32Array, `${hwId}: stores baseCapePos for live garment fitting`);
+      assert.ok((cape.material.roughness ?? 0.85) >= 0.82, `${hwId}: dark matte crepe stays non-glossy`);
+      if (cape.material.sheenColor) {
+        assert.ok(cape.material.sheenColor.r < 0.22, `${hwId}: dark cloth sheen stays subtle without white plastic glare`);
+      }
+
+      if (!cape.userData.isNiqabVeil && cape.userData.capeGrid) {
+        const { U, V } = cape.userData.capeGrid;
+        const pos = cape.geometry.attributes.position;
+        const stride = U + 1;
+        // Verify monotonic outward/straight gravity drape across lower half of khimar (no inward waist pinch)
+        for (let iu = 0; iu <= U; iu += 4) {
+          let prevR = 0;
+          for (let iv = Math.ceil(V * 0.25); iv <= V; iv++) {
+            const idx = iv * stride + iu;
+            const r = Math.hypot(pos.getX(idx), pos.getZ(idx));
+            assert.ok(r >= prevR - 0.022 * h, `${hwId} col=${iu} row=${iv}: maintains gravity fall (${r.toFixed(4)} >= ${(prevR - 0.022 * h).toFixed(4)})`);
+            prevR = Math.max(prevR, r);
+          }
+        }
+      }
+
+      if (cape.userData.isNiqabVeil) {
+        const pos = cape.geometry.attributes.position;
+        let maxAbsPhi = 0;
+        for (let i = 0; i < pos.count; i++) {
+          const phi = Math.abs(Math.atan2(pos.getX(i), pos.getZ(i)));
+          if (phi > maxAbsPhi) maxAbsPhi = phi;
+        }
+        assert.ok(maxAbsPhi >= 1.25, `${hwId}: niqab facial veil wraps past cheekbones (|phi|=${maxAbsPhi.toFixed(2)} >= 1.25)`);
+      }
+    }
+  }
+
+  const threeViewSrc = fs.readFileSync(path.join(process.cwd(), 'js', 'three-view.js'), 'utf8');
+  assert.match(threeViewSrc, /function fitHeadwearCapeOverGarment\(/);
+  assert.match(threeViewSrc, /updateAccessoriesPose\(\);\s*fitHeadwearCapeOverGarment\(\);/);
 });

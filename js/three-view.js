@@ -4884,6 +4884,7 @@ export const View3D = (() => {
     }
 
     updateAccessoriesPose();
+    fitHeadwearCapeOverGarment();
   }
 
   function attachAccessoryRigAnchor(obj, weights) {
@@ -4920,6 +4921,226 @@ export const View3D = (() => {
 
       child.matrix.multiplyMatrices(_tmpAccMat, child.userData.bindMatrix);
       child.matrixWorldNeedsUpdate = true;
+    }
+  }
+
+  let _capeInvHwMat = null;
+  let _capeRootToHwMat = null;
+  let _capeEnvGrid = null;
+  let _capeEnvMono = null;
+  let _capeEnvSmooth = null;
+
+  /**
+   * Fits full khimar / niqab cape drapes cleanly outside active 3D garments
+   * (e.g. puff sleeves, structured bodices, outer layers) so sleeves and dresses
+   * never poke through or slice the draped Islamic headwear.
+   */
+  function fitHeadwearCapeOverGarment() {
+    if (!garmentGroup || !activeMannequin?.headGroup) return;
+    const hwGroup = activeMannequin.headGroup.getObjectByName("headwearGroup");
+    if (!hwGroup) return;
+
+    const capeMeshes = [];
+    for (const ch of hwGroup.children) {
+      if (ch.isMesh && ch.visible && ch.userData?.isCapeDrape && ch.geometry?.userData?.baseCapePos) {
+        capeMeshes.push(ch);
+      }
+    }
+    if (!capeMeshes.length) return;
+
+    root.updateMatrixWorld(true);
+    hwGroup.updateMatrixWorld(true);
+    _capeInvHwMat ||= new THREE.Matrix4();
+    _capeRootToHwMat ||= new THREE.Matrix4();
+    _capeInvHwMat.copy(hwGroup.matrixWorld).invert();
+    _capeRootToHwMat.multiplyMatrices(_capeInvHwMat, root.matrixWorld);
+    const te = _capeRootToHwMat.elements;
+
+    let yMin = Infinity;
+    let yMax = -Infinity;
+    for (const cm of capeMeshes) {
+      const base = cm.geometry.userData.baseCapePos;
+      for (let i = 1; i < base.length; i += 3) {
+        const y = base[i];
+        if (y < yMin) yMin = y;
+        if (y > yMax) yMax = y;
+      }
+    }
+    if (!Number.isFinite(yMin) || yMax <= yMin) return;
+    yMin -= 0.04;
+    yMax += 0.04;
+
+    const Y_BINS = 36;
+    const PHI_BINS = 48;
+    const cellCount = Y_BINS * PHI_BINS;
+    if (!_capeEnvGrid || _capeEnvGrid.length !== cellCount) {
+      _capeEnvGrid = new Float32Array(cellCount);
+      _capeEnvMono = new Float32Array(cellCount);
+      _capeEnvSmooth = new Float32Array(cellCount);
+    } else {
+      _capeEnvGrid.fill(0);
+    }
+    const gEnv = _capeEnvGrid;
+    const TWO_PI = Math.PI * 2;
+    const invSpanY = (Y_BINS - 1) / Math.max(0.05, yMax - yMin);
+
+    const splatPoint = (lx, ly, lz, scaleR = 1.0) => {
+      if (ly < yMin || ly > yMax) return;
+      const r = Math.hypot(lx, lz) * scaleR;
+      if (r < 0.015) return;
+      const iy = clamp(Math.round((yMax - ly) * invSpanY), 0, Y_BINS - 1);
+      let uNorm = Math.atan2(lx, lz) / TWO_PI + 0.5;
+      uNorm -= Math.floor(uNorm);
+      const ip = Math.floor(uNorm * PHI_BINS) % PHI_BINS;
+      const rPad = r * 0.996;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = clamp(iy + dy, 0, Y_BINS - 1);
+        for (let dp = -1; dp <= 1; dp++) {
+          const pp = (ip + dp + PHI_BINS) % PHI_BINS;
+          const idxCell = yy * PHI_BINS + pp;
+          const val = (dy === 0 && dp === 0) ? r : rPad;
+          if (val > gEnv[idxCell]) gEnv[idxCell] = val;
+        }
+      }
+    };
+
+    garmentGroup.traverse((mesh) => {
+      if (!mesh.isMesh || !mesh.visible || mesh.userData?.isStitch) return;
+      const posAttr = mesh.geometry?.attributes?.position;
+      if (!posAttr) return;
+      const arr = posAttr.array;
+      const idxAttr = mesh.geometry.index;
+      if (idxAttr) {
+        const triIdx = idxAttr.array;
+        for (let t = 0; t < triIdx.length; t += 3) {
+          const i0 = triIdx[t] * 3, i1 = triIdx[t + 1] * 3, i2 = triIdx[t + 2] * 3;
+          const x0 = te[0] * arr[i0] + te[4] * arr[i0 + 1] + te[8] * arr[i0 + 2] + te[12];
+          const y0 = te[1] * arr[i0] + te[5] * arr[i0 + 1] + te[9] * arr[i0 + 2] + te[13];
+          const z0 = te[2] * arr[i0] + te[6] * arr[i0 + 1] + te[10] * arr[i0 + 2] + te[14];
+          const x1 = te[0] * arr[i1] + te[4] * arr[i1 + 1] + te[8] * arr[i1 + 2] + te[12];
+          const y1 = te[1] * arr[i1] + te[5] * arr[i1 + 1] + te[9] * arr[i1 + 2] + te[13];
+          const z1 = te[2] * arr[i1] + te[6] * arr[i1 + 1] + te[10] * arr[i1 + 2] + te[14];
+          const x2 = te[0] * arr[i2] + te[4] * arr[i2 + 1] + te[8] * arr[i2 + 2] + te[12];
+          const y2 = te[1] * arr[i2] + te[5] * arr[i2 + 1] + te[9] * arr[i2 + 2] + te[13];
+          const z2 = te[2] * arr[i2] + te[6] * arr[i2 + 1] + te[10] * arr[i2 + 2] + te[14];
+          if (Math.max(y0, y1, y2) < yMin || Math.min(y0, y1, y2) > yMax) continue;
+          splatPoint(x0, y0, z0, 1.0);
+          splatPoint(x1, y1, z1, 1.0);
+          splatPoint(x2, y2, z2, 1.0);
+          splatPoint(0.5 * (x0 + x1), 0.5 * (y0 + y1), 0.5 * (z0 + z1), 1.0);
+          splatPoint(0.5 * (x1 + x2), 0.5 * (y1 + y2), 0.5 * (z1 + z2), 1.0);
+          splatPoint(0.5 * (x2 + x0), 0.5 * (y2 + y0), 0.5 * (z2 + z0), 1.0);
+        }
+      } else {
+        for (let i = 0; i < posAttr.count; i++) {
+          const i3 = i * 3;
+          splatPoint(
+            te[0] * arr[i3] + te[4] * arr[i3 + 1] + te[8] * arr[i3 + 2] + te[12],
+            te[1] * arr[i3] + te[5] * arr[i3 + 1] + te[9] * arr[i3 + 2] + te[13],
+            te[2] * arr[i3] + te[6] * arr[i3 + 1] + te[10] * arr[i3 + 2] + te[14],
+            1.0
+          );
+        }
+      }
+    });
+
+    // Angular smoothing + monotonic downward garment envelope for natural fabric drape
+    const gSmooth = _capeEnvSmooth;
+    gSmooth.set(gEnv);
+    for (let pass = 0; pass < 2; pass++) {
+      for (let iy = 0; iy < Y_BINS; iy++) {
+        const row = iy * PHI_BINS;
+        for (let ip = 0; ip < PHI_BINS; ip++) {
+          const prev = gSmooth[row + ((ip + PHI_BINS - 1) % PHI_BINS)];
+          const next = gSmooth[row + ((ip + 1) % PHI_BINS)];
+          const cur = gSmooth[row + ip];
+          _capeEnvMono[row + ip] = Math.max(cur, 0.25 * prev + 0.50 * cur + 0.25 * next);
+        }
+      }
+      gSmooth.set(_capeEnvMono);
+    }
+    const gMono = _capeEnvMono;
+    for (let ip = 0; ip < PHI_BINS; ip++) {
+      gMono[ip] = gSmooth[ip];
+      for (let iy = 1; iy < Y_BINS; iy++) {
+        gMono[iy * PHI_BINS + ip] = Math.max(gSmooth[iy * PHI_BINS + ip], gMono[(iy - 1) * PHI_BINS + ip] * 0.996);
+      }
+    }
+
+    const sampleEnv = (tbl, yVal, phiVal) => {
+      const fyS = clamp((yMax - yVal) * invSpanY, 0, Y_BINS - 1);
+      const iy0 = Math.floor(fyS);
+      const iy1 = Math.min(Y_BINS - 1, iy0 + 1);
+      const fy = fyS - iy0;
+      let uNorm = phiVal / TWO_PI + 0.5;
+      uNorm -= Math.floor(uNorm);
+      const fpS = uNorm * PHI_BINS;
+      const ip0 = Math.floor(fpS) % PHI_BINS;
+      const ip1 = (ip0 + 1) % PHI_BINS;
+      const fp = fpS - Math.floor(fpS);
+      const r00 = tbl[iy0 * PHI_BINS + ip0];
+      const r10 = tbl[iy0 * PHI_BINS + ip1];
+      const r01 = tbl[iy1 * PHI_BINS + ip0];
+      const r11 = tbl[iy1 * PHI_BINS + ip1];
+      const bil = lerp(lerp(r00, r10, fp), lerp(r01, r11, fp), fy);
+      return Math.max(bil, 0.98 * Math.max(r00, r10, r01, r11));
+    };
+
+    for (const cm of capeMeshes) {
+      const geo = cm.geometry;
+      const posAttr = geo.attributes.position;
+      const base = geo.userData.baseCapePos;
+      if (!posAttr || !base) continue;
+      const arr = posAttr.array;
+      arr.set(base);
+
+      const isNiqabVeil = Boolean(cm.userData.isNiqabVeil);
+      const isFullCape = Boolean(cm.userData.isFullCape);
+      const grid = cm.userData.capeGrid || { U: 0, V: 0 };
+      const tbl = isFullCape ? gMono : gSmooth;
+      const margin = isNiqabVeil ? 0.018 : (isFullCape ? 0.015 : 0.010);
+
+      if (grid.U > 0 && grid.V > 0 && posAttr.count === (grid.U + 1) * (grid.V + 1)) {
+        const stride = grid.U + 1;
+        const colMaxR = new Float32Array(stride);
+        for (let iv = 0; iv <= grid.V; iv++) {
+          const v = iv / grid.V;
+          for (let iu = 0; iu <= grid.U; iu++) {
+            const idx3 = (iv * stride + iu) * 3;
+            const x = arr[idx3], y = arr[idx3 + 1], z = arr[idx3 + 2];
+            const curR = Math.hypot(x, z) || 1e-4;
+            if (isNiqabVeil && v < 0.26) {
+              colMaxR[iu] = curR;
+              continue;
+            }
+            const envR = sampleEnv(tbl, y, Math.atan2(x, z));
+            let targetR = envR > 0.012 ? Math.max(curR, envR + margin) : curR;
+            if (isFullCape && !isNiqabVeil && v >= 0.14) {
+              targetR = Math.max(targetR, colMaxR[iu]);
+            }
+            colMaxR[iu] = targetR;
+            if (targetR > curR + 1e-5) {
+              const sc = targetR / curR;
+              arr[idx3] = x * sc;
+              arr[idx3 + 2] = z * sc;
+            }
+          }
+        }
+      } else {
+        for (let i = 0; i < posAttr.count; i++) {
+          const idx3 = i * 3;
+          const x = arr[idx3], y = arr[idx3 + 1], z = arr[idx3 + 2];
+          const curR = Math.hypot(x, z) || 1e-4;
+          const envR = sampleEnv(tbl, y, Math.atan2(x, z));
+          if (envR > 0.012 && envR + margin > curR) {
+            const sc = (envR + margin) / curR;
+            arr[idx3] = x * sc;
+            arr[idx3 + 2] = z * sc;
+          }
+        }
+      }
+      posAttr.needsUpdate = true;
+      geo.computeVertexNormals();
     }
   }
 

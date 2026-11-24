@@ -1,5 +1,10 @@
 # Changelog
 
+## 3D Khimar & Niqab Seamless Drape & Garment-Aware Clearance (`berrystudio-v108`)
+
+- **Live Garment-Aware Headwear Draping ([`three-view.js`](js/three-view.js)):** Added `fitHeadwearCapeOverGarment()` inside `updateGarmentDynamics()` to build a real-time monotonic garment radial envelope from active 3D garments (including puff sleeves, bodices, outer layers, and skirts) and smoothly clear full khimar/niqab capes and face veils outside active clothing so garments never slice through draped Islamic headwear.
+- **Full Khimar Gravity Fall & Continuous Niqab Wrap ([`human-mannequin.js`](js/human-mannequin.js), [`mannequin-styling.js`](js/mannequin-styling.js)):** Added monotonic gravity-draped `isFullCape` mode to `buildLongIslamicCapeDrape` (eliminating waist pinch and neck-to-shoulder constriction steps across `hijab_khimar`, `hijab_long_khimar`, `hijab_french_jilbab`, `hijab_long_shayla`, and all niqab styles), widened `buildNiqabAssembly` facial veil wrap (`±81°`) and hood cheek coverage to eliminate bare jaw/cheek gaps and floating rectangular veil corners, and toned down dark headwear sheen + matte crepe/chiffon roughness (`test/mannequin-styling.test.js`).
+
 ## 3D Tailored Shoulders, Sleeve Armscye & Collar/Lapel Overhaul (`berrystudio-v107`)
 
 - **Layered Outer Clearance & Shoulder Seam Welding ([`three-view.js`](js/three-view.js)):** Added `resolveLayerEnvelopeMargin` (`isOuter`: `0.0155`, `isUnderOuter`: `0.0034`, `isLapel`: `0.0195`/`0.0120`, `isCollar`: `0.0115`/`0.0046`), front/back outer-layer shoulder & side-seam welding (`outerFrontMesh` / `outerBackMesh`), arm-segment exclusion across sleeved bodice/outer seams, narrowed covered inner bodices (`hasSleevedOuter`) with post-pass covered-shoulder recess, and smooth `topFadeBand` / `zBlend` shoulder-top projection eliminating shoulder Z-fighting and horizontal upper-chest ledges (`mf01`, `mf02`, `wa01`).
