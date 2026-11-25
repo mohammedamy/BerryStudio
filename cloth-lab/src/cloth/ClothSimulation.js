@@ -404,7 +404,8 @@ vec3 collideBodyEnvelope(vec3 p, vec3 prevP, float friction, float skinOffset) {
 vec3 collideAllBody(vec3 p, vec3 prevP, float friction, float skinOffset) {
   for (int i = 0; i < ${MAX_COLLISION_CAPSULES}; i++) {
     if (i >= uCapsuleCount) break;
-    p = collideCapsule(i, p, prevP, uCapA[i], uCapB[i], uCapR0[i], uCapR1[i], uCapZScale[i], friction, skinOffset);
+    vec3 cp = uCapParams[i];
+    p = collideCapsule(i, p, prevP, uCapA[i], uCapB[i], cp.x, cp.y, cp.z, friction, skinOffset);
   }
   if (uEnvEnabled > 0.5) {
     p = collideBodyEnvelope(p, prevP, friction, skinOffset);
@@ -852,9 +853,7 @@ uniform float uFriction;
 uniform int uCapsuleCount;
 uniform vec3 uCapA[${MAX_COLLISION_CAPSULES}];
 uniform vec3 uCapB[${MAX_COLLISION_CAPSULES}];
-uniform float uCapR0[${MAX_COLLISION_CAPSULES}];
-uniform float uCapR1[${MAX_COLLISION_CAPSULES}];
-uniform float uCapZScale[${MAX_COLLISION_CAPSULES}];
+uniform vec3 uCapParams[${MAX_COLLISION_CAPSULES}];
 uniform float uParticleCount;
 uniform float uApplySelfCollision;
 uniform float uSelfCollisionRadius;
@@ -936,8 +935,11 @@ void main() {
     vec3 pinTarget = pos;
     if (uPinMatrixActive > 0.5) {
       if (abs(myRestPos.x) > uPinWristMinX && myRestPos.y < uPinSplitY + 0.04) {
-        mat4 fMat = myRestPos.x >= 0.0 ? uForearmLPinMat : uForearmRPinMat;
-        pinTarget = (fMat * vec4(myRestPos, 1.0)).xyz;
+        if (myRestPos.x >= 0.0) {
+          pinTarget = (uForearmLPinMat * vec4(myRestPos, 1.0)).xyz;
+        } else {
+          pinTarget = (uForearmRPinMat * vec4(myRestPos, 1.0)).xyz;
+        }
       } else {
         float wChest = smoothstep(uPinSplitY - 0.08, uPinSplitY + 0.08, myRestPos.y);
         vec3 pPelv = (uPelvisPinMat * vec4(myRestPos, 1.0)).xyz;
@@ -1126,19 +1128,15 @@ void main() {
 function buildCollisionUniformValues(collisionRig) {
   const capA = Array.from({ length: MAX_COLLISION_CAPSULES }, () => new THREE.Vector3())
   const capB = Array.from({ length: MAX_COLLISION_CAPSULES }, () => new THREE.Vector3())
-  const capR0 = new Array(MAX_COLLISION_CAPSULES).fill(0)
-  const capR1 = new Array(MAX_COLLISION_CAPSULES).fill(0)
-  const capZScale = new Array(MAX_COLLISION_CAPSULES).fill(1)
+  const capParams = Array.from({ length: MAX_COLLISION_CAPSULES }, () => new THREE.Vector3(0, 0, 1))
   const count = Math.min(collisionRig.length, MAX_COLLISION_CAPSULES)
   for (let i = 0; i < count; i++) {
     const p = collisionRig[i]
     capA[i].set(p.a[0], p.a[1], p.a[2])
     capB[i].set(p.b[0], p.b[1], p.b[2])
-    capR0[i] = p.ra
-    capR1[i] = p.rb
-    capZScale[i] = p.zScale
+    capParams[i].set(p.ra, p.rb, p.zScale)
   }
-  return { capA, capB, capR0, capR1, capZScale, count }
+  return { capA, capB, capParams, count }
 }
 
 function buildEnvelopeUniformValues(envelopeFrames) {
@@ -1386,8 +1384,7 @@ export class ClothSimulation {
       uFriction: { value: fabric.friction },
       uCapsuleCount: { value: cap.count },
       uCapA: { value: cap.capA }, uCapB: { value: cap.capB },
-      uCapR0: { value: cap.capR0 }, uCapR1: { value: cap.capR1 },
-      uCapZScale: { value: cap.capZScale },
+      uCapParams: { value: cap.capParams },
       uParticleCount: { value: cloth.simParticleCount },
       uApplySelfCollision: { value: 0 },
       uSelfCollisionRadius: { value: selfCollision.radius },
@@ -1605,9 +1602,7 @@ export class ClothSimulation {
         const p = collisionRig[i]
         u.uCapA.value[i].set(p.a[0], p.a[1], p.a[2])
         u.uCapB.value[i].set(p.b[0], p.b[1], p.b[2])
-        u.uCapR0.value[i] = p.ra
-        u.uCapR1.value[i] = p.rb
-        u.uCapZScale.value[i] = p.zScale
+        u.uCapParams.value[i].set(p.ra, p.rb, p.zScale)
       }
     }
     if (envelopeFrames && envelopeFrames.length >= ENV_SEGMENT_COUNT) {
