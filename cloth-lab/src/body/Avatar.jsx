@@ -19,6 +19,8 @@ function categoryOf(female, kid) {
 
 const _chestPinMat = new THREE.Matrix4()
 const _pelvisPinMat = new THREE.Matrix4()
+const _forearmLPinMat = new THREE.Matrix4()
+const _forearmRPinMat = new THREE.Matrix4()
 
 function disposeGroup(group) {
   if (!group) return
@@ -90,6 +92,8 @@ export default function Avatar({
     built.limbs?.pelvis?.updateMatrixWorld(true)
     built.restPelvisInv = built.limbs?.pelvis ? built.limbs.pelvis.matrixWorld.clone().invert() : null
     built.restChestInv = built.limbs?.chest ? built.limbs.chest.matrixWorld.clone().invert() : null
+    built.restForearmLInv = built.limbs?.elbow1 ? built.limbs.elbow1.matrixWorld.clone().invert() : null
+    built.restForearmRInv = built.limbs?.['elbow-1'] ? built.limbs['elbow-1'].matrixWorld.clone().invert() : null
 
     if (bodyColliderRef) {
       bodyColliderRef.current = {
@@ -145,10 +149,23 @@ export default function Avatar({
     if (mannequin.restChestInv && mannequin.restPelvisInv && mannequin.limbs?.chest && mannequin.limbs?.pelvis) {
       _chestPinMat.multiplyMatrices(mannequin.limbs.chest.matrixWorld, mannequin.restChestInv)
       _pelvisPinMat.multiplyMatrices(mannequin.limbs.pelvis.matrixWorld, mannequin.restPelvisInv)
+      if (mannequin.restForearmLInv && mannequin.limbs?.elbow1) {
+        _forearmLPinMat.multiplyMatrices(mannequin.limbs.elbow1.matrixWorld, mannequin.restForearmLInv)
+      } else {
+        _forearmLPinMat.copy(_chestPinMat)
+      }
+      if (mannequin.restForearmRInv && mannequin.limbs?.['elbow-1']) {
+        _forearmRPinMat.multiplyMatrices(mannequin.limbs['elbow-1'].matrixWorld, mannequin.restForearmRInv)
+      } else {
+        _forearmRPinMat.copy(_chestPinMat)
+      }
       pinTransforms = {
         chestMatrix: _chestPinMat.elements.slice(),
         pelvisMatrix: _pelvisPinMat.elements.slice(),
+        forearmLMatrix: _forearmLPinMat.elements.slice(),
+        forearmRMatrix: _forearmRPinMat.elements.slice(),
         splitY: mannequin.dims.hipY + mannequin.dims.span * 0.50,
+        wristMinX: mannequin.dims.shoulderHalf * 0.80,
       }
     }
     if (parent) mannequin.group.updateMatrixWorld(true)

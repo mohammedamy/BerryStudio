@@ -859,6 +859,8 @@ test('3D Outer Layer & Collar Tailoring: distinct layer clearance margins, smoot
   assert.ok(tvSrc.includes('isHighOrCollaredBack'), 'collared backs close high to meet collar base with no back skin cutout');
   assert.ok(tvSrc.includes('wColNeck'), '3D collar base locks onto chest bone during walk instead of counter-swinging with neck');
   assert.ok(tvSrc.includes('const zArchScale = Math.cos(thetaArch);'), 'shoulder dome clusters rows cleanly across trapezius crest');
+  assert.ok(tvSrc.includes('isCollar ? []'), 'collars use analytical neck guard instead of wide chest envelope projection');
+  assert.ok(tvSrc.includes('const smoothK = 0.014 * Math.sin(Math.PI * upperFrac);'), 'smax smoothing fades to zero at top shoulder seam so front/back weld without gap');
 });
 
 test('3D Accessories Customization: shape, length, size, color across buttons, zipper, belt, bow, and brooch + bilingual i18n parity', async () => {

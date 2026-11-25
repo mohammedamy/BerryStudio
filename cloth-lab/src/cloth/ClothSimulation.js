@@ -833,7 +833,10 @@ uniform vec3 uPinOffset;
 uniform float uPinMatrixActive;
 uniform mat4 uChestPinMat;
 uniform mat4 uPelvisPinMat;
+uniform mat4 uForearmLPinMat;
+uniform mat4 uForearmRPinMat;
 uniform float uPinSplitY;
+uniform float uPinWristMinX;
 uniform float uDt;
 uniform float uVelocityScale;
 uniform float uGravityRamp;
@@ -932,10 +935,15 @@ void main() {
   if (pinned > 0.5) {
     vec3 pinTarget = pos;
     if (uPinMatrixActive > 0.5) {
-      float wChest = smoothstep(uPinSplitY - 0.08, uPinSplitY + 0.08, myRestPos.y);
-      vec3 pPelv = (uPelvisPinMat * vec4(myRestPos, 1.0)).xyz;
-      vec3 pChest = (uChestPinMat * vec4(myRestPos, 1.0)).xyz;
-      pinTarget = mix(pPelv, pChest, wChest);
+      if (abs(myRestPos.x) > uPinWristMinX && myRestPos.y < uPinSplitY + 0.04) {
+        mat4 fMat = myRestPos.x >= 0.0 ? uForearmLPinMat : uForearmRPinMat;
+        pinTarget = (fMat * vec4(myRestPos, 1.0)).xyz;
+      } else {
+        float wChest = smoothstep(uPinSplitY - 0.08, uPinSplitY + 0.08, myRestPos.y);
+        vec3 pPelv = (uPelvisPinMat * vec4(myRestPos, 1.0)).xyz;
+        vec3 pChest = (uChestPinMat * vec4(myRestPos, 1.0)).xyz;
+        pinTarget = mix(pPelv, pChest, wChest);
+      }
     } else if (uPinMotionActive > 0.5) {
       pinTarget = myRestPos + uPinOffset;
     }
@@ -1360,7 +1368,10 @@ export class ClothSimulation {
       uPinMatrixActive: { value: 0 },
       uChestPinMat: { value: new THREE.Matrix4() },
       uPelvisPinMat: { value: new THREE.Matrix4() },
+      uForearmLPinMat: { value: new THREE.Matrix4() },
+      uForearmRPinMat: { value: new THREE.Matrix4() },
       uPinSplitY: { value: 1.1 },
+      uPinWristMinX: { value: 0.19 },
       uDt: { value: (1 / 60) / SUBSTEPS_START },
       uVelocityScale: { value: 1 },
       uGravityRamp: { value: 0 },
@@ -1612,7 +1623,18 @@ export class ClothSimulation {
       u.uPinMatrixActive.value = 1
       u.uChestPinMat.value.fromArray(pinTransforms.chestMatrix)
       u.uPelvisPinMat.value.fromArray(pinTransforms.pelvisMatrix)
+      if (pinTransforms.forearmLMatrix) {
+        u.uForearmLPinMat.value.fromArray(pinTransforms.forearmLMatrix)
+      } else {
+        u.uForearmLPinMat.value.fromArray(pinTransforms.chestMatrix)
+      }
+      if (pinTransforms.forearmRMatrix) {
+        u.uForearmRPinMat.value.fromArray(pinTransforms.forearmRMatrix)
+      } else {
+        u.uForearmRPinMat.value.fromArray(pinTransforms.chestMatrix)
+      }
       u.uPinSplitY.value = pinTransforms.splitY ?? 1.1
+      u.uPinWristMinX.value = pinTransforms.wristMinX ?? 0.19
     } else {
       u.uPinMatrixActive.value = 0
     }

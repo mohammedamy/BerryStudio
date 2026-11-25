@@ -612,9 +612,13 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
       if (tp.role !== 'sleeve') continue
       const sOff = pieceOffset[tp.pieceId]
       const sPts = tp.positions2D
-      if (sOff == null || !sPts) continue
+      if (sOff == null || !sPts || sPts.length === 0) continue
+      let sMinY = Infinity
+      for (const [, sy] of sPts) if (sy < sMinY) sMinY = sy
       for (let localIdx = 0; localIdx < sPts.length; localIdx++) {
-        sleeveSimParticles[renderVertexToSimParticle[sOff + localIdx]] = 1
+        if (sPts[localIdx][1] > sMinY + 1.8) {
+          sleeveSimParticles[renderVertexToSimParticle[sOff + localIdx]] = 1
+        }
       }
     }
     for (const tp of triangulatedPieces) {
@@ -876,7 +880,9 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
           }
         } else if (BODY_OR_BUST_ATTACH_ROLES.has(role)) {
           if (role === 'attachWrist') {
-            if (yCm <= minY + Math.max(1.4, heightCm * 0.18)) mask[sp] = 1
+            const topRim = yCm <= minY + Math.max(1.4, heightCm * 0.22)
+            const botRim = heightCm <= 12 && yCm >= maxY - Math.max(1.4, heightCm * 0.22)
+            if (topRim || botRim) mask[sp] = 1
           } else {
             const topBand = yCm <= minY + Math.max(2.0, heightCm * 0.22)
             const compactStitch = heightCm <= 28 && (
