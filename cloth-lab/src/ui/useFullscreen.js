@@ -9,13 +9,18 @@ function syncBodyClass(active) {
   document.body.classList.toggle('clothlab-fullscreen-active', !!active)
 }
 
+let pendingResizeRaf = 0
+
 function notifyViewportResize() {
   if (typeof window === 'undefined') return
-  window.dispatchEvent(new Event('resize'))
   if (typeof window.requestAnimationFrame === 'function') {
-    window.requestAnimationFrame(() => {
+    if (pendingResizeRaf) window.cancelAnimationFrame(pendingResizeRaf)
+    pendingResizeRaf = window.requestAnimationFrame(() => {
+      pendingResizeRaf = 0
       window.dispatchEvent(new Event('resize'))
     })
+  } else {
+    window.dispatchEvent(new Event('resize'))
   }
 }
 

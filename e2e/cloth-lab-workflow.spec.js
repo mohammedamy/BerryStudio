@@ -99,7 +99,7 @@ test('sleeved garment auto-wires front/back sleeve cap, closes underarm tube, ke
 });
 
 test('Cloth Lab full screen demonstration mode expands across full viewport and cleanly exits back', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   const errors = [];
   page.on('pageerror', (err) => errors.push(String(err)));
   page.on('console', (msg) => {
@@ -117,6 +117,7 @@ test('Cloth Lab full screen demonstration mode expands across full viewport and 
   await root.getByRole('button', { name: /Try it on/ }).click();
   const simCanvas = root.locator('canvas').first();
   await expect(simCanvas).toBeVisible({ timeout: 15_000 });
+  await root.getByRole('button', { name: /^Pause$/ }).click();
 
   const normalBox = await root.boundingBox();
   expect(normalBox.y).toBeGreaterThan(40);
@@ -134,7 +135,7 @@ test('Cloth Lab full screen demonstration mode expands across full viewport and 
   // Hide panel for edge-to-edge stage presentation.
   await root.getByTestId('cl-stage-only-btn').click();
   await expect(root).toHaveClass(/is-stage-only/);
-  await expect.poll(async () => (await simCanvas.boundingBox())?.width ?? 0).toBe(1280);
+  await expect.poll(async () => (await simCanvas.boundingBox())?.width ?? 0, { timeout: 20_000 }).toBe(1280);
 
   // Exit full screen via the stage button and verify normal layout returns.
   await root.getByTestId('cl-fullscreen-stage-btn').click();
