@@ -928,12 +928,15 @@ export function placeAttachNeck(positions2D, dims, side = 0, neckKind = null) {
   // Vertical lapel/placket facings drape cleanly along the front opening border
   if (neckKind === 'lapel-facing' || neckKind === 'placket-facing') {
     const s = side === 0 ? 1 : side
+    const isWideFacing = neckKind === 'lapel-facing' && width > 22
     return positions2D.map(([xCm, yCm]) => {
       const worldY = (dims.shoulderY - dims.span * 0.045) - cm(yCm - minY) * 0.68
       const isPlacket = neckKind === 'placket-facing'
-      const torsoR = radiusAtHeight(dims, worldY) * (isPlacket ? 1.135 : 1.055) + (isPlacket ? 0.005 : 0)
+      const torsoR = radiusAtHeight(dims, worldY) * (isPlacket ? 1.135 : (isWideFacing ? 1.045 : 1.055)) + (isPlacket ? 0.005 : 0)
       const u = s > 0 ? clamp((xCm - minX) / width, 0, 1) : clamp((maxX - xCm) / width, 0, 1)
-      const phi = s * (isPlacket ? lerp(0.01 * Math.PI, 0.075 * Math.PI, u) : lerp(0.03 * Math.PI, 0.16 * Math.PI, u))
+      const phi = s * (isPlacket
+        ? lerp(0.01 * Math.PI, 0.075 * Math.PI, u)
+        : (isWideFacing ? lerp(0.01 * Math.PI, 0.14 * Math.PI, u) : lerp(0.03 * Math.PI, 0.16 * Math.PI, u)))
       const rOut = Math.max(dims.neckR * 1.30 / torsoZScale, torsoR)
       return [rOut * Math.sin(phi), worldY, rOut * torsoZScale * Math.cos(phi)]
     })
@@ -976,12 +979,19 @@ export function placeAttachNeck(positions2D, dims, side = 0, neckKind = null) {
   }
 
   // Standard collars & neckbands: wrap from back of neck (`phi = PI`) symmetrically toward front throat
+  const isStandingBand = (neckKind === 'collar-stand' || neckKind === 'collar-band') && height <= 10
+  const standTopY = dims.shoulderY + dims.span * 0.038
   const thetaCenter = side !== 0 ? side * Math.PI * 0.45 : Math.PI
   return positions2D.map(([xCm, yCm]) => {
-    const worldY = topWorldY - cm(yCm - minY) * 0.56
+    const worldY = isStandingBand
+      ? standTopY - cm(yCm - minY) * 0.65
+      : topWorldY - cm(yCm - minY) * 0.56
     let r
     let effZScale
-    if (worldY >= yNeckBase) {
+    if (isStandingBand) {
+      r = dims.neckR * 1.32
+      effZScale = 0.94
+    } else if (worldY >= yNeckBase) {
       const tNeck = clamp((topWorldY - worldY) / Math.max(1e-6, topWorldY - yNeckBase), 0, 1)
       r = lerp(dims.neckR * 1.34, dims.neckR * 1.38, tNeck)
       effZScale = lerp(0.96, 0.90, tNeck)

@@ -856,6 +856,9 @@ test('3D Outer Layer & Collar Tailoring: distinct layer clearance margins, smoot
   assert.ok(tvSrc.includes('const smax ='), 'smax smooth blend prevents upper chest-to-armhole crease');
   assert.ok(tvSrc.includes('armPushFade'), 'sleeve armscye seam rows fade capsule push-out so sleeve cap stays locked to shoulder seam');
   assert.ok(tvSrc.includes('hasSleevedOuter'), 'inner shirt stays strictly inside sleeved outer jackets');
+  assert.ok(tvSrc.includes('isHighOrCollaredBack'), 'collared backs close high to meet collar base with no back skin cutout');
+  assert.ok(tvSrc.includes('wColNeck'), '3D collar base locks onto chest bone during walk instead of counter-swinging with neck');
+  assert.ok(tvSrc.includes('const zArchScale = Math.cos(thetaArch);'), 'shoulder dome clusters rows cleanly across trapezius crest');
 });
 
 test('3D Accessories Customization: shape, length, size, color across buttons, zipper, belt, bow, and brooch + bilingual i18n parity', async () => {

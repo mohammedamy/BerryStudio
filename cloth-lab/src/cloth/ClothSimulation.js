@@ -830,6 +830,10 @@ uniform vec3 uEnvRight[${ENV_SEGMENT_COUNT}];
 uniform vec3 uEnvFwd[${ENV_SEGMENT_COUNT}];
 uniform float uPinMotionActive;
 uniform vec3 uPinOffset;
+uniform float uPinMatrixActive;
+uniform mat4 uChestPinMat;
+uniform mat4 uPelvisPinMat;
+uniform float uPinSplitY;
 uniform float uDt;
 uniform float uVelocityScale;
 uniform float uGravityRamp;
@@ -926,9 +930,15 @@ void main() {
   vec3 pos = texture2D(texturePosition, uv).xyz;
 
   if (pinned > 0.5) {
-    vec3 pinTarget = uPinMotionActive > 0.5
-      ? (myRestPos + uPinOffset)
-      : pos;
+    vec3 pinTarget = pos;
+    if (uPinMatrixActive > 0.5) {
+      float wChest = smoothstep(uPinSplitY - 0.08, uPinSplitY + 0.08, myRestPos.y);
+      vec3 pPelv = (uPelvisPinMat * vec4(myRestPos, 1.0)).xyz;
+      vec3 pChest = (uChestPinMat * vec4(myRestPos, 1.0)).xyz;
+      pinTarget = mix(pPelv, pChest, wChest);
+    } else if (uPinMotionActive > 0.5) {
+      pinTarget = myRestPos + uPinOffset;
+    }
     pinTarget = collideAllBody(pinTarget, pos, effFriction, skinOff);
     gl_FragColor = vec4(pinTarget, 0.0);
     return;
@@ -1347,6 +1357,10 @@ export class ClothSimulation {
       uEnvFwd: { value: env.envFwd },
       uPinMotionActive: { value: 0 },
       uPinOffset: { value: new THREE.Vector3() },
+      uPinMatrixActive: { value: 0 },
+      uChestPinMat: { value: new THREE.Matrix4() },
+      uPelvisPinMat: { value: new THREE.Matrix4() },
+      uPinSplitY: { value: 1.1 },
       uDt: { value: (1 / 60) / SUBSTEPS_START },
       uVelocityScale: { value: 1 },
       uGravityRamp: { value: 0 },
@@ -1571,7 +1585,7 @@ export class ClothSimulation {
     this.lastCostMs = costMs
   }
 
-  updateBodyCollider(collisionRig, envelopeFrames = null, pinOffset = null) {
+  updateBodyCollider(collisionRig, envelopeFrames = null, pinOffset = null, pinTransforms = null) {
     const u = this.posVar.material.uniforms
     if (collisionRig && collisionRig.length > 0) {
       const count = Math.min(collisionRig.length, MAX_COLLISION_CAPSULES)
@@ -1593,6 +1607,14 @@ export class ClothSimulation {
         u.uEnvRight.value[s].set(f.right[0], f.right[1], f.right[2])
         u.uEnvFwd.value[s].set(f.fwd[0], f.fwd[1], f.fwd[2])
       }
+    }
+    if (pinTransforms?.chestMatrix && pinTransforms?.pelvisMatrix) {
+      u.uPinMatrixActive.value = 1
+      u.uChestPinMat.value.fromArray(pinTransforms.chestMatrix)
+      u.uPelvisPinMat.value.fromArray(pinTransforms.pelvisMatrix)
+      u.uPinSplitY.value = pinTransforms.splitY ?? 1.1
+    } else {
+      u.uPinMatrixActive.value = 0
     }
     if (pinOffset) {
       u.uPinMotionActive.value = 1

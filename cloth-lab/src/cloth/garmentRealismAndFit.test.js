@@ -334,4 +334,43 @@ describe('Garment Realism, Tailored Fit & Surface Shading', () => {
       expect(buttonPins, `${sideId} waist-button pins`).toBeGreaterThanOrEqual(2)
     }
   })
+
+  test('mf10 sherwani collar, wide facing, and sloped back receive full walk-ready pins and GPU matrix pin transforms exist', async () => {
+    const { triangulated, cloth, dims } = buildPipeline('mf10', { category: 'men' })
+    const pins = deriveGarmentPinMask(cloth, triangulated, dims)
+
+    const countPins = (pieceId) => {
+      const tp = triangulated.find((t) => t.pieceId === pieceId)
+      expect(tp, `missing piece ${pieceId}`).toBeDefined()
+      const off = cloth.pieceOffset[pieceId]
+      let pc = 0
+      let minY = Infinity
+      let maxY = -Infinity
+      for (let i = 0; i < tp.positions2D.length; i++) {
+        const sp = cloth.renderVertexToSimParticle[off + i]
+        if (pins[sp]) pc++
+        const y = cloth.simRestPositions[sp * 3 + 1]
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+      }
+      return { pc, total: tp.positions2D.length, minY, maxY }
+    }
+
+    const col = countPins('collar_5')
+    expect(col.pc / col.total).toBeGreaterThanOrEqual(0.85)
+    expect(col.minY).toBeGreaterThan(dims.shoulderY - 0.01)
+    expect(col.maxY).toBeGreaterThan(dims.shoulderY + 0.018)
+
+    const fac = countPins('facing_8')
+    expect(fac.pc / fac.total).toBeGreaterThanOrEqual(0.55)
+
+    const back = countPins('back_2')
+    expect(back.pc).toBeGreaterThanOrEqual(14)
+
+    const { readFile } = await import('node:fs/promises')
+    const simSrc = await readFile(new URL('./ClothSimulation.js', import.meta.url), 'utf8')
+    expect(simSrc).toContain('uChestPinMat')
+    expect(simSrc).toContain('uPelvisPinMat')
+    expect(simSrc).toContain('pinTransforms')
+  })
 })

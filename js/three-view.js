@@ -966,7 +966,7 @@ export const View3D = (() => {
     const hasSleevedOuter = Boolean(hasOuter && bSpec.outerLayer.style !== "vest" && bSpec.outerLayer.style !== "pinafore");
     // Natural trapezius slope from High Point Shoulder down to acromion seam
     const shoulderTopY = shoulderY + span * (hasOuter ? (d.kid ? 0.044 : 0.036) : (d.kid ? 0.052 : 0.042));
-    const shoulderAcromionY = shoulderY + span * (hasOuter ? (hasSleeves ? -0.008 : 0.004) : (hasSleeves ? -0.004 : 0.008));
+    const shoulderAcromionY = shoulderY + span * (hasOuter ? (hasSleeves ? -0.008 : 0.004) : (hasSleeves ? 0.002 : 0.010));
 
     const bFit = bSpec.fitTier || "regular";
     const isSecondSkin = bFit === "second-skin";
@@ -1011,9 +1011,12 @@ export const View3D = (() => {
       frontNeckBottomY = Math.max(frontNeckBottomY, shoulderY - span * 0.024);
     }
 
+    const isHighOrCollaredBack = !isBra && !isStrapless && (bSpec.hasCollar || bSpec.neckline === "high" || bSpec.neckline === "collar" || bSpec.neckline === "mandarin");
     const backNeckBottomY = isBra
       ? hipY + span * 0.74
-      : (bSpec.neckline === "scoop" ? shoulderY - span * 0.10 : shoulderY - span * 0.02);
+      : (bSpec.neckline === "scoop"
+        ? shoulderY - span * 0.10
+        : (isHighOrCollaredBack ? shoulderTopY - span * 0.016 : shoulderY - span * 0.016));
 
     const effectiveTopY = isStrapless
       ? (isOffShoulder ? shoulderY - span * 0.065 : underarmY + span * 0.018)
@@ -1067,7 +1070,7 @@ export const View3D = (() => {
         // Smooth super-elliptical shoulder arch: climbs chest wall, rolls smoothly over top seam
         const thetaArch = (Math.PI * 0.5) * upperFrac;
         const yArchFrac = Math.pow(Math.sin(thetaArch), 0.85);
-        const zArchScale = Math.pow(Math.cos(thetaArch), 0.58);
+        const zArchScale = Math.cos(thetaArch);
         const armholeZBlend = smoothstep(0.0, 0.36, upperFrac);
 
         let y;
@@ -1096,7 +1099,7 @@ export const View3D = (() => {
           innerX = bSpec.style === "robe" ? 0.018 : 0.010;
         }
         if (!isStrapless && y > neckBottomY + 0.0005) {
-          const neckCompleteY = shoulderTopY - span * 0.012;
+          const neckCompleteY = (isHighOrCollaredBack && !isFront) ? shoulderTopY - span * 0.003 : shoulderTopY - span * 0.010;
           const nu = clamp((y - neckBottomY) / Math.max(0.02, neckCompleteY - neckBottomY), 0, 1);
           let curve;
           if (isFront && (bSpec.neckline === "v-neck" || bSpec.neckline === "surplice")) curve = Math.pow(nu, 0.86);
@@ -1135,9 +1138,13 @@ export const View3D = (() => {
             if (!isStrapless && upperFrac > 0) {
               const shoulderSpanFrac = clamp((xMag - neckHalfW) / Math.max(0.025, shoulderTipX - neckHalfW), 0, 1);
               const sCurve = Math.pow(shoulderSpanFrac, 1.08);
-              const trapArch = 0.0030 * Math.sin(Math.PI * shoulderSpanFrac);
+              const trapArch = 0.0055 * Math.sin(Math.PI * shoulderSpanFrac);
               const ySeam = shoulderTopY * (1 - sCurve) + shoulderAcromionY * sCurve + trapArch;
               yFinal = underarmY * (1 - yArchFrac) + ySeam * yArchFrac;
+              if (!hasOuter && upperFrac > 0.72 && xMag >= neckHalfW * 0.95) {
+                const crestBlend = smoothstep(0.72, 0.95, upperFrac);
+                yFinal = Math.max(yFinal, getAnatomicalShoulderTopY(xMag, d, 0.0065) * crestBlend + yFinal * (1 - crestBlend));
+              }
               ySampleZ = Math.min(yFinal, underarmY + span * 0.04);
             }
 
@@ -1232,15 +1239,14 @@ export const View3D = (() => {
         : (bSpec.outerLayer?.enabled ? "none" : (bSpec.collarStyle || "pointed"));
       if (collarStyle !== "none") {
         const collarH = collarStyle === "sailor" ? 0.068 : (collarStyle === "peter-pan" ? 0.044 : 0.036);
-        const rCol = neckR * (hasOuter ? 1.13 : 1.16) + 0.004;
+        const rCol = neckR * (hasOuter ? 1.15 : 1.18) + 0.005;
         const neckZScale = 0.94;
         const isStandOnly = bSpec.neckline === "high" || collarStyle === "mandarin" || collarStyle === "stand";
         const openPhi = isStandOnly ? 0.04 : 0.015;
-        const standH = isStandOnly ? (collarH * 0.85) : 0.026;
-        const neckBaseRefY = shoulderY + span * (d.kid ? 0.050 : 0.042);
-        const backBaseY = neckBaseRefY - span * 0.004;
-        const sideBaseY = neckBaseRefY - span * 0.009;
-        const frontBaseY = frontNeckBottomY - 0.002;
+        const standH = isStandOnly ? (collarH * 0.94) : 0.028;
+        const backBaseY = shoulderTopY - span * 0.019;
+        const sideBaseY = shoulderTopY - span * 0.021;
+        const frontBaseY = frontNeckBottomY - 0.004;
         const numRows = isStandOnly ? 2 : 4;
 
         for (let row = 0; row <= numRows; row++) {
@@ -1312,9 +1318,15 @@ export const View3D = (() => {
                 z = zNeck + Math.max(0, (zBody + wingPad) - zNeck) * Math.min(1, frontW * 1.35);
               }
             }
+            if (backW > 0.05 && row === 0) {
+              const yBackSamp = Math.min(shoulderY + span * 0.02, Math.max(hemY, y));
+              const [, zBackBody] = getBodySurfacePoint(yBackSamp, phi, d, easeBase + 0.006, waistRelax);
+              z = Math.min(zNeck, zBackBody * backW + zNeck * (1 - backW));
+            }
             cPos.push(x, y, z);
             cUvs.push(u, row / numRows);
-            const [bi, bw] = packSkinWeights([[BONE_IDX.neck, 0.55], [BONE_IDX.chest, 0.45]]);
+            const wColNeck = 0.06 * (row / Math.max(1, numRows));
+            const [bi, bw] = packSkinWeights([[BONE_IDX.chest, 1 - wColNeck], [BONE_IDX.neck, wColNeck]]);
             cSi.push(bi[0], bi[1], bi[2], bi[3]);
             cSw.push(bw[0], bw[1], bw[2], bw[3]);
           }
@@ -1361,7 +1373,7 @@ export const View3D = (() => {
         const uF = yClamped <= underarmY
           ? 0
           : clamp(Math.pow(clamp((yClamped - underarmY) / Math.max(0.02, shoulderTopY - underarmY), 0, 1), 1 / 0.85) * (2 / Math.PI), 0, 1);
-        const zAS = Math.pow(Math.cos(Math.PI * 0.5 * uF), 0.58);
+        const zAS = Math.cos(Math.PI * 0.5 * uF);
         const bodyHalfU = Math.abs(getBodySurfacePoint(underarmY, Math.PI / 2, d, easeBase, waistRelax)[0]);
         let maxX = Math.abs(getBodySurfacePoint(Math.min(yClamped, underarmY), Math.PI / 2, d, easeBase, waistRelax)[0]) * dropF;
         if (uF > 0) maxX = Math.max(neckHalfW + 0.028, bodyHalfU * (1 - uF) + shoulderTipX * uF);
@@ -1402,7 +1414,8 @@ export const View3D = (() => {
             }
             jcPos.push(rad * sinP, y, jz);
             jcUvs.push(u, row / 3);
-            const [bi, bw] = packSkinWeights([[BONE_IDX.neck, 0.5], [BONE_IDX.chest, 0.5]]);
+            const wJNeck = 0.05 * (row / 3);
+            const [bi, bw] = packSkinWeights([[BONE_IDX.chest, 1 - wJNeck], [BONE_IDX.neck, wJNeck]]);
             jcSi.push(bi[0], bi[1], bi[2], bi[3]);
             jcSw.push(bw[0], bw[1], bw[2], bw[3]);
           }
@@ -2280,13 +2293,13 @@ export const View3D = (() => {
       const flareF = (ol.style === "pinafore" || ol.style === "bisht" || ol.lengthStyle === "coat" || ol.lengthStyle === "robe")
         ? Math.max(1.26, (pm.bodice?.hemFlare || 1.0) + 0.06)
         : 1.04;
-      const upperFracs = computeOuterFracs(ROWS_U, isFront ? frontBreakY : (shoulderY - span * 0.02));
+      const upperFracs = computeOuterFracs(ROWS_U, isFront ? frontBreakY : (shoulderTopY - span * 0.022));
 
       for (let r = 0; r <= totalRows; r++) {
         const upperFrac = r <= ROWS_L ? 0 : upperFracs[r - ROWS_L - 1];
         const thetaArch = (Math.PI * 0.5) * upperFrac;
         const yArchFrac = Math.pow(Math.sin(thetaArch), 0.85);
-        const zArchScale = Math.pow(Math.cos(thetaArch), isStructuredTailored ? 0.50 : 0.54);
+        const zArchScale = Math.cos(thetaArch);
 
         const y = r <= ROWS_L
           ? hemY * (1 - r / ROWS_L) + underarmY * (r / ROWS_L)
@@ -2311,8 +2324,8 @@ export const View3D = (() => {
             const nu = clamp((y - frontBreakY) / Math.max(0.02, shoulderTopY - frontBreakY), 0, 1);
             innerX = neckHalfW * Math.pow(nu, 0.85);
           }
-        } else if (y > shoulderY - span * 0.02 + 0.0005) {
-          const nu = clamp((y - (shoulderY - span * 0.02)) / Math.max(0.02, shoulderTopY - (shoulderY - span * 0.02)), 0, 1);
+        } else if (y > shoulderTopY - span * 0.022 + 0.0005) {
+          const nu = clamp((y - (shoulderTopY - span * 0.022)) / Math.max(0.02, shoulderTopY - (shoulderTopY - span * 0.022)), 0, 1);
           innerX = neckHalfW * Math.sin(nu * Math.PI * 0.5);
         }
 
@@ -2401,7 +2414,7 @@ export const View3D = (() => {
         ? 0
         : clamp((2 / Math.PI) * Math.asin(Math.pow(clamp((yC - underarmY) / Math.max(0.02, shoulderTopY - underarmY), 0, 1), 1 / 0.85)), 0, 1);
       const thetaA = Math.PI * 0.5 * uFrac;
-      const zAS = Math.pow(Math.cos(thetaA), isStructuredTailored ? 0.50 : 0.54);
+      const zAS = Math.cos(thetaA);
       const bodyHalfW = Math.abs(getBodySurfacePoint(underarmY, Math.PI / 2, d, outerEase, waistRelax)[0]);
       let oMaxX = Math.abs(getBodySurfacePoint(Math.min(yC, underarmY), Math.PI / 2, d, outerEase, waistRelax)[0]) * lowerF;
       if (uFrac > 0) oMaxX = Math.max(neckHalfW * 0.85 + 0.025, bodyHalfW * (1 - uFrac) + shoulderTipX * uFrac);
@@ -2495,7 +2508,8 @@ export const View3D = (() => {
             }
             jcPos.push(rad * sinP, y, jz);
             jcUvs.push(u, row / 3);
-            const [bi, bw] = packSkinWeights([[BONE_IDX.neck, 0.52], [BONE_IDX.chest, 0.48]]);
+            const wJNeck = 0.05 * (row / 3);
+            const [bi, bw] = packSkinWeights([[BONE_IDX.chest, 1 - wJNeck], [BONE_IDX.neck, wJNeck]]);
             jcSi.push(bi[0], bi[1], bi[2], bi[3]);
             jcSw.push(bw[0], bw[1], bw[2], bw[3]);
           }
@@ -2580,6 +2594,60 @@ export const View3D = (() => {
         garmentGroup.add(lpMesh);
       });
     }
+    if (ol.collarStyle && ol.collarStyle !== "none" && (!ol.lapelStyle || ol.lapelStyle === "none") && !isVest) {
+      const colCols = 36;
+      const ocPos = [], ocUvs = [], ocSi = [], ocSw = [], ocIdx = [];
+      const isStandCol = ol.collarStyle === "mandarin" || ol.collarStyle === "stand";
+      const rOCol = neckR * 1.24 + 0.008;
+      const neckZScaleO = 0.95;
+      const openPhiO = ol.openFront ? 0.14 : 0.04;
+      const standHO = isStandCol ? 0.032 : 0.026;
+      const baseYO = shoulderTopY - span * 0.020;
+      const numRowsO = isStandCol ? 2 : 4;
+      for (let row = 0; row <= numRowsO; row++) {
+        const rOpenPhi = isStandCol ? openPhiO : (openPhiO + Math.max(0, row - 2) * 0.14);
+        for (let k = 0; k <= colCols; k++) {
+          const u = k / colCols;
+          const phi = rOpenPhi + u * (2 * Math.PI - 2 * rOpenPhi);
+          const cosP = Math.cos(phi), sinP = Math.sin(phi);
+          const frontW = Math.max(0, cosP);
+          let rad = rOCol, y = baseYO;
+          if (row === 1) { rad = rOCol * 1.02; y = baseYO + standHO * 0.55; }
+          else if (row === 2) { rad = rOCol * 1.05; y = baseYO + standHO; }
+          else if (row === 3) { rad = rOCol * (1.12 + 0.05 * frontW); y = baseYO + standHO * 0.56 - 0.010 * frontW; }
+          else if (row === 4) { rad = rOCol * (1.16 + 0.07 * frontW); y = baseYO + standHO * 0.16 - 0.022 * frontW; }
+          const x = rad * sinP;
+          const z = rad * neckZScaleO * cosP + torsoZBump(shoulderY, phi, d) * 0.16;
+          ocPos.push(x, y, z);
+          ocUvs.push(u, row / numRowsO);
+          const wNeckO = 0.06 * (row / Math.max(1, numRowsO));
+          const [bi, bw] = packSkinWeights([[BONE_IDX.chest, 1 - wNeckO], [BONE_IDX.neck, wNeckO]]);
+          ocSi.push(bi[0], bi[1], bi[2], bi[3]);
+          ocSw.push(bw[0], bw[1], bw[2], bw[3]);
+        }
+        if (row > 0) {
+          const pOff = (row - 1) * (colCols + 1), cOff = row * (colCols + 1);
+          const flipLeaf = row >= 3;
+          for (let k = 0; k < colCols; k++) {
+            const a0 = pOff + k, a1 = a0 + 1, b0 = cOff + k, b1 = b0 + 1;
+            if (flipLeaf) ocIdx.push(a0, b1, a1, a0, b0, b1);
+            else ocIdx.push(a0, a1, b1, a0, b1, b0);
+          }
+        }
+      }
+      const ocGeo = new THREE.BufferGeometry();
+      ocGeo.setAttribute("position", new THREE.Float32BufferAttribute(ocPos, 3));
+      ocGeo.setAttribute("uv", new THREE.Float32BufferAttribute(ocUvs, 2));
+      ocGeo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(ocSi, 4));
+      ocGeo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(ocSw, 4));
+      ocGeo.setIndex(ocIdx);
+      ocGeo.computeVertexNormals();
+      const ocMesh = createGarmentMesh(ocGeo, fabricMat("outer", "front"), "outer", "front", skeleton);
+      ocMesh.userData.garmentType = "collar";
+      ocMesh.userData.isOuterLayer = true;
+      ocMesh.userData.parentPart = "outer";
+      garmentGroup.add(ocMesh);
+    }
     void chestR;
   }
 
@@ -2613,7 +2681,7 @@ export const View3D = (() => {
     const activeTipX = isOuterTailored
       ? shoulderHalf * 0.93
       : (hasOuterSleeved ? shoulderHalf * 0.91 : (isLeo ? shoulderHalf * 0.82 : shoulderHalf * 0.89));
-    const activeAcromionY = shoulderY + span * (isOuterTailored ? 0.019 : (hasOuterSleeved ? 0.012 : (isLeo ? 0.002 : -0.004)));
+    const activeAcromionY = shoulderY + span * (isOuterTailored ? 0.019 : (hasOuterSleeved ? 0.012 : 0.002));
     const activeEase = hasOuterSleeved
       ? (0.028 + Math.max(0, ((pm.bodice?.easeRatio || 1.04) - 1.0) * 0.040))
       : (isTightSl ? 0.0038 : (isFittedSl ? 0.0075 : (0.015 + Math.max(-0.002, ((pm.bodice?.easeRatio || 1.0) - 1.0) * 0.042))));
@@ -4687,11 +4755,35 @@ export const View3D = (() => {
             projectOutsideExactMannequinEnvelope(p, exactEnv, exactFrames, d, dynEnvMargin, bodEnvOpts);
           }
         } else if (exactEnv && exactFrames) {
-          // Collars stay outside chest/neck [2, 3]; lapels stay clear of torso + neck [0, 1, 2, 3]
-          projectOutsideExactMannequinEnvelope(p, exactEnv, exactFrames, d, dynEnvMargin, {
-            segments: isLapel ? [0, 1, 2, 3] : [2, 3],
-            skipShoulderTop: true,
-          });
+          if (isLapel) {
+            projectOutsideExactMannequinEnvelope(p, exactEnv, exactFrames, d, dynEnvMargin, {
+              segments: [0, 1, 2, 3],
+              skipShoulderTop: true,
+            });
+          } else {
+            // Keep collars stabilized to the chest frame so neck counter-yaw during Walk never swings them sideways.
+            projectOutsideExactMannequinEnvelope(p, exactEnv, exactFrames, d, dynEnvMargin, {
+              segments: [2],
+              skipShoulderTop: true,
+            });
+            const invC = _dynInvMats[BONE_IDX.chest].elements;
+            const fwdC = _dynMats[BONE_IDX.chest].elements;
+            const lx = invC[0] * p.x + invC[4] * p.y + invC[8] * p.z + invC[12];
+            const ly = invC[1] * p.x + invC[5] * p.y + invC[9] * p.z + invC[13];
+            const lz = invC[2] * p.x + invC[6] * p.y + invC[10] * p.z + invC[14];
+            if (ly > d.shoulderY - d.span * 0.02) {
+              const nZScale = 0.94;
+              const nRad = Math.hypot(lx, lz / nZScale);
+              const minNRad = d.neckR * 1.08 + 0.003;
+              if (nRad < minNRad && nRad > 1e-5) {
+                const sc = minNRad / nRad;
+                const nlx = lx * sc, nlz = lz * sc;
+                p.x = fwdC[0] * nlx + fwdC[4] * ly + fwdC[8] * nlz + fwdC[12];
+                p.y = fwdC[1] * nlx + fwdC[5] * ly + fwdC[9] * nlz + fwdC[13];
+                p.z = fwdC[2] * nlx + fwdC[6] * ly + fwdC[10] * nlz + fwdC[14];
+              }
+            }
+          }
         }
 
         // Prevent floor-length skirts/robes from dipping below studio floor y = 0.008

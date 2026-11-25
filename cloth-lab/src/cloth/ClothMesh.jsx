@@ -412,7 +412,7 @@ varying vec2 vPrintUv;
     if (!paused) {
       const liveCollider = meshFitRigRef?.current ? null : bodyColliderRef?.current
       if (liveCollider && pose === 'walk') {
-        sim.updateBodyCollider(liveCollider.collisionRig, liveCollider.envelopeFrames, liveCollider.pinOffset)
+        sim.updateBodyCollider(liveCollider.collisionRig, liveCollider.envelopeFrames, liveCollider.pinOffset, liveCollider.pinTransforms)
       }
       sim.step(delta)
     }

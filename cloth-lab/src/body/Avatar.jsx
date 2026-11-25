@@ -17,6 +17,9 @@ function categoryOf(female, kid) {
   return kid ? 'boys' : 'men'
 }
 
+const _chestPinMat = new THREE.Matrix4()
+const _pelvisPinMat = new THREE.Matrix4()
+
 function disposeGroup(group) {
   if (!group) return
   const mats = new Set()
@@ -83,6 +86,10 @@ export default function Avatar({
     built.bodyEnvelope = bodyEnvelope
     built.collisionRig = collisionRig
     built.envelopeFrames = envelopeFrames
+    built.group.matrixWorld.identity()
+    built.limbs?.pelvis?.updateMatrixWorld(true)
+    built.restPelvisInv = built.limbs?.pelvis ? built.limbs.pelvis.matrixWorld.clone().invert() : null
+    built.restChestInv = built.limbs?.chest ? built.limbs.chest.matrixWorld.clone().invert() : null
 
     if (bodyColliderRef) {
       bodyColliderRef.current = {
@@ -90,6 +97,7 @@ export default function Avatar({
         bodyEnvelope,
         envelopeFrames,
         pinOffset: null,
+        pinTransforms: null,
       }
     }
 
@@ -133,6 +141,16 @@ export default function Avatar({
     mannequin.limbs.pelvis.updateMatrixWorld(true)
     const liveRig = deriveCollisionRigFromLimbs(mannequin.dims, mannequin.limbs)
     const liveFrames = computeEnvelopeFramesFromLimbs(mannequin.limbs, mannequin.dims, mannequin.landmarks)
+    let pinTransforms = null
+    if (mannequin.restChestInv && mannequin.restPelvisInv && mannequin.limbs?.chest && mannequin.limbs?.pelvis) {
+      _chestPinMat.multiplyMatrices(mannequin.limbs.chest.matrixWorld, mannequin.restChestInv)
+      _pelvisPinMat.multiplyMatrices(mannequin.limbs.pelvis.matrixWorld, mannequin.restPelvisInv)
+      pinTransforms = {
+        chestMatrix: _chestPinMat.elements.slice(),
+        pelvisMatrix: _pelvisPinMat.elements.slice(),
+        splitY: mannequin.dims.hipY + mannequin.dims.span * 0.50,
+      }
+    }
     if (parent) mannequin.group.updateMatrixWorld(true)
     mannequin.skeleton.update()
 
@@ -142,6 +160,7 @@ export default function Avatar({
         bodyEnvelope: mannequin.bodyEnvelope,
         envelopeFrames: liveFrames,
         pinOffset: [motion.swayX || 0, motion.bobY || 0, 0],
+        pinTransforms,
       }
     }
   })

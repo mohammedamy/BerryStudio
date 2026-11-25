@@ -607,13 +607,22 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
   // vertices of `sleeve` caps in mid-air; sewn sleeves hang naturally from their
   // welded armhole seams while unsewn sleeve components fall back to Stage 3).
   if (Array.isArray(triangulatedPieces) && triangulatedPieces.length > 0 && pieceOffset && renderVertexToSimParticle) {
+    const sleeveSimParticles = new Uint8Array(simParticleCount)
+    for (const tp of triangulatedPieces) {
+      if (tp.role !== 'sleeve') continue
+      const sOff = pieceOffset[tp.pieceId]
+      const sPts = tp.positions2D
+      if (sOff == null || !sPts) continue
+      for (let localIdx = 0; localIdx < sPts.length; localIdx++) {
+        sleeveSimParticles[renderVertexToSimParticle[sOff + localIdx]] = 1
+      }
+    }
     for (const tp of triangulatedPieces) {
       if (tp.role === 'sleeve') continue
       const offset = pieceOffset[tp.pieceId]
       const pts = tp.positions2D
       if (offset == null || !pts) continue
       const isTorsoPanel = tp.role === 'frontPanel' || tp.role === 'backPanel'
-      const useSlopedCut = !!(tp.placementHint?.isStructuredOuter || tp.placementHint?.splitSide)
       let minY = Infinity, maxY = -Infinity
       if (isTorsoPanel) {
         for (const [, y] of pts) {
@@ -622,12 +631,12 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
         }
       }
       const shoulderCutY = isTorsoPanel
-        ? (useSlopedCut ? minY + Math.min(6.6, Math.max(3.2, (maxY - minY) * 0.12)) : minY + 2.8)
+        ? minY + Math.min(6.6, Math.max(3.2, (maxY - minY) * 0.12))
         : Infinity
       for (let localIdx = 0; localIdx < pts.length; localIdx++) {
         if (isTorsoPanel && pts[localIdx][1] > shoulderCutY) continue
         const sp = renderVertexToSimParticle[offset + localIdx]
-        if (shoulderMask[sp]) mask[sp] = 1
+        if (shoulderMask[sp] && !sleeveSimParticles[sp]) mask[sp] = 1
       }
     }
   } else {
@@ -827,14 +836,44 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
             if (uStrap >= 0.42 && uStrap <= 0.58) mask[sp] = 1
             continue
           }
-          const topBand = yCm <= minY + Math.max(2.0, heightCm * 0.25)
-          const isPlacketOrFacing = widthCm <= 16 || heightCm / widthCm >= 2.2
-          const compactStitch = (heightCm <= 18 || isPlacketOrFacing) && (
-            yCm >= maxY - Math.max(1.6, heightCm * 0.16) ||
-            xCm <= minX + Math.max(1.6, widthCm * 0.18) ||
-            xCm >= maxX - Math.max(1.6, widthCm * 0.18)
-          )
-          if (topBand || compactStitch) mask[sp] = 1
+          const nk = tp.placementHint?.neckKind || ''
+          if (nk === 'collar' || nk === 'collar-stand' || nk === 'collar-band' || nk === 'undercollar') {
+            if (heightCm > widthCm * 1.35) {
+              if (
+                xCm <= minX + Math.max(2.2, widthCm * 0.45) ||
+                yCm <= minY + 2.0 ||
+                yCm >= maxY - 2.0
+              ) mask[sp] = 1
+            } else if (nk === 'collar-stand' || nk === 'collar-band' || heightCm <= 9) {
+              if (
+                yCm <= minY + Math.max(1.8, heightCm * 0.36) ||
+                yCm >= maxY - Math.max(1.8, heightCm * 0.40)
+              ) mask[sp] = 1
+            } else if (
+              yCm <= minY + Math.max(2.4, heightCm * 0.34) ||
+              yCm >= maxY - Math.max(1.8, heightCm * 0.18) ||
+              xCm <= minX + Math.max(1.8, widthCm * 0.15) ||
+              xCm >= maxX - Math.max(1.8, widthCm * 0.15)
+            ) {
+              mask[sp] = 1
+            }
+          } else if (nk === 'lapel-facing' || nk === 'placket-facing') {
+            if (
+              yCm <= minY + Math.max(2.2, heightCm * 0.22) ||
+              yCm >= maxY - Math.max(2.2, heightCm * 0.20) ||
+              xCm <= minX + Math.max(2.0, widthCm * 0.18) ||
+              xCm >= maxX - Math.max(2.0, widthCm * 0.18)
+            ) mask[sp] = 1
+          } else {
+            const topBand = yCm <= minY + Math.max(2.0, heightCm * 0.25)
+            const isPlacketOrFacing = widthCm <= 16 || heightCm / widthCm >= 2.2
+            const compactStitch = (heightCm <= 18 || isPlacketOrFacing) && (
+              yCm >= maxY - Math.max(1.6, heightCm * 0.16) ||
+              xCm <= minX + Math.max(1.6, widthCm * 0.18) ||
+              xCm >= maxX - Math.max(1.6, widthCm * 0.18)
+            )
+            if (topBand || compactStitch) mask[sp] = 1
+          }
         } else if (BODY_OR_BUST_ATTACH_ROLES.has(role)) {
           if (role === 'attachWrist') {
             if (yCm <= minY + Math.max(1.4, heightCm * 0.18)) mask[sp] = 1
