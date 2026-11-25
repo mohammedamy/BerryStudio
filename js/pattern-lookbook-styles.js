@@ -1471,6 +1471,14 @@ function resolvePieceTargetKey(piece, pieces, style = null) {
     }
     return style?.partColors?.outer ? "outer" : "bodice";
   }
+  if (role === "hem-band" && /facing|horsehair|تقوية|شريط\s*تقوية|بطانة/.test(txt)) {
+    const hasSkirt = (pieces || []).some((p) => {
+      const pr = p?.role || "";
+      const pTxt = `${p?.key || ""} ${p?.name?.en || ""}`.toLowerCase();
+      return pr.startsWith("skirt-") || pr === "tier" || pr === "godet" || pr === "hip-panel-front" || /skirt|تنورة/.test(pTxt);
+    });
+    return hasSkirt ? "skirt" : "bodice";
+  }
   if (TRIM_ROLE_SET.has(role)) return "trim";
   if (role === "undercollar" || role === "lapel-facing" || role === "pocket" || role === "flap") {
     return style?.partColors?.outer ? "outer" : "bodice";

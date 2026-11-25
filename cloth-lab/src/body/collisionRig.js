@@ -525,12 +525,12 @@ export function projectPointOutsideCapsules(p, collisionRig, clearanceOffset = 0
   return [px, py, pz]
 }
 
-const SHOULDER_PIN_RADIUS = 0.040
+const SHOULDER_PIN_RADIUS = 0.036
 
 export function deriveShoulderPinSegments(dims) {
   const { shoulderHalf, shoulderY, span, kid } = dims
   return [-1, 1].map((side) => ([
-    [side * shoulderHalf * 0.15, shoulderY + span * (kid ? 0.036 : 0.024), 0],
+    [side * shoulderHalf * 0.18, shoulderY + span * (kid ? 0.034 : 0.022), 0],
     [side * shoulderHalf * 0.90, shoulderY - span * 0.014, 0],
   ]))
 }
@@ -613,12 +613,19 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
       const pts = tp.positions2D
       if (offset == null || !pts) continue
       const isTorsoPanel = tp.role === 'frontPanel' || tp.role === 'backPanel'
-      let minY = Infinity
+      const useSlopedCut = !!(tp.placementHint?.isStructuredOuter || tp.placementHint?.splitSide)
+      let minY = Infinity, maxY = -Infinity
       if (isTorsoPanel) {
-        for (const [, y] of pts) if (y < minY) minY = y
+        for (const [, y] of pts) {
+          if (y < minY) minY = y
+          if (y > maxY) maxY = y
+        }
       }
+      const shoulderCutY = isTorsoPanel
+        ? (useSlopedCut ? minY + Math.min(6.6, Math.max(3.2, (maxY - minY) * 0.12)) : minY + 2.8)
+        : Infinity
       for (let localIdx = 0; localIdx < pts.length; localIdx++) {
-        if (isTorsoPanel && pts[localIdx][1] > minY + 3.5) continue
+        if (isTorsoPanel && pts[localIdx][1] > shoulderCutY) continue
         const sp = renderVertexToSimParticle[offset + localIdx]
         if (shoulderMask[sp]) mask[sp] = 1
       }
@@ -669,6 +676,7 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
 
     for (const tp of triangulatedPieces) {
       if (!LOWER_BODY_WAIST_PIN_ROLES.has(tp.role)) continue
+      if (tp.placementHint?.sewnToBodiceWaist) continue
       if (tp.placementHint?.isBrief && tp.placementHint?.sewnWaistElastic) continue
       const offset = pieceOffset[tp.pieceId]
       const pts = tp.positions2D
@@ -702,6 +710,7 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
       const pts = tp.positions2D
       if (offset == null || !pts || pts.length === 0) continue
       if (tp.placementHint?.sewnLegElastic) continue
+      if (tp.placementHint?.sewnToBodiceWaist) continue
       const { role } = tp
       if (tp.placementHint?.sewnBriefWaist) {
         let minY = Infinity
@@ -758,6 +767,16 @@ export function deriveGarmentPinMask(cloth, triangulatedPieces = [], dims) {
             const [xCm, yCm] = pts[localIdx]
             if (yCm < cfMinY) continue
             const isCFCorner = tp.placementHint.splitSide > 0 ? xCm <= fMinX + 3.5 : xCm >= fMaxX - 3.5
+            if (isCFCorner) mask[renderVertexToSimParticle[offset + localIdx]] = 1
+          }
+        } else if (!tp.placementHint?.isLooseGarment && (tp.placementHint?.isStructuredOuter || fMaxY - fMinY <= 92)) {
+          const H = fMaxY - fMinY
+          const btnMinY = fMinY + H * 0.44
+          const btnMaxY = fMinY + H * 0.62
+          for (let localIdx = 0; localIdx < pts.length; localIdx++) {
+            const [xCm, yCm] = pts[localIdx]
+            if (yCm < btnMinY || yCm > btnMaxY) continue
+            const isCFCorner = tp.placementHint.splitSide > 0 ? xCm <= fMinX + 2.8 : xCm >= fMaxX - 2.8
             if (isCFCorner) mask[renderVertexToSimParticle[offset + localIdx]] = 1
           }
         }

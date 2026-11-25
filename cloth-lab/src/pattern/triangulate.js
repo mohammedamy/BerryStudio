@@ -65,6 +65,17 @@ function resamplePolyline(pts, subdiv) {
 // average of the two (real) edge lengths, not either side alone, so a
 // sleeve cap slightly longer than its armhole (real-world "easing") still
 // gets one shared, sensible subdivision count instead of two different ones.
+function compactBodiceSpacing(piece, pieceHeight, targetSpacingCm) {
+  const hint = piece?.placementHint
+  const isCompactBodice = (piece.role === 'frontPanel' || piece.role === 'backPanel')
+    && !hint?.isLooseGarment
+    && pieceHeight > 0
+    && (hint?.isTailoredBodice || hint?.sewnToSkirtWaist || pieceHeight <= 50)
+  return (isCompactBodice && targetSpacingCm > 1.85)
+    ? Math.max(1.75, targetSpacingCm * 0.72)
+    : targetSpacingCm
+}
+
 export function computeSubdivisions(pieces, seams, targetSpacingCm) {
   const byId = Object.fromEntries(pieces.map((p) => [p.id, p]))
   const subdiv = {} // { pieceId: { edgeName: count } }
@@ -105,10 +116,19 @@ export function computeSubdivisions(pieces, seams, targetSpacingCm) {
   // chordal sagitta does not dip inside the collision arm mesh.
   for (const p of pieces) {
     const minSub = p.role === 'sleeve' ? 8 : 2
+    let pieceMinY = Infinity, pieceMaxY = -Infinity
+    if (Array.isArray(p.outline)) {
+      for (const [, py] of p.outline) {
+        if (py < pieceMinY) pieceMinY = py
+        if (py > pieceMaxY) pieceMaxY = py
+      }
+    }
+    const pieceHeight = Number.isFinite(pieceMaxY - pieceMinY) ? (pieceMaxY - pieceMinY) : Infinity
+    const effSpacing = compactBodiceSpacing(p, pieceHeight, targetSpacingCm)
     for (const edgeName of p.edgeOrder) {
       if (paired.has(`${p.id}.${edgeName}`)) continue
       const len = polylineLength(edgeRawPoints(p, edgeName))
-      subdiv[p.id][edgeName] = Math.max(minSub, Math.round(len / targetSpacingCm))
+      subdiv[p.id][edgeName] = Math.max(minSub, Math.round(len / effSpacing))
     }
   }
   return subdiv
@@ -173,12 +193,13 @@ export function triangulatePiece(piece, subdivForPiece, targetSpacingCm) {
   const xs = boundary.map((p) => p[0]), ys = boundary.map((p) => p[1])
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)
   const wSpan = maxX - minX, hSpan = maxY - minY
+  const effSpacing = compactBodiceSpacing(piece, hSpan, targetSpacingCm)
   const interior = []
-  const clearance = Math.min(0.6 * targetSpacingCm, Math.min(wSpan, hSpan) * 0.30)
+  const clearance = Math.min(0.6 * effSpacing, Math.min(wSpan, hSpan) * 0.30)
   const stepX = piece.role === 'sleeve' && wSpan > 0
-    ? Math.min(targetSpacingCm, Math.max(0.9, wSpan / 8))
-    : (wSpan > 0 && wSpan < targetSpacingCm * 1.4 && hSpan > targetSpacingCm * 2 ? Math.max(0.5, wSpan * 0.45) : targetSpacingCm)
-  const stepY = hSpan > 0 && hSpan < targetSpacingCm * 1.4 && wSpan > targetSpacingCm * 2 ? Math.max(0.5, hSpan * 0.45) : targetSpacingCm
+    ? Math.min(effSpacing, Math.max(0.9, wSpan / 8))
+    : (wSpan > 0 && wSpan < effSpacing * 1.4 && hSpan > effSpacing * 2 ? Math.max(0.5, wSpan * 0.45) : effSpacing)
+  const stepY = hSpan > 0 && hSpan < effSpacing * 1.4 && wSpan > effSpacing * 2 ? Math.max(0.5, hSpan * 0.45) : effSpacing
   for (let x = minX; x <= maxX; x += stepX) {
     for (let y = minY; y <= maxY; y += stepY) {
       const pt = [x, y]
@@ -236,7 +257,7 @@ export function adaptiveSpacingCm(pieces, minSpacingOrOpts = 2, maxParticles = 3
   let effMax = maxParticles
   if (minSpacingOrOpts && typeof minSpacingOrOpts === 'object') {
     if (typeof minSpacingOrOpts.minSpacingCm === 'number') minSpacingCm = minSpacingOrOpts.minSpacingCm
-    if (minSpacingOrOpts.qualityTier === 'high' && maxParticles === 3000) effMax = 3200
+    if (minSpacingOrOpts.qualityTier === 'high' && maxParticles === 3000) effMax = 3050
   }
   let totalArea = 0
   let hasIntimate = false

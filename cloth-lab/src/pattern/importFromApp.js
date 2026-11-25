@@ -1072,6 +1072,7 @@ export function convertAppPattern(payload) {
   const placementHints = {}
 
   const bySlot = { frontPanel: [], backPanel: [], hipPanelFront: [], hipPanelBack: [] }
+  const princessCenters = { front: null, back: null }
   const princessSides = { front: [], back: [] }
   const goreByRole = { goreFront: [], goreSideRight: [], goreBack: [], goreSideLeft: [] }
   const sleeves = []
@@ -1481,6 +1482,8 @@ export function convertAppPattern(payload) {
       roles[p.id] = placement
 
       if (princessSeamId) {
+        if (placement === 'frontPanel' && !princessCenters.front) princessCenters.front = p.id
+        else if (placement === 'backPanel' && !princessCenters.back) princessCenters.back = p.id
         const [right, left] = deriveTorsoEdgeInstructions(outline, { includeTop: false, necklineEndIdx })
         pushClaimedEdge(p.id, right.name, right.from, right.to, outline.length)
         pushClaimedEdge(p.id, left.name, left.from, left.to, outline.length)
@@ -1488,6 +1491,8 @@ export function convertAppPattern(payload) {
           ; (seamIdEdges[princessSeamId + '_L'] ||= []).push({ pieceId: p.id, fromIdx: left.from, toIdx: left.to })
         pushSeamIdEdges(p.id, adjEdges, outline.length, { cutOnFold: true })
       } else if (isPrincessCenter) {
+        if (placement === 'frontPanel' && !princessCenters.front) princessCenters.front = p.id
+        else if (placement === 'backPanel' && !princessCenters.back) princessCenters.back = p.id
         // Explicit princess center panel without `p.princessSeamId` (e.g. w10, w11, w17, m10, b10, ref_w_blouse, ref_g_top):
         // register its unfolded R and L princess seam chains directly under `<seamId>_R` / `<seamId>_L` so
         // center panels never hijack bySlot armhole/side seams!
@@ -2655,6 +2660,252 @@ export function convertAppPattern(payload) {
     seamInstructions.push({ id, a: { piece: pAId, edge: edgeA }, b: { piece: pBId, edge: edgeB }, reverse: rev })
   }
 
+  // Princess-seamed gown waist join: stitch all 6 bodice waist edges (FC, FS_R/L, BC, BS_R/L)
+  // directly to the gored skirt waist when no separate waistband piece exists.
+  const hasSeparateWaistband = activePieces.some((ap) => resolveSchemaRole(ap.role)?.role === 'waistband')
+  const hasGoreRing = seamInstructions.some((s) => s.id.startsWith('goreRing_'))
+  const hasGorePair = seamInstructions.some((s) => s.id.startsWith('gorePair_'))
+  if (
+    !hasSeparateWaistband &&
+    princessCenters.front && princessCenters.back &&
+    princessSides.front.length === 1 && princessSides.back.length === 1 &&
+    (hasGoreRing || hasGorePair)
+  ) {
+    const fcId = princessCenters.front
+    const bcId = princessCenters.back
+    const fs = princessSides.front[0]
+    const bs = princessSides.back[0]
+
+    const pickWaistSpanCenter = (pid) => {
+      const pc = rawPieces.find((p) => p.id === pid)
+      if (!pc?.outline?.length) return null
+      const pts = pc.outline
+      const n = pts.length
+      const half = Math.floor(n / 2)
+      const edges = edgeInstructions.filter((e) => e.pieceId === pid)
+      const rEdge = edges.find((e) => e.edgeName === 'rightSide' || /_R$/.test(e.edgeName))
+      const lEdge = edges.find((e) => e.edgeName === 'leftSide' || /_L$/.test(e.edgeName))
+      if (!rEdge || !lEdge) return null
+      const rBot = pts[rEdge.toIdx][1] >= pts[rEdge.fromIdx][1] ? rEdge.toIdx : rEdge.fromIdx
+      const lBot = pts[lEdge.fromIdx][1] >= pts[lEdge.toIdx][1] ? lEdge.fromIdx : lEdge.toIdx
+      if (rBot === lBot || rBot > half || lBot < half) return null
+      if (hasInteriorOverlap(pid, n, rBot, lBot)) return null
+      return { fromIdx: rBot, toIdx: lBot, n }
+    }
+
+    const pickWaistSpanSide = (pid) => {
+      const pc = rawPieces.find((p) => p.id === pid)
+      if (!pc?.outline?.length) return null
+      const pts = pc.outline
+      const n = pts.length
+      const edges = edgeInstructions.filter((e) => e.pieceId === pid)
+      const innerEdge = edges.find((e) => e.edgeName === 'seam0')
+      const outerEdge = edges.find((e) => e.edgeName === 'outerSide')
+      if (!innerEdge || !outerEdge) return null
+      const innerBot = pts[innerEdge.toIdx][1] >= pts[innerEdge.fromIdx][1] ? innerEdge.toIdx : innerEdge.fromIdx
+      const outerBot = pts[outerEdge.toIdx][1] >= pts[outerEdge.fromIdx][1] ? outerEdge.toIdx : outerEdge.fromIdx
+      if (innerBot === outerBot) return null
+      const fwdOk = !hasInteriorOverlap(pid, n, innerBot, outerBot)
+      const bwdOk = !hasInteriorOverlap(pid, n, outerBot, innerBot)
+      if (!fwdOk && !bwdOk) return null
+      const fwdLen = fwdOk ? edgeArcLen(pts, innerBot, outerBot) : Infinity
+      const bwdLen = bwdOk ? edgeArcLen(pts, outerBot, innerBot) : Infinity
+      return fwdLen <= bwdLen
+        ? { fromIdx: innerBot, toIdx: outerBot, n }
+        : { fromIdx: outerBot, toIdx: innerBot, n }
+    }
+
+    const buildSplitGoreWaist = (gid, fracs) => {
+      const pc = rawPieces.find((p) => p.id === gid)
+      if (!pc?.outline?.length) return null
+      const gLeft = edgeInstructions.find((e) => e.pieceId === gid && e.edgeName === 'goreLeft')
+      const gRight = edgeInstructions.find((e) => e.pieceId === gid && e.edgeName === 'goreRight')
+      if (!gLeft || !gRight) return null
+      const wStart = gLeft.toIdx
+      const wEnd = gRight.fromIdx
+      if (wStart === wEnd || hasInteriorOverlap(gid, pc.outline.length, wStart, wEnd)) return null
+
+      // Walk wStart -> wEnd and collect segment cum lengths
+      const walkChain = () => {
+        const ch = []
+        let cur = wStart, guard = 0
+        while (true) {
+          ch.push(cur)
+          if (cur === wEnd) break
+          cur = (cur + 1) % pc.outline.length
+          if (++guard > pc.outline.length) return null
+        }
+        return ch
+      }
+      const chain0 = walkChain()
+      if (!chain0 || chain0.length < 2) return null
+      let cum = [0]
+      for (let k = 1; k < chain0.length; k++) {
+        const a = pc.outline[chain0[k - 1]], b = pc.outline[chain0[k]]
+        cum.push(cum[k - 1] + Math.hypot(b[0] - a[0], b[1] - a[1]))
+      }
+      const totalLen = cum[cum.length - 1]
+      if (totalLen < 4) return null
+
+      // Insert fractional split vertices into pc.outline one-by-one while remapping indices
+      const splitIndices = [wStart]
+      const splicePoint = (segStartIdx, segNextIdx, pt) => {
+        const oldN = pc.outline.length
+        const isWrap = segStartIdx === oldN - 1 && segNextIdx === 0
+        const insertAt = isWrap ? oldN : segStartIdx + 1
+        pc.outline.splice(insertAt, 0, pt)
+        if (!isWrap) {
+          for (const e of edgeInstructions) {
+            if (e.pieceId !== gid) continue
+            if (e.fromIdx >= insertAt) e.fromIdx += 1
+            if (e.toIdx >= insertAt) e.toIdx += 1
+          }
+          if (claimedIndices[gid]) {
+            const nextSet = new Set()
+            for (const idx of claimedIndices[gid]) nextSet.add(idx >= insertAt ? idx + 1 : idx)
+            claimedIndices[gid] = nextSet
+          }
+          for (let si = 0; si < splitIndices.length; si++) {
+            if (splitIndices[si] >= insertAt) splitIndices[si] += 1
+          }
+        }
+        return insertAt
+      }
+
+      for (const f of fracs) {
+        const curChain = []
+        const curStart = splitIndices[0]
+        const curEnd = gRight.fromIdx
+        let cur = curStart, guard = 0
+        while (true) {
+          curChain.push(cur)
+          if (cur === curEnd) break
+          cur = (cur + 1) % pc.outline.length
+          if (++guard > pc.outline.length) break
+        }
+        cum = [0]
+        for (let k = 1; k < curChain.length; k++) {
+          const a = pc.outline[curChain[k - 1]], b = pc.outline[curChain[k]]
+          cum.push(cum[k - 1] + Math.hypot(b[0] - a[0], b[1] - a[1]))
+        }
+        const tot = cum[cum.length - 1]
+        const want = f * tot
+        let existingIdx = null
+        for (let k = 1; k < curChain.length - 1; k++) {
+          if (Math.abs(cum[k] - want) <= Math.max(0.8, tot * 0.08)) {
+            existingIdx = curChain[k]
+            break
+          }
+        }
+        if (existingIdx != null) {
+          splitIndices.push(existingIdx)
+        } else {
+          for (let k = 1; k < curChain.length; k++) {
+            if (cum[k] >= want - 1e-6 || k === curChain.length - 1) {
+              const segLen = Math.max(1e-6, cum[k] - cum[k - 1])
+              const t = Math.max(0, Math.min(1, (want - cum[k - 1]) / segLen))
+              const iA = curChain[k - 1], iB = curChain[k]
+              const pA = pc.outline[iA], pB = pc.outline[iB]
+              const pt = [pA[0] + (pB[0] - pA[0]) * t, pA[1] + (pB[1] - pA[1]) * t]
+              splitIndices.push(splicePoint(iA, iB, pt))
+              break
+            }
+          }
+        }
+      }
+      splitIndices.push(gRight.fromIdx)
+
+      const edgeNames = []
+      const nFin = pc.outline.length
+      for (let i = 0; i < splitIndices.length - 1; i++) {
+        const ename = splitIndices.length === 2 ? 'waistTop' : `waistTop_${i}`
+        pushClaimedEdge(gid, ename, splitIndices[i], splitIndices[i + 1], nFin)
+        edgeNames.push(ename)
+      }
+      return edgeNames
+    }
+
+    const bodiceTargets = [
+      { id: fcId, span: pickWaistSpanCenter(fcId), tag: 'fc' },
+      { id: bcId, span: pickWaistSpanCenter(bcId), tag: 'bc' },
+      { id: fs.rId, span: pickWaistSpanSide(fs.rId), tag: 'fsR' },
+      { id: fs.lId, span: pickWaistSpanSide(fs.lId), tag: 'fsL' },
+      { id: bs.rId, span: pickWaistSpanSide(bs.rId), tag: 'bsR' },
+      { id: bs.lId, span: pickWaistSpanSide(bs.lId), tag: 'bsL' },
+    ]
+
+    if (bodiceTargets.every((bt) => bt.span)) {
+      if (hasGoreRing && goreByRole.goreFront[0] && goreByRole.goreBack[0] && goreByRole.goreSideRight[0] && goreByRole.goreSideLeft[0]) {
+        const gfId = goreByRole.goreFront[0].id
+        const gbId = goreByRole.goreBack[0].id
+        const gsrId = goreByRole.goreSideRight[0].id
+        const gslId = goreByRole.goreSideLeft[0].id
+        const eGF = buildSplitGoreWaist(gfId, [])
+        const eGB = buildSplitGoreWaist(gbId, [])
+        const eGSR = buildSplitGoreWaist(gsrId, [0.5])
+        const eGSL = buildSplitGoreWaist(gslId, [0.5])
+        if (eGF && eGB && eGSR?.length === 2 && eGSL?.length === 2) {
+          for (const bt of bodiceTargets) {
+            pushClaimedEdge(bt.id, 'waistBottom', bt.span.fromIdx, bt.span.toIdx, bt.span.n)
+            placementHints[bt.id] = { ...(placementHints[bt.id] || {}), sewnToSkirtWaist: true }
+          }
+          for (const gid of [gfId, gbId, gsrId, gslId]) {
+            placementHints[gid] = { ...(placementHints[gid] || {}), sewnToBodiceWaist: true }
+          }
+          if (placedCache) placedCache.clear()
+
+          const avgEdgeZ = (gid, edgeName) => {
+            const p3 = getPlaced3D(gid)
+            const eg = edgeInstructions.find((e) => e.pieceId === gid && e.edgeName === edgeName)
+            if (!p3 || !eg) return 0
+            return 0.5 * ((p3[eg.fromIdx]?.[2] ?? 0) + (p3[eg.toIdx]?.[2] ?? 0))
+          }
+          const srFront = avgEdgeZ(gsrId, eGSR[0]) >= avgEdgeZ(gsrId, eGSR[1]) ? eGSR[0] : eGSR[1]
+          const srBack = srFront === eGSR[0] ? eGSR[1] : eGSR[0]
+          const slFront = avgEdgeZ(gslId, eGSL[0]) >= avgEdgeZ(gslId, eGSL[1]) ? eGSL[0] : eGSL[1]
+          const slBack = slFront === eGSL[0] ? eGSL[1] : eGSL[0]
+
+          push3DOrientedSeam('gownWaist_FC', fcId, 'waistBottom', gfId, eGF[0], false)
+          push3DOrientedSeam('gownWaist_BC', bcId, 'waistBottom', gbId, eGB[0], false)
+          push3DOrientedSeam('gownWaist_FS_R', fs.rId, 'waistBottom', gsrId, srFront, false)
+          push3DOrientedSeam('gownWaist_BS_R', bs.rId, 'waistBottom', gsrId, srBack, false)
+          push3DOrientedSeam('gownWaist_FS_L', fs.lId, 'waistBottom', gslId, slFront, false)
+          push3DOrientedSeam('gownWaist_BS_L', bs.lId, 'waistBottom', gslId, slBack, false)
+        }
+      } else if (hasGorePair && goreByRole.goreFront[0] && goreByRole.goreBack[0]) {
+        const gfId = goreByRole.goreFront[0].id
+        const gbId = goreByRole.goreBack[0].id
+        const eGF = buildSplitGoreWaist(gfId, [0.28, 0.72])
+        const eGB = buildSplitGoreWaist(gbId, [0.28, 0.72])
+        if (eGF?.length === 3 && eGB?.length === 3) {
+          for (const bt of bodiceTargets) {
+            pushClaimedEdge(bt.id, 'waistBottom', bt.span.fromIdx, bt.span.toIdx, bt.span.n)
+            placementHints[bt.id] = { ...(placementHints[bt.id] || {}), sewnToSkirtWaist: true }
+          }
+          for (const gid of [gfId, gbId]) {
+            placementHints[gid] = { ...(placementHints[gid] || {}), sewnToBodiceWaist: true }
+          }
+          if (placedCache) placedCache.clear()
+
+          const avgEdgeX = (gid, edgeName) => {
+            const p3 = getPlaced3D(gid)
+            const eg = edgeInstructions.find((e) => e.pieceId === gid && e.edgeName === edgeName)
+            if (!p3 || !eg) return 0
+            return 0.5 * ((p3[eg.fromIdx]?.[0] ?? 0) + (p3[eg.toIdx]?.[0] ?? 0))
+          }
+          const sortFrontEdges = [...eGF].sort((ea, eb) => avgEdgeX(gfId, eb) - avgEdgeX(gfId, ea))
+          const sortBackEdges = [...eGB].sort((ea, eb) => avgEdgeX(gbId, eb) - avgEdgeX(gbId, ea))
+          push3DOrientedSeam('gownWaist_FS_R', fs.rId, 'waistBottom', gfId, sortFrontEdges[0], false)
+          push3DOrientedSeam('gownWaist_FC', fcId, 'waistBottom', gfId, sortFrontEdges[1], false)
+          push3DOrientedSeam('gownWaist_FS_L', fs.lId, 'waistBottom', gfId, sortFrontEdges[2], false)
+          push3DOrientedSeam('gownWaist_BS_R', bs.rId, 'waistBottom', gbId, sortBackEdges[0], false)
+          push3DOrientedSeam('gownWaist_BC', bcId, 'waistBottom', gbId, sortBackEdges[1], false)
+          push3DOrientedSeam('gownWaist_BS_L', bs.lId, 'waistBottom', gbId, sortBackEdges[2], false)
+        }
+      }
+    }
+  }
+
   // Underwear brief/trunk/boxer closure: crotch gusset, inseams (if legged), waistband, and bilateral leg elastics
   if (briefFrontId && briefBackId && briefGussets.length > 0 && hasEdge(briefFrontId, 'crotchSeam') && hasEdge(briefBackId, 'crotchSeam')) {
     const gId = briefGussets[0]
@@ -2923,6 +3174,33 @@ export function convertAppPattern(payload) {
   const isStretchFittedDesign = !isSecondSkinDesign && !isLooseDesign && /corset|bustier|mermaid|pencil|fitted|slim|skinny|jogger|tank\s*top|vest\s*top|cropped?\s*top|polo|crew-neck\s*tee|ribbed|sheath|كورسيه|بنسل|ضيق|سليم/i.test(garmentText)
   const isCorsetOrMermaidGown = /corset|mermaid|peplum|كورسيه/i.test(garmentText)
   const isJoggerDesign = /jogger/i.test(garmentText)
+  const hasPrincessBodice = hasPrincessFrontSide || hasPrincessBackSide
+  const hasSkirtPanels = bySlot.hipPanelFront.length > 0 || allGorePieces.length > 0 || activePieces.some((ap) => ['tier', 'peplum-front'].includes(resolveSchemaRole(ap.role)?.role))
+  const isTailoredBodiceDesign = !isSecondSkinDesign && !isLooseDesign && (
+    hasPrincessBodice ||
+    hasSkirtPanels ||
+    /princess|ball\s*gown|evening\s*gown|fit\s*(?:&|and)\s*flare|sheath|tailored|bustier|corset|waistcoat|\bvest\b|أميرات|أميرة|سهرة|متسع\s*الخصر/i.test(garmentText)
+  )
+  let maxLowerDropCm = 0
+  let maxUpperDropCm = 0
+  for (const ap of activePieces) {
+    if (!ap?.outline?.length) continue
+    const sr = resolveSchemaRole(ap.role)?.role
+    const b = bbox(ap.outline)
+    const dropCm = Math.max(0, b.maxY - b.minY)
+    if (sr && (sr.startsWith('skirt-') || sr.startsWith('hip-panel-') || sr === 'tier')) {
+      if (dropCm > maxLowerDropCm) maxLowerDropCm = dropCm
+    } else if (sr && (sr === 'front-panel' || sr === 'back-panel' || sr.startsWith('bodice-'))) {
+      if (dropCm > maxUpperDropCm) maxUpperDropCm = dropCm
+    }
+  }
+  const bodyDimsForHem = payload.measurements ? computeBodyDims(payload.measurements, payload.category || 'women') : null
+  const waistWorldYEst = bodyDimsForHem ? (bodyDimsForHem.hipY + bodyDimsForHem.span * 0.44) : 0.96
+  const shoulderWorldYEst = bodyDimsForHem ? (bodyDimsForHem.shoulderY + bodyDimsForHem.span * 0.024) : 1.38
+  const targetHemWorldY = maxLowerDropCm > 20
+    ? Math.max(0.045, waistWorldYEst - maxLowerDropCm * 0.01)
+    : (maxUpperDropCm > 35 ? Math.max(0.06, shoulderWorldYEst - maxUpperDropCm * 0.01) : null)
+
   for (const p of allInputPieces) {
     if (p.visible === false) continue
     const schemaRole = resolveSchemaRole(p.role)?.role || null
@@ -2940,6 +3218,8 @@ export function convertAppPattern(payload) {
     const isPencilPiece = /pencil|بنسل/i.test(nameText)
     const isElasticTrim = schemaRole === 'elastic-band' || schemaRole === 'rib-cuff' || schemaRole === 'hem-band' || schemaRole === 'strap' || (schemaRole === 'band' && !(p.cutOnFold ?? false)) || (schemaRole === 'waistband' && (isSecondSkinDesign || isJoggerDesign))
     const isStructuredOuter = /collar|lapel|facing|yoke|blazer|jacket|waistcoat|trench|ياقة|طية|جاكيت|بليزر|صديري/i.test(nameText)
+    const isInSeamPocket = schemaRole === 'pocket' && /in-seam|pocket\s*bag|مخفي|كيس\s*الجيب/i.test(nameText)
+    const isHemFacingBand = schemaRole === 'hem-band'
     for (const pid of [p.id, p.id + '_r', p.id + '_l']) {
       if (!roles[pid]) continue
       const existing = placementHints[pid]
@@ -2954,8 +3234,9 @@ export function convertAppPattern(payload) {
       const secondSkinPiece = isSecondSkinDesign && !isFlowingSubPiece
       const isLeotardBody = isLeotardGarment && (pieceRole === 'frontPanel' || pieceRole === 'backPanel')
       const stretchFittedPiece = isStretchFittedDesign && !isFlowingSubPiece && !isNonFittedSkirtInGown
+      const tailoredBodicePiece = isTailoredBodiceDesign && (pieceRole === 'frontPanel' || pieceRole === 'backPanel')
       const loosePiece = isLooseDesign || (isSecondSkinDesign && isFlowingSubPiece)
-      if (!needSchema && !isElasticTrim && !isSport && !secondSkinPiece && !isLeotardBody && !stretchFittedPiece && !isStructuredOuter && !loosePiece) {
+      if (!needSchema && !isElasticTrim && !isSport && !secondSkinPiece && !isLeotardBody && !stretchFittedPiece && !tailoredBodicePiece && !isStructuredOuter && !loosePiece && !isInSeamPocket && !isHemFacingBand) {
         continue
       }
       const h = (placementHints[pid] ||= {})
@@ -2965,8 +3246,15 @@ export function convertAppPattern(payload) {
       if (secondSkinPiece) h.isFittedIntimate = true
       if (isLeotardBody) h.isLeotardBody = true
       if (stretchFittedPiece) h.isStretchFitted = true
+      if (tailoredBodicePiece) h.isTailoredBodice = true
       if (isStructuredOuter) h.isStructuredOuter = true
       if (loosePiece) h.isLooseGarment = true
+      if (isInSeamPocket) h.isInSeamPocket = true
+      if (isHemFacingBand) {
+        if (targetHemWorldY != null) h.targetHemWorldY = targetHemWorldY
+        if (/facing|horsehair|تقوية|شعر\s*الخيل/i.test(nameText)) h.isHorsehairFacing = true
+        if (allGorePieces.length > 0 || isLooseDesign) h.isFlaredSkirtHem = true
+      }
     }
   }
 

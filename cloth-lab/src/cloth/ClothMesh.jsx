@@ -36,13 +36,14 @@ export default function ClothMesh({ paused = false, dims, pose = 'standing', fab
   useEffect(() => () => emptyPrintTex.dispose(), [emptyPrintTex])
 
   const assembled = useMemo(() => {
-    const triangulated = triangulateAll(pieces, seams, adaptiveSpacingCm(pieces))
+    const triangulated = triangulateAll(pieces, seams, adaptiveSpacingCm(pieces, { qualityTier }))
     const cloth = assembleCloth(triangulated, dims, seams, pose)
     const neighbors = deriveNeighbors(cloth, 8)
     const normalRing = deriveNormalRing(cloth, neighbors, 4)
+    const normalRing6 = deriveNormalRing(cloth, neighbors, 6)
     const stitchChains = extractClothStitchChains(pieces, triangulated, seams, cloth)
-    return { triangulated, cloth, neighbors, normalRing, stitchChains }
-  }, [dims, pieces, seams, pose])
+    return { triangulated, cloth, neighbors, normalRing, normalRing6, stitchChains }
+  }, [dims, pieces, seams, pose, qualityTier])
 
   const normalizedStitch = useMemo(() => normalizeStitchConfig(stitchConfig), [stitchConfig])
   const stitchPartUniform = useRef({ value: [1, 1, 1, 1, 1, 1] })
@@ -194,23 +195,28 @@ varying float vStitchVis;
     // render vertex carries its sim particle's angularly-sorted 4-neighbor
     // ring, converted to the same position-texture texel coordinates aSimUV
     // already uses, packed as two vec4s since GLSL has no vec2[4] attribute.
-    const ringSize = 4
-    const { normalRing } = assembled
+    const ringSize = 6
+    const { normalRing6 } = assembled
     const toU = (sp) => (sp % texDim + 0.5) / texDim
     const toV = (sp) => (Math.floor(sp / texDim) + 0.5) / texDim
     const nbrUV0 = new Float32Array(cloth.renderVertexCount * 4)
     const nbrUV1 = new Float32Array(cloth.renderVertexCount * 4)
+    const nbrUV2 = new Float32Array(cloth.renderVertexCount * 4)
     for (let i = 0; i < cloth.renderVertexCount; i++) {
       const sp = cloth.renderVertexToSimParticle[i]
-      const r0 = normalRing[sp * ringSize], r1 = normalRing[sp * ringSize + 1]
-      const r2 = normalRing[sp * ringSize + 2], r3 = normalRing[sp * ringSize + 3]
+      const r0 = normalRing6[sp * ringSize], r1 = normalRing6[sp * ringSize + 1]
+      const r2 = normalRing6[sp * ringSize + 2], r3 = normalRing6[sp * ringSize + 3]
+      const r4 = normalRing6[sp * ringSize + 4], r5 = normalRing6[sp * ringSize + 5]
       nbrUV0[i * 4] = toU(r0); nbrUV0[i * 4 + 1] = toV(r0)
       nbrUV0[i * 4 + 2] = toU(r1); nbrUV0[i * 4 + 3] = toV(r1)
       nbrUV1[i * 4] = toU(r2); nbrUV1[i * 4 + 1] = toV(r2)
       nbrUV1[i * 4 + 2] = toU(r3); nbrUV1[i * 4 + 3] = toV(r3)
+      nbrUV2[i * 4] = toU(r4); nbrUV2[i * 4 + 1] = toV(r4)
+      nbrUV2[i * 4 + 2] = toU(r5); nbrUV2[i * 4 + 3] = toV(r5)
     }
     geom.setAttribute('aNbrUV0', new THREE.BufferAttribute(nbrUV0, 4))
     geom.setAttribute('aNbrUV1', new THREE.BufferAttribute(nbrUV1, 4))
+    geom.setAttribute('aNbrUV2', new THREE.BufferAttribute(nbrUV2, 4))
 
     return geom
   }, [assembled])
@@ -261,6 +267,7 @@ varying float vStitchVis;
           `attribute vec2 aSimUV;
 attribute vec4 aNbrUV0;
 attribute vec4 aNbrUV1;
+attribute vec4 aNbrUV2;
 attribute vec4 aPieceStyle;
 uniform sampler2D uSimPositionTex;
 uniform float uWeaveScale;
@@ -277,7 +284,9 @@ varying vec2 vPrintUv;
           vec3 rn1 = texture2D( uSimPositionTex, aNbrUV0.zw ).xyz - selfPos;
           vec3 rn2 = texture2D( uSimPositionTex, aNbrUV1.xy ).xyz - selfPos;
           vec3 rn3 = texture2D( uSimPositionTex, aNbrUV1.zw ).xyz - selfPos;
-          vec3 smoothNormal = cross(rn0, rn1) + cross(rn1, rn2) + cross(rn2, rn3) + cross(rn3, rn0);
+          vec3 rn4 = texture2D( uSimPositionTex, aNbrUV2.xy ).xyz - selfPos;
+          vec3 rn5 = texture2D( uSimPositionTex, aNbrUV2.zw ).xyz - selfPos;
+          vec3 smoothNormal = cross(rn0, rn1) + cross(rn1, rn2) + cross(rn2, rn3) + cross(rn3, rn4) + cross(rn4, rn5) + cross(rn5, rn0);
           vNormal = clothSafeNormal(normalMatrix * clothSafeNormal(smoothNormal, normal), vec3(0.0, 0.0, 1.0));
           vPieceStyle = aPieceStyle;
           vFabricUV = uv * uWeaveScale;
@@ -310,7 +319,7 @@ varying vec2 vPrintUv;
             diffuseColor.rgb *= mix(0.80, 1.20, fres * uVelvetFactor);
           } else if (uLusterFactor > 0.05) {
             float foldGleam = smoothstep(0.18, 0.72, ndotv) * (1.0 - ndotv) * 4.0;
-            diffuseColor.rgb *= (1.0 + foldGleam * 0.08 * uLusterFactor);
+            diffuseColor.rgb *= (1.0 + foldGleam * 0.045 * uLusterFactor);
           }
           if (elasticMask > 0.25) {
             float rib = sin(vFabricUV.x * 38.0) * 0.036 + sin(vFabricUV.y * 52.0) * 0.014;

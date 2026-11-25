@@ -211,8 +211,10 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
     )
   const isSecondSkin = Boolean(hint?.isFittedIntimate || hint?.isSportBra)
   const isFitted = !isSecondSkin && Boolean(hint?.isStretchFitted && !hint?.isLooseGarment)
-  const isLooseTorso = !isLeotardFull && !isSecondSkin && !isFitted && panelHeightCm > 48 && (hint?.isLooseGarment || botSpan > Math.max(1, topSpan) * 1.18)
+  const isTailored = !isSecondSkin && !isFitted && Boolean(hint?.isTailoredBodice && !hint?.isLooseGarment)
+  const isLooseTorso = !isLeotardFull && !isSecondSkin && !isFitted && !isTailored && panelHeightCm > 48 && (hint?.isLooseGarment || botSpan > Math.max(1, topSpan) * 1.18)
   const topWorldY = dims.shoulderY + dims.span * (isLeotardFull ? 0.026 : (dims.kid ? 0.036 : 0.024))
+  const waistWorldY = dims.hipY + dims.span * 0.44
   const zScale = dims.female ? 0.78 : 0.82
   const cx = splitSide > 0
     ? (Number.isFinite(minX) ? minX : 0)
@@ -224,22 +226,60 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
   const halfSpanCm = splitSide !== 0 ? Math.max(0, maxX - minX) : Math.max(0, (maxX - minX) * 0.5)
   const useRowWidth = !isLeotardFull && princessSide === 0
   const binHalfW = useRowWidth ? computeSmoothedRowHalfWidths(positions2D, minY, panelHeightCm, cx) : null
+  const ROW_BINS_PR = 14
+  let prMinBins = null
+  let prMaxBins = null
+  if (princessSide !== 0) {
+    prMinBins = new Float32Array(ROW_BINS_PR).fill(Infinity)
+    prMaxBins = new Float32Array(ROW_BINS_PR).fill(-Infinity)
+    for (const [x, y] of positions2D) {
+      const b = clamp(Math.floor(((y - minY) / panelHeightCm) * (ROW_BINS_PR - 1)), 0, ROW_BINS_PR - 1)
+      if (x < prMinBins[b]) prMinBins[b] = x
+      if (x > prMaxBins[b]) prMaxBins[b] = x
+    }
+    for (let pass = 0; pass < 3; pass++) {
+      for (let b = 0; b < ROW_BINS_PR; b++) {
+        if (!Number.isFinite(prMinBins[b])) {
+          const prev = b > 0 && Number.isFinite(prMinBins[b - 1]) ? prMinBins[b - 1] : minX
+          const next = b + 1 < ROW_BINS_PR && Number.isFinite(prMinBins[b + 1]) ? prMinBins[b + 1] : minX
+          prMinBins[b] = 0.5 * (prev + next)
+        }
+        if (!Number.isFinite(prMaxBins[b])) {
+          const prev = b > 0 && Number.isFinite(prMaxBins[b - 1]) ? prMaxBins[b - 1] : maxX
+          const next = b + 1 < ROW_BINS_PR && Number.isFinite(prMaxBins[b + 1]) ? prMaxBins[b + 1] : maxX
+          prMaxBins[b] = 0.5 * (prev + next)
+        }
+      }
+    }
+    for (let pass = 0; pass < 2; pass++) {
+      const nMin = new Float32Array(prMinBins)
+      const nMax = new Float32Array(prMaxBins)
+      for (let b = 1; b < ROW_BINS_PR - 1; b++) {
+        nMin[b] = 0.25 * prMinBins[b - 1] + 0.5 * prMinBins[b] + 0.25 * prMinBins[b + 1]
+        nMax[b] = 0.25 * prMaxBins[b - 1] + 0.5 * prMaxBins[b] + 0.25 * prMaxBins[b + 1]
+      }
+      prMinBins.set(nMin)
+      prMaxBins.set(nMax)
+    }
+  }
   const topProfile = computeTopShoulderProfile(positions2D, minX, maxX, minY, cx, splitSide)
   const maxDropCm = Math.max(20, (topWorldY - 0.025) * 100)
   const yScale = (Number.isFinite(maxY) && maxY > maxDropCm && minY >= -1)
     ? maxDropCm / Math.max(1e-4, maxY)
     : 1.0
   return positions2D.map(([xCm, yCm]) => {
-    const rawWorldY = topWorldY - cm(yCm * yScale)
+    const rawWorldY = hint?.sewnToSkirtWaist
+      ? lerp(topWorldY, waistWorldY, clamp((yCm - minY) / panelHeightCm, 0, 1))
+      : (topWorldY - cm(yCm * yScale))
     const crotchFloorY = isLeotardFull ? (dims.hipY - dims.span * 0.146) : 0.02
     const worldYBase = Math.max(crotchFloorY, rawWorldY)
     const hipBlend = smoothstep(dims.hipY + dims.span * 0.12, dims.hipY - dims.span * 0.08, worldYBase)
     const hemFlare = isLooseTorso ? smoothstep(dims.hipY - dims.span * 0.32, 0.12, worldYBase) * 0.075 : 0
     const lowerEase = princessSide !== 0
-      ? (isSecondSkin ? Math.max(easeFactor, 1.032) : (isFitted ? Math.max(easeFactor, 1.065) : Math.max(easeFactor, lerp(easeFactor, 1.17, hipBlend))))
+      ? (isSecondSkin ? Math.max(easeFactor, 1.032) : ((isFitted || isTailored) ? Math.max(easeFactor, 1.046) : Math.max(easeFactor, lerp(easeFactor, 1.13, hipBlend))))
       : (easeFactor + hemFlare)
     const rBody = radiusAtHeight(dims, worldYBase)
-    const flared = isSecondSkin
+    const flared = (isSecondSkin || isTailored || isFitted)
       ? { r: rBody * lowerEase, rowHalfW: halfSpanCm, startFlare: 0 }
       : sampleFlaredSkirtRadius(rBody * lowerEase, dims, worldYBase, yCm, minY, panelHeightCm, binHalfW)
     const r = flared.r
@@ -247,12 +287,20 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
     const startFlare = flared.startFlare
     const effZScale = isSecondSkin
       ? (dims.female ? 0.74 : 0.78)
-      : (isFitted ? lerp(dims.female ? 0.75 : 0.79, 0.84, hipBlend) : lerp(zScale, isLooseTorso ? 0.99 : 0.94, hipBlend))
+      : ((isFitted || isTailored) ? lerp(dims.female ? 0.74 : 0.79, 0.82, hipBlend) : lerp(zScale, isLooseTorso ? 0.99 : 0.94, hipBlend))
     let theta
     if (princessSide !== 0) {
-      const u = clamp((xCm - minX) / Math.max(1e-4, maxX - minX), 0, 1)
+      const bF = clamp(((yCm - minY) / panelHeightCm) * (ROW_BINS_PR - 1), 0, ROW_BINS_PR - 1)
+      const b0 = Math.floor(bF)
+      const b1 = Math.min(ROW_BINS_PR - 1, b0 + 1)
+      const rMin = lerp(prMinBins[b0], prMinBins[b1], bF - b0)
+      const rMax = lerp(prMaxBins[b0], prMaxBins[b1], bF - b0)
+      const u = clamp((xCm - rMin) / Math.max(1e-4, rMax - rMin), 0, 1)
       const uLat = princessSide > 0 ? u : (1 - u)
-      theta = princessSide * lerp(0.22 * Math.PI, 0.50 * Math.PI, uLat)
+      const dyTop = Math.max(0, yCm - minY)
+      const thetaInner = lerp(0.15 * Math.PI, 0.21 * Math.PI, smoothstep(0, 14, dyTop))
+      const thetaOuter = lerp(0.37 * Math.PI, 0.50 * Math.PI, smoothstep(0, 9.5, dyTop))
+      theta = princessSide * lerp(thetaInner, thetaOuter, uLat)
     } else {
       const rowCircMin = Math.max(cm(rowHalfW) * 1.06, Math.PI * r * (1 + effZScale) * 0.5)
       const flaredHalfCirc = Math.min(rowCircMin, Math.max(cm(rowHalfW) * (angleSpan / (Math.PI * 0.5)) * 0.98, cm(rowHalfW) * 1.04))
@@ -262,14 +310,14 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
     const colTopY = sampleTopShoulderY(topProfile, Math.abs(xCm - cx), minY)
     const colIsUpperShoulder = smoothstep(13.5, 9.0, colTopY - minY)
     const dyFromShoulder = Math.max(0, yCm - colTopY)
-    const shNearSeam = smoothstep(6.5, 0.0, dyFromShoulder) * colIsUpperShoulder
+    const shNearSeam = smoothstep(7.5, 0.0, dyFromShoulder) * colIsUpperShoulder
     const neckTheta = Math.asin(clamp((dims.neckR * 0.85) / Math.max(0.08, r), 0.08, 0.45))
     const shOutsideNeck = smoothstep(neckTheta * 0.72, neckTheta * 1.18, Math.abs(theta))
     const notCenterLine = smoothstep(0.8, 2.2, Math.abs(xCm - cx))
     const collarDropLift = Math.min(0.044, Math.max(0, colTopY - minY - 1.5) * 0.0055) * shNearSeam * notCenterLine
     const shSlope = smoothstep(0.14 * Math.PI, 0.46 * Math.PI, Math.abs(theta))
     const worldY = worldYBase + collarDropLift - dims.span * 0.030 * shNearSeam * shSlope
-    const shWorldLift = smoothstep(dims.shoulderY - dims.span * 0.14, dims.shoulderY - dims.span * 0.015, worldY)
+    const shWorldLift = smoothstep(dims.shoulderY - dims.span * 0.15, dims.shoulderY - dims.span * 0.015, worldY)
     const shArch = shNearSeam * shOutsideNeck * shWorldLift
     const excessRatio = isLooseTorso ? (cm(halfSpanCm) / Math.max(0.14, Math.PI * r * 0.5)) : 1.0
     const waveDrop = isLooseTorso ? smoothstep(dims.hipY + dims.span * 0.16, dims.hipY - dims.span * 0.45, worldYBase) : 0
@@ -283,7 +331,7 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
     const neckTuck = shNearSeam * shWorldLift * (1 - shOutsideNeck) * notCenterLine
     const neckGuardZ = zSign * Math.max(dims.neckR * 1.24, Math.sqrt(Math.max(0, Math.pow(dims.neckR * 1.22 + 0.012, 2) - x * x)))
     const zWithNeckTuck = lerp(zBase, neckGuardZ, neckTuck * 0.92)
-    const z = zWithNeckTuck * lerp(1.0, 0.06, shArch)
+    const z = zWithNeckTuck * lerp(1.0, 0.02, shArch)
     return applySeatedSkirtDrape(x, worldY, z, dims, zSign, pose)
   })
 }
@@ -778,7 +826,7 @@ export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */,
 }
 
 const GORE_ANGLE = Math.PI * 0.48
-export function placeGorePanel(positions2D, dims, angleCenter, pose = 'standing', goreSpan = GORE_ANGLE) {
+export function placeGorePanel(positions2D, dims, angleCenter, pose = 'standing', goreSpan = GORE_ANGLE, hint = null) {
   const topWorldY = dims.hipY + dims.span * 0.44
   const zScale = dims.female ? 0.72 : 0.78
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
@@ -834,13 +882,14 @@ export function placeGorePanel(positions2D, dims, angleCenter, pose = 'standing'
     binMinX.set(nextMin)
     binMaxX.set(nextMax)
   }
-  const hipEdgeR = radiusAtHeight(dims, dims.hipY) * 1.15
+  const waistGoreScale = hint?.sewnToBodiceWaist ? 1.055 : 1.15
+  const hipEdgeR = radiusAtHeight(dims, dims.hipY) * (hint?.sewnToBodiceWaist ? 1.12 : 1.15)
   const dropReach = Math.max(0.25, cm(panelHeightCm * yScale))
   return positions2D.map(([xCm, yCm]) => {
     const worldY = Math.max(0.02, topWorldY - cm(yCm * yScale))
     const r = worldY >= dims.hipY
-      ? radiusAtHeight(dims, worldY) * 1.15
-      : lerp(hipEdgeR, hipEdgeR * 1.55, smoothstep(0, 1, clamp((dims.hipY - worldY) / dropReach, 0, 1)))
+      ? radiusAtHeight(dims, worldY) * waistGoreScale
+      : lerp(hipEdgeR, hipEdgeR * 1.58, smoothstep(0, 1, clamp((dims.hipY - worldY) / dropReach, 0, 1)))
     const hipBlend = smoothstep(dims.hipY + dims.span * 0.12, dims.hipY - dims.span * 0.08, worldY)
     const effZScale = lerp(zScale, 0.96, hipBlend)
     const bF = clamp(((yCm - minY) / panelHeightCm) * (ROW_BINS - 1), 0, ROW_BINS - 1)
@@ -882,9 +931,9 @@ export function placeAttachNeck(positions2D, dims, side = 0, neckKind = null) {
     return positions2D.map(([xCm, yCm]) => {
       const worldY = (dims.shoulderY - dims.span * 0.045) - cm(yCm - minY) * 0.68
       const isPlacket = neckKind === 'placket-facing'
-      const torsoR = radiusAtHeight(dims, worldY) * (isPlacket ? 1.135 : 1.08) + (isPlacket ? 0.005 : 0)
+      const torsoR = radiusAtHeight(dims, worldY) * (isPlacket ? 1.135 : 1.055) + (isPlacket ? 0.005 : 0)
       const u = s > 0 ? clamp((xCm - minX) / width, 0, 1) : clamp((maxX - xCm) / width, 0, 1)
-      const phi = s * (isPlacket ? lerp(0.01 * Math.PI, 0.075 * Math.PI, u) : lerp(0.18 * Math.PI, 0.34 * Math.PI, u))
+      const phi = s * (isPlacket ? lerp(0.01 * Math.PI, 0.075 * Math.PI, u) : lerp(0.03 * Math.PI, 0.16 * Math.PI, u))
       const rOut = Math.max(dims.neckR * 1.30 / torsoZScale, torsoR)
       return [rOut * Math.sin(phi), worldY, rOut * torsoZScale * Math.cos(phi)]
     })
@@ -912,13 +961,15 @@ export function placeAttachNeck(positions2D, dims, side = 0, neckKind = null) {
       const uArc = isTallStrip ? uY : uX
       const vBand = isTallStrip ? uX : uY
       const worldY = isOnePieceBackCollar
-        ? lerp(dims.shoulderY + dims.span * 0.016, dims.shoulderY - dims.span * 0.050, vBand)
+        ? lerp(dims.shoulderY + dims.span * 0.040, dims.shoulderY + dims.span * 0.004, vBand)
         : lerp(dims.shoulderY + dims.span * 0.012, dims.shoulderY - Math.min(cm(height) * 0.62, dims.span * 0.40), uArc)
       const phi = isOnePieceBackCollar
-        ? (Math.PI + lerp(-0.72 * Math.PI, 0.72 * Math.PI, uArc))
+        ? (Math.PI + lerp(-0.68 * Math.PI, 0.68 * Math.PI, uArc))
         : (s * lerp(Math.PI, 0.20 * Math.PI, uArc))
-      const torsoR = Math.max(dims.neckR * 1.38, radiusAtHeight(dims, worldY) * (isOnePieceBackCollar ? 1.245 : lerp(0.92, 1.16, uArc)))
-      const rOut = Math.max(dims.neckR * 1.38, torsoR + vBand * 0.008)
+      const torsoR = isOnePieceBackCollar
+        ? lerp(dims.neckR * 1.34, dims.neckR * 1.56, vBand)
+        : Math.max(dims.neckR * 1.38, radiusAtHeight(dims, worldY) * lerp(0.92, 1.16, uArc))
+      const rOut = Math.max(dims.neckR * 1.34, torsoR + vBand * 0.005)
       const effZScale = isOnePieceBackCollar ? lerp(0.90, torsoZScale, vBand) : lerp(0.92, torsoZScale, uArc)
       return [rOut * Math.sin(phi), worldY, rOut * effZScale * Math.cos(phi)]
     })
@@ -1129,18 +1180,21 @@ export function placeAttachBody(positions2D, dims, zSign = 1, side = 0, hint = n
   for (const [, y] of positions2D) { if (y < minY) minY = y; if (y > maxY) maxY = y }
   const isFullLining = (maxY - minY) > 25
   const isSingleBackCenter = zSign < 0 && side === 0
+  const isInSeamPocket = Boolean(hint?.isInSeamPocket)
   const topWorldY = isFullLining
     ? (dims.shoulderY - dims.span * 0.035)
     : isSingleBackCenter
       ? (dims.shoulderY - dims.span * 0.06)
-      : (dims.hipY + dims.span * 0.34)
+      : (isInSeamPocket ? (dims.hipY + dims.span * 0.24) : (dims.hipY + dims.span * 0.34))
   const zScale = dims.female ? 0.80 : 0.84
   const cx = bboxCenterX(positions2D)
-  const effSide = (isFullLining || isSingleBackCenter) ? side : (side !== 0 ? side : 0.48)
-  const thetaCenter = effSide * Math.PI * 0.40
+  const effSide = (isFullLining || isSingleBackCenter) ? side : (side !== 0 ? side : (isInSeamPocket ? 1 : 0.48))
+  const thetaCenter = isInSeamPocket ? (effSide * Math.PI * 0.48) : (effSide * Math.PI * 0.40)
   const scale = hint?.isFittedIntimate
     ? (isFullLining ? 1.025 : 1.045)
-    : (isFullLining ? 1.085 : 1.235)
+    : isInSeamPocket
+      ? 1.032
+      : (isFullLining ? 1.085 : 1.105)
   return positions2D.map(([xCm, yCm]) => {
     const worldY = topWorldY - cm(yCm - minY)
     const baseR = Math.max(dims.chestR * 0.90, radiusAtHeight(dims, worldY)) * scale
@@ -1204,13 +1258,26 @@ export function placeAttachWrist(positions2D, dims, side = 1, pose = 'standing')
   })
 }
 
-export function placeAttachHemBand(positions2D, dims, pose = 'standing') {
-  const topWorldY = dims.hipY + dims.span * 0.10
-  const zScale = dims.female ? 0.72 : 0.78
+export function placeAttachHemBand(positions2D, dims, pose = 'standing', hint = null) {
+  let minY = Infinity, maxY = -Infinity
+  for (const [, y] of positions2D) {
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  const heightM = cm(Math.max(0, maxY - minY))
+  const hasExplicitHem = hint?.targetHemWorldY != null
+  const topWorldY = hasExplicitHem
+    ? (hint.targetHemWorldY + heightM)
+    : (dims.hipY + dims.span * 0.10)
+  const zScale = (hasExplicitHem && hint?.isFlaredSkirtHem) ? 0.94 : (dims.female ? 0.72 : 0.78)
   const cx = bboxCenterX(positions2D)
   return positions2D.map(([xCm, yCm]) => {
-    const worldY = topWorldY - cm(yCm)
-    const rOut = Math.max(dims.waistR * 1.02, radiusAtHeight(dims, worldY)) * 1.16
+    const worldY = hasExplicitHem ? Math.max(0.025, topWorldY - cm(yCm - minY)) : (topWorldY - cm(yCm))
+    const hemRScale = hasExplicitHem
+      ? (hint?.isFlaredSkirtHem ? 1.24 : 1.08)
+      : 1.16
+    const hemFacingOffset = hint?.isHorsehairFacing ? -0.004 : 0
+    const rOut = Math.max(dims.waistR * 1.02, radiusAtHeight(dims, worldY)) * hemRScale + hemFacingOffset
     const rEff = rOut * (1 + zScale) * 0.5
     const phi = cm(xCm - cx) / Math.max(0.05, rEff)
     const x = rOut * Math.sin(phi)
@@ -1324,8 +1391,9 @@ export function placePiece(triangulated, dims, pose = 'standing') {
   const princessSide = placementHint?.princessSide || 0
   const isSecondSkin = Boolean(placementHint?.isFittedIntimate || placementHint?.isSportBra)
   const isFitted = !isSecondSkin && Boolean(placementHint?.isStretchFitted && !placementHint?.isLooseGarment)
-  const fitTier = isSecondSkin ? 'second-skin' : (isFitted ? 'fitted' : 'regular')
-  const torsoEase = (isSecondSkin ? 1.028 : (isFitted ? 1.058 : 1.13)) + siblingEase
+  const isTailored = !isSecondSkin && !isFitted && Boolean(placementHint?.isTailoredBodice && !placementHint?.isLooseGarment)
+  const fitTier = isSecondSkin ? 'second-skin' : ((isFitted || isTailored) ? 'fitted' : 'regular')
+  const torsoEase = (isSecondSkin ? 1.028 : (isFitted ? 1.058 : (isTailored ? 1.046 : (placementHint?.isLooseGarment ? 1.13 : 1.085)))) + siblingEase
   const hipEase = (isSecondSkin ? 1.032 : (isFitted ? 1.055 : 1.16)) + siblingEase
   const sleeveEase = isSecondSkin ? 1.055 : (isFitted ? 1.085 : 1.15)
   const legFrontEase = isSecondSkin ? 1.025 : (isFitted ? 1.07 : 1.16)
@@ -1337,15 +1405,15 @@ export function placePiece(triangulated, dims, pose = 'standing') {
   if (role === 'hipPanelBack') return placeHipPanel(positions2D, dims, { zSign: -1, easeFactor: hipEase, pose, hint: placementHint })
   if (role === 'legFront') return placeLegPanel(positions2D, dims, { side, zSign: 1, easeFactor: legFrontEase, pose, hint: placementHint })
   if (role === 'legBack') return placeLegPanel(positions2D, dims, { side, zSign: -1, easeFactor: legBackEase, pose, hint: placementHint })
-  if (role === 'goreFront') return placeGorePanel(positions2D, dims, 0, pose, placementHint?.goreSpan || GORE_ANGLE)
-  if (role === 'goreBack') return placeGorePanel(positions2D, dims, Math.PI, pose, placementHint?.goreSpan || GORE_ANGLE)
-  if (role === 'goreSideLeft') return placeGorePanel(positions2D, dims, -Math.PI / 2, pose, placementHint?.goreSpan || GORE_ANGLE)
-  if (role === 'goreSideRight') return placeGorePanel(positions2D, dims, Math.PI / 2, pose, placementHint?.goreSpan || GORE_ANGLE)
+  if (role === 'goreFront') return placeGorePanel(positions2D, dims, 0, pose, placementHint?.goreSpan || GORE_ANGLE, placementHint)
+  if (role === 'goreBack') return placeGorePanel(positions2D, dims, Math.PI, pose, placementHint?.goreSpan || GORE_ANGLE, placementHint)
+  if (role === 'goreSideLeft') return placeGorePanel(positions2D, dims, -Math.PI / 2, pose, placementHint?.goreSpan || GORE_ANGLE, placementHint)
+  if (role === 'goreSideRight') return placeGorePanel(positions2D, dims, Math.PI / 2, pose, placementHint?.goreSpan || GORE_ANGLE, placementHint)
   if (role === 'attachNeck') return placeAttachNeck(positions2D, dims, attachSide, placementHint?.neckKind || null)
   if (role === 'attachWaist') return placeAttachWaist(positions2D, dims, 1, pose, Boolean(placementHint?.foldAtBack), placementHint)
   if (role === 'attachWaistBack') return placeAttachWaist(positions2D, dims, -1, pose, Boolean(placementHint?.foldAtBack), placementHint)
   if (role === 'attachHem') return placeAttachHem(positions2D, dims, attachSide, pose, placementHint)
-  if (role === 'attachHemBand') return placeAttachHemBand(positions2D, dims, pose)
+  if (role === 'attachHemBand') return placeAttachHemBand(positions2D, dims, pose, placementHint)
   if (role === 'attachCrotch') return placeAttachCrotch(positions2D, dims, placementHint)
   if (role === 'attachWrist') return placeAttachWrist(positions2D, dims, attachSide || 1, pose)
   if (role === 'attachBust') return placeAttachBust(positions2D, dims, attachSide)

@@ -187,6 +187,18 @@ export function classifyPiecePhysics(tp, dims = null) {
     }
   }
 
+  if (hint.isTailoredBodice && !hint.isLooseGarment && (role === 'frontPanel' || role === 'backPanel')) {
+    return {
+      physClass: PHYS_CLASS.STRUCTURED,
+      restScale: 0.975,
+      skinOffset: clamp(-0.0018 + siblingOffset, -0.0032, 0.0020),
+      isElastic: false,
+      isIntimateKnit: false,
+      isLoose: false,
+      flareFactor: 0,
+    }
+  }
+
   const prof = measure2DProfile(tp?.positions2D)
   const hipHalfCircCm = dims?.hipR ? dims.hipR * Math.PI * 100 : 50
   const thighWidthCm = dims?.thighR ? dims.thighR * 200 : 17

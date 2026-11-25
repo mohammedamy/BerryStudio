@@ -1,4 +1,5 @@
 import { placePiece } from '../pattern/placement.js'
+import { computeMannequinPoseJoints } from '../body/collisionRig.js'
 import { dihedralAngle } from './dihedralBend.js'
 import { classifyPiecePhysics, computePerVertexFlowWeight, PHYS_CLASS } from './piecePhysics.js'
 
@@ -108,9 +109,130 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
   }
   const simParticleCount = rootToSim.size
 
-  // Place pieces in 3D, then average every render vertex mapped to a given
-  // sim particle into that particle's rest position (more forgiving of tiny
-  // placement-seam gaps than "just take one side").
+  const simDegree = new Uint16Array(simParticleCount)
+  for (let i = 0; i < renderVertexCount; i++) simDegree[renderVertexToSimParticle[i]]++
+
+  // Place every piece first so we can compute exact welded seam targets,
+  // harmonically diffuse seam offsets smoothly into adjacent interior vertices,
+  // and enforce consistent outward 3D triangle winding per piece.
+  const rawPlaced = triangulatedPieces.map((tp) => placePiece(tp, dims, pose))
+  const seamPosAccum = new Float32Array(simParticleCount * 3)
+  const seamCount = new Float32Array(simParticleCount)
+  for (let pieceIdx = 0; pieceIdx < triangulatedPieces.length; pieceIdx++) {
+    const offset = pieceOffset[triangulatedPieces[pieceIdx].pieceId]
+    const posArr = rawPlaced[pieceIdx]
+    for (let localIdx = 0; localIdx < posArr.length; localIdx++) {
+      const sp = renderVertexToSimParticle[offset + localIdx]
+      if (simDegree[sp] < 2) continue
+      const p = posArr[localIdx]
+      seamPosAccum[sp * 3] += p[0]
+      seamPosAccum[sp * 3 + 1] += p[1]
+      seamPosAccum[sp * 3 + 2] += p[2]
+      seamCount[sp]++
+    }
+  }
+  const seamTarget = new Float32Array(simParticleCount * 3)
+  for (let sp = 0; sp < simParticleCount; sp++) {
+    const c = seamCount[sp]
+    if (c > 0) {
+      seamTarget[sp * 3] = seamPosAccum[sp * 3] / c
+      seamTarget[sp * 3 + 1] = seamPosAccum[sp * 3 + 1] / c
+      seamTarget[sp * 3 + 2] = seamPosAccum[sp * 3 + 2] / c
+    }
+  }
+
+  const smoothedPlaced = triangulatedPieces.map((tp, pieceIdx) => {
+    const offset = pieceOffset[tp.pieceId]
+    const rawPts = rawPlaced[pieceIdx]
+    const nLocal = rawPts.length
+    const isSeamLocal = new Uint8Array(nLocal)
+    let hasSeam = false
+    for (let v = 0; v < nLocal; v++) {
+      if (simDegree[renderVertexToSimParticle[offset + v]] >= 2) {
+        isSeamLocal[v] = 1
+        hasSeam = true
+      }
+    }
+    if (!hasSeam) return rawPts
+    const adj = Array.from({ length: nLocal }, () => new Set())
+    for (let t = 0; t < tp.triangles.length; t += 3) {
+      const a = tp.triangles[t], b = tp.triangles[t + 1], c = tp.triangles[t + 2]
+      adj[a].add(b); adj[a].add(c)
+      adj[b].add(a); adj[b].add(c)
+      adj[c].add(a); adj[c].add(b)
+    }
+    const adjLists = adj.map((s) => [...s])
+    let delta = new Float32Array(nLocal * 3)
+    for (let v = 0; v < nLocal; v++) {
+      if (!isSeamLocal[v]) continue
+      const sp = renderVertexToSimParticle[offset + v]
+      delta[v * 3] = seamTarget[sp * 3] - rawPts[v][0]
+      delta[v * 3 + 1] = seamTarget[sp * 3 + 1] - rawPts[v][1]
+      delta[v * 3 + 2] = seamTarget[sp * 3 + 2] - rawPts[v][2]
+    }
+    let next = new Float32Array(nLocal * 3)
+    for (let pass = 0; pass < 8; pass++) {
+      for (let v = 0; v < nLocal; v++) {
+        if (isSeamLocal[v]) {
+          next[v * 3] = delta[v * 3]
+          next[v * 3 + 1] = delta[v * 3 + 1]
+          next[v * 3 + 2] = delta[v * 3 + 2]
+          continue
+        }
+        const nbrs = adjLists[v]
+        if (!nbrs.length) continue
+        let sx = 0, sy = 0, sz = 0
+        for (let k = 0; k < nbrs.length; k++) {
+          const nb = nbrs[k]
+          sx += delta[nb * 3]
+          sy += delta[nb * 3 + 1]
+          sz += delta[nb * 3 + 2]
+        }
+        const scale = 0.86 / nbrs.length
+        next[v * 3] = sx * scale
+        next[v * 3 + 1] = sy * scale
+        next[v * 3 + 2] = sz * scale
+      }
+      const tmp = delta; delta = next; next = tmp
+    }
+    return rawPts.map((p, v) => [
+      p[0] + delta[v * 3],
+      p[1] + delta[v * 3 + 1],
+      p[2] + delta[v * 3 + 2],
+    ])
+  })
+
+  const poseJoints = computeMannequinPoseJoints(dims, pose)
+  const closestSegPt = (p, a, b) => {
+    const abx = b[0] - a[0], aby = b[1] - a[1], abz = b[2] - a[2]
+    const len2 = Math.max(1e-8, abx * abx + aby * aby + abz * abz)
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * abx + (p[1] - a[1]) * aby + (p[2] - a[2]) * abz) / len2))
+    return [a[0] + abx * t, a[1] + aby * t, a[2] + abz * t]
+  }
+  const outwardRefCenter = (tp, mid) => {
+    const role = tp.role
+    const side = (tp.pieceId.endsWith('L') || tp.pieceId.endsWith('_l')) ? -1 : 1
+    if (role === 'sleeve' || role === 'attachWrist') {
+      const arm = poseJoints.arms[side]
+      const c1 = closestSegPt(mid, arm.shoulder, arm.elbow)
+      const c2 = closestSegPt(mid, arm.elbow, arm.wrist)
+      const d1 = Math.hypot(mid[0] - c1[0], mid[1] - c1[1], mid[2] - c1[2])
+      const d2 = Math.hypot(mid[0] - c2[0], mid[1] - c2[1], mid[2] - c2[2])
+      return d1 <= d2 ? c1 : c2
+    }
+    if ((role === 'legFront' || role === 'legBack') && mid[1] < dims.hipY - dims.span * 0.12) {
+      const leg = poseJoints.legs[side]
+      const c1 = closestSegPt(mid, leg.hip, leg.knee)
+      const c2 = closestSegPt(mid, leg.knee, leg.ankle)
+      const d1 = Math.hypot(mid[0] - c1[0], mid[1] - c1[1], mid[2] - c1[2])
+      const d2 = Math.hypot(mid[0] - c2[0], mid[1] - c2[1], mid[2] - c2[2])
+      return d1 <= d2 ? c1 : c2
+    }
+    return [poseJoints.pelvisPos[0], mid[1], poseJoints.pelvisPos[2]]
+  }
+
+  // Place & diffuse vertices, enforce outward 3D triangle winding per piece,
+  // then compute averaged seam rest positions & outward rest normals.
   const simRestPositions = new Float32Array(simParticleCount * 3)
   const contributionCount = new Float32Array(simParticleCount)
   const renderUV = new Float32Array(renderVertexCount * 2)
@@ -143,7 +265,7 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
   for (let pieceIdx = 0; pieceIdx < triangulatedPieces.length; pieceIdx++) {
     const tp = triangulatedPieces[pieceIdx]
     const offset = pieceOffset[tp.pieceId]
-    const positions3D = placePiece(tp, dims, pose)
+    const positions3D = smoothedPlaced[pieceIdx]
     const [cr, cg, cb] = hexToLinearRGB(tp.color)
     const physInfo = classifyPiecePhysics(tp, dims)
     const vertFlow = computePerVertexFlowWeight(tp, physInfo)
@@ -187,7 +309,24 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
       renderUV[g * 2] = tp.positions2D[localIdx][0] / UV_REPEAT_CM
       renderUV[g * 2 + 1] = tp.positions2D[localIdx][1] / UV_REPEAT_CM
     })
-    for (let i = 0; i < tp.triangles.length; i++) renderTriangles[triWriteOffset + i] = tp.triangles[i] + offset
+
+    let outDotSum = 0
+    for (let t = 0; t < tp.triangles.length; t += 3) {
+      const pA = positions3D[tp.triangles[t]], pB = positions3D[tp.triangles[t + 1]], pC = positions3D[tp.triangles[t + 2]]
+      const ux = pB[0] - pA[0], uy = pB[1] - pA[1], uz = pB[2] - pA[2]
+      const vx = pC[0] - pA[0], vy = pC[1] - pA[1], vz = pC[2] - pA[2]
+      const fnx = uy * vz - uz * vy, fny = uz * vx - ux * vz, fnz = ux * vy - uy * vx
+      const mid = [(pA[0] + pB[0] + pC[0]) / 3, (pA[1] + pB[1] + pC[1]) / 3, (pA[2] + pB[2] + pC[2]) / 3]
+      const refC = outwardRefCenter(tp, mid)
+      outDotSum += fnx * (mid[0] - refC[0]) + fny * (mid[1] - refC[1]) + fnz * (mid[2] - refC[2])
+    }
+    const windSign = outDotSum < -1e-9 ? -1 : 1
+    for (let t = 0; t < tp.triangles.length; t += 3) {
+      const ia = tp.triangles[t], ib = tp.triangles[t + 1], ic = tp.triangles[t + 2]
+      renderTriangles[triWriteOffset + t] = ia + offset
+      renderTriangles[triWriteOffset + t + 1] = (windSign < 0 ? ic : ib) + offset
+      renderTriangles[triWriteOffset + t + 2] = (windSign < 0 ? ib : ic) + offset
+    }
     const triStart = Math.floor(triWriteOffset / 3)
     const triCount = Math.floor(tp.triangles.length / 3)
     renderTriPieceIdx.fill(pieceIdx, triStart, triStart + triCount)
@@ -208,7 +347,7 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
       const [xA, yA, zA] = positions3D[ia], [xB, yB, zB] = positions3D[ib], [xC, yC, zC] = positions3D[ic]
       const ux = xB - xA, uy = yB - yA, uz = zB - zA
       const vx = xC - xA, vy = yC - yA, vz = zC - zA
-      const fnx = uy * vz - uz * vy, fny = uz * vx - ux * vz, fnz = ux * vy - uy * vx
+      const fnx = (uy * vz - uz * vy) * windSign, fny = (uz * vx - ux * vz) * windSign, fnz = (ux * vy - uy * vx) * windSign
       simRestNormal[spa * 3] += fnx; simRestNormal[spa * 3 + 1] += fny; simRestNormal[spa * 3 + 2] += fnz
       simRestNormal[spb * 3] += fnx; simRestNormal[spb * 3 + 1] += fny; simRestNormal[spb * 3 + 2] += fnz
       simRestNormal[spc * 3] += fnx; simRestNormal[spc * 3 + 1] += fny; simRestNormal[spc * 3 + 2] += fnz
@@ -233,8 +372,6 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
   }
 
   // Weld degree per render vertex (debug view: 1=interior, 2=seam, 3+=corner).
-  const simDegree = new Uint16Array(simParticleCount)
-  for (let i = 0; i < renderVertexCount; i++) simDegree[renderVertexToSimParticle[i]]++
   const weldDegree = new Uint8Array(renderVertexCount)
   for (let i = 0; i < renderVertexCount; i++) {
     const deg = Math.min(255, simDegree[renderVertexToSimParticle[i]])
@@ -308,16 +445,30 @@ export function deriveNeighbors(cloth, maxNeighbors = 8) {
     if (Math.hypot(...n1r) < 1e-8 || Math.hypot(...n2r) < 1e-8) continue
 
     const isCrossPiece = Boolean(isGarmentAssembly && renderTriPieceIdx && tC.pieceIdx !== tD.pieceIdx)
-    const n2Sign = isCrossPiece
-      ? 1
-      : ((tD.a === p2 && tD.b === p1) ? 1 : -1)
-    const seamScale = isCrossPiece ? 0.20 : 1.0
+    const n2Sign = (tD.a === p2 && tD.b === p1) ? 1 : -1
+    const seamScale = isCrossPiece ? 0.25 : 1.0
 
     let canonRest = 0.0
     if (!isGarmentAssembly) {
       const measured = dihedralAngle(pt1, pt2, ptC, ptD)
       if (measured === null) continue
       canonRest = measured
+    } else if (!isCrossPiece) {
+      const edgeLen = Math.hypot(...edgeVec)
+      const eUnit = [edgeVec[0] / edgeLen, edgeVec[1] / edgeLen, edgeVec[2] / edgeLen]
+      const n1l = Math.hypot(...n1r)
+      const n2l = Math.hypot(...n2r)
+      const n1 = [n1r[0] / n1l, n1r[1] / n1l, n1r[2] / n1l]
+      const n2 = [(n2r[0] * n2Sign) / n2l, (n2r[1] * n2Sign) / n2l, (n2r[2] * n2Sign) / n2l]
+      const cosT = Math.max(-1, Math.min(1, n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2]))
+      const cx = n1[1] * n2[2] - n1[2] * n2[1]
+      const cy = n1[2] * n2[0] - n1[0] * n2[2]
+      const cz = n1[0] * n2[1] - n1[1] * n2[0]
+      const sinT = cx * eUnit[0] + cy * eUnit[1] + cz * eUnit[2]
+      const measured = Math.atan2(sinT, cosT)
+      const avgFlow = cloth.simFlowWeight ? 0.5 * ((cloth.simFlowWeight[c] || 0) + (cloth.simFlowWeight[d] || 0)) : 0
+      const retain = avgFlow > 0.35 ? 0.12 : 0.45
+      canonRest = Math.max(-0.26, Math.min(0.26, measured * retain))
     }
 
     bendSets[c].add(d)
@@ -395,7 +546,7 @@ export function deriveNeighbors(cloth, maxNeighbors = 8) {
         idx[slot] = n
         edgeV0[slot] = rec.p1
         edgeV1[slot] = rec.p2
-        restAngle[slot] = p === rec.c ? rec.canonRest : (isGarmentAssembly ? 0.0 : -rec.canonRest)
+        restAngle[slot] = p === rec.c ? rec.canonRest : -rec.canonRest
         n2Sign[slot] = rec.n2Sign
         seamScale[slot] = rec.seamScale
         active[slot] = hasAll4Slots(rec) ? 1 : 0
@@ -479,14 +630,23 @@ export function deriveNormalRing(cloth, neighbors, ringSize = 4) {
     const px = simRestPositions[p * 3], py = simRestPositions[p * 3 + 1], pz = simRestPositions[p * 3 + 2]
     const nx = simRestNormal[p * 3], ny = simRestNormal[p * 3 + 1], nz = simRestNormal[p * 3 + 2]
 
-    // Seed a tangent from the first candidate, projected orthogonal to the
-    // rough normal, then bitangent = normal x tangent completes the basis.
-    let tx = simRestPositions[cand[0] * 3] - px
-    let ty = simRestPositions[cand[0] * 3 + 1] - py
-    let tz = simRestPositions[cand[0] * 3 + 2] - pz
-    const d = tx * nx + ty * ny + tz * nz
-    tx -= d * nx; ty -= d * ny; tz -= d * nz
-    const tlen = Math.hypot(tx, ty, tz) || 1
+    // Seed a coherent angular basis from world up/right projected orthogonal
+    // to simRestNormal (falling back to the first neighbor only when degenerate),
+    // and select neighbors across the full 360-degree span.
+    const refAxis = Math.abs(ny) < 0.92 ? [0, 1, 0] : [1, 0, 0]
+    const dRef = refAxis[0] * nx + refAxis[1] * ny + refAxis[2] * nz
+    let tx = refAxis[0] - dRef * nx
+    let ty = refAxis[1] - dRef * ny
+    let tz = refAxis[2] - dRef * nz
+    let tlen = Math.hypot(tx, ty, tz)
+    if (tlen < 1e-5) {
+      tx = simRestPositions[cand[0] * 3] - px
+      ty = simRestPositions[cand[0] * 3 + 1] - py
+      tz = simRestPositions[cand[0] * 3 + 2] - pz
+      const d = tx * nx + ty * ny + tz * nz
+      tx -= d * nx; ty -= d * ny; tz -= d * nz
+      tlen = Math.hypot(tx, ty, tz) || 1
+    }
     tx /= tlen; ty /= tlen; tz /= tlen
     const bx = ny * tz - nz * ty, by = nz * tx - nx * tz, bz = nx * ty - ny * tx
 
@@ -495,7 +655,16 @@ export function deriveNormalRing(cloth, neighbors, ringSize = 4) {
       return [n, Math.atan2(dx * bx + dy * by + dz * bz, dx * tx + dy * ty + dz * tz)]
     }).sort((a, b) => a[1] - b[1])
 
-    for (let r = 0; r < ringSize; r++) ring[p * ringSize + r] = withAngles[r % withAngles.length][0]
+    const m = withAngles.length
+    if (m <= ringSize) {
+      for (let r = 0; r < ringSize; r++) {
+        ring[p * ringSize + r] = withAngles[Math.min(r, m - 1)][0]
+      }
+    } else {
+      for (let r = 0; r < ringSize; r++) {
+        ring[p * ringSize + r] = withAngles[Math.floor((r * m) / ringSize)][0]
+      }
+    }
   }
 
   return ring
