@@ -1256,6 +1256,21 @@ export function buildTechPackHTML(pieces, meta = {}) {
 
   const estMeters150 = Math.max(0.4, (totalAreaCm2 / (145 * 100)) * 1.28);
   const qaPass = !meta.validation || meta.validation.summary?.fail === 0;
+  const viewDefs = [
+    ['front', lang === 'ar' ? 'أمامي' : 'Front'],
+    ['threeQuarter', lang === 'ar' ? 'زاوية 3/4' : '3/4 Studio'],
+    ['side', lang === 'ar' ? 'جانبي' : 'Side Profile'],
+    ['back', lang === 'ar' ? 'خلفي' : 'Back'],
+  ];
+  const viewsObj = (meta.views3d && typeof meta.views3d === 'object') ? meta.views3d : null;
+  const viewCards = viewsObj
+    ? viewDefs
+      .filter(([k]) => typeof viewsObj[k] === 'string' && viewsObj[k].startsWith('data:image/'))
+      .map(([k, lbl]) => `<figure class="view3d-card"><img src="${escXML(viewsObj[k])}" alt="${escXML(lbl)}"><figcaption>${escXML(lbl)}</figcaption></figure>`)
+      .join('')
+    : '';
+  const hasViewsGallery = Boolean(viewCards);
+  const secOff = hasViewsGallery ? 1 : 0;
 
   return `<!DOCTYPE html>
 <html lang="${lang}" dir="${dir}">
@@ -1271,6 +1286,11 @@ export function buildTechPackHTML(pieces, meta = {}) {
   .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 18px; }
   .meta-card { border: 1px solid #e4e4e7; border-radius: 8px; padding: 10px 12px; background: #fafafa; }
   .meta-card small { color: #71717a; display: block; font-size: 11px; }
+  .views3d-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+  .view3d-card { margin: 0; border: 1px solid #e4e4e7; border-radius: 10px; overflow: hidden; background: #e7ecf4; text-align: center; }
+  .view3d-card img { width: 100%; height: 240px; object-fit: contain; display: block; }
+  .view3d-card figcaption { padding: 6px; font-size: 12px; font-weight: 600; color: #3f3f46; background: #ffffff; border-top: 1px solid #e4e4e7; }
+  @media (max-width: 720px) { .views3d-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .diagram-box { border: 1px solid #d4d4d8; border-radius: 10px; padding: 14px; background: #ffffff; margin: 12px 0; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
   th, td { border: 1px solid #e4e4e7; padding: 7px 9px; text-align: start; }
@@ -1295,21 +1315,22 @@ export function buildTechPackHTML(pieces, meta = {}) {
     <div class="meta-card"><small>Seam Allowance</small><b>${seamCm.toFixed(1)} cm</b></div>
     <div class="meta-card"><small>Est. Fabric (150 cm wide)</small><b>${estMeters150.toFixed(2)} m (${(estMeters150 * 1.09361).toFixed(2)} yd)</b></div>
   </div>
-  <h2>1. Technical Pattern Layout (1:1 Proportions)</h2>
+  ${hasViewsGallery ? `<h2>1. ${lang === 'ar' ? 'معاينة الموديل ثلاثية الأبعاد من 4 زوايا' : '3D Multi-Angle Drape &amp; Fit Views'}</h2><div class="views3d-grid">${viewCards}</div>` : ''}
+  <h2>${1 + secOff}. Technical Pattern Layout (1:1 Proportions)</h2>
   <div class="diagram-box">${svgDiagram}</div>
-  <h2>2. Pattern Cut List &amp; Seam Allowance Schedule</h2>
+  <h2>${2 + secOff}. Pattern Cut List &amp; Seam Allowance Schedule</h2>
   <table>
     <thead><tr><th>#</th><th>Piece Name</th><th>Role</th><th>Cut Qty</th><th>Fold</th><th>Dimensions</th><th>Net Area</th><th>Seam Allowance &amp; Marks</th></tr></thead>
     <tbody>${pieceRows}</tbody>
   </table>
-  <h2>3. Graded Size Specification Matrix (W × L cm · XS–XXL)</h2>
+  <h2>${3 + secOff}. Graded Size Specification Matrix (W × L cm · XS–XXL)</h2>
   <table>
     <thead><tr><th>Pattern Piece</th>${gradeSizes.map((s) => `<th>${s}</th>`).join('')}</tr></thead>
     <tbody>${gradedRows}</tbody>
   </table>
-  ${seamBalanceRows ? `<h2>4. Seam Balance QA Audit</h2><table><thead><tr><th>Seam Pair</th><th>Edge A</th><th>Edge B</th><th>Diff / Ease</th><th>Status</th></tr></thead><tbody>${seamBalanceRows}</tbody></table>` : ''}
-  ${measRows ? `<h2>${seamBalanceRows ? '5' : '4'}. Target Body Measurements</h2><table><thead><tr><th>Measurement</th><th>Metric (cm)</th><th>Imperial (in)</th></tr></thead><tbody>${measRows}</tbody></table>` : ''}
-  <h2>${(seamBalanceRows ? 4 : 3) + (measRows ? 2 : 1)}. Atelier Construction &amp; Sewing Sequence</h2>
+  ${seamBalanceRows ? `<h2>${4 + secOff}. Seam Balance QA Audit</h2><table><thead><tr><th>Seam Pair</th><th>Edge A</th><th>Edge B</th><th>Diff / Ease</th><th>Status</th></tr></thead><tbody>${seamBalanceRows}</tbody></table>` : ''}
+  ${measRows ? `<h2>${(seamBalanceRows ? 5 : 4) + secOff}. Target Body Measurements</h2><table><thead><tr><th>Measurement</th><th>Metric (cm)</th><th>Imperial (in)</th></tr></thead><tbody>${measRows}</tbody></table>` : ''}
+  <h2>${(seamBalanceRows ? 4 : 3) + (measRows ? 2 : 1) + secOff}. Atelier Construction &amp; Sewing Sequence</h2>
   <ol>${steps.map((s) => `<li>${escXML(s)}</li>`).join('')}</ol>
 </body>
 </html>`;

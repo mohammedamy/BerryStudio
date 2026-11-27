@@ -35,6 +35,8 @@
    request header/URL, never in a string that could reach a log or export.
    ============================================================ */
 
+import { getModelFileMeta } from './workers/model-file-cache.js';
+
 function getFetch(opts) { return (opts && opts.fetchImpl) || (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : null); }
 
 function parseDataUrl(dataURL) {
@@ -515,6 +517,43 @@ export async function runPhoto2PatternOn(imageData) {
     width: imageData.width,
     height: imageData.height,
   });
+}
+
+// Default bundled neural weights shipped under `models/` (fetched lazily on
+// demand, never precached in sw.js) so Photo-to-Pattern works out of the box
+// with zero manual `.onnx` file picking when online/same-origin available.
+export const DEFAULT_PHOTO2PATTERN_ONNX_URL = './models/berrystudio_photo2pattern_v1.onnx';
+let bundledPhoto2PatternInfo = null;
+
+export async function ensureBundledPhoto2PatternModel({
+  url = DEFAULT_PHOTO2PATTERN_ONNX_URL,
+  fetchImpl = (typeof fetch === 'function' ? fetch.bind(globalThis) : null),
+} = {}) {
+  if (bundledPhoto2PatternInfo && bundledPhoto2PatternInfo.ok) return bundledPhoto2PatternInfo;
+  try {
+    if (typeof Worker === 'undefined' || !fetchImpl) {
+      return { ok: false, reason: 'unavailable' };
+    }
+    if (typeof indexedDB !== 'undefined') {
+      try {
+        const meta = await getModelFileMeta();
+        if (meta && /photo2pattern/i.test(meta.name || '')) {
+          const cached = await restoreLocalModelFromCache();
+          bundledPhoto2PatternInfo = { ok: true, cached: true, ...cached };
+          return bundledPhoto2PatternInfo;
+        }
+      } catch { /* fall through to bundled fetch */ }
+    }
+    const resp = await fetchImpl(url, { cache: 'default' });
+    if (!resp || !resp.ok) return { ok: false, reason: `HTTP ${resp ? resp.status : 0}` };
+    const bytes = await resp.arrayBuffer();
+    if (!bytes || bytes.byteLength <= 1024) return { ok: false, reason: 'empty-onnx' };
+    const loaded = await loadLocalModelFromFile('berrystudio_photo2pattern_v1.onnx', 'application/octet-stream', bytes);
+    bundledPhoto2PatternInfo = { ok: true, bundled: true, ...loaded };
+    return bundledPhoto2PatternInfo;
+  } catch (err) {
+    return { ok: false, reason: String((err && err.message) || err || 'failed') };
+  }
 }
 
 // ---------- Real segmentation (BerryStudio-Upgrade-Plan-v2.0 WP-39) ----------

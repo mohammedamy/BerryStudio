@@ -23,6 +23,30 @@ const STRUCTURED_SCHEMA_ROLES = new Set([
   'waistband',
 ])
 
+export const INTERLINED_SCHEMA_ROLES = new Set([
+  'collar',
+  'undercollar',
+  'collar-stand',
+  'collar-band',
+  'cuff',
+  'waistband',
+  'lapel-facing',
+  'placket-facing',
+  'facing',
+])
+
+export function isPieceInterlined(tp) {
+  const role = tp?.role || ''
+  const hint = tp?.placementHint || {}
+  const schemaRole = hint.schemaRole || ''
+  if (INTERLINED_SCHEMA_ROLES.has(schemaRole)) return true
+  if (role === 'attachWrist') return true
+  if (role === 'attachNeck' && hint.neckKind !== 'cape' && hint.neckKind !== 'cape-overlay' && hint.neckKind !== 'hood') {
+    return true
+  }
+  return false
+}
+
 const LOOSE_SCHEMA_ROLES = new Set([
   'tier',
   'godet',
@@ -84,6 +108,8 @@ export function classifyPiecePhysics(tp, dims = null) {
   const hint = tp?.placementHint || {}
   const schemaRole = hint.schemaRole || ''
   const siblingOffset = (hint.index || 0) > 0 ? 0.0010 : 0
+  const interlined = isPieceInterlined(tp)
+  const bendingBoost = interlined ? 2.25 : 1.0
 
   const isElasticBand = Boolean(
     hint.isElasticTrim ||
@@ -119,6 +145,8 @@ export function classifyPiecePhysics(tp, dims = null) {
       isIntimateKnit: false,
       isLoose: false,
       flareFactor: 0,
+      interlined: false,
+      bendingBoost: 1.0,
     }
   }
 
@@ -148,6 +176,8 @@ export function classifyPiecePhysics(tp, dims = null) {
       isIntimateKnit: true,
       isLoose: false,
       flareFactor: 0,
+      interlined: false,
+      bendingBoost: 1.0,
     }
   }
 
@@ -166,6 +196,8 @@ export function classifyPiecePhysics(tp, dims = null) {
       isIntimateKnit: false,
       isLoose: false,
       flareFactor: 0,
+      interlined,
+      bendingBoost,
     }
   }
 
@@ -184,6 +216,8 @@ export function classifyPiecePhysics(tp, dims = null) {
       isIntimateKnit: true,
       isLoose: false,
       flareFactor: 0,
+      interlined: false,
+      bendingBoost: 1.0,
     }
   }
 
@@ -196,6 +230,8 @@ export function classifyPiecePhysics(tp, dims = null) {
       isIntimateKnit: false,
       isLoose: false,
       flareFactor: 0,
+      interlined: false,
+      bendingBoost: 1.0,
     }
   }
 
@@ -243,6 +279,8 @@ export function classifyPiecePhysics(tp, dims = null) {
       isIntimateKnit: false,
       isLoose: true,
       flareFactor: Math.max(rawFlare, hint.isLooseGarment || role.startsWith('gore') || hint.isSkirtTier ? 0.75 : 0.4),
+      interlined: false,
+      bendingBoost: 1.0,
     }
   }
 
@@ -254,6 +292,8 @@ export function classifyPiecePhysics(tp, dims = null) {
     isIntimateKnit: false,
     isLoose: false,
     flareFactor: 0,
+    interlined,
+    bendingBoost,
   }
 }
 

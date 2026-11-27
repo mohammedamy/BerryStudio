@@ -225,11 +225,14 @@
                 <label for="v3dPoseSelect" class="sr-only" data-i18n="v3dPoseLabel">Pose</label>
                 <select id="v3dPoseSelect" class="v3d-select" title="Runway Model Pose">
                   <option value="walk" data-i18n="v3dPoseWalk">Runway Walk</option>
+                  <option value="catwalk" data-i18n="v3dPoseCatwalk">Catwalk Show (180°)</option>
                   <option value="editorial" data-i18n="v3dPoseEditorial">Editorial Pose</option>
                   <option value="contrapposto" data-i18n="v3dPoseContrapposto">Contrapposto</option>
                   <option value="showcase" data-i18n="v3dPoseShowcase">Drape Showcase</option>
+                  <option value="arms_up" data-i18n="v3dPoseArmsUp">Arms-Up Fit Check</option>
                   <option value="standing" data-i18n="v3dPoseStanding">Natural Stand</option>
                   <option value="apose" data-i18n="v3dPoseApose">Tailor A-Pose</option>
+                  <option value="seated" data-i18n="v3dPoseSeated">Seated Drape</option>
                 </select>
               </div>
             </div>
@@ -292,6 +295,12 @@
                 <input type="checkbox" id="tensionToggle">
                 <span data-i18n="v3dTensionShort">Fit Map</span>
               </label>
+              <select id="v3dFitMapMode" class="v3d-select sm" title="Fit Inspection Mode" aria-label="Fit Inspection Mode">
+                <option value="ease" data-i18n="fitModeEase">Ease / Stress</option>
+                <option value="strain" data-i18n="fitModeStrain">Strain %</option>
+                <option value="pressure" data-i18n="fitModePressure">Pressure (kPa)</option>
+                <option value="xray" data-i18n="fitModeXray">X-Ray Fit</option>
+              </select>
               <button id="v3dExportObjBtn" class="v3d-btn" title="Export 3D Garment as Wavefront OBJ" aria-label="Export 3D Model">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 <span data-i18n="v3dExportShort">OBJ</span>

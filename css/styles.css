@@ -2299,3 +2299,4 @@ body.clothlab-fullscreen-active #viewClothLab.show {
 .seam-badge.ease { background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--brand); }
 .seam-badge.warn { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
 .grade-quick-card { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); }
+#v3dFitMapMode { max-width: 112px; }

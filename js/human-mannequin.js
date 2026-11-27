@@ -6246,8 +6246,68 @@ export const FASHION_POSES = Object.freeze([
   "contrapposto",
   "editorial",
   "showcase",
+  "arms_up",
   "seated",
 ]);
+
+/**
+ * Evaluates a continuous 12-second runway catwalk choreography loop:
+ * walk out -> hero editorial pause -> 180 deg pivot turn -> return walk -> turn front.
+ */
+export function evaluateCatwalkChoreography(time = 0, opts = {}) {
+  const cycleSec = Math.max(4, Number(opts.cycleSec) || 12.0);
+  const u = ((Number(time) % cycleSec) + cycleSec) % cycleSec;
+  const s = u * (12.0 / cycleSec);
+  const zBack = -0.22;
+  const zFront = 0.18;
+  if (s < 3.8) {
+    const f = smoothstep(0, 1, s / 3.8);
+    return {
+      stage: "walk_out",
+      zOffsetM: lerp(zBack, zFront, f),
+      yawRad: 0,
+      walkWeight: 1 - smoothstep(3.3, 3.8, s),
+      poseId: "editorial",
+    };
+  }
+  if (s < 5.8) {
+    return {
+      stage: "front_pose",
+      zOffsetM: zFront,
+      yawRad: 0,
+      walkWeight: 0,
+      poseId: "editorial",
+    };
+  }
+  if (s < 7.2) {
+    const f = smoothstep(5.8, 7.2, s);
+    return {
+      stage: "turn_back",
+      zOffsetM: zFront,
+      yawRad: f * Math.PI,
+      walkWeight: 0.45 * Math.sin(f * Math.PI),
+      poseId: "contrapposto",
+    };
+  }
+  if (s < 10.6) {
+    const f = smoothstep(0, 1, (s - 7.2) / 3.4);
+    return {
+      stage: "walk_back",
+      zOffsetM: lerp(zFront, zBack, f),
+      yawRad: Math.PI,
+      walkWeight: smoothstep(7.2, 7.6, s) * (1 - smoothstep(10.2, 10.6, s)),
+      poseId: "editorial",
+    };
+  }
+  const f = smoothstep(10.6, 12.0, s);
+  return {
+    stage: "turn_front",
+    zOffsetM: zBack,
+    yawRad: Math.PI + f * Math.PI,
+    walkWeight: 0.45 * Math.sin(f * Math.PI),
+    poseId: "editorial",
+  };
+}
 
 function computeStaticPoseTargets(pose = "standing", minArmAbduct = 0.095, breath = 0, idleSway = 0, dims = null, landmarks = null) {
   const p = pose || "standing";
@@ -6367,6 +6427,19 @@ function computeStaticPoseTargets(pose = "standing", minArmAbduct = 0.095, breat
     targets.leg_1Rz = -0.05;
     targets.leg1Rx = -0.04;
     targets.knee1Rx = 0.08;
+  } else if (p === "arms_up") {
+    targets.arm1Rz = Math.max(1.06, armBase + 0.82);
+    targets.arm_1Rz = -Math.max(1.06, armBase + 0.82);
+    targets.arm1Rx = -0.22;
+    targets.arm_1Rx = -0.22;
+    targets.arm1Ry = 0.12;
+    targets.arm_1Ry = -0.12;
+    targets.elbow1Rx = -0.38;
+    targets.elbow_1Rx = -0.38;
+    targets.chestRx = -0.022;
+    targets.spineRx = -0.012;
+    targets.leg1Rz = 0.035;
+    targets.leg_1Rz = -0.035;
   } else if (p === "seated") {
     targets.arm1Rz = 0.09;
     targets.arm_1Rz = -0.09;

@@ -301,7 +301,7 @@ export function assembleCloth(triangulatedPieces, dims, seams, pose = 'standing'
       renderColor[g * 3 + 1] = cg
       renderColor[g * 3 + 2] = cb
       renderPieceStyle[g * 4] = physInfo.isElastic ? 1.0 : 0.0
-      renderPieceStyle[g * 4 + 2] = physInfo.isIntimateKnit ? 1.0 : 0.0
+      renderPieceStyle[g * 4 + 2] = physInfo.isIntimateKnit ? 1.0 : (physInfo.interlined ? -1.0 : 0.0)
       // Fixed real-world divisor (not this piece's own bounding box) so a
       // fabric weave repeats at the same physical size on every piece
       // regardless of its area — see UV_REPEAT_CM above. UVs now legitimately

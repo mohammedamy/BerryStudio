@@ -261,6 +261,7 @@ varying float vStitchVis;
       shader.uniforms.uWeaveScale = { value: fabric.weaveScale ?? 1.2 }
       shader.uniforms.uVelvetFactor = { value: isVelvet ? 1.0 : 0.0 }
       shader.uniforms.uLusterFactor = { value: isLuster ? (fabricId === 'satin' ? 1.0 : 0.78) : 0.0 }
+      shader.uniforms.uThicknessFactor = { value: Math.min(1.0, Math.max(0.08, (fabric.thicknessMm ?? 0.48) / 2.2)) }
       shader.uniforms.uPrintTex = printUniforms.current.tex
       shader.uniforms.uHasPrint = printUniforms.current.hasPrint
       shader.uniforms.uPrintRepeat = printUniforms.current.repeat
@@ -304,6 +305,7 @@ uniform float uHasPrint;
 uniform float uPrintRepeat;
 uniform float uVelvetFactor;
 uniform float uLusterFactor;
+uniform float uThicknessFactor;
 varying vec4 vPieceStyle;
 varying vec2 vFabricUV;
 varying vec2 vPrintUv;
@@ -315,6 +317,7 @@ varying vec2 vPrintUv;
           float elasticMask = clamp(vPieceStyle.x, 0.0, 1.0);
           float seamAO = smoothstep(0.62, 1.0, vPieceStyle.y);
           float knitMask = clamp(vPieceStyle.z, 0.0, 1.0);
+          float interlinedMask = clamp(-vPieceStyle.z, 0.0, 1.0);
           float hemEdge = smoothstep(0.76, 1.0, vPieceStyle.w);
           float ndotv = abs(dot(normalize(vNormal), normalize(vViewPosition)));
           float fres = pow(clamp(1.0 - ndotv, 0.0, 1.0), 2.5);
@@ -331,7 +334,8 @@ varying vec2 vPrintUv;
             float wale = sin(vFabricUV.x * 64.0) * 0.016;
             diffuseColor.rgb *= (1.0 + wale * knitMask);
           }
-          diffuseColor.rgb *= (1.0 - 0.115 * seamAO - 0.055 * hemEdge * (1.0 - elasticMask * 0.5));
+          float edgeBodyShade = 0.04 + 0.08 * uThicknessFactor + 0.04 * interlinedMask;
+          diffuseColor.rgb *= (1.0 - 0.115 * seamAO - hemEdge * edgeBodyShade * (1.0 - elasticMask * 0.5));
           vec4 printSample = (uHasPrint > 0.5) ? texture2D(uPrintTex, vPrintUv * uPrintRepeat) : vec4(0.0);
           if (printSample.a > 0.01) {
             diffuseColor.rgb = mix(diffuseColor.rgb, printSample.rgb, clamp(printSample.a, 0.0, 1.0) * 0.92);

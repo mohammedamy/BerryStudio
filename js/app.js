@@ -51,7 +51,7 @@ import './abaya-collection.js'; // side-effect only — adds the 20-pattern Embr
 import { PatternValidator } from './validate.js';
 import { renderPatternFlat } from './pattern-flat.js';
 import { getPatternThumbnail } from './thumbnails.js';
-import { AIProviders, AI_PROVIDER_IDS, getProvider, loadLocalModelFromFile, restoreLocalModelFromCache, runOnnxTestInference, runPhoto2PatternOn, loadSegmentationModel, runSegmentationOn } from './ai-providers.js';
+import { AIProviders, AI_PROVIDER_IDS, getProvider, loadLocalModelFromFile, restoreLocalModelFromCache, runOnnxTestInference, runPhoto2PatternOn, ensureBundledPhoto2PatternModel, loadSegmentationModel, runSegmentationOn } from './ai-providers.js';
 import { getModelFileMeta, clearModelFile } from './workers/model-file-cache.js';
 import { KeyStore } from './ai-keystore.js';
 import { probeCapabilities } from './capability-probe.js';
@@ -2417,45 +2417,55 @@ import {
           setStage("done");
         } else toast(T(classifyAIFallbackReason(specResult.fallbackReason)));
       }
-      // Colab Photo-to-Pattern ONNX Route B hook: when the user loaded
-      // berrystudio_photo2pattern_v1.onnx via Settings -> Local .onnx file
-      // and attached a garment image, run in-browser ONNX vision inference.
-      if(!res && imageDataURL && onnxLoadedInfo && /photo2pattern/i.test(onnxLoadedInfo.name || "")){
-        try {
-          setStage("analyzing");
-          const imgEl = await new Promise((resolve, reject) => {
-            const im = new Image();
-            im.onload = () => resolve(im);
-            im.onerror = reject;
-            im.src = imageDataURL;
-          });
-          const off = document.createElement("canvas");
-          off.width = 224; off.height = 224;
-          const octx = off.getContext("2d");
-          octx.drawImage(imgEl, 0, 0, 224, 224);
-          const imgData = octx.getImageData(0, 0, 224, 224);
-          setStage("silhouette");
-          const onnxOut = await runPhoto2PatternOn(imgData);
-          if(onnxOut && onnxOut.ok && Array.isArray(onnxOut.params12d)){
-            setStage("drafting");
-            const pixelMetrics = await AIGen.analyzeImage(imageDataURL, { segment: getSegmentFn() });
-            const baseStyle = AIGen.deriveStyle({ metrics: pixelMetrics, prompt: effectivePrompt, category, imageDataURL });
-            const { style: onnxStyle, provenance } = mapOnnx12dToStyle(onnxOut.params12d, baseStyle);
-            const built = AIGen.build(onnxStyle, measurements);
-            res = {
-              ...built,
-              summary: AIGen.summary(onnxStyle, lang),
-              style: onnxStyle,
-              attributes: AIGen.attributes(onnxStyle, lang, provenance),
-              source: "fused",
-              validation: PatternValidator.run(built.pieces, {}),
-              usedImage: true,
-              imageSupplied: true,
-            };
-            setStage("done");
+      // Colab Photo-to-Pattern ONNX Route B hook: auto-load the bundled
+      // `models/berrystudio_photo2pattern_v1.onnx` when online & available,
+      // or use a user-loaded Photo2Pattern `.onnx`, falling back cleanly.
+      if(!res && imageDataURL){
+        if(!onnxLoadedInfo && (typeof navigator === "undefined" || navigator.onLine !== false)){
+          try {
+            const bundled = await ensureBundledPhoto2PatternModel();
+            if(bundled && bundled.ok){
+              onnxLoadedInfo = { name: bundled.name, inputNames: bundled.inputNames, outputNames: bundled.outputNames };
+            }
+          } catch {}
+        }
+        if(onnxLoadedInfo && /photo2pattern/i.test(onnxLoadedInfo.name || "")){
+          try {
+            setStage("analyzing");
+            const imgEl = await new Promise((resolve, reject) => {
+              const im = new Image();
+              im.onload = () => resolve(im);
+              im.onerror = reject;
+              im.src = imageDataURL;
+            });
+            const off = document.createElement("canvas");
+            off.width = 224; off.height = 224;
+            const octx = off.getContext("2d");
+            octx.drawImage(imgEl, 0, 0, 224, 224);
+            const imgData = octx.getImageData(0, 0, 224, 224);
+            setStage("silhouette");
+            const onnxOut = await runPhoto2PatternOn(imgData);
+            if(onnxOut && onnxOut.ok && Array.isArray(onnxOut.params12d)){
+              setStage("drafting");
+              const pixelMetrics = await AIGen.analyzeImage(imageDataURL, { segment: getSegmentFn() });
+              const baseStyle = AIGen.deriveStyle({ metrics: pixelMetrics, prompt: effectivePrompt, category, imageDataURL });
+              const { style: onnxStyle, provenance } = mapOnnx12dToStyle(onnxOut.params12d, baseStyle);
+              const built = AIGen.build(onnxStyle, measurements);
+              res = {
+                ...built,
+                summary: AIGen.summary(onnxStyle, lang),
+                style: onnxStyle,
+                attributes: AIGen.attributes(onnxStyle, lang, provenance),
+                source: "fused",
+                validation: PatternValidator.run(built.pieces, {}),
+                usedImage: true,
+                imageSupplied: true,
+              };
+              setStage("done");
+            }
+          } catch (onnxErr) {
+            console.warn("[Photo2Pattern ONNX fallback]", onnxErr);
           }
-        } catch (onnxErr) {
-          console.warn("[Photo2Pattern ONNX fallback]", onnxErr);
         }
       }
       if(!res){
@@ -3034,7 +3044,13 @@ import {
       return;
     }
     else if(F==="CSV") download("berrystudio-cut-spec.csv","text/csv;charset=utf-8",buildSpecCSV(pieces,meta));
-    else if(F==="HTML"||F==="TECHPACK_HTML") download("berrystudio-techpack.html","text/html;charset=utf-8",buildTechPackHTML(pieces,meta));
+    else if(F==="HTML"||F==="TECHPACK_HTML"){
+      if(View3D.isReady()){
+        build3D();
+        meta.views3d = View3D.captureFourAngleViews?.() || null;
+      }
+      download("berrystudio-techpack.html","text/html;charset=utf-8",buildTechPackHTML(pieces,meta));
+    }
     else if(F==="MD"||F==="TECHPACK_MD") download("berrystudio-techpack.md","text/markdown;charset=utf-8",buildTechPackMarkdown(pieces,meta));
     else if(F==="OBJ"){
       if(View3D.isReady()){
@@ -6177,6 +6193,22 @@ import {
     const fileInput=el("input"); fileInput.type="file"; fileInput.accept=".onnx"; fileInput.style.display="none";
     const pickBtn=el("button","big-btn ghost", T("onnxPickFile"));
     pickBtn.type="button"; pickBtn.onclick=()=>fileInput.click();
+    const bundledBtn=el("button","big-btn ghost", T("onnxLoadBundled"));
+    bundledBtn.type="button";
+    bundledBtn.onclick=async()=>{
+      const orig=bundledBtn.textContent; bundledBtn.disabled=true; bundledBtn.textContent=T("onnxLoading");
+      try{
+        const r=await ensureBundledPhoto2PatternModel();
+        if(r && r.ok){
+          onnxLoadedInfo={ name: r.name, inputNames: r.inputNames, outputNames: r.outputNames };
+          onnxLastResult=null;
+          toast("✓ "+T("onnxModelLoaded"));
+        } else {
+          toast("✗ "+(r?.reason||"Failed"));
+        }
+      }catch(e){ toast("✗ "+(e&&e.message||e)); }
+      finally{ bundledBtn.disabled=false; bundledBtn.textContent=orig; renderProviderPane(pane, false); }
+    };
     fileInput.onchange=async()=>{
       const f=fileInput.files && fileInput.files[0]; fileInput.value="";
       if(!f) return;
@@ -6190,7 +6222,7 @@ import {
       }catch(e){ toast("✗ "+(e&&e.message||e)); }
       finally{ pickBtn.disabled=false; pickBtn.textContent=orig; renderProviderPane(pane, false); }
     };
-    pickRow.appendChild(pickBtn); pickRow.appendChild(fileInput);
+    pickRow.appendChild(pickBtn); pickRow.appendChild(bundledBtn); pickRow.appendChild(fileInput);
     pane.appendChild(pickRow);
     pane.appendChild(statusLine);
 
@@ -7473,18 +7505,25 @@ import {
     if (walkToggle) {
       walkToggle.onchange = e => {
         const w = e.target.checked;
+        if (!w) View3D.setCatwalk?.(false);
         View3D.setWalk(w);
-        if (poseSelect) poseSelect.value = w ? "walk" : (View3D.getPose?.() || "editorial");
+        if (poseSelect) poseSelect.value = w ? (View3D.getCatwalk?.() ? "catwalk" : "walk") : (View3D.getPose?.() || "editorial");
       };
     }
     if (poseSelect) {
       poseSelect.onchange = e => {
         const v = e.target.value;
-        if (v === "walk") {
+        if (v === "catwalk") {
           if (walkToggle) walkToggle.checked = true;
+          View3D.setCatwalk?.(true);
+          View3D.setWalk(true);
+        } else if (v === "walk") {
+          if (walkToggle) walkToggle.checked = true;
+          View3D.setCatwalk?.(false);
           View3D.setWalk(true);
         } else {
           if (walkToggle) walkToggle.checked = false;
+          View3D.setCatwalk?.(false);
           View3D.setWalk(false);
           View3D.setPose?.(v);
         }
@@ -7566,12 +7605,23 @@ import {
       };
     }
     const tensionToggle = $("#tensionToggle");
+    const fitMapModeSel = $("#v3dFitMapMode");
     const tensionHud = $("#v3dTensionHud");
     if (tensionToggle) {
       tensionToggle.onchange = e => {
         const on = e.target.checked;
         View3D.setTensionMap(on);
         if (tensionHud) tensionHud.classList.toggle("hidden", !on);
+      };
+    }
+    if (fitMapModeSel) {
+      fitMapModeSel.onchange = e => {
+        View3D.setFitMapMode?.(e.target.value);
+        if (tensionToggle && !tensionToggle.checked) {
+          tensionToggle.checked = true;
+          View3D.setTensionMap(true);
+          tensionHud?.classList.remove("hidden");
+        }
       };
     }
     const fabricSelect = $("#v3dFabricSelect");
@@ -7611,7 +7661,7 @@ import {
       const zBust = $("#v3dZoneBust");
       const zWaist = $("#v3dZoneWaist");
       const zHips = $("#v3dZoneHips");
-      if (peak) peak.textContent = (m.peakStrain || 0) + "%";
+      if (peak) peak.textContent = m.mode === "pressure" ? `${m.peakPressureKpa ?? 0} kPa` : `${m.peakStrain || 0}%`;
       if (ease) ease.textContent = (m.avgEase || 0) + " cm";
       if (m.zones) {
         const fmt = (v) => `${v >= 0 ? "+" : ""}${Number(v || 0).toFixed(1)} cm`;
