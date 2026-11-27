@@ -9,7 +9,15 @@
    now thin wrappers calling into this module with their own `pieces`.
    ============================================================ */
 
-import { offsetPoly } from './geometry.js';
+import {
+  offsetPoly,
+  detectFoldEdgeIndex,
+  resolvePieceSeamAllowances,
+  offsetPieceOutline,
+  edgeNormalAtPoint,
+  findVisualLabelAnchor,
+  inferPieceCutInstruction,
+} from './geometry.js';
 
 // A vertex's interior angle deviating from straight (180°) by more than
 // this counts as a real corner — a smoothly bezier-sampled curve's own
@@ -213,8 +221,204 @@ function assemblePDFObjects(pages) {
   return pdf;
 }
 
-const PAGE_SIZES_MM = { a4: [210, 297], letter: [215.9, 279.4] };
+const PAGE_SIZES_MM = {
+  a0: [841, 1189],
+  a1: [594, 841],
+  a2: [420, 594],
+  a3: [297, 420],
+  a4: [210, 297],
+  letter: [215.9, 279.4],
+};
 const TILE_MARGIN_MM = 10; // printer-safe margin within each tile's own page
+
+function pdfSafeText(s) {
+  return String(s ?? '').replace(/[()\\]/g, '').replace(/[^\x20-\x7E]/g, '').trim();
+}
+
+function polygonPathOps(poly, X, Y) {
+  if (!Array.isArray(poly) || poly.length < 3) return '';
+  let cs = `${X(poly[0][0]).toFixed(2)} ${Y(poly[0][1]).toFixed(2)} m\n`;
+  for (let i = 1; i < poly.length; i++) {
+    cs += `${X(poly[i][0]).toFixed(2)} ${Y(poly[i][1]).toFixed(2)} l\n`;
+  }
+  return cs;
+}
+
+function pdfArrowHeadOps(fromCm, toCm, X, Y, lenPt = 6) {
+  const fx = X(fromCm[0]), fy = Y(fromCm[1]);
+  const tx = X(toCm[0]), ty = Y(toCm[1]);
+  const a = Math.atan2(ty - fy, tx - fx);
+  const lx1 = tx - lenPt * Math.cos(a - 0.42), ly1 = ty - lenPt * Math.sin(a - 0.42);
+  const lx2 = tx - lenPt * Math.cos(a + 0.42), ly2 = ty - lenPt * Math.sin(a + 0.42);
+  return `${lx1.toFixed(2)} ${ly1.toFixed(2)} m ${tx.toFixed(2)} ${ty.toFixed(2)} l ${lx2.toFixed(2)} ${ly2.toFixed(2)} l S\n`;
+}
+
+// Emits full atelier piece markings (outer cut line w/ variable SA + 0 cm fold,
+// inner dashed stitch line with cubic beziers, grainline arrows, darts w/ center fold &
+// diamond apex punch, perpendicular V-notches, Cut-on-Fold bracket, and spec stamp).
+// Never emits 'c' operators on straight-edged pieces (keeps test/pattern-export.test.js green).
+function pieceVectorPdfOps(p, X, Y, opts = {}) {
+  if (!p?.outline?.length) return '';
+  const seamCm = Number(opts.seamAllowanceCm) > 0 ? Number(opts.seamAllowanceCm) : 0;
+  const variableSeam = opts.variableSeam !== false;
+  const drawMarkings = opts.drawMarkings !== false;
+  let cs = '';
+
+  if (seamCm > 0 && p.outline.length >= 3) {
+    const saPoly = offsetPieceOutline(p, seamCm, { variable: variableSeam });
+    if (saPoly.length >= 3) {
+      cs += '0.85 w [] 0 d 0.08 0.08 0.10 RG\n';
+      cs += polygonPathOps(saPoly, X, Y) + 'h S\n';
+    }
+    cs += '0.55 w [4 3] 0 d 0.35 0.35 0.42 RG\n';
+    cs += outlinePathOps(p, X, Y) + 'h S\n[] 0 d\n';
+  } else {
+    cs += '0.80 w [] 0 d 0 0 0 RG\n';
+    cs += outlinePathOps(p, X, Y) + 'h S\n';
+  }
+
+  if (!drawMarkings) return cs;
+
+  // Grainline + arrowheads + GRAIN tag
+  if (Array.isArray(p.grain) && p.grain.length === 2) {
+    const [g0, g1] = p.grain;
+    cs += '0.55 w [] 0 d 0.28 0.25 0.72 RG 0.28 0.25 0.72 rg\n';
+    cs += `${X(g0[0]).toFixed(2)} ${Y(g0[1]).toFixed(2)} m ${X(g1[0]).toFixed(2)} ${Y(g1[1]).toFixed(2)} l S\n`;
+    cs += pdfArrowHeadOps(g0, g1, X, Y, 5.5);
+    cs += pdfArrowHeadOps(g1, g0, X, Y, 5.5);
+    const gx = (X(g0[0]) + X(g1[0])) * 0.5, gy = (Y(g0[1]) + Y(g1[1])) * 0.5;
+    cs += `BT /F1 6.5 Tf ${(gx + 3).toFixed(2)} ${gy.toFixed(2)} Td (GRAIN) Tj ET\n`;
+  }
+
+  // Cut-on-Fold bracket symbol along detected fold edge
+  const foldIdx = p.cutOnFold ? detectFoldEdgeIndex(p) : -1;
+  if (foldIdx >= 0 && p.outline.length >= 3) {
+    const a = p.outline[foldIdx], b = p.outline[(foldIdx + 1) % p.outline.length];
+    const fLen = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (fLen >= 3) {
+      const mid = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
+      const nInfo = edgeNormalAtPoint(p.outline, mid);
+      const tx = (b[0] - a[0]) / fLen, ty = (b[1] - a[1]) / fLen;
+      const [ix, iy] = nInfo.inward;
+      const halfSpan = Math.min(Math.max(fLen * 0.28, 2.5), 10);
+      const inset = Math.min(1.5, Math.max(0.8, fLen * 0.08));
+      const p1 = [mid[0] - tx * halfSpan, mid[1] - ty * halfSpan];
+      const p2 = [mid[0] + tx * halfSpan, mid[1] + ty * halfSpan];
+      const s1 = [p1[0] + ix * inset, p1[1] + iy * inset];
+      const s2 = [p2[0] + ix * inset, p2[1] + iy * inset];
+      cs += '0.6 w [] 0 d 0.02 0.42 0.64 RG 0.02 0.42 0.64 rg\n';
+      cs += `${X(p1[0]).toFixed(2)} ${Y(p1[1]).toFixed(2)} m ${X(s1[0]).toFixed(2)} ${Y(s1[1]).toFixed(2)} l ${X(s2[0]).toFixed(2)} ${Y(s2[1]).toFixed(2)} l ${X(p2[0]).toFixed(2)} ${Y(p2[1]).toFixed(2)} l S\n`;
+      cs += pdfArrowHeadOps(s1, p1, X, Y, 4.5);
+      cs += pdfArrowHeadOps(s2, p2, X, Y, 4.5);
+      const mx = (X(s1[0]) + X(s2[0])) * 0.5 + ix * 4;
+      const my = (Y(s1[1]) + Y(s2[1])) * 0.5 - iy * 4;
+      cs += `BT /F1 6.5 Tf ${mx.toFixed(2)} ${my.toFixed(2)} Td (FOLD / 0cm SA) Tj ET\n`;
+    }
+  }
+
+  // Darts: solid legs + dashed center fold + diamond apex drill punch (zero 'c' ops!)
+  (p.darts || []).forEach((d) => {
+    if (!Array.isArray(d) || d.length < 3) return;
+    const [apex, legA, legC] = d;
+    cs += '0.55 w [] 0 d 0.72 0.14 0.14 RG\n';
+    cs += `${X(legA[0]).toFixed(2)} ${Y(legA[1]).toFixed(2)} m ${X(apex[0]).toFixed(2)} ${Y(apex[1]).toFixed(2)} l ${X(legC[0]).toFixed(2)} ${Y(legC[1]).toFixed(2)} l S\n`;
+    const mid = [(legA[0] + legC[0]) * 0.5, (legA[1] + legC[1]) * 0.5];
+    cs += '0.45 w [2 2] 0 d\n';
+    cs += `${X(apex[0]).toFixed(2)} ${Y(apex[1]).toFixed(2)} m ${X(mid[0]).toFixed(2)} ${Y(mid[1]).toFixed(2)} l S [] 0 d\n`;
+    const dx = mid[0] - apex[0], dy = mid[1] - apex[1], dl = Math.hypot(dx, dy) || 1;
+    const drill = dl > 1.2 ? [apex[0] + (dx / dl) * 0.5, apex[1] + (dy / dl) * 0.5] : apex;
+    const dX = X(drill[0]), dY = Y(drill[1]), r = 2.4;
+    cs += `${dX.toFixed(2)} ${(dY + r).toFixed(2)} m ${(dX + r).toFixed(2)} ${dY.toFixed(2)} l ${dX.toFixed(2)} ${(dY - r).toFixed(2)} l ${(dX - r).toFixed(2)} ${dY.toFixed(2)} l h S\n`;
+  });
+
+  // Perpendicular inward V-notches
+  (p.notches || []).forEach((nt) => {
+    const rawPt = Array.isArray(nt) ? nt : [nt?.x ?? 0, nt?.y ?? 0];
+    const nInfo = edgeNormalAtPoint(p.outline, rawPt);
+    const bp = nInfo.proj || rawPt;
+    const [tx, ty] = nInfo.tangent;
+    const [inx, iny] = nInfo.inward;
+    const depth = 0.5, halfB = 0.25;
+    const l = [bp[0] - tx * halfB, bp[1] - ty * halfB];
+    const r = [bp[0] + tx * halfB, bp[1] + ty * halfB];
+    const tip = [bp[0] + inx * depth, bp[1] + iny * depth];
+    cs += '0.6 w [] 0 d 0.1 0.1 0.12 RG\n';
+    cs += `${X(l[0]).toFixed(2)} ${Y(l[1]).toFixed(2)} m ${X(tip[0]).toFixed(2)} ${Y(tip[1]).toFixed(2)} l ${X(r[0]).toFixed(2)} ${Y(r[1]).toFixed(2)} l S\n`;
+  });
+
+  // Interior Piece Spec Stamp (ASCII Helvetica-safe)
+  const anchor = findVisualLabelAnchor(p.outline);
+  const lx = X(anchor.x), ly = Y(anchor.y);
+  const pieceLabel = pdfSafeText((p.name && p.name.en) || p.key || 'Piece');
+  const cutInfo = inferPieceCutInstruction(p);
+  const sizeTxt = pdfSafeText(opts.size ? `Size: ${opts.size}` : '');
+  const specLine = pdfSafeText([sizeTxt, cutInfo.en].filter(Boolean).join(' | '));
+  let saLine = '';
+  if (seamCm > 0) {
+    const perEdge = resolvePieceSeamAllowances(p, seamCm, { variable: variableSeam });
+    const maxSA = Math.max(...perEdge);
+    saLine = `SA: ${seamCm}cm` + (maxSA > seamCm + 0.5 ? ` / Hem: ${maxSA.toFixed(0)}cm` : '') + (foldIdx >= 0 ? ' / Fold: 0cm' : '');
+  }
+  cs += '0 0 0 rg\n';
+  if (pieceLabel) {
+    cs += `BT /F1 9 Tf ${(lx - pieceLabel.length * 2.3).toFixed(2)} ${(ly + 8).toFixed(2)} Td (${pieceLabel}) Tj ET\n`;
+  }
+  if (specLine) {
+    cs += `0.28 0.28 0.32 rg\nBT /F1 7.2 Tf ${(lx - specLine.length * 1.8).toFixed(2)} ${(ly - 2).toFixed(2)} Td (${specLine}) Tj ET\n`;
+  }
+  if (saLine) {
+    cs += `0.42 0.42 0.48 rg\nBT /F1 6.8 Tf ${(lx - saLine.length * 1.65).toFixed(2)} ${(ly - 11).toFixed(2)} Td (${pdfSafeText(saLine)}) Tj ET\n`;
+  }
+  cs += '0 0 0 RG 0 0 0 rg\n';
+  return cs;
+}
+
+function drawNestedPdfLayersOps(nestedLayers, X, Y) {
+  if (!Array.isArray(nestedLayers) || !nestedLayers.length) return '';
+  let cs = '';
+  nestedLayers.forEach((layer) => {
+    const rgb = layer?.style?.rgb || [0.43, 0.37, 0.99];
+    const dash = layer?.style?.pdfDash || '[5 3] 0 d';
+    cs += `0.65 w ${dash} ${rgb[0].toFixed(2)} ${rgb[1].toFixed(2)} ${rgb[2].toFixed(2)} RG\n`;
+    (layer.pieces || []).forEach((np) => {
+      if (!np?.outline?.length) return;
+      cs += outlinePathOps(np, X, Y) + 'h S\n';
+    });
+  });
+  cs += '[] 0 d 0 0 0 RG\n';
+  return cs;
+}
+
+function drawCalibrationBoxesPdf(xPt, yPt, titleText = null) {
+  const PT_CM = 28.3465;
+  const sq10 = 10 * PT_CM;
+  const sq2in = 2 * 2.54 * PT_CM;
+  let cs = '0.6 w [] 0 d 0 0 0 RG 0 0 0 rg\n';
+  cs += `${xPt.toFixed(2)} ${yPt.toFixed(2)} ${sq10.toFixed(2)} ${sq10.toFixed(2)} re S\n`;
+  cs += `BT /F1 7.5 Tf ${(xPt + 4).toFixed(2)} ${(yPt + sq10 * 0.5).toFixed(2)} Td (10cm x 10cm calibration - print at 100%/actual size) Tj ET\n`;
+  const x2 = xPt + sq10 + 18;
+  cs += `${x2.toFixed(2)} ${yPt.toFixed(2)} ${sq2in.toFixed(2)} ${sq2in.toFixed(2)} re S\n`;
+  cs += `BT /F1 7.5 Tf ${(x2 + 4).toFixed(2)} ${(yPt + sq2in * 0.5).toFixed(2)} Td (2in x 2in imperial check) Tj ET\n`;
+  if (titleText) {
+    cs += `BT /F1 8 Tf ${x2.toFixed(2)} ${(yPt + sq10 - 10).toFixed(2)} Td (${pdfSafeText(titleText)}) Tj ET\n`;
+  }
+  return cs;
+}
+
+function drawNestedLegendPdf(nestedLayers, xPt, yPt) {
+  if (!Array.isArray(nestedLayers) || !nestedLayers.length) return '';
+  let cs = '0 0 0 rg\n';
+  cs += `BT /F1 8 Tf ${xPt.toFixed(2)} ${(yPt + nestedLayers.length * 13 + 4).toFixed(2)} Td (Multi-Size Nest Key:) Tj ET\n`;
+  nestedLayers.forEach((layer, idx) => {
+    const ry = yPt + (nestedLayers.length - 1 - idx) * 13;
+    const rgb = layer?.style?.rgb || [0.1, 0.1, 0.1];
+    const dash = layer?.style?.pdfDash || '[] 0 d';
+    cs += `1.1 w ${dash} ${rgb[0].toFixed(2)} ${rgb[1].toFixed(2)} ${rgb[2].toFixed(2)} RG\n`;
+    cs += `${xPt.toFixed(2)} ${(ry + 3).toFixed(2)} m ${(xPt + 26).toFixed(2)} ${(ry + 3).toFixed(2)} l S\n`;
+    cs += `0 0 0 rg [] 0 d BT /F1 8 Tf ${(xPt + 32).toFixed(2)} ${ry.toFixed(2)} Td (${pdfSafeText(layer.size)}) Tj ET\n`;
+  });
+  return cs;
+}
 
 // Pure tiling geometry: given the pattern's full bounding box (cm) and a
 // page size + overlap (mm), returns the grid of tiles needed to print the
@@ -245,78 +449,194 @@ export function computeTileGrid(bboxCm, pageSizeMm, overlapMm) {
 // to this. Turning it off still tiles+overlaps the pattern (a plain
 // multi-page cut, no assembly help drawn on top) for a user who's already
 // comfortable lining pages up by eye.
-function tileContentStream(pieces, originXcm, originYcm, pageWpt, pageHpt, marginPt, tile, grid, includeGuides) {
+function tileContentStream(pieces, originXcm, originYcm, pageWpt, pageHpt, marginPt, tile, grid, includeGuides, opts = {}) {
   const PT_CM = 28.3465;
   const X = (xCm) => (xCm - originXcm) * PT_CM + marginPt;
   const Y = (yCm) => pageHpt - ((yCm - originYcm) * PT_CM + marginPt);
   const contentW = pageWpt - 2 * marginPt, contentH = pageHpt - 2 * marginPt;
   let cs = "0.75 w 0 0 0 RG 0 0 0 rg\n";
   // Clip to this tile's own content window (q/Q bracketed) so a piece
-  // extending past this tile's edge doesn't draw over the registration
-  // marks/labels, which are deliberately drawn AFTER the clip is lifted.
+  // extending past this tile's edge doesn't draw over the registration marks/labels.
   cs += `q\n${marginPt.toFixed(2)} ${marginPt.toFixed(2)} ${contentW.toFixed(2)} ${contentH.toFixed(2)} re W n\n`;
+  if (Array.isArray(opts.nestedLayers) && opts.nestedLayers.length) {
+    cs += drawNestedPdfLayersOps(opts.nestedLayers, X, Y);
+  }
   pieces.forEach((p) => {
-    cs += outlinePathOps(p, X, Y);
-    cs += "h S\n";
+    cs += pieceVectorPdfOps(p, X, Y, opts);
   });
   cs += "Q\n";
   if (!includeGuides) return cs;
-  // Registration crosshairs at the 4 corners of the content window — the
-  // SAME pattern-space location falls inside more than one tile's overlap
-  // strip, so these marks line up when two printed sheets are overlaid.
-  const armPt = 4 * (72 / 25.4); // ~4mm arm length, in points
+  // Subtle dashed trim frame along printable boundary
+  cs += `0.35 w [3 3] 0 d 0.55 0.55 0.60 RG ${marginPt.toFixed(2)} ${marginPt.toFixed(2)} ${contentW.toFixed(2)} ${contentH.toFixed(2)} re S [] 0 d 0 0 0 RG\n`;
+  // Registration crosshairs + center diamond target at all 4 corners
+  const armPt = 4 * (72 / 25.4);
+  const dPt = 2.8;
   const corners = [[marginPt, marginPt], [pageWpt - marginPt, marginPt], [marginPt, pageHpt - marginPt], [pageWpt - marginPt, pageHpt - marginPt]];
   corners.forEach(([cx, cy]) => {
-    cs += `0.4 w ${(cx - armPt).toFixed(2)} ${cy.toFixed(2)} m ${(cx + armPt).toFixed(2)} ${cy.toFixed(2)} l S\n`;
+    cs += `0.45 w ${(cx - armPt).toFixed(2)} ${cy.toFixed(2)} m ${(cx + armPt).toFixed(2)} ${cy.toFixed(2)} l S\n`;
     cs += `${cx.toFixed(2)} ${(cy - armPt).toFixed(2)} m ${cx.toFixed(2)} ${(cy + armPt).toFixed(2)} l S\n`;
+    cs += `${cx.toFixed(2)} ${(cy + dPt).toFixed(2)} m ${(cx + dPt).toFixed(2)} ${cy.toFixed(2)} l ${cx.toFixed(2)} ${(cy - dPt).toFixed(2)} l ${(cx - dPt).toFixed(2)} ${cy.toFixed(2)} l h S\n`;
   });
-  // Row/column label, bottom-left margin.
-  cs += `BT /F1 8 Tf ${marginPt.toFixed(2)} ${(marginPt / 2).toFixed(2)} Td (R${tile.row + 1}C${tile.col + 1} of ${grid.rows}x${grid.cols}) Tj ET\n`;
+  const tileMeta = pdfSafeText([opts.title, opts.size ? `Size ${opts.size}` : ''].filter(Boolean).join(' | '));
+  cs += `BT /F1 8 Tf ${marginPt.toFixed(2)} ${(marginPt / 2).toFixed(2)} Td (R${tile.row + 1}C${tile.col + 1} of ${grid.rows}x${grid.cols}${tileMeta ? ' - ' + tileMeta : ''}) Tj ET\n`;
+  if (tile.col + 1 < grid.cols) {
+    cs += `0.35 0.35 0.42 rg BT /F1 7 Tf ${(pageWpt - marginPt - 46).toFixed(2)} ${(pageHpt * 0.5).toFixed(2)} Td (Join R${tile.row + 1}C${tile.col + 2} >) Tj ET\n`;
+  }
+  if (tile.row + 1 < grid.rows) {
+    cs += `0.35 0.35 0.42 rg BT /F1 7 Tf ${(pageWpt * 0.5 - 24).toFixed(2)} ${(marginPt / 2).toFixed(2)} Td (v Join R${tile.row + 2}C${tile.col + 1}) Tj ET\n`;
+  }
+  cs += '0 0 0 RG 0 0 0 rg\n';
   return cs;
 }
 
-function assemblyMapStream(grid, pageWpt, pageHpt, marginPt) {
-  const PT_CM = 28.3465;
+function assemblyMapStream(pieces, box, grid, pageWpt, pageHpt, marginPt, opts = {}) {
   let cs = "0.5 w 0 0 0 RG 0 0 0 rg\n";
-  cs += `BT /F1 14 Tf ${marginPt.toFixed(2)} ${(pageHpt - marginPt - 14).toFixed(2)} Td (Assembly map — ${grid.rows}x${grid.cols} pages) Tj ET\n`;
-  // Small thumbnail grid, one rectangle per tile, labelled.
-  const availW = pageWpt - 2 * marginPt, availH = pageHpt - 3 * marginPt - 40;
-  const cellW = availW / grid.cols, cellH = availH / grid.rows;
-  grid.tiles.forEach((t) => {
-    const x = marginPt + t.col * cellW, yTop = pageHpt - 2 * marginPt - 40 - t.row * cellH;
-    cs += `${x.toFixed(2)} ${(yTop - cellH).toFixed(2)} ${(cellW - 2).toFixed(2)} ${(cellH - 2).toFixed(2)} re S\n`;
-    cs += `BT /F1 9 Tf ${(x + 4).toFixed(2)} ${(yTop - 14).toFixed(2)} Td (R${t.row + 1}C${t.col + 1}) Tj ET\n`;
+  const head = pdfSafeText(`Assembly map - ${grid.rows}x${grid.cols} pages` + (opts.title ? ` (${opts.title}${opts.size ? ' | ' + opts.size : ''})` : ''));
+  cs += `BT /F1 13 Tf ${marginPt.toFixed(2)} ${(pageHpt - marginPt - 14).toFixed(2)} Td (${head}) Tj ET\n`;
+  // Thumbnail tile grid positioned in upper area, reserving bottom strip for calibration squares & legend
+  const calReservePt = 315;
+  const availW = pageWpt - 2 * marginPt, availH = Math.max(120, pageHpt - 2 * marginPt - calReservePt - 30);
+  const fullGridWmm = grid.cols * grid.stepWmm + (grid.contentWmm - grid.stepWmm);
+  const fullGridHmm = grid.rows * grid.stepHmm + (grid.contentHmm - grid.stepHmm);
+  const scaleMm = Math.min(availW / Math.max(fullGridWmm, 1), availH / Math.max(fullGridHmm, 1));
+  const mapTopY = pageHpt - marginPt - 28;
+  const mapLeftX = marginPt + (availW - fullGridWmm * scaleMm) * 0.5;
+  const mapBottomY = mapTopY - fullGridHmm * scaleMm;
+
+  // Draw mini silhouettes of every pattern piece across the map
+  const mapX = (xCm) => mapLeftX + (xCm - box.minX) * 10 * scaleMm;
+  const mapY = (yCm) => mapTopY - (yCm - box.minY) * 10 * scaleMm;
+  cs += '0.7 w 0.32 0.28 0.85 RG\n';
+  pieces.forEach((p) => {
+    if (!p?.outline?.length) return;
+    cs += polygonPathOps(p.outline, mapX, mapY) + 'h S\n';
   });
-  // A genuine 10cm x 10cm calibration square, drawn once — printing this
-  // page at anything other than 100%/"actual size" is immediately obvious
-  // if the square doesn't measure 10cm with a ruler.
-  const sqPt = 10 * PT_CM, sqX = marginPt, sqY = marginPt;
-  cs += `${sqX.toFixed(2)} ${sqY.toFixed(2)} ${sqPt.toFixed(2)} ${sqPt.toFixed(2)} re S\n`;
-  cs += `BT /F1 8 Tf ${sqX.toFixed(2)} ${(sqY + sqPt + 4).toFixed(2)} Td (10cm x 10cm calibration — print at 100%\\/actual size) Tj ET\n`;
+
+  // Draw tile boxes on top of silhouettes
+  cs += '0.45 w 0.35 0.35 0.40 RG 0.25 0.25 0.30 rg\n';
+  grid.tiles.forEach((t) => {
+    const tx = mapLeftX + t.originMm[0] * scaleMm;
+    const tw = grid.contentWmm * scaleMm, th = grid.contentHmm * scaleMm;
+    const ty = mapTopY - t.originMm[1] * scaleMm - th;
+    cs += `${tx.toFixed(2)} ${ty.toFixed(2)} ${tw.toFixed(2)} ${th.toFixed(2)} re S\n`;
+    cs += `BT /F1 8 Tf ${(tx + 3).toFixed(2)} ${(ty + th - 11).toFixed(2)} Td (R${t.row + 1}C${t.col + 1}) Tj ET\n`;
+  });
+
+  const infoY = Math.max(marginPt + 295, mapBottomY - 16);
+  const cutNote = pdfSafeText(`${pieces.length} pieces | SA: ${opts.seamAllowanceCm > 0 ? opts.seamAllowanceCm + 'cm' : 'Net'} (0cm fold)`);
+  cs += `0 0 0 rg BT /F1 8.5 Tf ${marginPt.toFixed(2)} ${infoY.toFixed(2)} Td (${cutNote}) Tj ET\n`;
+  if (Array.isArray(opts.nestedLayers) && opts.nestedLayers.length) {
+    cs += drawNestedLegendPdf(opts.nestedLayers, marginPt, marginPt + 295);
+  }
+  cs += drawCalibrationBoxesPdf(marginPt, marginPt, opts.title ? `${opts.title} | 1:1 Check` : null);
   return cs;
 }
 
-// `opts.tiled` (default false) reproduces buildSinglePagePDF() exactly —
-// ship-behind-flag, per this project's own non-negotiable rule #5.
+function copyshopContentStream(pieces, box, originXcm, originYcm, pageWpt, pageHpt, marginPt, opts = {}) {
+  const PT_CM = 28.3465;
+  const X = (xCm) => (xCm - originXcm) * PT_CM + marginPt;
+  const Y = (yCm) => pageHpt - ((yCm - originYcm) * PT_CM + marginPt + 38);
+  const contentW = pageWpt - 2 * marginPt, contentH = pageHpt - 2 * marginPt;
+  let cs = `0.5 w [] 0 d 0.5 0.5 0.55 RG ${marginPt.toFixed(2)} ${marginPt.toFixed(2)} ${contentW.toFixed(2)} ${contentH.toFixed(2)} re S\n`;
+  const titleStr = pdfSafeText(`BerryStudio 1:1 Atelier Sheet - ${opts.title || 'Sewing Pattern'}${opts.size ? ' (' + opts.size + ')' : ''}`);
+  cs += `0 0 0 rg BT /F1 12 Tf ${(marginPt + 8).toFixed(2)} ${(pageHpt - marginPt - 20).toFixed(2)} Td (${titleStr}) Tj ET\n`;
+  cs += `q\n${marginPt.toFixed(2)} ${marginPt.toFixed(2)} ${contentW.toFixed(2)} ${contentH.toFixed(2)} re W n\n`;
+  if (Array.isArray(opts.nestedLayers) && opts.nestedLayers.length) {
+    cs += drawNestedPdfLayersOps(opts.nestedLayers, X, Y);
+  }
+  pieces.forEach((p) => { cs += pieceVectorPdfOps(p, X, Y, opts); });
+  cs += 'Q\n';
+  if (opts.includeGuides !== false) {
+    cs += drawCalibrationBoxesPdf(marginPt + 8, marginPt + 8);
+    if (Array.isArray(opts.nestedLayers) && opts.nestedLayers.length) {
+      cs += drawNestedLegendPdf(opts.nestedLayers, pageWpt - marginPt - 130, marginPt + 12);
+    }
+  }
+  return cs;
+}
+
+// `opts.tiled` (default false) reproduces original buildSinglePagePDF() unless
+// rich atelier flags (`copyshop`, `seamAllowanceCm > 0`, `nestedLayers`, `richMarkings`) are passed.
 export function buildPDF(pieces, opts = {}) {
-  const { tiled = false, pageSize = 'a4', overlapMm = 10, includeGuides = true } = opts;
+  const {
+    tiled = false,
+    copyshop = false,
+    pageSize = 'a4',
+    overlapMm = 10,
+    includeGuides = true,
+  } = opts;
   if (!pieces || !pieces.length) return null;
-  if (!tiled) return buildSinglePagePDF(pieces);
+
+  const hasRichOpts = copyshop || (Number(opts.seamAllowanceCm) > 0) || (Array.isArray(opts.nestedLayers) && opts.nestedLayers.length > 0) || opts.richMarkings === true;
+  if (!tiled && !hasRichOpts) return buildSinglePagePDF(pieces);
 
   const PT_MM = 2.83465;
-  const all = pieces.flatMap((p) => p.outline);
-  const xs = all.map((p) => p[0]), ys = all.map((p) => p[1]);
-  const minX = Math.min(...xs), minY = Math.min(...ys), maxX = Math.max(...xs), maxY = Math.max(...ys);
+  const PT_CM = 28.3465;
+  const saPad = Number(opts.seamAllowanceCm) > 0 ? Math.max(3.5, Number(opts.seamAllowanceCm) + 1) : 1;
+  const allPts = [
+    ...pieces.flatMap((p) => p.outline || []),
+    ...(Array.isArray(opts.nestedLayers) ? opts.nestedLayers.flatMap((l) => (l.pieces || []).flatMap((np) => np.outline || [])) : []),
+  ];
+  const xs = allPts.map((p) => p[0]), ys = allPts.map((p) => p[1]);
+  const minX = Math.min(...xs) - (hasRichOpts ? saPad : 0);
+  const minY = Math.min(...ys) - (hasRichOpts ? saPad : 0);
+  const maxX = Math.max(...xs) + (hasRichOpts ? saPad : 0);
+  const maxY = Math.max(...ys) + (hasRichOpts ? saPad : 0);
   const bboxCm = { minX, minY, w: maxX - minX, h: maxY - minY };
+
+  if (!tiled && copyshop) {
+    let sheetMm = PAGE_SIZES_MM[pageSize] || PAGE_SIZES_MM.a0;
+    // Pick portrait or landscape to minimize sheet overflow on large-format plotters/copyshop sheets
+    if (bboxCm.w * 10 > sheetMm[0] - 2 * TILE_MARGIN_MM && bboxCm.w * 10 <= sheetMm[1] - 2 * TILE_MARGIN_MM && bboxCm.h * 10 <= sheetMm[0] - 2 * TILE_MARGIN_MM) {
+      sheetMm = [sheetMm[1], sheetMm[0]];
+    }
+    const usableWcm = (sheetMm[0] - 2 * TILE_MARGIN_MM) / 10;
+    const usableHcm = (sheetMm[1] - 2 * TILE_MARGIN_MM) / 10;
+    if (bboxCm.w <= usableWcm && bboxCm.h + 2 <= usableHcm) {
+      const pageWpt = sheetMm[0] * PT_MM, pageHpt = sheetMm[1] * PT_MM, marginPt = TILE_MARGIN_MM * PT_MM;
+      return assemblePDFObjects([{
+        mediaBox: [pageWpt, pageHpt],
+        contentStream: copyshopContentStream(pieces, bboxCm, bboxCm.minX, bboxCm.minY, pageWpt, pageHpt, marginPt, opts),
+      }]);
+    }
+    // Larger than one sheet: cleanly tile across multiple copyshop sheets
+    const grid = computeTileGrid(bboxCm, sheetMm, overlapMm);
+    const pageWpt = sheetMm[0] * PT_MM, pageHpt = sheetMm[1] * PT_MM, marginPt = TILE_MARGIN_MM * PT_MM;
+    const pages = grid.tiles.map((tile) => ({
+      mediaBox: [pageWpt, pageHpt],
+      contentStream: tileContentStream(pieces, bboxCm.minX + tile.originMm[0] / 10, bboxCm.minY + tile.originMm[1] / 10, pageWpt, pageHpt, marginPt, tile, grid, includeGuides, opts),
+    }));
+    return assemblePDFObjects(pages);
+  }
+
+  if (!tiled) {
+    // Rich single-page vector pattern PDF (with SA, notches, fold symbols, spec stamps & optional nested sizes)
+    const margin = 28;
+    const W = bboxCm.w * PT_CM + margin * 2, H = bboxCm.h * PT_CM + margin * 2;
+    const X = (x) => (x - bboxCm.minX) * PT_CM + margin;
+    const Y = (y) => H - ((y - bboxCm.minY) * PT_CM + margin);
+    let cs = '';
+    if (Array.isArray(opts.nestedLayers) && opts.nestedLayers.length) cs += drawNestedPdfLayersOps(opts.nestedLayers, X, Y);
+    pieces.forEach((p) => { cs += pieceVectorPdfOps(p, X, Y, opts); });
+    return assemblePDFObjects([{ mediaBox: [W, H], contentStream: cs }]);
+  }
+
   const pageSizeMm = PAGE_SIZES_MM[pageSize] || PAGE_SIZES_MM.a4;
-  const grid = computeTileGrid(bboxCm, pageSizeMm, overlapMm);
+  const rawBboxCm = { minX: Math.min(...pieces.flatMap((p) => p.outline.map((q) => q[0]))), minY: Math.min(...pieces.flatMap((p) => p.outline.map((q) => q[1]))), w: 0, h: 0 };
+  const rawMaxX = Math.max(...pieces.flatMap((p) => p.outline.map((q) => q[0])));
+  const rawMaxY = Math.max(...pieces.flatMap((p) => p.outline.map((q) => q[1])));
+  rawBboxCm.w = rawMaxX - rawBboxCm.minX;
+  rawBboxCm.h = rawMaxY - rawBboxCm.minY;
+  const tileBox = (Number(opts.seamAllowanceCm) > 0 || (Array.isArray(opts.nestedLayers) && opts.nestedLayers.length > 0)) ? bboxCm : rawBboxCm;
+
+  const grid = computeTileGrid(tileBox, pageSizeMm, overlapMm);
   const pageWpt = pageSizeMm[0] * PT_MM, pageHpt = pageSizeMm[1] * PT_MM, marginPt = TILE_MARGIN_MM * PT_MM;
 
-  const pages = includeGuides ? [{ mediaBox: [pageWpt, pageHpt], contentStream: assemblyMapStream(grid, pageWpt, pageHpt, marginPt) }] : [];
+  const pages = includeGuides ? [{ mediaBox: [pageWpt, pageHpt], contentStream: assemblyMapStream(pieces, tileBox, grid, pageWpt, pageHpt, marginPt, opts) }] : [];
   grid.tiles.forEach((tile) => {
-    const originXcm = bboxCm.minX + tile.originMm[0] / 10;
-    const originYcm = bboxCm.minY + tile.originMm[1] / 10;
-    pages.push({ mediaBox: [pageWpt, pageHpt], contentStream: tileContentStream(pieces, originXcm, originYcm, pageWpt, pageHpt, marginPt, tile, grid, includeGuides) });
+    const originXcm = tileBox.minX + tile.originMm[0] / 10;
+    const originYcm = tileBox.minY + tile.originMm[1] / 10;
+    pages.push({ mediaBox: [pageWpt, pageHpt], contentStream: tileContentStream(pieces, originXcm, originYcm, pageWpt, pageHpt, marginPt, tile, grid, includeGuides, opts) });
   });
   return assemblePDFObjects(pages);
 }
@@ -453,61 +773,122 @@ export function buildSVG(pieces, opts = {}) {
   if (!pieces || !pieces.length) return "";
   const laid = opts.preservePositions ? pieces : ensureSheetLayout(pieces);
   const seamCm = Number(opts.seamAllowanceCm) > 0 ? Number(opts.seamAllowanceCm) : 0;
+  const variableSeam = opts.variableSeam !== false;
   const includeScaleBar = opts.includeScaleBar !== false;
   const lang = opts.lang === 'ar' ? 'ar' : 'en';
-  const all = laid.flatMap((p) => p.outline || []);
+  const nestedLayers = Array.isArray(opts.nestedLayers) ? opts.nestedLayers : [];
+  const all = [
+    ...laid.flatMap((p) => p.outline || []),
+    ...nestedLayers.flatMap((l) => (l.pieces || []).flatMap((np) => np.outline || [])),
+  ];
   if (!all.length) return "";
-  const pad = Math.max(4, seamCm + 3);
+  const pad = Math.max(4, seamCm + 3.5);
   const xs = all.map((pt) => pt[0]), ys = all.map((pt) => pt[1]);
   const minX = +(Math.min(...xs) - pad).toFixed(2);
   const minY = +(Math.min(...ys) - pad).toFixed(2);
   const w = +(Math.max(...xs) - minX + pad).toFixed(2);
-  const h = +(Math.max(...ys) - minY + pad + (includeScaleBar ? 5 : 0)).toFixed(2);
+  const h = +(Math.max(...ys) - minY + pad + (includeScaleBar ? 7 : 0)).toFixed(2);
 
   let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${w} ${h}" width="${w}cm" height="${h}cm" data-generator="BerryStudio" data-units="cm">\n`;
+  if (nestedLayers.length) {
+    s += `  <g id="nested-size-grades" fill="none" stroke-linecap="round" stroke-linejoin="round">\n`;
+    nestedLayers.forEach((layer) => {
+      const st = layer?.style || { color: '#6d5efc', dash: [5, 3] };
+      const dashAttr = st.dash && st.dash.length ? ` stroke-dasharray="${st.dash.map((v) => +(v * 0.12).toFixed(2)).join(',')}"` : '';
+      (layer.pieces || []).forEach((np) => {
+        if (!np?.outline?.length) return;
+        s += `    <path class="grade-line" data-size="${escXML(layer.size)}" d="${svgOutlinePathD(np)}" stroke="${escXML(st.color)}" stroke-width="0.14"${dashAttr}/>\n`;
+      });
+    });
+    s += `  </g>\n`;
+  }
   s += `  <g id="pattern-pieces" fill="none" stroke-linecap="round" stroke-linejoin="round">\n`;
   laid.forEach((p, idx) => {
     if (!p?.outline?.length) return;
     const label = (p.name && (p.name[lang] || p.name.en)) || p.key || `Piece ${idx + 1}`;
+    const altLabel = (p.name && (p.name[lang === 'ar' ? 'en' : 'ar'])) || '';
     const role = p.role || 'other';
     s += `    <g id="piece-${idx + 1}" data-role="${escXML(role)}" data-name="${escXML(label)}">\n`;
     if (seamCm > 0 && p.outline.length >= 3) {
       try {
-        const sa = offsetPoly(p.outline, seamCm);
+        const sa = offsetPieceOutline(p, seamCm, { variable: variableSeam });
         if (Array.isArray(sa) && sa.length >= 3) {
           const saD = sa.map((pt, j) => `${j === 0 ? 'M' : 'L'} ${pt[0].toFixed(3)} ${pt[1].toFixed(3)}`).join(' ') + ' Z';
-          s += `      <path class="seam-allowance" d="${saD}" stroke="#888888" stroke-width="0.1" stroke-dasharray="0.45,0.3"/>\n`;
+          s += `      <path class="seam-allowance" d="${saD}" stroke="#18181b" stroke-width="0.16"/>\n`;
         }
       } catch { /* skip SA if degenerate */ }
     }
-    s += `      <path class="cut-line" d="${svgOutlinePathD(p)}" stroke="#18181b" stroke-width="0.18"/>\n`;
+    s += `      <path class="cut-line" d="${svgOutlinePathD(p)}" stroke="${seamCm > 0 ? '#52525b' : '#18181b'}" stroke-width="0.16"${seamCm > 0 ? ' stroke-dasharray="0.5,0.35"' : ''}/>\n`;
     if (Array.isArray(p.grain) && p.grain.length === 2) {
       const [[gx1, gy1], [gx2, gy2]] = p.grain;
-      s += `      <line class="grainline" x1="${gx1.toFixed(3)}" y1="${gy1.toFixed(3)}" x2="${gx2.toFixed(3)}" y2="${gy2.toFixed(3)}" stroke="#4f46e5" stroke-width="0.12"/>\n`;
+      const gAng = Math.atan2(gy2 - gy1, gx2 - gx1);
+      const ah = 0.7;
+      const arr = (fx, fy, tx, ty) => {
+        const a = Math.atan2(ty - fy, tx - fx);
+        return `M ${(tx - ah * Math.cos(a - 0.42)).toFixed(3)} ${(ty - ah * Math.sin(a - 0.42)).toFixed(3)} L ${tx.toFixed(3)} ${ty.toFixed(3)} L ${(tx - ah * Math.cos(a + 0.42)).toFixed(3)} ${(ty - ah * Math.sin(a + 0.42)).toFixed(3)}`;
+      };
+      s += `      <path class="grainline" d="M ${gx1.toFixed(3)} ${gy1.toFixed(3)} L ${gx2.toFixed(3)} ${gy2.toFixed(3)} ${arr(gx1, gy1, gx2, gy2)} ${arr(gx2, gy2, gx1, gy1)}" stroke="#4f46e5" stroke-width="0.12"/>\n`;
+      if (Math.hypot(gx2 - gx1, gy2 - gy1) > 12) {
+        const gmx = ((gx1 + gx2) * 0.5).toFixed(2), gmy = ((gy1 + gy2) * 0.5).toFixed(2);
+        const deg = +((gAng * 180) / Math.PI).toFixed(1);
+        const uDeg = (deg > 90 || deg < -90) ? deg + 180 : deg;
+        s += `      <text x="${gmx}" y="${gmy}" transform="rotate(${uDeg} ${gmx} ${gmy})" font-family="Inter, Arial, sans-serif" font-size="0.85" fill="#4f46e5" stroke="none" text-anchor="middle" dy="-0.35">GRAIN</text>\n`;
+      }
+    }
+    const foldIdx = p.cutOnFold ? detectFoldEdgeIndex(p) : -1;
+    if (foldIdx >= 0 && p.outline.length >= 3) {
+      const a = p.outline[foldIdx], b = p.outline[(foldIdx + 1) % p.outline.length];
+      const fLen = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (fLen >= 3) {
+        const mid = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
+        const nInfo = edgeNormalAtPoint(p.outline, mid);
+        const tx = (b[0] - a[0]) / fLen, ty = (b[1] - a[1]) / fLen;
+        const [ix, iy] = nInfo.inward;
+        const hs = Math.min(Math.max(fLen * 0.28, 2.5), 10), ins = Math.min(1.5, Math.max(0.8, fLen * 0.08));
+        const p1 = [mid[0] - tx * hs, mid[1] - ty * hs], p2 = [mid[0] + tx * hs, mid[1] + ty * hs];
+        const s1 = [p1[0] + ix * ins, p1[1] + iy * ins], s2 = [p2[0] + ix * ins, p2[1] + iy * ins];
+        s += `      <path class="fold-symbol" d="M ${p1[0].toFixed(3)} ${p1[1].toFixed(3)} L ${s1[0].toFixed(3)} ${s1[1].toFixed(3)} L ${s2[0].toFixed(3)} ${s2[1].toFixed(3)} L ${p2[0].toFixed(3)} ${p2[1].toFixed(3)}" stroke="#0284c7" stroke-width="0.14"/>\n`;
+      }
     }
     (p.darts || []).forEach((d) => {
       if (Array.isArray(d) && d.length >= 3) {
         const [apex, legA, legC] = d;
-        s += `      <path class="dart" d="M ${legA[0].toFixed(3)} ${legA[1].toFixed(3)} L ${apex[0].toFixed(3)} ${apex[1].toFixed(3)} L ${legC[0].toFixed(3)} ${legC[1].toFixed(3)}" stroke="#dc2626" stroke-width="0.12"/>\n`;
+        const mid = [(legA[0] + legC[0]) * 0.5, (legA[1] + legC[1]) * 0.5];
+        const dx = mid[0] - apex[0], dy = mid[1] - apex[1], dl = Math.hypot(dx, dy) || 1;
+        const drill = dl > 1.2 ? [apex[0] + (dx / dl) * 0.5, apex[1] + (dy / dl) * 0.5] : apex;
+        s += `      <path class="dart" d="M ${legA[0].toFixed(3)} ${legA[1].toFixed(3)} L ${apex[0].toFixed(3)} ${apex[1].toFixed(3)} L ${legC[0].toFixed(3)} ${legC[1].toFixed(3)}" stroke="#dc2626" stroke-width="0.13"/>\n`;
+        s += `      <line class="dart-fold" x1="${apex[0].toFixed(3)}" y1="${apex[1].toFixed(3)}" x2="${mid[0].toFixed(3)}" y2="${mid[1].toFixed(3)}" stroke="#ef4444" stroke-width="0.1" stroke-dasharray="0.3,0.3"/>\n`;
+        s += `      <circle class="dart-apex" cx="${drill[0].toFixed(3)}" cy="${drill[1].toFixed(3)}" r="0.3" stroke="#dc2626" stroke-width="0.12" fill="#ffffff"/>\n`;
       }
     });
     (p.notches || []).forEach((nt) => {
-      if (Array.isArray(nt) && nt.length === 2) {
-        s += `      <circle class="notch" cx="${nt[0].toFixed(3)}" cy="${nt[1].toFixed(3)}" r="0.28" fill="#18181b" stroke="none"/>\n`;
-      }
+      const rawPt = Array.isArray(nt) ? nt : [nt?.x ?? 0, nt?.y ?? 0];
+      const nInfo = edgeNormalAtPoint(p.outline, rawPt);
+      const bp = nInfo.proj || rawPt;
+      const [tx, ty] = nInfo.tangent, [inx, iny] = nInfo.inward;
+      const l = [bp[0] - tx * 0.28, bp[1] - ty * 0.28];
+      const r = [bp[0] + tx * 0.28, bp[1] + ty * 0.28];
+      const tip = [bp[0] + inx * 0.55, bp[1] + iny * 0.55];
+      s += `      <path class="notch" d="M ${l[0].toFixed(3)} ${l[1].toFixed(3)} L ${tip[0].toFixed(3)} ${tip[1].toFixed(3)} L ${r[0].toFixed(3)} ${r[1].toFixed(3)}" fill="#18181b" stroke="#18181b" stroke-width="0.08"/>\n`;
     });
-    const cx = avg(p.outline.map((pt) => pt[0])), cy = avg(p.outline.map((pt) => pt[1]));
-    const cutNote = p.cutOnFold ? (lang === 'ar' ? 'قص ١ على الثنية' : 'Cut 1 on Fold') : `Cut ${p.quantity || (p.bilateral ? 2 : 1)}`;
-    s += `      <text x="${cx.toFixed(2)}" y="${cy.toFixed(2)}" font-family="Inter, Arial, sans-serif" font-size="1.35" font-weight="600" fill="#18181b" stroke="none" text-anchor="middle">${escXML(label)}</text>\n`;
-    s += `      <text x="${cx.toFixed(2)}" y="${(cy + 1.7).toFixed(2)}" font-family="Inter, Arial, sans-serif" font-size="0.95" fill="#52525b" stroke="none" text-anchor="middle">${escXML(cutNote)}</text>\n`;
+    const anchor = findVisualLabelAnchor(p.outline);
+    const cutInfo = inferPieceCutInstruction(p);
+    const sizeSpec = opts.size ? `${opts.size} · ${cutInfo[lang]}` : cutInfo[lang];
+    s += `      <text x="${anchor.x.toFixed(2)}" y="${(anchor.y - 0.6).toFixed(2)}" font-family="Inter, Arial, sans-serif" font-size="1.3" font-weight="700" fill="#18181b" stroke="none" text-anchor="middle">${escXML(label)}</text>\n`;
+    if (altLabel && altLabel !== label) {
+      s += `      <text x="${anchor.x.toFixed(2)}" y="${(anchor.y + 0.9).toFixed(2)}" font-family="Inter, Arial, sans-serif" font-size="0.95" fill="#4f46e5" stroke="none" text-anchor="middle">${escXML(altLabel)}</text>\n`;
+    }
+    s += `      <text x="${anchor.x.toFixed(2)}" y="${(anchor.y + 2.3).toFixed(2)}" font-family="Inter, Arial, sans-serif" font-size="0.92" fill="#52525b" stroke="none" text-anchor="middle">${escXML(sizeSpec)}</text>\n`;
     s += `    </g>\n`;
   });
   s += `  </g>\n`;
   if (includeScaleBar) {
-    const bx = +(minX + 2).toFixed(2), by = +(minY + h - 3).toFixed(2);
+    const bx = +(minX + 2).toFixed(2), by = +(minY + h - 5).toFixed(2);
     s += `  <g id="calibration-scale" stroke="#18181b" stroke-width="0.16" fill="none">\n`;
-    s += `    <rect x="${bx}" y="${by}" width="10" height="1.2"/>\n`;
+    s += `    <rect x="${bx}" y="${by}" width="10" height="2"/>\n`;
     s += `    <text x="${(bx + 5).toFixed(2)}" y="${(by - 0.5).toFixed(2)}" font-family="Inter, Arial, sans-serif" font-size="0.95" fill="#18181b" stroke="none" text-anchor="middle">10 cm (1:1 Calibration)</text>\n`;
+    s += `    <rect x="${(bx + 12).toFixed(2)}" y="${by}" width="5.08" height="2"/>\n`;
+    s += `    <text x="${(bx + 14.54).toFixed(2)}" y="${(by - 0.5).toFixed(2)}" font-family="Inter, Arial, sans-serif" font-size="0.85" fill="#18181b" stroke="none" text-anchor="middle">2 in</text>\n`;
     s += `  </g>\n`;
   }
   s += `</svg>`;

@@ -1,9 +1,9 @@
 /* BerryStudio — service worker (offline-capable, update-friendly) */
-const CACHE = "berrystudio-v114";
+const CACHE = "berrystudio-v115";
 const ASSETS = [
   "./", "./index.html",
   "./css/styles.css",
-  "./js/i18n.js", "./js/geometry.js", "./js/pleats.js", "./js/pattern-builders.js", "./js/pattern-export.js", "./js/pattern-import.js", "./js/data.js", "./js/mannequin-catalog.js", "./js/mannequin-styling.js", "./js/fabric-textures.js", "./js/stitch-config.js", "./js/measure-guide-data.js", "./js/measure-guide-3d.js", "./js/measure-form.js", "./js/canvas.js", "./js/human-mannequin.js", "./js/pattern-3d-metrics.js", "./js/pattern-lookbook-styles.js", "./js/three-view.js", "./js/ai.js", "./js/ai-atelier.js", "./js/billboard.js", "./js/library.js", "./js/girls-leotards.js", "./js/underwear-library.js", "./js/reference-patterns.js", "./js/abaya-collection.js", "./js/pattern-flat.js", "./js/fancy-patterns.js", "./js/validate.js",
+  "./js/i18n.js", "./js/geometry.js", "./js/grading.js", "./js/pleats.js", "./js/pattern-builders.js", "./js/pattern-export.js", "./js/pattern-import.js", "./js/data.js", "./js/mannequin-catalog.js", "./js/mannequin-styling.js", "./js/fabric-textures.js", "./js/stitch-config.js", "./js/measure-guide-data.js", "./js/measure-guide-3d.js", "./js/measure-form.js", "./js/canvas.js", "./js/human-mannequin.js", "./js/pattern-3d-metrics.js", "./js/pattern-lookbook-styles.js", "./js/three-view.js", "./js/ai.js", "./js/ai-atelier.js", "./js/billboard.js", "./js/library.js", "./js/girls-leotards.js", "./js/underwear-library.js", "./js/reference-patterns.js", "./js/abaya-collection.js", "./js/pattern-flat.js", "./js/fancy-patterns.js", "./js/validate.js",
   "./js/ai-keystore.js", "./js/capability-probe.js", "./js/ai-providers.js", "./js/schema-validate.js", "./js/ai-spec-pipeline.js", "./js/ai-fusion.js", "./js/image-providers.js", "./js/thumbnails.js", "./js/app.js",
   "./js/vendor/pattern-spec-validate.generated.js",
   "./js/cloth-workflow-contract.js", "./js/responsive-workspace.js",

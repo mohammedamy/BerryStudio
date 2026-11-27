@@ -347,7 +347,7 @@ function pointsListSubpath(a, closed) {
 // shape element, composing ancestor transforms as it goes; SKIP_TAGS are
 // definitions (never rendered directly) rather than visible content.
 const SKIP_TAGS = new Set(["defs","symbol","clipPath","mask","pattern","metadata","title","desc","style"]);
-const SKIP_CLASSES = new Set(["seam-allowance","dart","notch","grainline","calibration-scale"]);
+const SKIP_CLASSES = new Set(["seam-allowance","dart","dart-fold","dart-apex","notch","fold-symbol","grainline","grade-line","calibration-scale"]);
 function shapeLabel(node, fallback = null) {
   return node.attrs["data-name"] || node.attrs["inkscape:label"] || node.attrs.id || fallback;
 }

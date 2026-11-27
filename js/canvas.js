@@ -3,8 +3,16 @@
    Grid, rulers, zoom/pan, seam allowance, notches, grainlines,
    selection, snapping, measure & sketch tools, undo/redo.
    ============================================================ */
-import { buildDXF, buildHPGL, buildPDF } from './pattern-export.js';
-import { offsetPoly as offsetPolyImpl } from './geometry.js';
+import { buildDXF, buildHPGL, buildPDF, buildSVG } from './pattern-export.js';
+import {
+  offsetPoly as offsetPolyImpl,
+  detectFoldEdgeIndex,
+  resolvePieceSeamAllowances,
+  offsetPieceOutline,
+  edgeNormalAtPoint,
+  findVisualLabelAnchor,
+  inferPieceCutInstruction,
+} from './geometry.js';
 import { ensureClothPieceIds } from './cloth-workflow-contract.js';
 import { acceptCommands, projectContext } from './project-revisions.js';
 import { validateImageStudio } from './image-studio.js';
@@ -41,7 +49,11 @@ export const Canvas = (() => {
   let dartEdit = null;
   let dartHoverPreview = null;        // {pieceIdx, edgeIdx, point} — live preview while hovering with the Add Dart tool, before the drag starts
   let tool = "select";
-  let opts = { grid: true, snap: true, seam: true, unitsCm: true, seamCm: 1, fillOpacity: 0.12 };
+  let opts = { grid: true, snap: true, seam: true, unitsCm: true, seamCm: 1, fillOpacity: 0.12, atelierPaper: true, variableSeam: true, showNestedSizes: false };
+  let pieceMetaContext = { title: '', size: 'M', standard: 'intl', category: 'women' };
+  let nestedLayers = [];                        // [{ size, style, pieces }] live grading overlay
+  function setPieceMetaContext(meta = {}) { pieceMetaContext = { ...pieceMetaContext, ...meta }; render(); }
+  function setNestedLayers(layers) { nestedLayers = Array.isArray(layers) ? layers : []; render(); }
   let sketch = [];                              // user-drawn strokes {tool, pts:[[cm,cm]]}
   let drawing = null;                           // active stroke
   let measurePts = [];
@@ -865,7 +877,9 @@ export const Canvas = (() => {
     if (ghostSnap && ghostSnap.visible) drawSnapshot();
     if (opts.grid) drawGrid(W,H);
     drawRulers(W,H);
+    drawNestedOverlay();
     pieces.forEach((p,i)=>drawPiece(p,i));
+    drawNestedLegend(W,H);
     if (selected>=0 && pieces[selected] && pieces[selected].visible && SHOW_HANDLES.has(tool)) drawHandles(pieces[selected]);
     drawMultiSelection();
     drawConstruction();
@@ -1118,6 +1132,95 @@ export const Canvas = (() => {
 
   function path(poly, close=true){ ctx.beginPath(); poly.forEach((p,i)=>{ const [x,y]=toScreen(p[0],p[1]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);}); if(close)ctx.closePath(); }
 
+  // Traces a piece outline honoring real cubic Bézier `p.curves` when present.
+  function tracePiecePath(p, close = true) {
+    const o = p?.outline;
+    if (!Array.isArray(o) || !o.length) { ctx.beginPath(); return; }
+    const n = o.length;
+    const curveByFrom = new Map((p.curves || []).map((c) => [c.fromIdx, c]));
+    ctx.beginPath();
+    const s0 = toScreen(o[0][0], o[0][1]);
+    ctx.moveTo(s0[0], s0[1]);
+    let i = 0;
+    while (i < n - 1) {
+      const c = curveByFrom.get(i);
+      if (c && c.toIdx > i && c.toIdx < n && c.c1 && c.c2) {
+        const sc1 = toScreen(c.c1[0], c.c1[1]), sc2 = toScreen(c.c2[0], c.c2[1]);
+        const send = toScreen(o[c.toIdx][0], o[c.toIdx][1]);
+        ctx.bezierCurveTo(sc1[0], sc1[1], sc2[0], sc2[1], send[0], send[1]);
+        i = c.toIdx;
+      } else if (c && c.toIdx === 0 && i > 0 && c.c1 && c.c2) {
+        const sc1 = toScreen(c.c1[0], c.c1[1]), sc2 = toScreen(c.c2[0], c.c2[1]);
+        ctx.bezierCurveTo(sc1[0], sc1[1], sc2[0], sc2[1], s0[0], s0[1]);
+        i = n;
+        break;
+      } else {
+        i++;
+        const sp = toScreen(o[i][0], o[i][1]);
+        ctx.lineTo(sp[0], sp[1]);
+      }
+    }
+    const closeC = curveByFrom.get(n - 1);
+    if (i === n - 1 && closeC && closeC.toIdx === 0 && closeC.c1 && closeC.c2) {
+      const sc1 = toScreen(closeC.c1[0], closeC.c1[1]), sc2 = toScreen(closeC.c2[0], closeC.c2[1]);
+      ctx.bezierCurveTo(sc1[0], sc1[1], sc2[0], sc2[1], s0[0], s0[1]);
+    }
+    if (close) ctx.closePath();
+  }
+
+  function drawNestedOverlay() {
+    if (!opts.showNestedSizes || !nestedLayers.length) return;
+    ctx.save();
+    ctx.globalAlpha = 0.78;
+    nestedLayers.forEach((layer) => {
+      const st = layer?.style || { color: '#6d5efc', dash: [5, 3] };
+      ctx.strokeStyle = st.color || '#6d5efc';
+      ctx.lineWidth = layer.size === pieceMetaContext.size ? 1.8 : 1.35;
+      ctx.setLineDash(Array.isArray(st.dash) ? st.dash : [5, 3]);
+      (layer.pieces || []).forEach((np) => {
+        if (!np?.outline?.length) return;
+        tracePiecePath(np, true);
+        ctx.stroke();
+      });
+    });
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function drawNestedLegend(W, H) {
+    if (!opts.showNestedSizes || !nestedLayers.length) return;
+    const pad = 10, rowH = 18, boxW = 104, boxH = pad * 2 + nestedLayers.length * rowH + 18;
+    const isRtl = document.documentElement.dir === 'rtl';
+    // Sit top-left in LTR or top-right below ruler away from zoombar in both directions
+    const x = isRtl ? Math.max(26, W - boxW - 14) : 26;
+    const y = 26;
+    const dark = document.documentElement.dataset.mode === 'dark';
+    ctx.save();
+    ctx.fillStyle = dark ? 'rgba(20,23,31,0.9)' : 'rgba(255,253,248,0.94)';
+    ctx.strokeStyle = CSS('--line') || '#d4d4d8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, boxW, boxH, 8); else ctx.rect(x, y, boxW, boxH);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = CSS('--ink');
+    ctx.font = '700 10px Inter, Cairo, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(document.documentElement.dir === 'rtl' ? 'تدرج المقاسات' : 'Size Nest', x + pad, y + pad + 10);
+    nestedLayers.forEach((layer, idx) => {
+      const ly = y + pad + 24 + idx * rowH;
+      const st = layer.style || { color: '#6d5efc', dash: [] };
+      ctx.strokeStyle = st.color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash(st.dash || []);
+      ctx.beginPath(); ctx.moveTo(x + pad, ly); ctx.lineTo(x + pad + 34, ly); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = CSS('--ink');
+      ctx.font = (layer.size === pieceMetaContext.size ? '700 ' : '500 ') + '10.5px Inter, sans-serif';
+      ctx.fillText(layer.size, x + pad + 42, ly + 3);
+    });
+    ctx.restore();
+  }
+
   // WP-39 (Tailornova feature study): an uploaded fabric-swatch Image, decoded
   // once and cached by its own dataURL — Image objects (unlike three-view.js's
   // GPU textures) have no dispose-ownership contract to worry about, so a
@@ -1142,40 +1245,69 @@ export const Canvas = (() => {
     if (!p.visible) return;
     const sel = i===selected;
     const col = p.color || CSS("--brand");
-    // seam allowance (dashed outer)
-    if (opts.seam) {
-      const off = offsetPoly(p.outline, opts.seamCm);
-      ctx.setLineDash([6,4]); ctx.lineWidth=1.5; ctx.strokeStyle=CSS("--ink-2");
-      path(off); ctx.stroke(); ctx.setLineDash([]);
-    }
-    // fill (cutting area) — fabric colour + adjustable transparency
-    // (a piece may carry its own opacity override from Layer properties)
+    const isAtelier = opts.atelierPaper !== false;
+    const dark = document.documentElement.dataset.mode === "dark";
+    const saOutline = opts.seam ? offsetPieceOutline(p, opts.seamCm, { variable: opts.variableSeam !== false }) : null;
     const baseOp = p.opacity != null ? p.opacity : opts.fillOpacity;
     const fillAlpha = sel ? Math.min(0.85, baseOp*1.9) : baseOp;
-    path(p.outline);
-    // WP-39 (Tailornova feature study): an uploaded fabric-swatch photo fills
-    // the piece as a real tiled pattern instead of a solid colour, once its
-    // Image has decoded (getTextureImage() returns null on the first ask and
-    // triggers a render() when ready — the solid-colour fallback below covers
-    // that one frame so the piece is never invisible while it loads).
     const texImg = p.textureDataURL ? getTextureImage(p.textureDataURL) : null;
-    if (texImg) {
-      const pat = ctx.createPattern(texImg, "repeat");
-      const s = view.scale * TEXTURE_TILE_CM / texImg.naturalWidth;
-      if (pat.setTransform) pat.setTransform(new DOMMatrix([s,0,0,s,0,0]));
-      ctx.fillStyle = pat; ctx.globalAlpha = fillAlpha; ctx.fill(); ctx.globalAlpha = 1;
-    } else {
-      ctx.fillStyle = hexA(col, fillAlpha); ctx.fill();
-    }
-    // cutting line
-    ctx.lineWidth = sel?3:2; ctx.strokeStyle = col;
-    if (p.locked) ctx.setLineDash([2,3]);
-    ctx.stroke(); ctx.setLineDash([]);
 
-    // closing edges (WP-46) — redrawn on top of the cutting line in a
-    // distinct dashed accent so an edge deliberately left open for the
-    // garment's closure (zip/buttons/hook-and-eye) reads differently from
-    // every other seam at a glance. See js/canvas.js toggleClosingEdge().
+    if (isAtelier && !texImg) {
+      // Atelier technical paper mode: translucent drafting vellum on outer cut boundary (or net outline),
+      // crisp SOLID dark ink Cutting Line outside (with 0 cm on Cut-on-Fold edges), and DASHED net Stitching Line inside.
+      if (saOutline && saOutline.length >= 3) {
+        path(saOutline);
+        ctx.fillStyle = dark ? (sel ? "rgba(42,48,62,0.92)" : "rgba(26,30,38,0.84)") : (sel ? "rgba(255,249,235,0.94)" : "rgba(255,253,247,0.88)");
+        ctx.fill();
+        ctx.save();
+        ctx.fillStyle = hexA(col, sel ? 0.14 : 0.045);
+        tracePiecePath(p, true);
+        ctx.fill();
+        ctx.restore();
+        ctx.lineWidth = sel ? 2.6 : 1.75;
+        ctx.strokeStyle = dark ? "#e4e4e7" : "#18181b";
+        if (p.locked) ctx.setLineDash([2,3]);
+        path(saOutline);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Inner net stitching line
+        tracePiecePath(p, true);
+        ctx.lineWidth = sel ? 2.0 : 1.25;
+        ctx.strokeStyle = col;
+        ctx.setLineDash([5, 3.5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else {
+        tracePiecePath(p, true);
+        ctx.fillStyle = dark ? (sel ? "rgba(42,48,62,0.92)" : "rgba(26,30,38,0.84)") : (sel ? "rgba(255,249,235,0.94)" : "rgba(255,253,247,0.88)");
+        ctx.fill();
+        ctx.lineWidth = sel ? 2.6 : 1.85;
+        ctx.strokeStyle = col;
+        if (p.locked) ctx.setLineDash([2,3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    } else {
+      // Studio color / fabric-swatch mode
+      if (saOutline && saOutline.length >= 3) {
+        ctx.setLineDash([6,4]); ctx.lineWidth=1.5; ctx.strokeStyle=CSS("--ink-2");
+        path(saOutline); ctx.stroke(); ctx.setLineDash([]);
+      }
+      tracePiecePath(p, true);
+      if (texImg) {
+        const pat = ctx.createPattern(texImg, "repeat");
+        const s = view.scale * TEXTURE_TILE_CM / texImg.naturalWidth;
+        if (pat.setTransform) pat.setTransform(new DOMMatrix([s,0,0,s,0,0]));
+        ctx.fillStyle = pat; ctx.globalAlpha = fillAlpha; ctx.fill(); ctx.globalAlpha = 1;
+      } else {
+        ctx.fillStyle = hexA(col, fillAlpha); ctx.fill();
+      }
+      ctx.lineWidth = sel?3:2; ctx.strokeStyle = col;
+      if (p.locked) ctx.setLineDash([2,3]);
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    // closing edges (WP-46)
     if (p.closingEdges && p.closingEdges.length){
       const n=p.outline.length;
       ctx.save(); ctx.strokeStyle=CSS("--warn"); ctx.lineWidth=(sel?3:2)+1.5; ctx.setLineDash([2,4]); ctx.lineCap="round";
@@ -1187,24 +1319,98 @@ export const Canvas = (() => {
       ctx.restore(); ctx.setLineDash([]);
     }
 
-    // darts
-    ctx.lineWidth=1.4; ctx.strokeStyle=col;
-    (p.darts||[]).forEach(d=>{ ctx.beginPath(); const [a,b,c]=d.map(pt=>toScreen(pt[0],pt[1])); ctx.moveTo(b[0],b[1]); ctx.lineTo(a[0],a[1]); ctx.lineTo(c[0],c[1]); ctx.stroke(); });
+    // Cut-on-Fold bracket symbol (┌──┐ arrows pointing into fold edge)
+    const foldIdx = p.cutOnFold ? detectFoldEdgeIndex(p) : -1;
+    if (foldIdx >= 0 && p.outline.length >= 3) {
+      const a = p.outline[foldIdx], b = p.outline[(foldIdx + 1) % p.outline.length];
+      const fLen = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (fLen >= 3) {
+        const midPt = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
+        const nInfo = edgeNormalAtPoint(p.outline, midPt);
+        const tx = (b[0] - a[0]) / fLen, ty = (b[1] - a[1]) / fLen;
+        const [ix, iy] = nInfo.inward;
+        const halfSpan = Math.min(Math.max(fLen * 0.28, 2.5), 10);
+        const inset = Math.min(1.05, Math.max(0.65, fLen * 0.06));
+        const p1 = [midPt[0] - tx * halfSpan, midPt[1] - ty * halfSpan];
+        const p2 = [midPt[0] + tx * halfSpan, midPt[1] + ty * halfSpan];
+        const s1 = [p1[0] + ix * inset, p1[1] + iy * inset];
+        const s2 = [p2[0] + ix * inset, p2[1] + iy * inset];
+        const sp1 = toScreen(p1[0], p1[1]), sp2 = toScreen(p2[0], p2[1]);
+        const ss1 = toScreen(s1[0], s1[1]), ss2 = toScreen(s2[0], s2[1]);
+        ctx.save();
+        ctx.strokeStyle = isAtelier ? (dark ? "#38bdf8" : "#0369a1") : col;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(sp1[0], sp1[1]); ctx.lineTo(ss1[0], ss1[1]);
+        ctx.lineTo(ss2[0], ss2[1]); ctx.lineTo(sp2[0], sp2[1]);
+        ctx.stroke();
+        arrow(ss1, sp1); arrow(ss2, sp2);
+        const sm = toScreen((s1[0] + s2[0]) * 0.5 + ix * 0.45, (s1[1] + s2[1]) * 0.5 + iy * 0.45);
+        const ang = Math.atan2(sp2[1] - sp1[1], sp2[0] - sp1[0]);
+        const uprightAng = (ang > Math.PI / 2 || ang < -Math.PI / 2) ? ang + Math.PI : ang;
+        ctx.translate(sm[0], sm[1]);
+        ctx.rotate(uprightAng);
+        ctx.fillStyle = isAtelier ? (dark ? "#38bdf8" : "#0369a1") : col;
+        ctx.font = "700 8px Inter, Cairo, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(document.documentElement.dir === "rtl" ? "على الثنية" : "FOLD", 0, 0);
+        ctx.restore();
+      }
+    }
 
-    // notches
+    // darts — solid stitched legs + dashed center fold + circular apex drill punch
+    (p.darts||[]).forEach(d=>{
+      if (!Array.isArray(d) || d.length < 3) return;
+      const [apex, legA, legC] = d;
+      const [sApex, sLegA, sLegC] = [apex, legA, legC].map(pt=>toScreen(pt[0],pt[1]));
+      ctx.strokeStyle=isAtelier ? "#dc2626" : col; ctx.lineWidth=1.4;
+      ctx.beginPath(); ctx.moveTo(sLegA[0],sLegA[1]); ctx.lineTo(sApex[0],sApex[1]); ctx.lineTo(sLegC[0],sLegC[1]); ctx.stroke();
+      const midW = [(legA[0]+legC[0])*0.5, (legA[1]+legC[1])*0.5];
+      const sMid = toScreen(midW[0], midW[1]);
+      ctx.save(); ctx.setLineDash([3,3]); ctx.lineWidth=1; ctx.strokeStyle="#ef4444";
+      ctx.beginPath(); ctx.moveTo(sApex[0],sApex[1]); ctx.lineTo(sMid[0],sMid[1]); ctx.stroke();
+      ctx.restore();
+      // Apex drill-hole mark inset 0.5 cm from apex along center fold
+      const dx = midW[0]-apex[0], dy = midW[1]-apex[1], dLen = Math.hypot(dx,dy) || 1;
+      const drillW = dLen > 1.2 ? [apex[0] + (dx/dLen)*0.55, apex[1] + (dy/dLen)*0.55] : apex;
+      const sDrill = toScreen(drillW[0], drillW[1]);
+      ctx.save();
+      ctx.fillStyle = dark ? "#18181b" : "#ffffff";
+      ctx.strokeStyle = "#dc2626"; ctx.lineWidth = 1.3;
+      ctx.beginPath(); ctx.arc(sDrill[0], sDrill[1], 3, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    });
+
+    // perpendicular industrial V-notches (inward along true edge normal)
     (p.notches||[]).forEach((nt,ni)=>{
-      const [x,y]=toScreen(nt[0],nt[1]);
-      ctx.fillStyle=CSS("--ink"); ctx.beginPath(); ctx.moveTo(x,y-5); ctx.lineTo(x-3,y+3); ctx.lineTo(x+3,y+3); ctx.closePath(); ctx.fill();
+      const rawPt = Array.isArray(nt) ? nt : [nt.x ?? 0, nt.y ?? 0];
+      const nInfo = edgeNormalAtPoint(p.outline, rawPt);
+      const basePt = nInfo.proj || rawPt;
+      const sBase = toScreen(basePt[0], basePt[1]);
+      // Edge unit vectors in screen Y-down space match pattern space direction
+      const [tx, ty] = nInfo.tangent;
+      const [inx, iny] = nInfo.inward;
+      const drawV = (offsetAlongPx) => {
+        const bx = sBase[0] + tx * offsetAlongPx, by = sBase[1] + ty * offsetAlongPx;
+        const tipX = bx + inx * 6.5, tipY = by + iny * 6.5;
+        const lX = bx - tx * 3.2, lY = by - ty * 3.2;
+        const rX = bx + tx * 3.2, rY = by + ty * 3.2;
+        ctx.beginPath(); ctx.moveTo(lX, lY); ctx.lineTo(tipX, tipY); ctx.lineTo(rX, rY); ctx.closePath();
+        ctx.fill();
+      };
+      ctx.fillStyle = isAtelier ? (dark ? "#fbbf24" : "#18181b") : CSS("--ink");
+      if (!Array.isArray(nt) && nt?.type === "double") {
+        drawV(-3.2); drawV(3.2);
+      } else {
+        drawV(0);
+      }
       if (selNotch && selNotch.pieceIdx===i && selNotch.idx===ni){
         ctx.save(); ctx.strokeStyle=CSS("--ok"); ctx.lineWidth=2.5; ctx.globalAlpha=0.85;
-        ctx.beginPath(); ctx.arc(x,y,8,0,Math.PI*2); ctx.stroke(); ctx.restore();
+        ctx.beginPath(); ctx.arc(sBase[0],sBase[1],8,0,Math.PI*2); ctx.stroke(); ctx.restore();
       }
     });
 
-    // named outline points (WP-46) — a small tag beside the vertex; two
-    // vertices sharing a name (same piece or different pieces) are what
-    // the Sewing Guide (js/app.js buildSewingSteps) reads as "match and
-    // seam these together". See setOutlinePointName()/getMatchedPointGroups().
+    // named outline points (WP-46)
     if (p.pointNames){
       ctx.font="600 10px Inter, sans-serif"; ctx.textAlign="start"; ctx.fillStyle=CSS("--accent");
       Object.entries(p.pointNames).forEach(([idxStr,name])=>{
@@ -1214,24 +1420,87 @@ export const Canvas = (() => {
       });
     }
 
-    // grainline arrow
+    // Technical Atelier Piece Spec Stamp anchored safely inside the piece interior
+    const anchor = findVisualLabelAnchor(p.outline);
+    const [rawLx, rawLy] = toScreen(anchor.x, anchor.y);
+    const foldShiftPx = (foldIdx >= 0 && anchor.width * view.scale > 95) ? Math.min(10, anchor.width * view.scale * 0.04) : 0;
+    const lx = rawLx + foldShiftPx, ly = rawLy;
+
+    // grainline arrow + non-overlapping GRAIN tag positioned away from the Spec Stamp
     if (p.grain && p.grain.length===2){
       const [a,b]=p.grain.map(pt=>toScreen(pt[0],pt[1]));
-      ctx.strokeStyle=col; ctx.lineWidth=1.6; ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke();
+      ctx.strokeStyle=isAtelier ? "#4f46e5" : col; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke();
       arrow(a,b); arrow(b,a);
+      const sLen = Math.hypot(b[0]-a[0], b[1]-a[1]);
+      if (sLen > 65) {
+        const candTop = [a[0] + (b[0]-a[0])*0.16, a[1] + (b[1]-a[1])*0.16];
+        const candBot = [a[0] + (b[0]-a[0])*0.84, a[1] + (b[1]-a[1])*0.84];
+        const dTop = Math.hypot(candTop[0]-lx, candTop[1]-ly);
+        const dBot = Math.hypot(candBot[0]-lx, candBot[1]-ly);
+        const gPt = dBot >= dTop ? candBot : candTop;
+        if (Math.max(dTop, dBot) > 26) {
+          const ang = Math.atan2(b[1]-a[1], b[0]-a[0]);
+          const upAng = (ang > Math.PI/2 || ang < -Math.PI/2) ? ang + Math.PI : ang;
+          ctx.save();
+          ctx.translate(gPt[0], gPt[1]);
+          ctx.rotate(upAng);
+          ctx.fillStyle = isAtelier ? (dark ? "#a5b4fc" : "#4338ca") : col;
+          ctx.font = "700 7.5px Inter, Cairo, sans-serif";
+          ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+          ctx.fillText(document.documentElement.dir === "rtl" ? "نسيج" : "GRAIN", 0, -3);
+          ctx.restore();
+        }
+      }
     }
 
-    // bilingual label
-    const cx = avg(p.outline.map(pt=>pt[0])), cy = avg(p.outline.map(pt=>pt[1]));
-    const [lx,ly]=toScreen(cx,cy);
     const lang = document.documentElement.dir==="rtl"?"ar":"en";
-    ctx.textAlign="center"; ctx.fillStyle=CSS("--ink");
-    ctx.font="700 12px "+(lang==="ar"?"Cairo, sans-serif":"Inter, sans-serif");
-    ctx.fillText(p.name[lang], lx, ly-4);
-    ctx.font="600 10px "+(lang==="ar"?"Inter":"Cairo")+", sans-serif";
+    const altLang = lang === "ar" ? "en" : "ar";
+    const kFit = Math.min(1.0, Math.max(0.55, (anchor.maxRadius * view.scale) / 52));
+    const cutInfo = inferPieceCutInstruction(p);
+    const titleStr = (p.name && (p.name[lang] || p.name.en)) || p.key || "";
+    const altStr = (p.name && p.name[altLang] && p.name[altLang] !== p.name[lang]) ? p.name[altLang] : "";
+    const sizeLabel = pieceMetaContext.size || "M";
+    const cutLineTxt = `${sizeLabel} · ${cutInfo[lang]}`;
+    let saTxt = "";
+    if (opts.seam && anchor.maxRadius * view.scale >= 26) {
+      const perEdge = resolvePieceSeamAllowances(p, opts.seamCm, { variable: opts.variableSeam !== false });
+      const maxSA = Math.max(...perEdge);
+      saTxt = `SA ${opts.seamCm}cm`;
+      if (maxSA > opts.seamCm + 0.5) saTxt += ` · Hem ${maxSA.toFixed(0)}cm`;
+      if (foldIdx >= 0) saTxt += lang === "ar" ? " · ثنية 0" : " · Fold 0";
+    }
+    const fTitle = Math.max(8, Math.round(11.5 * kFit));
+    const fSub = Math.max(6.5, Math.round(9 * kFit));
+    // Clamp horizontal width cleanly inside piece interior clearance so labels never cross stitch edges
+    const maxW = Math.max(36, Math.min(anchor.width * view.scale * 0.78, anchor.maxRadius * view.scale * 1.9));
+    ctx.font = `700 ${fTitle}px ` + (lang === "ar" ? "Cairo, sans-serif" : "Inter, sans-serif");
+    const wTitle = ctx.measureText(titleStr).width;
+    ctx.font = `600 ${Math.max(6.5, fSub - 0.5)}px Inter, Cairo, sans-serif`;
+    const wMaxSub = Math.max(ctx.measureText(cutLineTxt).width, saTxt ? ctx.measureText(saTxt).width : 0, 1);
+    const widthFit = Math.min(1, maxW / Math.max(wTitle, wMaxSub, 1));
+    const effTitle = Math.max(6.5, fTitle * widthFit);
+    const effSub = Math.max(5.5, fSub * widthFit);
+
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillStyle=CSS("--ink");
+    ctx.font=`700 ${effTitle.toFixed(1)}px `+(lang==="ar"?"Cairo, sans-serif":"Inter, sans-serif");
+    ctx.fillText(titleStr, lx, ly - effTitle * 0.8);
+    ctx.font=`600 ${effSub.toFixed(1)}px `+(altLang==="ar"?"Cairo":"Inter")+", sans-serif";
     ctx.fillStyle=col;
-    ctx.fillText(p.name[lang==="ar"?"en":"ar"], lx, ly+10);
-    if (p.locked) drawLock(lx, ly-20);
+    if (altStr) {
+      ctx.fillText(altStr, lx, ly + effSub * 0.35);
+    }
+    if (anchor.maxRadius * view.scale >= 18) {
+      ctx.fillStyle = CSS("--ink-2");
+      ctx.font = `600 ${Math.max(5.5, effSub - 0.4).toFixed(1)}px Inter, Cairo, sans-serif`;
+      ctx.fillText(cutLineTxt, lx, ly + effSub * 1.45);
+      if (saTxt) {
+        ctx.fillText(saTxt, lx, ly + effSub * 2.5);
+      }
+    }
+    ctx.textBaseline = "alphabetic";
+    if (p.locked) drawLock(lx, ly - effTitle * 1.9);
   }
   // small padlock glyph (piece is locked)
   function drawLock(cx, cy){
@@ -1858,14 +2127,20 @@ export const Canvas = (() => {
   }
   function exportSVG(){
     if(!pieces.length) return "";
-    const all=pieces.flatMap(p=>p.outline); const xs=all.map(p=>p[0]),ys=all.map(p=>p[1]);
-    const minX=Math.min(...xs)-3,minY=Math.min(...ys)-3,w=Math.max(...xs)-minX+3,h=Math.max(...ys)-minY+3;
-    let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${w} ${h}" width="${w}cm" height="${h}cm">`;
-    pieces.forEach(p=>{ s+=`<path d="${outlinePathD(p)}" fill="none" stroke="#222" stroke-width="0.2"/>`;
-      if(p.grain?.length===2) s+=`<line x1="${p.grain[0][0]}" y1="${p.grain[0][1]}" x2="${p.grain[1][0]}" y2="${p.grain[1][1]}" stroke="#222" stroke-width="0.15"/>`; });
+    const lang = typeof document !== "undefined" && document.documentElement.dir === "rtl" ? "ar" : "en";
+    const baseSvg = buildSVG(pieces, {
+      preservePositions: true,
+      seamAllowanceCm: opts.seam ? opts.seamCm : 0,
+      variableSeam: opts.variableSeam !== false,
+      nestedLayers: opts.showNestedSizes ? nestedLayers : null,
+      size: pieceMetaContext.size,
+      title: pieceMetaContext.title,
+      lang,
+    });
+    if (!texts.length || !baseSvg) return baseSvg;
     const escXML = t => String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    texts.forEach(tx=>{ s+=`<text x="${tx.x}" y="${tx.y}" font-size="${tx.size||4}" fill="${tx.color||"#222"}"${tx.bold?' font-weight="700"':""}${tx.italic?' font-style="italic"':""} font-family="Inter, sans-serif">${escXML(tx.text)}</text>`; });
-    return s+"</svg>";
+    const txtEls = texts.map(tx=>`<text x="${tx.x}" y="${tx.y}" font-size="${tx.size||4}" fill="${tx.color||"#222"}"${tx.bold?' font-weight="700"':""}${tx.italic?' font-style="italic"':""} font-family="Inter, sans-serif">${escXML(tx.text)}</text>`).join("\n");
+    return baseSvg.replace("</svg>", `${txtEls}\n</svg>`);
   }
 
   // ---- text annotation API ----
@@ -2551,6 +2826,7 @@ export const Canvas = (() => {
            setBackgroundImage, setBgOpacity, setBgVisible, removeBackground, hasBackground, getBgOpacity,
            moveBackground, onCalibrationRequest, applyCalibration,
            centerOn, selectPoint, selectCons, clearHighlight, armPick, cancelPick,
+           setPieceMetaContext, setNestedLayers,
            freezeSnapshot, showSnapshot, setSnapshotOpacity, removeSnapshot, hasSnapshot, getSnapshotOpacity,
            // exposed for js/validate.js (WP-0.4) — a pure function, safe to reuse rather than reimplement
            offsetPoly };

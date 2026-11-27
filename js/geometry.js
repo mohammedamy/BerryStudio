@@ -135,3 +135,510 @@ export function offsetPoly(poly, d, opts = {}) {
   }
   return out;
 }
+
+// Signed double shoelace area (positive in CW screen/Y-down coords for BerryStudio pieces).
+function signedDoubleArea(poly) {
+  let area = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i];
+    const [x2, y2] = poly[(i + 1) % poly.length];
+    area += x1 * y2 - x2 * y1;
+  }
+  return area;
+}
+
+// Even-odd raycast point-in-polygon check (pattern cm space).
+function pointInPoly(pt, poly) {
+  if (!Array.isArray(poly) || poly.length < 3) return false;
+  const [px, py] = pt;
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    const intersect = ((yi > py) !== (yj > py)) &&
+      (px < ((xj - xi) * (py - yi)) / ((yj - yi) || 1e-12) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Detects which outline edge index acts as the Cut-on-Fold line for a piece.
+ * Checks explicit `piece.foldEdgeIndex` first, then the longest vertical edge along
+ * the left (or right) bounding edge when `piece.cutOnFold` is true. Returns -1 if none.
+ */
+export function detectFoldEdgeIndex(piece) {
+  const o = piece?.outline;
+  if (!piece?.cutOnFold || !Array.isArray(o) || o.length < 3) return -1;
+  if (Number.isInteger(piece.foldEdgeIndex) && piece.foldEdgeIndex >= 0 && piece.foldEdgeIndex < o.length) {
+    return piece.foldEdgeIndex;
+  }
+  const xs = o.map((p) => p[0]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const w = Math.max(maxX - minX, 1);
+  const xTol = Math.max(0.35, w * 0.025);
+  const dxTol = Math.max(0.25, w * 0.02);
+
+  let bestLeftIdx = -1, bestLeftLen = -1;
+  let bestRightIdx = -1, bestRightLen = -1;
+  for (let i = 0; i < o.length; i++) {
+    const a = o[i], b = o[(i + 1) % o.length];
+    const dx = Math.abs(a[0] - b[0]);
+    const dy = Math.abs(a[1] - b[1]);
+    if (dx > dxTol || dy < 2) continue;
+    const avgX = (a[0] + b[0]) * 0.5;
+    if (Math.abs(avgX - minX) <= xTol && dy > bestLeftLen) {
+      bestLeftLen = dy; bestLeftIdx = i;
+    } else if (Math.abs(avgX - maxX) <= xTol && dy > bestRightLen) {
+      bestRightLen = dy; bestRightIdx = i;
+    }
+  }
+  return bestLeftIdx >= 0 ? bestLeftIdx : bestRightIdx;
+}
+
+const TIGHT_CURVE_ROLES = /(collar|stand|neck|facing|placket|cuff|waistband|belt|pocket|strap|tab|gusset|fly|yoke)/i;
+const HEM_CANDIDATE_ROLES = /(bodice|front|back|skirt|dress|trouser|pant|short|sleeve|peplum|coat|jacket|shirt|blouse|abaya|kaftan|panel|gown|tunic|top)/i;
+
+/**
+ * Resolves per-edge seam allowances (cm) for a piece:
+ *  - 0 cm on Cut-on-Fold edge
+ *  - `hemCm` (default 3.0 cm) on bottom hem edges of main garment pieces
+ *  - min(default, 1.0 cm) on tight curves / collars / facings / necklines
+ *  - explicit `piece.edgeSeamAllowances[i]` when declared
+ */
+export function resolvePieceSeamAllowances(piece, defaultSeamCm = 1.0, opts = {}) {
+  const o = piece?.outline;
+  if (!Array.isArray(o) || o.length < 3) return [];
+  const n = o.length;
+  const base = Math.max(0, Number(defaultSeamCm) || 0);
+  if (base === 0) return new Array(n).fill(0);
+
+  const variable = opts.variable !== false;
+  const zeroFold = opts.zeroFold !== false;
+  const foldIdx = zeroFold ? detectFoldEdgeIndex(piece) : -1;
+
+  if (!variable) {
+    return o.map((_, i) => {
+      if (Array.isArray(piece.edgeSeamAllowances) && Number.isFinite(piece.edgeSeamAllowances[i])) {
+        return Math.max(0, piece.edgeSeamAllowances[i]);
+      }
+      return i === foldIdx ? 0 : base;
+    });
+  }
+
+  const roleStr = `${piece.role || ''} ${(piece.name && piece.name.en) || ''} ${piece.key || ''}`;
+  const isTightPiece = TIGHT_CURVE_ROLES.test(roleStr) && !/(dress|bodice|skirt|front_panel|back_panel)/i.test(piece.role || '');
+  const isHemPiece = !isTightPiece && (HEM_CANDIDATE_ROLES.test(roleStr) || !piece.role);
+  const hemCm = Number.isFinite(opts.hemCm) ? opts.hemCm : Math.max(base, 3.0);
+  const curveAllowanceCm = Math.min(base, 1.0);
+
+  const ys = o.map((p) => p[1]);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const h = Math.max(maxY - minY, 1);
+
+  const curveEdgeSet = new Set();
+  (piece.curves || []).forEach((c) => {
+    if (c && Number.isInteger(c.fromIdx) && Number.isInteger(c.toIdx)) {
+      let idx = c.fromIdx;
+      let guard = 0;
+      while (idx !== c.toIdx && guard++ < n) {
+        curveEdgeSet.add(idx);
+        idx = (idx + 1) % n;
+      }
+    }
+  });
+
+  const hemEdgeSet = new Set();
+  (piece.edges || []).forEach((e) => {
+    if (e && /hem/i.test(e.seamId || e.role || '')) {
+      let idx = e.fromIdx;
+      let guard = 0;
+      while (idx !== e.toIdx && guard++ < n) {
+        hemEdgeSet.add(idx);
+        idx = (idx + 1) % n;
+      }
+    }
+  });
+
+  return o.map((a, i) => {
+    if (Array.isArray(piece.edgeSeamAllowances) && Number.isFinite(piece.edgeSeamAllowances[i])) {
+      return Math.max(0, piece.edgeSeamAllowances[i]);
+    }
+    if (i === foldIdx) return 0;
+    const b = o[(i + 1) % n];
+    const edgeLen = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const isBottomHoriz = isHemPiece &&
+      a[1] >= maxY - Math.max(1.6, h * 0.06) &&
+      b[1] >= maxY - Math.max(1.6, h * 0.06) &&
+      Math.abs(a[0] - b[0]) >= Math.abs(a[1] - b[1]) * 1.4 &&
+      edgeLen >= 4;
+    if (hemEdgeSet.has(i) || isBottomHoriz) return hemCm;
+    if (isTightPiece) return curveAllowanceCm;
+    const midY = (a[1] + b[1]) * 0.5;
+    if (curveEdgeSet.has(i) && midY <= minY + h * 0.45) return curveAllowanceCm;
+    return base;
+  });
+}
+
+/**
+ * Offsets a pattern piece's outline outward using resolved per-edge seam allowances
+ * (keeping Cut-on-Fold edges at 0 cm and preventing extreme acute miter spikes).
+ */
+export function offsetPieceOutline(piece, defaultSeamCm = 1.0, opts = {}) {
+  const o = piece?.outline;
+  if (!Array.isArray(o) || o.length < 3) return [];
+  const perEdge = resolvePieceSeamAllowances(piece, defaultSeamCm, opts);
+  const maxD = Math.max(...perEdge);
+  if (maxD <= 1e-6) return o.map((pt) => [pt[0], pt[1]]);
+  const raw = offsetPoly(o, defaultSeamCm, { perEdge, join: 'miter' });
+  const miterCap = Math.max(1.5, maxD * 3.5);
+  return raw.map((pt, i) => {
+    const src = o[i % o.length];
+    const dx = pt[0] - src[0], dy = pt[1] - src[1];
+    const dist = Math.hypot(dx, dy);
+    if (dist > miterCap && dist > 1e-6) {
+      const k = miterCap / dist;
+      return [src[0] + dx * k, src[1] + dy * k];
+    }
+    return pt;
+  });
+}
+
+/**
+ * Finds the closest outline edge to `pt` and returns its tangent, guaranteed inward unit
+ * normal (pointing into the piece interior), and outward unit normal.
+ */
+export function edgeNormalAtPoint(outline, pt) {
+  if (!Array.isArray(outline) || outline.length < 3 || !Array.isArray(pt)) {
+    return { edgeIdx: 0, dist: 0, proj: pt ? pt.slice() : [0, 0], tangent: [1, 0], inward: [0, 1], outward: [0, -1] };
+  }
+  const n = outline.length;
+  let bestIdx = 0, bestDist = Infinity, bestProj = outline[0].slice();
+  for (let i = 0; i < n; i++) {
+    const a = outline[i], b = outline[(i + 1) % n];
+    const abx = b[0] - a[0], aby = b[1] - a[1];
+    const len2 = abx * abx + aby * aby;
+    const t = len2 > 1e-9 ? Math.max(0, Math.min(1, ((pt[0] - a[0]) * abx + (pt[1] - a[1]) * aby) / len2)) : 0;
+    const px = a[0] + abx * t, py = a[1] + aby * t;
+    const d = Math.hypot(pt[0] - px, pt[1] - py);
+    if (d < bestDist) {
+      bestDist = d; bestIdx = i; bestProj = [px, py];
+    }
+  }
+  const a = outline[bestIdx], b = outline[(bestIdx + 1) % n];
+  const txLen = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  const tx = (b[0] - a[0]) / txLen, ty = (b[1] - a[1]) / txLen;
+  const area = signedDoubleArea(outline);
+  const outSign = area > 0 ? -1 : 1;
+  let outX = -ty * outSign, outY = tx * outSign;
+  let inX = -outX, inY = -outY;
+  // Verify inward candidate lands inside the polygon for short non-degenerate pieces.
+  const eps = Math.min(0.4, Math.max(0.05, txLen * 0.1));
+  if (!pointInPoly([bestProj[0] + inX * eps, bestProj[1] + inY * eps], outline) &&
+      pointInPoly([bestProj[0] + outX * eps, bestProj[1] + outY * eps], outline)) {
+    [inX, inY, outX, outY] = [outX, outY, inX, inY];
+  }
+  return {
+    edgeIdx: bestIdx,
+    dist: bestDist,
+    proj: bestProj,
+    tangent: [tx, ty],
+    inward: [inX, inY],
+    outward: [outX, outY],
+  };
+}
+
+function pointToOutlineDist(pt, outline) {
+  let best = Infinity;
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i], b = outline[(i + 1) % outline.length];
+    const abx = b[0] - a[0], aby = b[1] - a[1];
+    const len2 = abx * abx + aby * aby;
+    const t = len2 > 1e-9 ? Math.max(0, Math.min(1, ((pt[0] - a[0]) * abx + (pt[1] - a[1]) * aby) / len2)) : 0;
+    const d = Math.hypot(pt[0] - (a[0] + abx * t), pt[1] - (a[1] + aby * t));
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+/**
+ * Computes a safe visual anchor inside a pattern piece (approximate pole of inaccessibility)
+ * so text stamps stay inside curved collars, crescent pieces, and narrow strips.
+ */
+export function findVisualLabelAnchor(outline) {
+  if (!Array.isArray(outline) || outline.length < 3) {
+    return { x: 0, y: 0, maxRadius: 2, width: 4, height: 4 };
+  }
+  const xs = outline.map((p) => p[0]), ys = outline.map((p) => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const width = Math.max(maxX - minX, 1e-3), height = Math.max(maxY - minY, 1e-3);
+  const cx = xs.reduce((s, v) => s + v, 0) / xs.length;
+  const cy = ys.reduce((s, v) => s + v, 0) / ys.length;
+
+  let bestX = cx, bestY = cy;
+  let bestScore = pointInPoly([cx, cy], outline) ? pointToOutlineDist([cx, cy], outline) : -1;
+
+  const steps = 6;
+  for (let gx = 1; gx < steps; gx++) {
+    for (let gy = 1; gy < steps; gy++) {
+      const px = minX + (gx / steps) * width;
+      const py = minY + (gy / steps) * height;
+      if (!pointInPoly([px, py], outline)) continue;
+      const d = pointToOutlineDist([px, py], outline);
+      if (d > bestScore) {
+        bestScore = d; bestX = px; bestY = py;
+      }
+    }
+  }
+  // Prefer slightly above vertical center on tall pieces when clearance is still generous.
+  const upperY = minY + height * 0.42;
+  if (pointInPoly([bestX, upperY], outline)) {
+    const dUp = pointToOutlineDist([bestX, upperY], outline);
+    if (dUp >= Math.max(2.5, bestScore * 0.72)) {
+      bestY = upperY;
+    }
+  }
+  return {
+    x: bestX,
+    y: bestY,
+    maxRadius: Math.max(0.8, bestScore > 0 ? bestScore : Math.min(width, height) * 0.25),
+    width,
+    height,
+  };
+}
+
+/**
+ * Infers clear bilingual cutting instructions (Cut Qty, Fold, Mirrored, Interfacing).
+ */
+export function inferPieceCutInstruction(piece) {
+  const roleStr = `${piece?.role || ''} ${(piece?.name && piece.name.en) || ''} ${piece?.key || ''}`;
+  const interfacing = piece?.interfacing !== undefined
+    ? !!piece.interfacing
+    : /(collar|stand|cuff|waistband|facing|placket|lapel|belt|neckband)/i.test(roleStr);
+  const onFold = !!piece?.cutOnFold;
+  const qty = Number.isInteger(piece?.quantity)
+    ? piece.quantity
+    : (onFold ? 1 : (piece?.bilateral === true || (piece?.bilateral !== false && /(sleeve|trouser|pant|side|leg|pocket|panel|cuff)/i.test(roleStr) && !onFold) ? 2 : 1));
+
+  let en, ar;
+  if (onFold) {
+    en = `Cut ${qty} on Fold`;
+    ar = `قص ${qty} على الثنية`;
+  } else if (qty >= 2) {
+    en = `Cut ${qty} (Pair)`;
+    ar = `قص ${qty} (يمين ويسار)`;
+  } else {
+    en = `Cut ${qty} Self`;
+    ar = `قص ${qty}`;
+  }
+  if (interfacing) {
+    en += ' + Interfacing';
+    ar += ' + فازلين';
+  }
+  return { qty, onFold, interfacing, en, ar };
+}
+
+/**
+ * Measures the arc length (cm) along `piece.outline` from `fromIdx` to `toIdx`.
+ */
+export function measureSeamArcLength(piece, fromIdx, toIdx) {
+  const o = piece?.outline;
+  if (!Array.isArray(o) || o.length < 2) return 0;
+  const n = o.length;
+  const idxList = [((fromIdx % n) + n) % n];
+  const end = ((toIdx % n) + n) % n;
+  let i = idxList[0], guard = 0;
+  while (i !== end && guard++ < n) {
+    i = (i + 1) % n;
+    idxList.push(i);
+  }
+  let total = 0;
+  for (let k = 0; k < idxList.length - 1; k++) {
+    const a = o[idxList[k]], b = o[idxList[k + 1]];
+    total += Math.hypot(b[0] - a[0], b[1] - a[1]);
+  }
+  return total;
+}
+
+function edgeMidY(o, i) { return (o[i][1] + o[(i + 1) % o.length][1]) * 0.5; }
+function edgeMidX(o, i) { return (o[i][0] + o[(i + 1) % o.length][0]) * 0.5; }
+function edgeLen(o, i) { const a = o[i], b = o[(i + 1) % o.length]; return Math.hypot(b[0] - a[0], b[1] - a[1]); }
+
+// Heuristic topological seam detector for patterns lacking explicit edges[].seamId metadata.
+function inferEdgeCandidate(piece, kind) {
+  const o = piece?.outline;
+  if (!Array.isArray(o) || o.length < 3) return null;
+  const n = o.length;
+  const xs = o.map((p) => p[0]), ys = o.map((p) => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const w = Math.max(maxX - minX, 1), h = Math.max(maxY - minY, 1);
+
+  if (kind === 'shoulder') {
+    let best = null, bestScore = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const a = o[i], b = o[(i + 1) % n];
+      const len = edgeLen(o, i);
+      const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
+      if (len < 3 || dx < len * 0.65) continue;
+      if (edgeMidY(o, i) > minY + h * 0.25) continue;
+      const midX = edgeMidX(o, i);
+      const score = (midX - minX) / w * 2 - (edgeMidY(o, i) - minY) / h * 3 + (dy > 0.2 ? 0.5 : 0);
+      if (score > bestScore) { bestScore = score; best = { fromIdx: i, toIdx: (i + 1) % n }; }
+    }
+    return best;
+  }
+  if (kind === 'side') {
+    const idxs = [];
+    for (let i = 0; i < n; i++) {
+      const a = o[i], b = o[(i + 1) % n];
+      const len = edgeLen(o, i);
+      const dy = Math.abs(b[1] - a[1]);
+      if (len < 1 || dy < len * 0.55) continue;
+      if (edgeMidX(o, i) < minX + w * 0.52) continue;
+      if (edgeMidY(o, i) < minY + h * 0.38) continue;
+      idxs.push(i);
+    }
+    if (idxs.length >= 1) return { fromIdx: idxs[0], toIdx: (idxs[idxs.length - 1] + 1) % n };
+  }
+  if (kind === 'armhole') {
+    const idxs = [];
+    for (let i = 0; i < n; i++) {
+      if (edgeMidX(o, i) >= minX + w * 0.55 && edgeMidY(o, i) >= minY + h * 0.06 && edgeMidY(o, i) <= minY + h * 0.52) {
+        idxs.push(i);
+      }
+    }
+    if (idxs.length >= 1) return { fromIdx: idxs[0], toIdx: (idxs[idxs.length - 1] + 1) % n };
+  }
+  if (kind === 'sleevecap') {
+    const idxs = [];
+    for (let i = 0; i < n; i++) {
+      if (edgeMidY(o, i) <= minY + h * 0.42) idxs.push(i);
+    }
+    if (idxs.length >= 2) return { fromIdx: idxs[0], toIdx: (idxs[idxs.length - 1] + 1) % n };
+  }
+  return null;
+}
+
+/**
+ * Analyzes seam balance across all pieces — combining declared `edges[].seamId` pairs
+ * and auto-inferred shoulder, side-seam, and armhole/sleeve-cap pairs.
+ */
+export function analyzeSeamBalance(pieces) {
+  if (!Array.isArray(pieces) || pieces.length < 2) return [];
+  const pairs = [];
+  const seenKeys = new Set();
+  const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+
+  const bySeam = {};
+  pieces.forEach((p, i) => {
+    (p.edges || []).forEach((e) => {
+      if (e?.seamId) (bySeam[e.seamId] ||= []).push({ pieceIdx: i, edge: e });
+    });
+  });
+
+  Object.entries(bySeam).forEach(([seamId, entries]) => {
+    for (let a = 0; a < entries.length; a++) {
+      for (let b = a + 1; b < entries.length; b++) {
+        if (entries[a].pieceIdx === entries[b].pieceIdx) continue;
+        const A = entries[a], B = entries[b];
+        const oA = pieces[A.pieceIdx].outline, oB = pieces[B.pieceIdx].outline;
+        const sameDir = dist(oA[A.edge.fromIdx], oB[B.edge.fromIdx]) + dist(oA[A.edge.toIdx], oB[B.edge.toIdx]);
+        const oppDir = dist(oA[A.edge.fromIdx], oB[B.edge.toIdx]) + dist(oB[B.edge.fromIdx], oA[A.edge.toIdx]);
+        const lenA = measureSeamArcLength(pieces[A.pieceIdx], A.edge.fromIdx, A.edge.toIdx);
+        const lenB = measureSeamArcLength(pieces[B.pieceIdx], B.edge.fromIdx, B.edge.toIdx);
+        const diffCm = +(lenB - lenA).toFixed(2);
+        const absDiff = Math.abs(diffCm);
+        const status = absDiff <= 0.45 ? 'ok' : (absDiff <= 1.2 ? 'ease' : 'warn');
+        const pAName = pieces[A.pieceIdx].name || {};
+        const pBName = pieces[B.pieceIdx].name || {};
+        pairs.push({
+          id: seamId,
+          labelEn: `${pAName.en || seamId} ↔ ${pBName.en || seamId}`,
+          labelAr: `${pAName.ar || seamId} ↔ ${pBName.ar || seamId}`,
+          source: 'declared',
+          a: A,
+          b: B,
+          bReversed: oppDir < sameDir,
+          lenA: +lenA.toFixed(2),
+          lenB: +lenB.toFixed(2),
+          diffCm,
+          status,
+        });
+        seenKeys.add(`${Math.min(A.pieceIdx, B.pieceIdx)}-${Math.max(A.pieceIdx, B.pieceIdx)}-${seamId}`);
+      }
+    }
+  });
+
+  // Auto-inferred structural seams (Shoulder, Side Seam, Armhole ↔ Sleeve Cap)
+  const frontIdx = pieces.findIndex((p) => /front|bodice_front|shirt_front/i.test(`${p.role || ''} ${p.key || ''} ${p.name?.en || ''}`) && !/back|skirt|trouser|pant|sleeve/i.test(`${p.role || ''} ${p.key || ''}`));
+  const backIdx = pieces.findIndex((p) => /back|bodice_back|shirt_back/i.test(`${p.role || ''} ${p.key || ''} ${p.name?.en || ''}`) && !/front|skirt|trouser|pant|sleeve/i.test(`${p.role || ''} ${p.key || ''}`));
+  const sleeveIdx = pieces.findIndex((p) => /sleeve/i.test(`${p.role || ''} ${p.key || ''} ${p.name?.en || ''}`));
+
+  if (frontIdx >= 0 && backIdx >= 0) {
+    const shF = inferEdgeCandidate(pieces[frontIdx], 'shoulder');
+    const shB = inferEdgeCandidate(pieces[backIdx], 'shoulder');
+    if (shF && shB && !pairs.some((p) => /shoulder/i.test(p.id))) {
+      const lenA = measureSeamArcLength(pieces[frontIdx], shF.fromIdx, shF.toIdx);
+      const lenB = measureSeamArcLength(pieces[backIdx], shB.fromIdx, shB.toIdx);
+      const diffCm = +(lenB - lenA).toFixed(2);
+      pairs.push({
+        id: 'shoulder',
+        labelEn: 'Front ↔ Back Shoulder Seam',
+        labelAr: 'خياطة الكتف (الأمام ↔ الخلف)',
+        source: 'inferred',
+        a: { pieceIdx: frontIdx, edge: shF },
+        b: { pieceIdx: backIdx, edge: shB },
+        bReversed: false,
+        lenA: +lenA.toFixed(2),
+        lenB: +lenB.toFixed(2),
+        diffCm,
+        status: Math.abs(diffCm) <= 0.45 ? 'ok' : (Math.abs(diffCm) <= 1.2 ? 'ease' : 'warn'),
+      });
+    }
+    const sdF = inferEdgeCandidate(pieces[frontIdx], 'side');
+    const sdB = inferEdgeCandidate(pieces[backIdx], 'side');
+    if (sdF && sdB && !pairs.some((p) => /side/i.test(p.id))) {
+      const lenA = measureSeamArcLength(pieces[frontIdx], sdF.fromIdx, sdF.toIdx);
+      const lenB = measureSeamArcLength(pieces[backIdx], sdB.fromIdx, sdB.toIdx);
+      const diffCm = +(lenB - lenA).toFixed(2);
+      pairs.push({
+        id: 'side_seam',
+        labelEn: 'Front ↔ Back Side Seam',
+        labelAr: 'خياطة الجنب (الأمام ↔ الخلف)',
+        source: 'inferred',
+        a: { pieceIdx: frontIdx, edge: sdF },
+        b: { pieceIdx: backIdx, edge: sdB },
+        bReversed: false,
+        lenA: +lenA.toFixed(2),
+        lenB: +lenB.toFixed(2),
+        diffCm,
+        status: Math.abs(diffCm) <= 0.5 ? 'ok' : (Math.abs(diffCm) <= 1.3 ? 'ease' : 'warn'),
+      });
+    }
+    if (sleeveIdx >= 0) {
+      const armF = inferEdgeCandidate(pieces[frontIdx], 'armhole');
+      const slCap = inferEdgeCandidate(pieces[sleeveIdx], 'sleevecap');
+      if (armF && slCap) {
+        const lenF = measureSeamArcLength(pieces[frontIdx], armF.fromIdx, armF.toIdx);
+        const armB = inferEdgeCandidate(pieces[backIdx], 'armhole');
+        const lenB_arm = armB ? measureSeamArcLength(pieces[backIdx], armB.fromIdx, armB.toIdx) : lenF;
+        const totalArmhole = +(lenF + lenB_arm).toFixed(2);
+        const capLen = +measureSeamArcLength(pieces[sleeveIdx], slCap.fromIdx, slCap.toIdx).toFixed(2);
+        const ease = +(capLen - totalArmhole).toFixed(2);
+        pairs.push({
+          id: 'armhole_sleeve_cap',
+          labelEn: 'Armhole (F+B) ↔ Sleeve Cap Ease',
+          labelAr: 'حردة الإبط (أمام+خلف) ↔ تشريب الكم',
+          source: 'inferred',
+          a: { pieceIdx: frontIdx, edge: armF },
+          b: { pieceIdx: sleeveIdx, edge: slCap },
+          bReversed: false,
+          lenA: totalArmhole,
+          lenB: capLen,
+          diffCm: ease,
+          status: ease >= -0.3 && ease <= 4.5 ? 'ease' : (Math.abs(ease) > 4.5 ? 'warn' : 'ok'),
+        });
+      }
+    }
+  }
+  return pairs;
+}

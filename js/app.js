@@ -68,9 +68,9 @@ import {
 } from './measurement-profiles.js';
 import { consumeBodyFormHandoff } from './body-handoff.js';
 import { nest as nestTruePolygon, cancelNest } from './nesting.js';
-import { stepForSize, resolveGradedPieces } from './grading.js';
+import { stepForSize, resolveGradedPieces, gradePiecesAnatomically, buildNestedSizeLayers } from './grading.js';
 import { pivotDart, slashAndSpread, transferDart } from './darts.js';
-import { seamPointAtFraction } from './geometry.js';
+import { seamPointAtFraction, analyzeSeamBalance } from './geometry.js';
 import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 import { parseSVGPattern, parseDXFPattern, parseJSONPattern } from './pattern-import.js';
 import { buildSVG, buildEPS, buildSpecCSV, buildTechPackMarkdown, buildTechPackHTML, buildPatternJSON } from './pattern-export.js';
@@ -155,6 +155,7 @@ import {
     // key -> outline-index -> {dx,dy} (cm per size step). Purely additive
     // — a pattern with no authored rules here grades exactly as before.
     gradeRules: {}, gradeRulesPiece: null,
+    atelierPaper: true, exportVariableSeam: true, exportNestedPdf: false, exportPaper: "A4",
     // WP-18: optional cloud sync. `cloudSync` itself predates this pass (a
     // dormant Settings toggle with no behaviour behind it) — these three
     // fields are new. Endpoint URL and OAuth client IDs are not secrets
@@ -587,6 +588,52 @@ import {
     const bg = el("button","big-btn",IC.spark+T("autoGrade")); bg.style.marginTop="16px"; bg.onclick=()=>{grade();toast(T("graded")+" · "+(state.kids?L(KIDS_AGES.find(a=>a.id===state.kids).label):state.size));}; c.appendChild(bg);
     c.appendChild(el("div","help-note",`${T("gradedTo")}: <b id="gradeLbl"></b>`)).style.marginTop="12px";
     updateGradeLbl();
+
+    // Phase 1: Universal Pattern Grader & Live Nested Overlay card (works on library, AI & imported patterns)
+    if (Canvas.getPieces().length && !state.kids) {
+      const qCard = el("div", "grade-quick-card");
+      qCard.appendChild(el("div", "help-note", T("gradeQuickHint")));
+      const bf = el("div", "field", `<label>${T("baseSourceSize")}</label>`);
+      bf.style.marginTop = "8px";
+      const bSel = el("select", "select");
+      const currentBase = baseGradeSnapshot?.baseSize || state.size;
+      SIZES.forEach((s) => {
+        const o = el("option", null, s); o.value = s;
+        if (s === currentBase) o.selected = true;
+        bSel.appendChild(o);
+      });
+      bSel.onchange = () => {
+        if (!state.loaded) {
+          const measAtBase = computeCatalogAwareMeasurements({ category: state.category, size: bSel.value, standard: state.standard, kids: null, custom: {} });
+          baseGradeSnapshot = {
+            baseSize: bSel.value,
+            baseMeas: measAtBase,
+            pieces: JSON.parse(JSON.stringify(baseGradeSnapshot?.pieces || Canvas.getPieces())),
+          };
+          grade();
+        }
+      };
+      if (state.loaded) bSel.disabled = true;
+      bf.appendChild(bSel); qCard.appendChild(bf);
+
+      const nRow = el("label", "set-row");
+      nRow.style.marginTop = "6px";
+      nRow.innerHTML = `<span class="sl">${T("showNestedOn2D")}</span>`;
+      const nSw = el("span", "switch", `<input type="checkbox" ${Canvas.getOpt("showNestedSizes") ? "checked" : ""}><span class="track"></span>`);
+      nSw.querySelector("input").onchange = (e) => {
+        setNestedOverlayEnabled(e.target.checked);
+      };
+      nRow.appendChild(nSw); qCard.appendChild(nRow);
+
+      if (!state.loaded) {
+        const uniNestBtn = el("button", "big-btn ghost", IC.layers + T("gradeNestPreview"));
+        uniNestBtn.style.marginTop = "8px";
+        uniNestBtn.onclick = () => openGradeNestModal(Canvas.getPieces()[0]?.key || null);
+        qCard.appendChild(uniNestBtn);
+      }
+      c.appendChild(qCard);
+    }
+
     renderGradeRulesSection(c);
   }
   function updateGradeLbl(){ const l=$("#gradeLbl"); if(l) l.textContent = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids).label) : state.size; }
@@ -704,15 +751,24 @@ import {
     });
   }
   function openGradeNestModal(pieceKey){
-    if(!state.loaded) return;
-    const pattern = PATTERNS[state.loaded];
+    const active = Canvas.getPieces();
+    if(!active.length) return;
     const sizesToShow = ["S","M","L","XL"];
     const opts = {category:state.category,standard:state.standard,kids:null,custom:state.custom};
-    const outlinesBySize = sizesToShow.map(size=>{
-      const ps = resolveGradedPieces(pattern, {...opts,size}, computeMeasurements, state.gradeRules[state.loaded]);
-      const piece = ps.find(p=>p.key===pieceKey);
-      return {size, outline: piece ? piece.outline : []};
-    });
+    let outlinesBySize;
+    if (state.loaded && PATTERNS[state.loaded]) {
+      const pattern = PATTERNS[state.loaded];
+      outlinesBySize = sizesToShow.map(size=>{
+        const ps = resolveGradedPieces(pattern, {...opts,size}, computeCatalogAwareMeasurements, state.gradeRules[state.loaded]);
+        const piece = ps.find(p=>p.key===pieceKey) || ps[0];
+        return {size, outline: piece ? piece.outline : []};
+      });
+    } else {
+      const snap = ensureBaseGradeSnapshot();
+      const targetIdx = Math.max(0, active.findIndex(p=>p.key===pieceKey));
+      const layers = buildNestedSizeLayers({ basePieces: snap.pieces, baseMeas: snap.baseMeas, baseSize: snap.baseSize, activePieces: active }, sizesToShow, opts, computeCatalogAwareMeasurements, null);
+      outlinesBySize = layers.map(l=>({ size: l.size, outline: (l.pieces[targetIdx] || l.pieces[0])?.outline || [] }));
+    }
     openModal(T("gradeNestTitle"), "", true);
     const body = $("#genericModal .modal-body"); body.innerHTML="";
     body.appendChild(el("div","help-note",T("gradeNestHint")));
@@ -1311,7 +1367,7 @@ import {
           grid.appendChild(card);
         });
       // my patterns
-      state.mine.forEach((mp,idx)=>{ const card=el("div","lib-card"); card.appendChild(el("div","lib-thumb",LIB_ICONS.dress)); card.appendChild(el("div","lib-meta",`<div class="t">${mp.name}</div><div class="s">★ ${T("saveMine").split(" ")[0]}</div>`)); card.onclick=()=>{Canvas.setPattern(mp.pieces,PALETTE);afterLoad(mp.name);}; grid.appendChild(card); });
+      state.mine.forEach((mp,idx)=>{ const card=el("div","lib-card"); card.appendChild(el("div","lib-thumb",LIB_ICONS.dress)); card.appendChild(el("div","lib-meta",`<div class="t">${mp.name}</div><div class="s">★ ${T("saveMine").split(" ")[0]}</div>`)); card.onclick=()=>{state.loaded=null;Canvas.setPattern(mp.pieces,PALETTE);captureBaseGradeSnapshot(mp.pieces);afterLoad(mp.name);}; grid.appendChild(card); });
       if(!grid.children.length) grid.appendChild(el("div","help-note",T("noResults")));
     };
     inp.oninput=()=>draw(inp.value); draw();
@@ -1571,7 +1627,9 @@ import {
 
     state.loaded = null;
     Canvas.setPattern(res.pieces, PALETTE, { preserveAnnotations: true });
+    captureBaseGradeSnapshot(res.pieces);
     lastGradedMeas = { ...currentMeas() };
+    syncCanvasPieceMeta(); refreshNestedCanvasOverlay();
     hideEmpty();
     renderLayersPane();
     renderAIPane();
@@ -2202,7 +2260,8 @@ import {
       const res = await generateSVGPatternFromImage({ adapter, cfg, imageDataURL: aiImage, measurements: currentMeas() });
       if(!res.ok){ toast(T(classifySVGFailReason(res.reason))); return; }
       const n = Canvas.importPieces(res.pieces, {kind:'ai-svg-image', validation:res.validation.summary});
-      hideEmpty(); renderLayersPane(); renderAIPane();
+      state.loaded = null; captureBaseGradeSnapshot(); syncCanvasPieceMeta(); refreshNestedCanvasOverlay();
+      hideEmpty(); renderLayersPane(); renderSizePane(); renderAIPane();
       if(is3DActive()) build3D();
       save();
       const hasWarnings = res.warnings && res.warnings.length;
@@ -2550,8 +2609,10 @@ import {
     if (!pieces || !pieces.length) { toast(T("importFail")); return; }
     state.loaded = null;
     Canvas.setPattern(pieces, PALETTE);
+    captureBaseGradeSnapshot(pieces);
     lastGradedMeas = { ...currentMeas() };
-    hideEmpty(); renderLayersPane();
+    syncCanvasPieceMeta(); refreshNestedCanvasOverlay();
+    hideEmpty(); renderLayersPane(); renderSizePane();
     if (is3DActive()) build3D(null, { resetPrints: true });
     if (state.view === "clothlab") syncClothLab();
     update3DStatusPill();
@@ -2578,16 +2639,21 @@ import {
     if(!gateAllowed()) c.appendChild(el("div","help-note",T("exportPartialGateNote")));
     c.appendChild(el("div",null,`<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("paperSize")}</label>`));
     const pg=el("div","opt-grid"); pg.style.margin="8px 0 4px";
-    PAPERS.forEach((p,i)=>{const o=el("div","opt"+(i===4?" active":""),p);o.onclick=()=>{$$("#pg .opt").forEach(x=>x.classList.remove("active"));o.classList.add("active");};pg.appendChild(o);}); pg.id="pg"; c.appendChild(pg);
+    const curPaper = state.exportPaper || "A4";
+    PAPERS.forEach((p)=>{const o=el("div","opt"+(p===curPaper?" active":""),p);o.onclick=()=>{$$("#pg .opt").forEach(x=>x.classList.remove("active"));o.classList.add("active");state.exportPaper=p;save();};pg.appendChild(o);}); pg.id="pg"; c.appendChild(pg);
     c.appendChild(el("div",null,`<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("format")}</label>`)).style.marginTop="12px";
     const fg=el("div","opt-grid"); fg.style.margin="8px 0";
     FORMATS.forEach((p,i)=>{const o=el("div","opt"+(i===2?" active":""),p);o.dataset.fmt=p;o.onclick=()=>{$$("#fg .opt").forEach(x=>x.classList.remove("active"));o.classList.add("active");};fg.appendChild(o);}); fg.id="fg"; c.appendChild(fg);
     // toggles
-    [["tiled","exportTiled"],["regMarks","exportRegMarks"]].forEach(([k,sk])=>{
-      const v = state[sk]!==false; // default on
+    [["tiled","exportTiled"],["regMarks","exportRegMarks"],["variableSeam","exportVariableSeam"],["multiSizeNested","exportNestedPdf"]].forEach(([k,sk])=>{
+      const v = (sk==="exportNestedPdf") ? !!state[sk] : state[sk]!==false;
       const r=el("label","set-row"); r.innerHTML=`<span class="sl">${T(k)}</span>`;
       const sw=el("span","switch",`<input type="checkbox" ${v?"checked":""}><span class="track"></span>`); r.appendChild(sw);
-      sw.querySelector("input").onchange=(e)=>{ state[sk]=e.target.checked; save(); };
+      sw.querySelector("input").onchange=(e)=>{
+        state[sk]=e.target.checked;
+        if(sk==="exportVariableSeam"){ Canvas.setOpt("variableSeam", e.target.checked); }
+        save();
+      };
       c.appendChild(r);
     });
     c.appendChild(el("div",null,`<label style="font-size:11.5px;font-weight:700;color:var(--ink-2)">${T("dpi")}</label>`)).style.marginTop="10px";
@@ -2629,6 +2695,16 @@ import {
     c.appendChild(cost);
     if((state.costCurrency||"USD")!=="USD") c.appendChild(el("div","help-note",T("costRateNote")));
     const ex=el("button","big-btn",IC.download+T("exportNow")); ex.style.marginTop="14px"; ex.onclick=doExport; c.appendChild(ex);
+    const nxBtn=el("button","big-btn ghost",IC.layers+T("exportNestedPdfBtn")); nxBtn.style.marginTop="8px";
+    nxBtn.onclick=()=>{
+      if(!requireEntitlement()) return;
+      const pieces=Canvas.getPieces(); if(!pieces.length){ toast(T("empty2d")); return; }
+      const pdf=Canvas.exportPDF(currentExportPdfOpts({ forceNested:true }));
+      if(!pdf){ toast(T("empty2d")); return; }
+      download("berrystudio-nested-sizes.pdf","application/pdf",pdf);
+      toast(T("exported")+" · PDF (S–XL)");
+    };
+    c.appendChild(nxBtn);
     const tp=el("button","big-btn ghost",T("techPack")); tp.style.marginTop="8px"; tp.onclick=()=>techPack(); c.appendChild(tp);
     const ps=el("button","big-btn ghost",IC.printer+T("patternSummary")); ps.style.marginTop="8px"; ps.onclick=()=>exportSummary(); c.appendChild(ps);
     c.appendChild(el("div","help-note",T("patternSummaryD"))).style.marginTop="6px";
@@ -2644,73 +2720,88 @@ import {
     c.appendChild(el("div","help-note",T("constructionEvidenceExportHint"))).style.marginTop="6px";
   }
 
-  // WP-14: "walk the seam" — scans currently loaded pieces for a pair
-  // sharing a declared edges[].seamId (js/fancy-patterns.js's princess-
-  // seam metadata is the one real producer of this today) and lets the
-  // user drag a single 0-100% slider to see the matching arc-length
-  // position highlighted on BOTH edges at once — the visual, interactive
-  // front-end over js/geometry.js's seamPointAtFraction (itself the same
-  // arc-length technique js/validate.js's notch-alignment check uses).
-  function findSeamPairs(pieces){
-    const bySeam = {};
-    pieces.forEach((p,i)=>{ (p.edges||[]).forEach(e=>{ (bySeam[e.seamId] ||= []).push({pieceIdx:i, edge:e}); }); });
-    const pairs = [];
-    const dist=(p,q)=>Math.hypot(p[0]-q[0],p[1]-q[1]);
-    Object.entries(bySeam).forEach(([seamId, entries])=>{
-      for(let a=0; a<entries.length; a++) for(let b=a+1; b<entries.length; b++){
-        if(entries[a].pieceIdx===entries[b].pieceIdx) continue;
-        const A=entries[a], B=entries[b];
-        const outlineA=pieces[A.pieceIdx].outline, outlineB=pieces[B.pieceIdx].outline;
-        const startA=outlineA[A.edge.fromIdx], endA=outlineA[A.edge.toIdx];
-        const startB=outlineB[B.edge.fromIdx], endB=outlineB[B.edge.toIdx];
-        // Two edges declaring the same seamId aren't guaranteed to be
-        // walked in the same direction (frontCenter's princess curve runs
-        // top->hem in its own natural point order; frontSide splices the
-        // SAME curve in reverse — hem->top). Detect this from the real
-        // endpoint positions rather than trusting fromIdx/toIdx order, and
-        // flip B's fraction at draw time so "50%" means the same physical
-        // point on both edges regardless of how each was declared.
-        const sameDir = dist(startA,startB)+dist(endA,endB);
-        const oppDir = dist(startA,endB)+dist(startB,endA);
-        pairs.push({seamId, a:A, b:B, bReversed: oppDir < sameDir});
+  // Phase 1: Interactive Seam Balance & Walker — powered by analyzeSeamBalance()
+  // in js/geometry.js so declared AND inferred structural seams work across all patterns.
+  function drawWalkPieceOutline(ctx, piece, scale, offsetX = 0, offsetY = 0) {
+    const o = piece?.outline;
+    if (!Array.isArray(o) || !o.length) return;
+    const n = o.length;
+    const curveByFrom = new Map((piece.curves || []).map((c) => [c.fromIdx, c]));
+    ctx.beginPath();
+    ctx.moveTo((o[0][0] + offsetX) * scale, (o[0][1] + offsetY) * scale);
+    let i = 0;
+    while (i < n - 1) {
+      const c = curveByFrom.get(i);
+      if (c && c.toIdx > i && c.toIdx < n && c.c1 && c.c2) {
+        ctx.bezierCurveTo(
+          (c.c1[0] + offsetX) * scale, (c.c1[1] + offsetY) * scale,
+          (c.c2[0] + offsetX) * scale, (c.c2[1] + offsetY) * scale,
+          (o[c.toIdx][0] + offsetX) * scale, (o[c.toIdx][1] + offsetY) * scale,
+        );
+        i = c.toIdx;
+      } else {
+        i++;
+        ctx.lineTo((o[i][0] + offsetX) * scale, (o[i][1] + offsetY) * scale);
       }
-    });
-    return pairs;
+    }
+    ctx.closePath();
+    ctx.stroke();
   }
+
   function openWalkSeamModal(){
     const pieces = Canvas.getPieces();
-    const pairs = findSeamPairs(pieces);
+    const pairs = analyzeSeamBalance(pieces);
     if(!pairs.length){ toast(T("walkSeamNone")); return; }
-    const pair = pairs[0];
-    const pieceA = pieces[pair.a.pieceIdx], pieceB = pieces[pair.b.pieceIdx];
-    // Pieces are drawn at their own independent layoutPieces() position
-    // on the shared cutting sheet — comparing raw coordinates between
-    // two DIFFERENT pieces would show a constant offset even for a
-    // perfectly-matching seam (confirmed: every fraction differed by the
-    // exact same distance until this alignment was added). Align pieceB
-    // by translating it so its fraction=0 point coincides with pieceA's,
-    // purely for this preview's drawing — the real Canvas.getPieces()
-    // data is never mutated.
-    const a0 = seamPointAtFraction(pieceA.outline, pair.a.edge.fromIdx, pair.a.edge.toIdx, 0);
-    const b0 = seamPointAtFraction(pieceB.outline, pair.b.edge.fromIdx, pair.b.edge.toIdx, pair.bReversed ? 1 : 0);
-    const alignOffset = [a0[0]-b0[0], a0[1]-b0[1]];
-    const pieceBOutlineAligned = pieceB.outline.map(([x,y])=>[x+alignOffset[0], y+alignOffset[1]]);
+    let activeIdx = 0;
     openModal(T("walkSeam"), "", true);
     const body = $("#genericModal .modal-body"); body.innerHTML="";
-    body.appendChild(el("div","help-note",T("walkSeamHint")+` (${pair.seamId})`));
-    const canvas = el("canvas"); canvas.width=560; canvas.height=420;
-    canvas.style.cssText="width:100%;height:auto;margin-top:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)";
+    const hint = el("div","help-note",T("walkSeamHint")+` (${pairs[0].id})`);
+    body.appendChild(hint);
+
+    // Full Seam Balance Summary Table (auto-detects shoulder, side, armhole/cap & declared seams)
+    const table = el("table","seam-balance-list");
+    table.innerHTML = `<thead><tr><th>${T("seamBalancePairs")}</th><th>${T("seamLenA")}</th><th>${T("seamLenB")}</th><th>${T("seamDiff")}</th></tr></thead>`;
+    const tbody = el("tbody");
+    const statusText = (s) => s === "ok" ? T("seamStatusOk") : (s === "ease" ? T("seamStatusEase") : T("seamStatusWarn"));
+    const rows = pairs.map((pair, idx) => {
+      const tr = el("tr", "seam-balance-row" + (idx === 0 ? " active" : ""));
+      const sign = pair.diffCm > 0 ? "+" : "";
+      const title = state.lang === "ar" ? pair.labelAr : pair.labelEn;
+      tr.innerHTML = `<td>${title}</td><td>${pair.lenA.toFixed(1)} cm</td><td>${pair.lenB.toFixed(1)} cm</td><td><span class="seam-badge ${pair.status}">${sign}${pair.diffCm.toFixed(1)} cm · ${statusText(pair.status)}</span></td>`;
+      tr.onclick = () => {
+        activeIdx = idx;
+        rows.forEach((r, ri) => r.classList.toggle("active", ri === idx));
+        hint.textContent = `${T("walkSeamHint")} (${pairs[activeIdx].id})`;
+        draw();
+      };
+      tbody.appendChild(tr);
+      return tr;
+    });
+    table.appendChild(tbody);
+    body.appendChild(table);
+
+    const canvas = el("canvas"); canvas.width=560; canvas.height=250;
+    canvas.style.cssText="width:100%;max-height:250px;height:auto;margin-top:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)";
     body.appendChild(canvas);
-    const sliderRow = el("div","row"); sliderRow.style.cssText="display:flex;align-items:center;gap:10px;margin-top:12px";
+    const sliderRow = el("div","row"); sliderRow.style.cssText="display:flex;align-items:center;gap:10px;margin-top:10px";
     const slider = el("input"); slider.type="range"; slider.min="0"; slider.max="100"; slider.value="50"; slider.style.flex="1";
-    const pctLbl = el("span",null,"50%"); pctLbl.style.cssText="min-width:3em;text-align:right;font-weight:600";
+    const pctLbl = el("span",null,"50%"); pctLbl.style.cssText="min-width:11em;text-align:right;font-weight:600;font-size:12px";
     sliderRow.appendChild(slider); sliderRow.appendChild(pctLbl); body.appendChild(sliderRow);
 
     const draw = () => {
-      const frac = (+slider.value)/100; pctLbl.textContent = slider.value+"%";
+      const pair = pairs[activeIdx];
+      const pieceA = pieces[pair.a.pieceIdx], pieceB = pieces[pair.b.pieceIdx];
+      const frac = (+slider.value)/100;
+      const walkedA = (pair.lenA * frac).toFixed(1);
+      const walkedB = (pair.lenB * frac).toFixed(1);
+      pctLbl.textContent = `${slider.value}% (${walkedA} / ${walkedB} cm)`;
+      const a0 = seamPointAtFraction(pieceA.outline, pair.a.edge.fromIdx, pair.a.edge.toIdx, 0);
+      const b0 = seamPointAtFraction(pieceB.outline, pair.b.edge.fromIdx, pair.b.edge.toIdx, pair.bReversed ? 1 : 0);
+      const ax = a0[0]-b0[0], ay = a0[1]-b0[1];
       const ptA = seamPointAtFraction(pieceA.outline, pair.a.edge.fromIdx, pair.a.edge.toIdx, frac);
       const ptBraw = seamPointAtFraction(pieceB.outline, pair.b.edge.fromIdx, pair.b.edge.toIdx, pair.bReversed ? 1-frac : frac);
-      const ptB = [ptBraw[0]+alignOffset[0], ptBraw[1]+alignOffset[1]];
+      const ptB = [ptBraw[0]+ax, ptBraw[1]+ay];
+      const pieceBOutlineAligned = pieceB.outline.map(([x,y])=>[x+ax, y+ay]);
       const ctx = canvas.getContext("2d"); const W=canvas.width, H=canvas.height;
       ctx.clearRect(0,0,W,H);
       const allPts = [...pieceA.outline, ...pieceBOutlineAligned];
@@ -2718,14 +2809,11 @@ import {
       const minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
       const scale = Math.min((W-40)/Math.max(maxX-minX,1), (H-40)/Math.max(maxY-minY,1));
       ctx.save(); ctx.translate(20-minX*scale, 20-minY*scale);
-      [ [pieceA.outline,"#6d5efc"], [pieceBOutlineAligned,"#00c2a8"] ].forEach(([outline,color])=>{
-        ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.beginPath();
-        outline.forEach(([x,y],j)=>{ const px=x*scale, py=y*scale; j===0?ctx.moveTo(px,py):ctx.lineTo(px,py); });
-        ctx.closePath(); ctx.stroke();
-      });
+      ctx.strokeStyle="#6d5efc"; ctx.lineWidth=1.8; drawWalkPieceOutline(ctx, pieceA, scale, 0, 0);
+      ctx.strokeStyle="#00c2a8"; ctx.lineWidth=1.8; drawWalkPieceOutline(ctx, pieceB, scale, ax, ay);
       [ [ptA,"#6d5efc"], [ptB,"#00c2a8"] ].forEach(([pt,color])=>{
-        ctx.beginPath(); ctx.arc(pt[0]*scale, pt[1]*scale, 6, 0, Math.PI*2);
-        ctx.fillStyle=color; ctx.fill(); ctx.strokeStyle="#1a1a1a"; ctx.lineWidth=1.5; ctx.stroke();
+        ctx.beginPath(); ctx.arc(pt[0]*scale, pt[1]*scale, 6.5, 0, Math.PI*2);
+        ctx.fillStyle=color; ctx.fill(); ctx.strokeStyle="#18181b"; ctx.lineWidth=1.5; ctx.stroke();
       });
       ctx.restore();
     };
@@ -2736,14 +2824,33 @@ import {
     const fmt=($("#fg .opt.active")||{}).dataset?.fmt||"SVG";
     exportAs(fmt);
   }
-  // Paper sizes that are actual home-printer page formats — tiling only
-  // makes sense for these; A0-A3/Plotter/Custom are already large-format.
   const TILEABLE_PAPER_TO_PAGESIZE = { A4: "a4", Letter: "letter" };
-  function currentExportPdfOpts(){
-    const paper = ($("#pg .opt.active")||{}).textContent || "A4";
-    const pageSize = TILEABLE_PAPER_TO_PAGESIZE[paper];
-    const tiled = !!(state.exportTiled!==false && pageSize);
-    return { tiled, pageSize: pageSize||"a4", overlapMm: 10, includeGuides: state.exportRegMarks!==false };
+  const COPYSHOP_PAPER_TO_PAGESIZE = { A0: "a0", A1: "a1", A2: "a2", A3: "a3" };
+  function currentNestedExportLayers() {
+    return computeNestedLayersForActive(["S", "M", "L", "XL"]);
+  }
+  function currentExportPdfOpts(extra = {}){
+    const paper = ($("#pg .opt.active")||{}).textContent || state.exportPaper || "A4";
+    const tilePs = TILEABLE_PAPER_TO_PAGESIZE[paper];
+    const copyPs = COPYSHOP_PAPER_TO_PAGESIZE[paper];
+    const tiled = !!(state.exportTiled!==false && tilePs);
+    const copyshop = !tiled && !!copyPs;
+    const includeNested = extra.forceNested || !!state.exportNestedPdf;
+    const activeSizeLbl = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids)?.label) : state.size;
+    return {
+      tiled,
+      copyshop,
+      pageSize: tilePs || copyPs || "a4",
+      overlapMm: 10,
+      includeGuides: state.exportRegMarks!==false,
+      seamAllowanceCm: Canvas.getOpt("seam")!==false ? (state.seamCm||1) : 0,
+      variableSeam: state.exportVariableSeam!==false,
+      title: activeProject()?.title || (state.loaded ? L((PATTERNS[state.loaded]||{}).name) : "BerryStudio Pattern"),
+      size: activeSizeLbl,
+      standard: state.standard,
+      richMarkings: true,
+      ...(includeNested ? { nestedLayers: currentNestedExportLayers() } : {}),
+    };
   }
   // Fallback Wavefront .obj exporter from 2D pattern panels (in meters) when
   // 3D WebGL scene has not yet been initialized, ensuring .OBJ export works 100%.
@@ -2793,8 +2900,11 @@ import {
       const svg = buildSVG(pieces, {
         preservePositions: true,
         seamAllowanceCm: Canvas.getOpt("seam")!==false ? (state.seamCm||1) : 0,
+        variableSeam: state.exportVariableSeam!==false,
+        nestedLayers: state.exportNestedPdf ? currentNestedExportLayers() : null,
         lang: state.lang,
         title: meta.title,
+        size: meta.size,
       });
       download("berrystudio-pattern.svg","image/svg+xml", svg || Canvas.exportSVG());
     }
@@ -2920,6 +3030,7 @@ import {
     p.loaded = state.loaded;
     p.category = state.category;
     p.aiImage = aiImage;
+    p.baseGradeSnapshot = baseGradeSnapshot;
     // Named-profile snapshots are immutable evidence. Working snapshots,
     // however, must follow every size/standard/category/manual edit so a
     // tab switch or JSON export can never retain stale measurements.
@@ -2977,7 +3088,9 @@ import {
       } catch { target.measurementProfileSnapshot=workingMeasurementSnapshot(); state.selectedMeasurementProfileId=null; }
     } else { target.measurementProfileSnapshot=workingMeasurementSnapshot(); state.selectedMeasurementProfileId=null; }
     lastGradedMeas = { ...currentMeas() };
+    baseGradeSnapshot = target.baseGradeSnapshot ? JSON.parse(JSON.stringify(target.baseGradeSnapshot)) : null;
     aiImage = target.aiImage||null;
+    syncCanvasPieceMeta(); refreshNestedCanvasOverlay();
     if(Canvas.getPieces().length) hideEmpty(); else showEmpty();
     renderLayersPane(); renderAIPane(); renderSizePane(); renderMeasurePane();
     if(is3DActive()) build3D();
@@ -2989,8 +3102,9 @@ import {
     syncActiveProjectSnapshot();
     Canvas.clearAll();
     Canvas.setHistory({undo:[],redo:[]});
-    state.loaded=null; aiImage=null;
+    state.loaded=null; aiImage=null; baseGradeSnapshot=null;
     lastGradedMeas = { ...currentMeas() };
+    Canvas.setNestedLayers([]); syncCanvasPieceMeta();
     const p = { id: projectSeq++, title: T("untitledProject"), customTitle:false,
       snapshot: Canvas.snapshotState(), history: Canvas.getHistory(), loaded:null, category: state.category, aiImage:null,
       measurementProfileSnapshot: workingMeasurementSnapshot() };
@@ -3107,8 +3221,10 @@ import {
       newProjectTab();
       if(res.colors?.length > 1) draft.pieces.forEach(p => { p.customColor = true; });
       Canvas.setPattern(draft.pieces, res.colors?.length?res.colors:['#6d5efc'],{...(res.brief?{brief:res.brief}:{}),...(res.patternProgram?{patternProgram:res.patternProgram}:{}),...(res.patternConfiguration?{patternConfiguration:res.patternConfiguration}:{}),...(res.multimodalProposal?{multimodalProposal:res.multimodalProposal}:{})});
+      state.loaded=null; captureBaseGradeSnapshot(draft.pieces);
       lastGradedMeas = { ...currentMeas() };
-      hideEmpty(); renderLayersPane();
+      syncCanvasPieceMeta(); refreshNestedCanvasOverlay();
+      hideEmpty(); renderLayersPane(); renderSizePane();
       if(res.attributes) lastAIResult = res;
       renderAIPane();
       if(res.attributes) renderAIAttrs(res);
@@ -3133,7 +3249,11 @@ import {
     applyMeasurementSnapshotToState(measurementSnapshot);
     state.selectedMeasurementProfileId=state.measurementProfiles.some(profile=>profile.id===measurementSnapshot.id)?measurementSnapshot.id:null;
     lastGradedMeas = { ...currentMeas() };
-    state.loaded=null; hideEmpty(); renderLayersPane(); renderAIPane();
+    state.loaded=null;
+    baseGradeSnapshot = data.baseGradeSnapshot ? JSON.parse(JSON.stringify(data.baseGradeSnapshot)) : null;
+    if (!baseGradeSnapshot && Canvas.getPieces().length) captureBaseGradeSnapshot();
+    syncCanvasPieceMeta(); refreshNestedCanvasOverlay();
+    hideEmpty(); renderLayersPane(); renderSizePane(); renderAIPane();
     if(is3DActive()) build3D();
     update3DStatusPill();
     save();
@@ -3174,7 +3294,8 @@ import {
         const { pieces, warnings } = result || {};
         if(!pieces || !pieces.length){ toast((warnings&&warnings[0]) || T("importPatternNone")); return; }
         const n = Canvas.importPieces(pieces);
-        hideEmpty(); renderLayersPane(); renderAIPane();
+        state.loaded = null; captureBaseGradeSnapshot(); syncCanvasPieceMeta(); refreshNestedCanvasOverlay();
+        hideEmpty(); renderLayersPane(); renderSizePane(); renderAIPane();
         if(is3DActive()) build3D();
         save();
         toast((warnings&&warnings.length ? T("importPatternPartial") : T("importPatternDone")).replace("{n}",n) + (warnings&&warnings.length ? " — "+warnings.join(" ") : ""));
@@ -4307,7 +4428,61 @@ import {
 
   // ================= PATTERNS =================
   let lastGradedMeas = null;
+  let baseGradeSnapshot = null;
   let pendingLookbookEffects = null;
+  function captureBaseGradeSnapshot(piecesOverride = null) {
+    const src = piecesOverride || Canvas.getPieces();
+    if (!Array.isArray(src) || !src.length) { baseGradeSnapshot = null; return null; }
+    baseGradeSnapshot = {
+      baseSize: state.size || "M",
+      baseMeas: { ...currentMeas() },
+      pieces: JSON.parse(JSON.stringify(src)),
+    };
+    const pr = activeProject();
+    if (pr) pr.baseGradeSnapshot = baseGradeSnapshot;
+    return baseGradeSnapshot;
+  }
+  function ensureBaseGradeSnapshot() {
+    return baseGradeSnapshot || captureBaseGradeSnapshot();
+  }
+  function syncCanvasPieceMeta() {
+    const activeSizeLbl = state.kids ? L(KIDS_AGES.find(a=>a.id===state.kids)?.label) : state.size;
+    Canvas.setPieceMetaContext({
+      title: activeProject()?.title || (state.loaded ? L((PATTERNS[state.loaded]||{}).name) : ""),
+      size: activeSizeLbl,
+      standard: state.standard,
+      category: state.category,
+    });
+  }
+  function computeNestedLayersForActive(sizes = ["S", "M", "L", "XL"]) {
+    const active = Canvas.getPieces();
+    if (!active.length) return [];
+    const opts = { category: state.category, standard: state.standard, kids: null, custom: state.custom };
+    if (state.loaded && PATTERNS[state.loaded]) {
+      return buildNestedSizeLayers({ pattern: PATTERNS[state.loaded], activePieces: active }, sizes, opts, computeCatalogAwareMeasurements, state.gradeRules[state.loaded]);
+    }
+    const snap = ensureBaseGradeSnapshot();
+    if (!snap) return [];
+    return buildNestedSizeLayers({ basePieces: snap.pieces, baseMeas: snap.baseMeas, baseSize: snap.baseSize, activePieces: active }, sizes, opts, computeCatalogAwareMeasurements, null);
+  }
+  function refreshNestedCanvasOverlay() {
+    if (!Canvas.getOpt("showNestedSizes") || state.kids || !Canvas.getPieces().length) {
+      Canvas.setNestedLayers([]);
+      return;
+    }
+    Canvas.setNestedLayers(computeNestedLayersForActive(["S", "M", "L", "XL"]));
+  }
+  function setNestedOverlayEnabled(enabled) {
+    const on = !!enabled;
+    Canvas.setOpt("showNestedSizes", on);
+    const btn = $("#nestOverlayBtn");
+    if (btn) {
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-pressed", String(on));
+    }
+    refreshNestedCanvasOverlay();
+    renderSizePane();
+  }
   function computeCatalogAwareMeasurements(opts){
     if(!opts.kids && isActiveMannequinSize(opts.size)){
       return resolveMannequinMeasurements(opts.category, opts.size, {
@@ -4576,12 +4751,18 @@ import {
     const fabricSelect = $("#v3dFabricSelect");
     if (fabricSelect) fabricSelect.value = state.fabric3d;
     pendingLookbookEffects = id;
+    baseGradeSnapshot = null;
+    const ap = activeProject();
+    if (ap) ap.baseGradeSnapshot = null;
     Canvas.setPattern(styledPieces, PALETTE);
     lastGradedMeas = { ...currentMeas() };
     syncLookbookControlsUI(lbStyle);
+    syncCanvasPieceMeta();
+    refreshNestedCanvasOverlay();
     afterLoad(L(p.name), true);
   }
   function afterLoad(name, resetPrints=false){
+    syncCanvasPieceMeta(); refreshNestedCanvasOverlay();
     hideEmpty(); renderLayersPane(); renderSizePane(); renderAIPane();
     toast(T("patternLoaded")+" · "+name);
     if(is3DActive()) build3D(null, { resetPrints });
@@ -4628,16 +4809,41 @@ import {
       });
       Canvas.setPattern(pieces, PALETTE);
       renderLayersPane();
-    } else if (Canvas.getPieces().length > 0 && lastGradedMeas) {
-      const sx = Math.max(0.5, Math.min(2.0, nextMeas.chest / (lastGradedMeas.chest || nextMeas.chest)));
-      const sy = Math.max(0.5, Math.min(2.0, nextMeas.height / (lastGradedMeas.height || nextMeas.height)));
-      if (Math.abs(sx - 1) > 1e-3 || Math.abs(sy - 1) > 1e-3) {
-        Canvas.scalePieces(sx, sy);
-        renderLayersPane();
+    } else if (Canvas.getPieces().length > 0) {
+      const snap = baseGradeSnapshot || {
+        baseSize: state.size || "M",
+        baseMeas: lastGradedMeas ? { ...lastGradedMeas } : { ...nextMeas },
+        pieces: JSON.parse(JSON.stringify(Canvas.getPieces())),
+      };
+      if (!baseGradeSnapshot) {
+        baseGradeSnapshot = snap;
+        const ap = activeProject();
+        if (ap) ap.baseGradeSnapshot = snap;
       }
+      const prevPieces = Canvas.getPieces();
+      const stepDelta = state.kids ? 0 : (stepForSize(state.size) - stepForSize(snap.baseSize || "M"));
+      const graded = gradePiecesAnatomically(snap.pieces, snap.baseMeas, nextMeas, state.gradeRules["custom"], stepDelta).map((gp, idx) => {
+        const prev = prevPieces[idx];
+        if (!prev) return gp;
+        return {
+          ...gp,
+          color: prev.color || gp.color,
+          customColor: prev.customColor,
+          material: prev.material || gp.material,
+          textureDataURL: prev.textureDataURL || gp.textureDataURL,
+          bodyZone: prev.bodyZone || gp.bodyZone,
+          visible: prev.visible !== false,
+          locked: Boolean(prev.locked),
+          ...(prev.opacity != null ? { opacity: prev.opacity } : {}),
+        };
+      });
+      Canvas.setPattern(graded, PALETTE, { preserveAnnotations: true });
+      renderLayersPane();
     }
     lastGradedMeas = { ...nextMeas };
     Canvas.recomputeConstruction();   // re-resolve any formula-driven construction points to the new measurements
+    syncCanvasPieceMeta();
+    refreshNestedCanvasOverlay();
     if(is3DActive()) build3D();
     if(state.view==="clothlab") syncClothLab();
     update3DStatusPill();
@@ -7094,6 +7300,8 @@ import {
     $("#redoBtn").onclick=()=>{Canvas.doRedo();renderLayersPane();if(is3DActive())build3D();else{sync3DVisibility();sync3DFabric();}}; tip($("#redoBtn"),T("redoLbl"),T("tt_redo"));
     $("#gridBtn").onclick=()=>{const v=!Canvas.getOpt("grid");Canvas.setOpt("grid",v);$("#gridBtn").classList.toggle("active",v);}; tip($("#gridBtn"),T("t_line"),T("tt_grid"));
     $("#snapBtn").onclick=()=>{const v=!Canvas.getOpt("snap");Canvas.setOpt("snap",v);$("#snapBtn").classList.toggle("active",v);}; tip($("#snapBtn"),"Snap",T("tt_snap"));
+    $("#atelierModeBtn").onclick=()=>{const v=!(Canvas.getOpt("atelierPaper")!==false);state.atelierPaper=v;Canvas.setOpt("atelierPaper",v);$("#atelierModeBtn").classList.toggle("active",v);$("#atelierModeBtn").setAttribute("aria-pressed",String(v));save();}; tip($("#atelierModeBtn"),T("atelierPaperMode"),T("tt_atelierPaper"));
+    $("#nestOverlayBtn").onclick=()=>{setNestedOverlayEnabled(!Canvas.getOpt("showNestedSizes"));}; tip($("#nestOverlayBtn"),T("nestedOverlayToggle"),T("tt_nestedOverlay"));
     $("#bgBtn").onclick=()=>openBgPanel(); tip($("#bgBtn"),T("bgImage"),T("tt_bgImage"));
     $("#bgBtn").classList.toggle("active",Canvas.hasBackground());
     $("#objBrowserBtn").onclick=()=>toggleObjectBrowser(); tip($("#objBrowserBtn"),T("objBrowser"),T("tt_objBrowser"));
@@ -7322,6 +7530,11 @@ import {
     updateUnitsPill(); updateStageChips();
     $("#gridBtn").classList.toggle("active",Canvas.getOpt("grid"));
     $("#snapBtn").classList.toggle("active",Canvas.getOpt("snap"));
+    Canvas.setOpt("atelierPaper", state.atelierPaper!==false);
+    Canvas.setOpt("variableSeam", state.exportVariableSeam!==false);
+    $("#atelierModeBtn")?.classList.toggle("active", Canvas.getOpt("atelierPaper")!==false);
+    $("#nestOverlayBtn")?.classList.toggle("active", !!Canvas.getOpt("showNestedSizes"));
+    syncCanvasPieceMeta();
     // Snapshot direct canvas edits too: these do not all pass through a
     // settings/action handler that calls save(). Capture again on exit.
     $("#patternCanvas").addEventListener("pointerup", () => {
