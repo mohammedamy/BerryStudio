@@ -19,6 +19,9 @@ test('Bundled Photo2Pattern ONNX file exists in models/, stays out of sw.js prec
   const swSrc = fs.readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
   assert.ok(!swSrc.includes('berrystudio_photo2pattern_v1.onnx'), 'Heavy ONNX weights must not be precached in sw.js');
 
+  const deployYml = fs.readFileSync(new URL('../.github/workflows/deploy-pages.yml', import.meta.url), 'utf8');
+  assert.ok(/\bmodels\s+_site\//.test(deployYml), 'GitHub Pages assemble step includes models/ directory');
+
   const res = await ensureBundledPhoto2PatternModel({ fetchImpl: null });
   assert.equal(res.ok, false);
 });
