@@ -986,7 +986,7 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     // Rounded human acromion-to-deltoid cap curving seamlessly from shoulderSeamRx into lateral deltoid
     const outerAcromionX = (lm.shoulderPivotX + upperR * 0.80) * radCap;
     const zArm = upperR * 0.99 * radCap;
-    const acromionTargetY = shoulderY - span * 0.011;
+    const acromionTargetY = shoulderY - span * 0.020;
     const saddle = [];
     for (let j = 1; j <= 13; j++) {
       const u = j / 14; // 0 = front seam, 0.5 = lateral acromion dome, 1 = back seam
@@ -994,7 +994,7 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       const cosU = Math.cos(Math.PI * u);
       const x = side * (shoulderSeamRx + (outerAcromionX - shoulderSeamRx) * Math.pow(sinU, 0.78));
       const baseLineY = fy * (1 - u) + by * u;
-      const acromionCrown = upperR * 0.075 * Math.pow(sinU, 1.35);
+      const acromionCrown = upperR * 0.058 * Math.pow(sinU, 1.30);
       const y = baseLineY * (1 - sinU) + (acromionTargetY + acromionCrown) * sinU;
       const z = zArm * cosU;
       const wArm = 0.34 + 0.14 * sinU;
@@ -1305,14 +1305,14 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
 
   const neckSpecs = [
     // [ny, nrx, nrz, zShift, sw, focus]
-    [shoulderY + neckSpan * 0.44, neckR * 1.05, neckR * 1.04, 0.002, 0.42, 0.25],
-    [shoulderY + neckSpan * 0.68, neckR * 0.94, neckR * 0.97, 0.004, 0.30, 0.55],
-    [shoulderY + neckSpan * 0.90, neckR * 0.89, neckR * 0.93, 0.006, 0.20, 0.82],
+    [shoulderY + neckSpan * 0.46, neckR * 1.09, neckR * 1.06, 0.002, 0.42, 0.25],
+    [shoulderY + neckSpan * 0.70, neckR * 0.97, neckR * 0.99, 0.004, 0.30, 0.55],
+    [shoulderY + neckSpan * 0.91, neckR * 0.91, neckR * 0.95, 0.006, 0.20, 0.82],
   ];
 
   // Two naturally sloped trapezius / supraclavicular rings rise ~15-18 deg from sloped acromion up to side of neck!
   let prevHeadRing = neckBaseRing;
-  for (const [trapFrac, yLiftFrac, swTrap] of [[0.36, 0.16, 0.46], [0.70, 0.31, 0.44]]) {
+  for (const [trapFrac, yLiftFrac, swTrap] of [[0.34, 0.17, 0.46], [0.68, 0.33, 0.44]]) {
     const tRing = [];
     const targetNy = shoulderY + neckSpan * yLiftFrac;
     for (let k = 0; k < 48; k++) {
@@ -1320,12 +1320,12 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
       const bx0 = positions[baseVid], by0 = positions[baseVid + 1], bz0 = positions[baseVid + 2];
       const phi = headAzimuth(k, 0.14 * trapFrac);
       const cosP = Math.cos(phi);
-      const tx = neckR * 1.10 * Math.sin(phi);
-      const tz = 0.002 + neckR * 1.06 * cosP;
+      const tx = neckR * (trapFrac < 0.5 ? 1.24 : 1.13) * Math.sin(phi);
+      const tz = 0.002 + neckR * 1.06 * cosP - 0.0018 * Math.max(0, cosP) * Math.sin(Math.abs(phi) * 1.6) * (1 - trapFrac);
       const x = bx0 * (1 - trapFrac) + tx * trapFrac;
       // Natural slightly concave human trapezius slope from acromion up to side of neck
       const trapArch = Math.pow(trapFrac, 0.92);
-      const postTrapLift = span * 0.004 * Math.max(0, -cosP) * (1 - trapFrac);
+      const postTrapLift = span * 0.005 * Math.max(0, -cosP) * (1 - trapFrac);
       const y = by0 * (1 - trapArch) + targetNy * trapArch + postTrapLift;
       const z = bz0 * (1 - trapFrac) + tz * trapFrac;
       const bArm = x >= 0 ? BONE_IDX.armL : BONE_IDX.armR;
@@ -1636,12 +1636,13 @@ export function buildWatertightBodyGeometry(THREE, category, d, rigLandmarks, op
     } else if (y < shoulderY + span * 0.04 && y > hipY * 0.25) {
       // 2. Subtle anatomical subsurface warmth on clavicles, palms/knuckles, knees & ankles
       const clavicle = bumpWindow(y, shoulderY - span * 0.02, span * 0.08) * bumpWindow(Math.abs(x), shoulderHalf * 0.45, shoulderHalf * 0.38) * Math.max(0, z / (chestR || 0.15));
+      const sternalNotchAO = bumpWindow(y, shoulderY - span * 0.012, span * 0.032) * bumpWindow(x, 0, neckR * 0.95) * Math.max(0, z / (chestR || 0.15));
       const kneeWarm = bumpWindow(y, lm.kneeY, H * 0.055) * Math.max(0, z / (thighR || 0.1));
       const axillaAO = bumpWindow(y, shoulderY - span * 0.09, span * 0.055) * bumpWindow(Math.abs(x), chestR * 0.96, upperR * 0.7);
       const warmB = Math.min(1, clavicle * 0.35 + kneeWarm * 0.45);
-      cr += 0.020 * warmB - 0.055 * axillaAO;
-      cg -= 0.022 * warmB + 0.062 * axillaAO;
-      cb -= 0.026 * warmB + 0.066 * axillaAO;
+      cr += 0.020 * warmB - 0.055 * axillaAO - 0.022 * sternalNotchAO;
+      cg -= 0.022 * warmB + 0.062 * axillaAO + 0.024 * sternalNotchAO;
+      cb -= 0.026 * warmB + 0.066 * axillaAO + 0.026 * sternalNotchAO;
     }
     // 3. Hand palm & interdigital shadow depth
     const wristWorldY = lm.shoulderPivotY - lm.upperArmLen - lm.forearmLen;

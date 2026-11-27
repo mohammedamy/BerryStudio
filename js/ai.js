@@ -663,7 +663,7 @@ export const AIGen = (() => {
           pieces.push({ name: { en: "Button Placket", ar: "مرد الأزرار الأمامي" }, desc: { en: "Interfaced center-front button placket.", ar: "مرد أزرار أمامي مقوى بالحشوة." }, outline: bandPc(4.5, Math.max(30, bLen - 4)), darts: [], notches: [[0, 0]], grain: [[2.2, 4], [2.2, Math.max(20, bLen - 8)]], role: "placket-facing", bilateral: true });
         }
         if (style.sleeveLenF > 0.7 && style.cuffs !== false) {
-          pieces.push({ name: { en: "Wrist Cuff", ar: "أسورة المعصم" }, desc: { en: "Buttoned shirt cuff band.", ar: "أسورة معصم القميص بالأزرار." }, outline: bandPc(Math.max(21, m.bicep * 0.78), 6.5), darts: [], notches: [[0, 0]], grain: [[4, 3.2], [17, 3.2]], role: "cuff", bilateral: true });
+          pieces.push({ name: { en: "Wrist Cuff", ar: "أسورة المعصم" }, desc: { en: "Buttoned shirt cuff band.", ar: "أسورة معصم القميص بالأزرار." }, outline: bandPc(Math.max(21, (m.bicep || 28) * 0.78), 6.5), darts: [], notches: [[0, 0]], grain: [[4, 3.2], [17, 3.2]], role: "cuff", bilateral: true });
         }
       }
       if (style.pockets && !pieces.some((p) => p.role === "pocket")) {
@@ -780,13 +780,14 @@ export const AIGen = (() => {
       pieces.push(sleevePiece(style, m));
     }
     if(style.neckline==="collar" && style.type==="shirt"){
-      const nc = m.neck/2+3;
+      const nc = (m.neck || 37)/2+3;
       pieces.push({
         name:{en:"Collar & Stand", ar:"الياقة والقاعدة"},
         desc:{en:"Two-piece collar for the button-front neckline.", ar:"ياقة من قطعتين لفتحة الأزرار الأمامية."},
         outline:[[0,0],[nc,0],[nc,7],[0,8]], darts:[], notches:[],
         grain:[[2,2],[nc-2,2]],
         role:"collar",
+        cutOnFold:true,
       });
     }
     if(style.wrap){

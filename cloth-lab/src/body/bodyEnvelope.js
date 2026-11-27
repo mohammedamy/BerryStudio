@@ -13,7 +13,7 @@ import { BONE_IDX } from '../../../js/human-mannequin.js'
 export const ENV_SEGMENT_COUNT = 9
 export const ENV_PHI_BINS = 64
 export const ENV_T_BINS = 32
-export const ENV_CLEARANCE = 0.0058 // 5.8mm skin + triangle-chord safety cushion
+export const ENV_CLEARANCE = 0.0068 // 6.8mm skin + triangle-chord safety cushion
 
 const TWO_PI = Math.PI * 2
 

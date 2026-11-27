@@ -314,9 +314,9 @@ export function placeTorsoPanel(positions2D, dims, { zSign, easeFactor = 1.12, a
     const neckTheta = Math.asin(clamp((dims.neckR * 0.85) / Math.max(0.08, r), 0.08, 0.45))
     const shOutsideNeck = smoothstep(neckTheta * 0.72, neckTheta * 1.18, Math.abs(theta))
     const notCenterLine = smoothstep(0.8, 2.2, Math.abs(xCm - cx))
-    const collarDropLift = Math.min(0.044, Math.max(0, colTopY - minY - 1.5) * 0.0055) * shNearSeam * notCenterLine
+    const collarDropLift = Math.min(0.044, Math.max(0, colTopY - minY - 1.5) * 0.0055) * shNearSeam * (notCenterLine + (colIsUpperShoulder > 0.5 ? 0.35 * (1 - notCenterLine) : 0))
     const shSlope = smoothstep(0.14 * Math.PI, 0.46 * Math.PI, Math.abs(theta))
-    const worldY = worldYBase + collarDropLift - dims.span * 0.030 * shNearSeam * shSlope
+    const worldY = worldYBase + collarDropLift - dims.span * 0.014 * shNearSeam * shSlope
     const shWorldLift = smoothstep(dims.shoulderY - dims.span * 0.15, dims.shoulderY - dims.span * 0.015, worldY)
     const shArch = shNearSeam * shOutsideNeck * shWorldLift
     const excessRatio = isLooseTorso ? (cm(halfSpanCm) / Math.max(0.14, Math.PI * r * 0.5)) : 1.0
@@ -715,8 +715,8 @@ export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */,
   const arm = joints.arms[side]
 
   const capRoot = [
-    arm.shoulder[0] - side * dims.upperR * 0.06,
-    arm.shoulder[1] + dims.span * 0.014,
+    arm.shoulder[0] - side * dims.upperR * 0.24,
+    arm.shoulder[1] + dims.span * 0.024,
     arm.shoulder[2],
   ]
   const upperSegLen = Math.hypot(
@@ -816,7 +816,7 @@ export function placeSleeve(positions2D, dims, side /* -1 = left, +1 = right */,
     const capFrontScale = lerp(0.76, 1.0, uCap)
     const cOut = radius * cosA * capOutScale
     const cFront = -side * radius * Math.sin(alpha) * capFrontScale
-    const crownLift = dims.upperR * 0.16 * (1 - uCap) * Math.max(0, cosA)
+    const crownLift = dims.upperR * 0.22 * (1 - uCap) * Math.max(0, cosA)
     return [
       center[0] + cOut * out[0] + cFront * front[0],
       center[1] + crownLift + cOut * out[1] + cFront * front[1],
@@ -911,7 +911,7 @@ const bboxCenterX = (positions2D) => {
   return (minX + maxX) / 2
 }
 
-export function placeAttachNeck(positions2D, dims, side = 0, neckKind = null) {
+export function placeAttachNeck(positions2D, dims, side = 0, neckKind = null, hint = null) {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
   for (const [x, y] of positions2D) {
     if (x < minX) minX = x; if (x > maxX) maxX = x
@@ -942,10 +942,11 @@ export function placeAttachNeck(positions2D, dims, side = 0, neckKind = null) {
     })
   }
   if (neckKind === 'yoke' && side === 0) {
+    const thetaBase = hint?.isFrontYoke ? 0 : Math.PI
     return positions2D.map(([xCm, yCm]) => {
-      const worldY = (dims.shoulderY - dims.span * 0.048) - cm(yCm - minY) * 0.82
+      const worldY = (dims.shoulderY + dims.span * 0.010) - cm(yCm - minY) * 0.82
       const u = clamp((xCm - cx) / Math.max(1e-4, 0.5 * width), -1, 1)
-      const phi = u * 0.42 * Math.PI
+      const phi = thetaBase + u * 0.42 * Math.PI
       const rOut = Math.max(dims.neckR * 1.35 / torsoZScale, radiusAtHeight(dims, worldY) * 1.145 + 0.006)
       return [rOut * Math.sin(phi), worldY, rOut * torsoZScale * Math.cos(phi)]
     })
@@ -981,18 +982,19 @@ export function placeAttachNeck(positions2D, dims, side = 0, neckKind = null) {
   // Standard collars & neckbands: wrap from back of neck (`phi = PI`) symmetrically toward front throat
   const isStandingBand = (neckKind === 'collar-stand' || neckKind === 'collar-band') && height <= 10
   const standTopY = dims.shoulderY + dims.span * 0.038
+  const collarTopY = isStandingBand ? topWorldY : (dims.shoulderY + dims.span * 0.036)
   const thetaCenter = side !== 0 ? side * Math.PI * 0.45 : Math.PI
   return positions2D.map(([xCm, yCm]) => {
     const worldY = isStandingBand
       ? standTopY - cm(yCm - minY) * 0.65
-      : topWorldY - cm(yCm - minY) * 0.56
+      : collarTopY - cm(yCm - minY) * 0.56
     let r
     let effZScale
     if (isStandingBand) {
       r = dims.neckR * 1.32
       effZScale = 0.94
     } else if (worldY >= yNeckBase) {
-      const tNeck = clamp((topWorldY - worldY) / Math.max(1e-6, topWorldY - yNeckBase), 0, 1)
+      const tNeck = clamp((collarTopY - worldY) / Math.max(1e-6, collarTopY - yNeckBase), 0, 1)
       r = lerp(dims.neckR * 1.34, dims.neckR * 1.38, tNeck)
       effZScale = lerp(0.96, 0.90, tNeck)
     } else {
@@ -1005,10 +1007,11 @@ export function placeAttachNeck(positions2D, dims, side = 0, neckKind = null) {
       effZScale = lerp(0.90, torsoZScale, tSlope)
     }
     const rEff = r * (1 + effZScale) * 0.5
-    const deltaPhi = clamp(cm(xCm - cx) / Math.max(0.05, rEff), -Math.PI * 0.78, Math.PI * 0.78)
+    const deltaPhi = clamp(cm(xCm - cx) / Math.max(0.05, rEff), -Math.PI * 0.92, Math.PI * 0.92)
     const phi = thetaCenter + deltaPhi
     const minR = (dims.neckR * 1.30) / Math.min(1, effZScale)
-    const rOut = Math.max(minR, r + 0.004 * (Math.abs(deltaPhi) / Math.PI))
+    const vLeaf = isStandingBand ? 0 : clamp((yCm - minY) / Math.max(2, height), 0, 1)
+    const rOut = Math.max(minR, r + 0.004 * (Math.abs(deltaPhi) / Math.PI) + 0.012 * vLeaf)
     return [rOut * Math.sin(phi), worldY, rOut * effZScale * Math.cos(phi)]
   })
 }
@@ -1419,7 +1422,7 @@ export function placePiece(triangulated, dims, pose = 'standing') {
   if (role === 'goreBack') return placeGorePanel(positions2D, dims, Math.PI, pose, placementHint?.goreSpan || GORE_ANGLE, placementHint)
   if (role === 'goreSideLeft') return placeGorePanel(positions2D, dims, -Math.PI / 2, pose, placementHint?.goreSpan || GORE_ANGLE, placementHint)
   if (role === 'goreSideRight') return placeGorePanel(positions2D, dims, Math.PI / 2, pose, placementHint?.goreSpan || GORE_ANGLE, placementHint)
-  if (role === 'attachNeck') return placeAttachNeck(positions2D, dims, attachSide, placementHint?.neckKind || null)
+  if (role === 'attachNeck') return placeAttachNeck(positions2D, dims, attachSide, placementHint?.neckKind || null, placementHint)
   if (role === 'attachWaist') return placeAttachWaist(positions2D, dims, 1, pose, Boolean(placementHint?.foldAtBack), placementHint)
   if (role === 'attachWaistBack') return placeAttachWaist(positions2D, dims, -1, pose, Boolean(placementHint?.foldAtBack), placementHint)
   if (role === 'attachHem') return placeAttachHem(positions2D, dims, attachSide, pose, placementHint)

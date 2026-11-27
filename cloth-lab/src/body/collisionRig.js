@@ -319,15 +319,15 @@ export function deriveCollisionRig(dims, pose = 'standing', precomputedJoints = 
   })
 
   // 10, 11: Left & Right sloped clavicle-to-acromion shoulder bridges
-  const clavRa = upperR * 0.62 + SKIN_CLEARANCE
-  const clavRb = upperR * 0.68 + SKIN_CLEARANCE
-  const innerTopY = shoulderY + span * (kid ? 0.044 : 0.030) + pelvDY
-  const outerTopY = shoulderY - span * 0.010 + pelvDY
+  const clavRa = upperR * 0.68 + SKIN_CLEARANCE
+  const clavRb = upperR * 0.72 + SKIN_CLEARANCE
+  const innerTopY = shoulderY + span * (kid ? 0.040 : 0.028) + pelvDY
+  const outerTopY = shoulderY - span * 0.016 + pelvDY
   for (const side of [-1, 1]) {
     const innerClav = [
       joints.neckPos[0] + side * neckR * 0.72,
       innerTopY - clavRa + SKIN_CLEARANCE,
-      joints.neckPos[2],
+      joints.neckPos[2] + 0.004,
     ]
     const sh = joints.arms[side].shoulder
     const outerAcromion = [

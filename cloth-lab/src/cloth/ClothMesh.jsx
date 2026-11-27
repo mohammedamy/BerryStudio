@@ -249,6 +249,9 @@ varying float vStitchVis;
       envMapIntensity: fabric.envMapIntensity ?? pbr?.spec?.envMapIntensity ?? 0.85,
       transparent: fabric.om < 1, opacity: fabric.om,
       side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -1.5,
+      polygonOffsetUnits: -2,
       // Note: omit `anisotropy` on GPU-displaced tangentless cloth geometry so
       // screen-space tangent derivatives never divide by zero and emit NaN pixels.
       ...(fabric.transmission != null && { transmission: fabric.transmission, thickness: 0.001 }),
@@ -328,7 +331,7 @@ varying vec2 vPrintUv;
             float wale = sin(vFabricUV.x * 64.0) * 0.016;
             diffuseColor.rgb *= (1.0 + wale * knitMask);
           }
-          diffuseColor.rgb *= (1.0 - 0.085 * seamAO - 0.042 * hemEdge * (1.0 - elasticMask * 0.5));
+          diffuseColor.rgb *= (1.0 - 0.115 * seamAO - 0.055 * hemEdge * (1.0 - elasticMask * 0.5));
           vec4 printSample = (uHasPrint > 0.5) ? texture2D(uPrintTex, vPrintUv * uPrintRepeat) : vec4(0.0);
           if (printSample.a > 0.01) {
             diffuseColor.rgb = mix(diffuseColor.rgb, printSample.rgb, clamp(printSample.a, 0.0, 1.0) * 0.92);
