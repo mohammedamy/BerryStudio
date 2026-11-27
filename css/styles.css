@@ -999,6 +999,46 @@ body.clothlab-fullscreen-active #viewClothLab.show {
   color: var(--ink);
   margin-inline-start: 4px;
 }
+.v3d-hud-zones {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+.v3d-zone-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 5px;
+  border-radius: 7px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-size: 10px;
+  color: var(--ink-2);
+}
+.v3d-zone-pill b {
+  font-size: 11px;
+  color: var(--ink);
+  font-weight: 800;
+}
+.mk-width-presets {
+  display: flex;
+  gap: 5px;
+  margin-top: 6px;
+}
+.mk-width-presets .tag {
+  cursor: pointer;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.mk-width-presets .tag.active {
+  background: var(--brand);
+  color: var(--brand-ink);
+  border-color: var(--brand);
+}
 .v3d-fit-badge {
   padding: 2px 7px;
   border-radius: 6px;
@@ -1892,6 +1932,24 @@ body.clothlab-fullscreen-active #viewClothLab.show {
 .ai-readiness-bar { height: 6px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
 .ai-readiness-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--brand), var(--ok)); border-radius: 999px; transition: width .25s var(--ease); }
 .ai-all-clear { margin-top: 8px; padding: 8px 10px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--ok) 12%, var(--panel)); color: var(--ok); font-size: 12px; font-weight: 700; }
+
+.ai-photo-mode-box {
+  margin: 4px 0 9px; padding: 8px 9px; border-radius: var(--r-md);
+  background: var(--panel-2); border: 1px solid var(--line);
+}
+.ai-photo-mode-box .ai-sub-label { margin: 0 0 6px; }
+.ai-photo-mode-box .help-note { margin-top: 5px; font-size: 11px; }
+.ai-photo-pills {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px;
+}
+.ai-photo-pill {
+  padding: 5px 4px; border-radius: 7px; font-size: 11px; font-weight: 700;
+  color: var(--ink-2); background: var(--panel); border: 1px solid var(--line);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: all var(--fast) var(--ease);
+}
+.ai-photo-pill:hover { border-color: var(--brand); color: var(--ink); }
+.ai-photo-pill.active { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
 
 .ai-q-block { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line-2); }
 .ai-q-title { font-size: 12px; font-weight: 700; color: var(--ink); margin-bottom: 3px; }

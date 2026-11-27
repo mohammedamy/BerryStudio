@@ -221,6 +221,17 @@
               </button>
               <label class="v3d-btn-label" title="Rotate 360°"><input type="checkbox" id="spinToggle" checked> <span data-i18n="v3dSpin">360°</span></label>
               <label class="v3d-btn-label" title="Walk Animation"><input type="checkbox" id="walkToggle" checked> <span data-i18n="v3dWalk">Walk</span></label>
+              <div class="v3d-select-wrap">
+                <label for="v3dPoseSelect" class="sr-only" data-i18n="v3dPoseLabel">Pose</label>
+                <select id="v3dPoseSelect" class="v3d-select" title="Runway Model Pose">
+                  <option value="walk" data-i18n="v3dPoseWalk">Runway Walk</option>
+                  <option value="editorial" data-i18n="v3dPoseEditorial">Editorial Pose</option>
+                  <option value="contrapposto" data-i18n="v3dPoseContrapposto">Contrapposto</option>
+                  <option value="showcase" data-i18n="v3dPoseShowcase">Drape Showcase</option>
+                  <option value="standing" data-i18n="v3dPoseStanding">Natural Stand</option>
+                  <option value="apose" data-i18n="v3dPoseApose">Tailor A-Pose</option>
+                </select>
+              </div>
             </div>
 
             <span class="v3d-sep"></span>
@@ -791,6 +802,11 @@
               <div class="v3d-metric">
                 <span id="v3dFitBadge" class="v3d-fit-badge badge-optimal" data-i18n="fitOptimal">Optimal</span>
               </div>
+            </div>
+            <div class="v3d-hud-zones">
+              <div class="v3d-zone-pill"><span data-i18n="fitZoneBust">Bust</span> <b id="v3dZoneBust">+4.5 cm</b></div>
+              <div class="v3d-zone-pill"><span data-i18n="fitZoneWaist">Waist</span> <b id="v3dZoneWaist">+4.0 cm</b></div>
+              <div class="v3d-zone-pill"><span data-i18n="fitZoneHips">Hips</span> <b id="v3dZoneHips">+4.8 cm</b></div>
             </div>
           </div>
         </div>

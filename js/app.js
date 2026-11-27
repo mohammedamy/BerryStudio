@@ -58,6 +58,12 @@ import { probeCapabilities } from './capability-probe.js';
 import { generateFromSpec, provenanceMapFromSpec, generateSVGPatternFromImage } from './ai-spec-pipeline.js';
 import { fuseStyle, mergeProvenance } from './ai-fusion.js';
 import { mapOnnx12dToStyle } from './photo2pattern.js';
+import {
+  GARMENT_PART_TYPES,
+  loadImageDataFromURL,
+  extractGarmentPartPattern,
+  digitizeFlatPatternSheet,
+} from './photo-digitizer.js';
 import { ImageProviders, IMAGE_PROVIDER_IDS } from './image-providers.js';
 import { MEAS_KEYS, renderMeasureFields } from './measure-form.js';
 import {
@@ -75,7 +81,7 @@ import { pivotDart, slashAndSpread, transferDart } from './darts.js';
 import { seamPointAtFraction, analyzeSeamBalance } from './geometry.js';
 import { SelfHostedSync, GoogleDriveSync, OneDriveSync } from './cloud-sync.js';
 import { parseSVGPattern, parseDXFPattern, parseJSONPattern } from './pattern-import.js';
-import { buildSVG, buildEPS, buildSpecCSV, buildTechPackMarkdown, buildTechPackHTML, buildPatternJSON } from './pattern-export.js';
+import { buildSVG, buildEPS, buildSpecCSV, buildTechPackMarkdown, buildTechPackHTML, buildPatternJSON, buildNestedMarkerSVG } from './pattern-export.js';
 import {
   ATELIER_PRESETS,
   ensureValidPieces,
@@ -290,6 +296,8 @@ import {
   };
   let aiImage = null;   // data-URL of the uploaded AI inspiration image
   let aiStudioMode = "create";      // "create" | "edit" | "tools"
+  let aiPhotoMode = "garment";      // "garment" | "part" | "sheet"
+  let aiPartTarget = "auto";        // "auto" | "collar" | "sleeve" | ...
   let aiDraftText = "";             // preserved prompt text across AI pane re-renders
   let aiConsultOpen = false;        // whether Designer Pre-Draft Q&A card is open
   let aiConsultMetrics = null;      // cached image silhouette read for smart Q&A
@@ -1901,11 +1909,46 @@ import {
     upAskRow.style.marginBottom = "8px";
     upAskRow.append(up, askBtn);
 
+    // Phase 2: 3-Mode Photo Analysis Bar (Full Garment | Single Part | Pattern Sheet)
+    const photoModeWrap = el("div", "ai-photo-mode-box");
+    photoModeWrap.appendChild(el("div", "ai-sub-label", T("aiPhotoModeTitle")));
+    const pmTabs = el("div", "ai-photo-pills");
+    [
+      { id: "garment", label: T("aiPhotoGarment") },
+      { id: "part", label: T("aiPhotoPart") },
+      { id: "sheet", label: T("aiPhotoSheet") },
+    ].forEach(pm => {
+      const btn = el("button", "ai-photo-pill" + (aiPhotoMode === pm.id ? " active" : ""), pm.label);
+      btn.type = "button";
+      btn.dataset.photoMode = pm.id;
+      btn.onclick = () => { aiPhotoMode = pm.id; renderAIPane(); };
+      pmTabs.appendChild(btn);
+    });
+    photoModeWrap.appendChild(pmTabs);
+    if (aiPhotoMode === "part") {
+      const partSelWrap = el("div", "field");
+      partSelWrap.style.marginTop = "6px";
+      const partSel = el("select", "input");
+      partSel.id = "aiPartTargetSelect";
+      GARMENT_PART_TYPES.forEach(pt => {
+        const opt = el("option", null, T(`aiPart_${pt}`));
+        opt.value = pt;
+        if (aiPartTarget === pt) opt.selected = true;
+        partSel.appendChild(opt);
+      });
+      partSel.onchange = () => { aiPartTarget = partSel.value; };
+      partSelWrap.appendChild(partSel);
+      photoModeWrap.appendChild(partSelWrap);
+      photoModeWrap.appendChild(el("div", "help-note", T("aiPhotoPartHint")));
+    } else if (aiPhotoMode === "sheet") {
+      photoModeWrap.appendChild(el("div", "help-note", T("aiPhotoSheetHint")));
+    }
+
     const gen=el("button","big-btn",IC.spark+T("generate"));
     gen.type = "button";
     gen.onclick=()=>runAI(ta.value,gen);
 
-    createWrap.append(f, file, upAskRow, gen);
+    createWrap.append(f, file, upAskRow, photoModeWrap, gen);
 
     const statusBox=el("div","ai-status"); statusBox.id="aiStatus";
     const attrsBox=el("div","ai-attrs"); attrsBox.id="aiAttrs"; attrsBox.style.display="none";
@@ -2292,7 +2335,26 @@ import {
       const hasRealProvider = providerId!=="proxy" ? !missingKey : !!cfg.baseUrl;
       const seamAllowanceCm = state.seamCm || 1;
       let res = null;
-      if(missingKey) toast(T("specFallbackNoKey"));
+      // Phase 2: Offline single-garment-part extractor & flat paper pattern sheet digitizer
+      if(!isBriefFlow && imageDataURL && (aiPhotoMode === "part" || aiPhotoMode === "sheet")){
+        try {
+          setStage("analyzing");
+          const imgData = await loadImageDataFromURL(imageDataURL, 260);
+          setStage("silhouette");
+          await new Promise(r => setTimeout(r, 80));
+          setStage("drafting");
+          const digitized = aiPhotoMode === "part"
+            ? extractGarmentPartPattern({ imageData: imgData, partType: aiPartTarget, category, measurements, seamAllowanceCm, lang })
+            : digitizeFlatPatternSheet({ imageData: imgData, measurements, seamAllowanceCm, lang });
+          if (digitized && digitized.ok && digitized.pieces?.length) {
+            res = { ...digitized, usedImage: true, imageSupplied: true, source: "pixel" };
+            setStage("done");
+          }
+        } catch (digErr) {
+          console.warn("[PhotoDigitizer fallback]", digErr);
+        }
+      }
+      if(!res && missingKey) toast(T("specFallbackNoKey"));
       else if(hasRealProvider){
         setStage("analyzing");
         const schema = await loadSpecSchema();
@@ -3942,7 +4004,18 @@ import {
 
     const row1 = el("div","row"); row1.style.cssText="display:flex;gap:10px;margin-top:12px";
     const wField = el("div","field"); wField.style.flex="1"; wField.innerHTML=`<label>${T("markerWidth")}</label>`;
-    const wInp = el("input","input"); wInp.type="number"; wInp.min="20"; wInp.value="160"; wField.appendChild(wInp);
+    const wInp = el("input","input"); wInp.type="number"; wInp.min="20"; wInp.value="150"; wField.appendChild(wInp);
+    const widthPresets = el("div","mk-width-presets");
+    [115, 140, 150, 160].forEach(wCm => {
+      const chip = el("button", "tag" + (wCm === 150 ? " active" : ""), `${wCm} cm`);
+      chip.type = "button";
+      chip.onclick = () => {
+        wInp.value = String(wCm);
+        [...widthPresets.children].forEach(x => x.classList.toggle("active", x === chip));
+      };
+      widthPresets.appendChild(chip);
+    });
+    wField.appendChild(widthPresets);
     const lField = el("div","field"); lField.style.flex="1"; lField.innerHTML=`<label>${T("markerLength")}</label>`;
     const lInp = el("input","input"); lInp.type="number"; lInp.min="20"; lInp.value="250"; lField.appendChild(lInp);
     row1.appendChild(wField); row1.appendChild(lField); body.appendChild(row1);
@@ -3980,17 +4053,26 @@ import {
     const btnRow = el("div","row"); btnRow.style.cssText="display:flex;gap:8px;margin-top:12px";
     const nestBtn = el("button","big-btn",T("markerNest")); nestBtn.style.flex="1";
     const stopBtn = el("button","big-btn ghost",T("markerStop")); stopBtn.style.flex="1";
-    btnRow.appendChild(nestBtn); btnRow.appendChild(stopBtn);
+    const svgOutBtn = el("button","big-btn ghost",T("markerExportSvg")); svgOutBtn.style.flex="1"; svgOutBtn.disabled=true;
+    btnRow.appendChild(nestBtn); btnRow.appendChild(stopBtn); btnRow.appendChild(svgOutBtn);
     body.appendChild(btnRow); body.appendChild(yardEl);
 
     let fullNestRunning = false;
+    let lastMarkerState = null;
     stopBtn.onclick = () => { if(fullNestRunning) cancelNest(); else toast(T("markerInstant")); };
+    svgOutBtn.onclick = () => {
+      if (!lastMarkerState) return;
+      const svgTxt = buildNestedMarkerSVG(lastMarkerState.pieces, lastMarkerState.placements, lastMarkerState.matWidth, lastMarkerState.totalHeight, {
+        utilization: lastMarkerState.utilization, lang: state.lang,
+      });
+      if (svgTxt) download("berrystudio-marker-1to1.svg", "image/svg+xml;charset=utf-8", svgTxt);
+    };
 
     nestBtn.onclick = async () => {
       const matFilter = body.querySelector(".mk-mat").value;
       const selected = pieces.filter((p,i)=>checks[i].checked && (!matFilter || (p.material||state.fabric3d)===matFilter));
       if(!selected.length){ toast(T("empty2d")); return; }
-      const matWidth = +wInp.value||160, matLength = +lInp.value||250;
+      const matWidth = +wInp.value||150, matLength = +lInp.value||250;
       const allowRotate = rField.querySelector(".mk-rot").value==="any";
       const minDistCm = +dInp.value||0;
 
@@ -4002,7 +4084,12 @@ import {
         const result = nestShelfPack(items, matWidth, allowRotate, minDistCm);
         drawNestPreview(canvas, result, matWidth, matLength);
         state.lastMarkerYards = result.totalHeight/100; state.lastMarkerWidth = matWidth; save();
-        yardEl.innerHTML = `${T("markerYardage")}: <b>${state.lastMarkerYards.toFixed(2)} m</b> @ ${matWidth}cm`;
+        const usedArea = items.reduce((s,it)=>s + it.w * it.h, 0);
+        const fastUtil = Math.min(0.98, usedArea / Math.max(1, matWidth * result.totalHeight));
+        const utilPct = Math.round(fastUtil * 100);
+        lastMarkerState = { pieces: selected, placements: result.placements || items.map((it,idx)=>({ ...it, x:0, y:idx*2 })), matWidth, totalHeight: result.totalHeight, utilization: fastUtil };
+        svgOutBtn.disabled = false;
+        yardEl.innerHTML = `${T("markerYardage")}: <b>${state.lastMarkerYards.toFixed(2)} m</b> @ ${matWidth}cm · ${T("markerUtilization")}: <b>${utilPct}%</b>`;
         renderExportPane();
         return;
       }
@@ -4030,6 +4117,8 @@ import {
         drawNestPreviewPolygons(canvas, placements, matWidth);
         state.lastMarkerYards = result.totalHeight/100; state.lastMarkerWidth = matWidth; save();
         const utilPct = Math.round(result.utilization*100);
+        lastMarkerState = { pieces: selected, placements, matWidth, totalHeight: result.totalHeight, utilization: result.utilization };
+        svgOutBtn.disabled = false;
         yardEl.innerHTML = `${T("markerYardage")}: <b>${state.lastMarkerYards.toFixed(2)} m</b> @ ${matWidth}cm`
           + ` · ${T("markerUtilization")}: <b>${utilPct}%</b>`
           + (result.cancelled ? ` — ${T("markerCancelled")}` : "");
@@ -7379,7 +7468,28 @@ import {
     $("#onbNext").onclick=onbNext; $("#onbBack").onclick=onbBack; $("#onbSkip").onclick=()=>{state.onboarded=true;save();closeModal("#onbModal");};
     // 3d controls
     $("#spinToggle").onchange=e=>View3D.setSpin(e.target.checked);
-    $("#walkToggle").onchange=e=>View3D.setWalk(e.target.checked);
+    const walkToggle = $("#walkToggle");
+    const poseSelect = $("#v3dPoseSelect");
+    if (walkToggle) {
+      walkToggle.onchange = e => {
+        const w = e.target.checked;
+        View3D.setWalk(w);
+        if (poseSelect) poseSelect.value = w ? "walk" : (View3D.getPose?.() || "editorial");
+      };
+    }
+    if (poseSelect) {
+      poseSelect.onchange = e => {
+        const v = e.target.value;
+        if (v === "walk") {
+          if (walkToggle) walkToggle.checked = true;
+          View3D.setWalk(true);
+        } else {
+          if (walkToggle) walkToggle.checked = false;
+          View3D.setWalk(false);
+          View3D.setPose?.(v);
+        }
+      };
+    }
     const camBtns = $$("#v3dCamBar [data-cam-preset]");
     camBtns.forEach(btn => {
       btn.onclick = () => {
@@ -7498,8 +7608,17 @@ import {
       const peak = $("#v3dPeakStrain");
       const ease = $("#v3dAvgEase");
       const badge = $("#v3dFitBadge");
+      const zBust = $("#v3dZoneBust");
+      const zWaist = $("#v3dZoneWaist");
+      const zHips = $("#v3dZoneHips");
       if (peak) peak.textContent = (m.peakStrain || 0) + "%";
       if (ease) ease.textContent = (m.avgEase || 0) + " cm";
+      if (m.zones) {
+        const fmt = (v) => `${v >= 0 ? "+" : ""}${Number(v || 0).toFixed(1)} cm`;
+        if (zBust) zBust.textContent = fmt(m.zones.bust);
+        if (zWaist) zWaist.textContent = fmt(m.zones.waist);
+        if (zHips) zHips.textContent = fmt(m.zones.hips);
+      }
       if (badge) {
         badge.className = `v3d-fit-badge badge-${(m.status || "").replace(/^fit/, "").toLowerCase()}`;
         badge.textContent = T(m.status) || m.status;

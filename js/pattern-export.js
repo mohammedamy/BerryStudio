@@ -17,7 +17,9 @@ import {
   edgeNormalAtPoint,
   findVisualLabelAnchor,
   inferPieceCutInstruction,
+  analyzeSeamBalance,
 } from './geometry.js';
+import { gradePieceAnatomically, stepForSize } from './grading.js';
 
 // A vertex's interior angle deviating from straight (180°) by more than
 // this counts as a real corner — a smoothly bezier-sampled curve's own
@@ -1123,6 +1125,55 @@ export function buildTechPackMarkdown(pieces, meta = {}) {
   return lines.join('\n');
 }
 
+// ---- 1:1 Nested Fabric Marker Layout SVG (.svg) ----
+export function buildNestedMarkerSVG(pieces, placements, matWidthCm, totalHeightCm, opts = {}) {
+  if (!Array.isArray(placements) || !placements.length || !(matWidthCm > 0)) return "";
+  const W = Number(matWidthCm) || 150;
+  const H = Math.max(20, Number(totalHeightCm) || 100);
+  const pad = 4;
+  const utilPct = opts.utilization != null ? `${Math.round(opts.utilization * 100)}%` : "—";
+  const lang = opts.lang === "ar" ? "ar" : "en";
+
+  const transformPoly = (outline, xOff, yOff, angleDeg = 0) => {
+    if (!Array.isArray(outline) || !outline.length) return [];
+    const rad = (Number(angleDeg) * Math.PI) / 180;
+    const c = Math.cos(rad), s = Math.sin(rad);
+    const rot = outline.map(([px, py]) => [px * c - py * s, px * s + py * c]);
+    const rMinX = Math.min(...rot.map((p) => p[0]));
+    const rMinY = Math.min(...rot.map((p) => p[1]));
+    return rot.map(([px, py]) => [+(px - rMinX + xOff).toFixed(2), +(py - rMinY + yOff).toFixed(2)]);
+  };
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${(W + pad * 2).toFixed(1)}cm" height="${(H + pad * 2 + 8).toFixed(1)}cm" viewBox="${-pad} ${-pad - 8} ${(W + pad * 2).toFixed(2)} ${(H + pad * 2 + 8).toFixed(2)}">\n`;
+  svg += `  <rect x="0" y="-6.5" width="${W.toFixed(2)}" height="5.5" fill="#f4f4f5" stroke="#d4d4d8" stroke-width="0.15" rx="0.6"/>\n`;
+  svg += `  <text x="1.5" y="-3.2" font-family="Inter, Arial, sans-serif" font-size="2.2" font-weight="700" fill="#18181b">BerryStudio 1:1 Marker · Width: ${W.toFixed(0)} cm · Length: ${(H / 100).toFixed(2)} m · Efficiency: ${utilPct}</text>\n`;
+  svg += `  <rect x="0" y="0" width="${W.toFixed(2)}" height="${H.toFixed(2)}" fill="#ffffff" stroke="#18181b" stroke-width="0.25"/>\n`;
+  svg += `  <line x1="0" y1="0" x2="0" y2="${H.toFixed(2)}" stroke="#4f46e5" stroke-width="0.18" stroke-dasharray="1.2,0.8"/>\n`;
+  svg += `  <line x1="${W.toFixed(2)}" y1="0" x2="${W.toFixed(2)}" y2="${H.toFixed(2)}" stroke="#4f46e5" stroke-width="0.18" stroke-dasharray="1.2,0.8"/>\n`;
+
+  placements.forEach((pl, idx) => {
+    const srcPiece = pl.id != null ? pieces[pl.id] : pieces[idx];
+    const lbl = escXML(pl.label || (srcPiece?.name && (srcPiece.name[lang] || srcPiece.name.en)) || `Piece ${idx + 1}`);
+    if (srcPiece && Array.isArray(srcPiece.outline) && srcPiece.outline.length >= 3 && (pl.rotation != null || pl.x != null)) {
+      const pts = transformPoly(srcPiece.outline, pl.x || 0, pl.y || 0, pl.rotation || 0);
+      const d = `M ${pts.map((pt) => `${pt[0].toFixed(2)} ${pt[1].toFixed(2)}`).join(" L ")} Z`;
+      const cx = avg(pts.map((p) => p[0])), cy = avg(pts.map((p) => p[1]));
+      svg += `  <path d="${d}" fill="rgba(109,94,252,0.08)" stroke="#18181b" stroke-width="0.18"/>\n`;
+      svg += `  <text x="${cx.toFixed(2)}" y="${cy.toFixed(2)}" font-family="Inter, Arial, sans-serif" font-size="1.8" font-weight="700" fill="#18181b" text-anchor="middle">${lbl}</text>\n`;
+    } else if (pl.w && pl.h) {
+      svg += `  <rect x="${(pl.x || 0).toFixed(2)}" y="${(pl.y || 0).toFixed(2)}" width="${pl.w.toFixed(2)}" height="${pl.h.toFixed(2)}" fill="rgba(109,94,252,0.08)" stroke="#18181b" stroke-width="0.18"/>\n`;
+      svg += `  <text x="${((pl.x || 0) + pl.w / 2).toFixed(2)}" y="${((pl.y || 0) + pl.h / 2).toFixed(2)}" font-family="Inter, Arial, sans-serif" font-size="1.8" font-weight="700" fill="#18181b" text-anchor="middle">${lbl}</text>\n`;
+    }
+  });
+
+  if (W >= 14 && H >= 12) {
+    svg += `  <rect x="${(W - 11).toFixed(2)}" y="1.0" width="10" height="10" fill="none" stroke="#18181b" stroke-width="0.16"/>\n`;
+    svg += `  <text x="${(W - 6).toFixed(2)}" y="6.3" font-family="Inter, Arial, sans-serif" font-size="1.15" fill="#18181b" text-anchor="middle">10×10 cm 1:1</text>\n`;
+  }
+  svg += `</svg>`;
+  return svg;
+}
+
 // ---- Print-Ready HTML Couture Tech Pack (.html) ----
 export function buildTechPackHTML(pieces, meta = {}) {
   if (!pieces || !pieces.length) return "";
@@ -1133,22 +1184,67 @@ export function buildTechPackHTML(pieces, meta = {}) {
   const svgDiagram = buildSVG(pieces, { seamAllowanceCm: seamCm, lang, includeScaleBar: true })
     .replace(/width="[^"]+" height="[^"]+"/, 'style="width:100%;max-height:420px;height:auto;display:block"');
   const steps = deriveConstructionSteps(pieces, lang);
+  const INTERFACE_ROLES = new Set(['collar', 'collar-stand', 'collar-band', 'cuff', 'waistband', 'facing', 'lapel-facing', 'placket-facing']);
 
   let totalAreaCm2 = 0;
   const pieceRows = pieces.map((p, i) => {
     const st = pieceStats(p);
     const qty = Number.isInteger(p.quantity) ? p.quantity : (p.cutOnFold ? 1 : (p.bilateral ? 2 : 1));
     totalAreaCm2 += st.area * (p.cutOnFold ? 2 : 1) * qty;
+    const perEdge = seamCm > 0 ? resolvePieceSeamAllowances(p, seamCm, { variable: true }) : [];
+    const maxSA = perEdge.length ? Math.max(...perEdge) : seamCm;
+    const hasZeroFold = detectFoldEdgeIndex(p) >= 0;
+    const saText = seamCm <= 0
+      ? 'Net 0 cm'
+      : `${seamCm.toFixed(1)} cm` + (maxSA > seamCm + 0.5 ? ` / Hem ${maxSA.toFixed(0)} cm` : '') + (hasZeroFold ? ' / Fold 0 cm' : '');
+    const needsInterface = INTERFACE_ROLES.has(p.role || '') || /collar|cuff|waistband|facing|placket/i.test(p.name?.en || '');
     return `<tr>
       <td>${i + 1}</td>
-      <td><b>${escXML(p.name?.en || `Piece ${i + 1}`)}</b><br><small style="color:#64748b">${escXML(p.name?.ar || '')}</small></td>
+      <td><b>${escXML(p.name?.en || `Piece ${i + 1}`)}</b><br><small style="color:#64748b">${escXML(p.name?.ar || '')}</small>${needsInterface ? `<br><span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-weight:700">${lang === 'ar' ? 'حشوة مقواة (فازلين)' : 'Interfaced / Fusible'}</span>` : ''}</td>
       <td><code>${escXML(p.role || 'other')}</code></td>
       <td>${qty}</td>
       <td>${p.cutOnFold ? (lang === 'ar' ? 'على الثنية' : 'Cut on Fold') : '—'}</td>
       <td>${st.w} × ${st.h} cm</td>
       <td>${st.area} cm²</td>
-      <td>${(p.notches || []).length}N · ${(p.darts || []).length}D · ${(p.curves || []).length}C</td>
+      <td>${escXML(saText)}<br><small style="color:#64748b">${(p.notches || []).length}N · ${(p.darts || []).length}D · ${(p.curves || []).length}C</small></td>
     </tr>`;
+  }).join('\n');
+
+  const seamBalance = analyzeSeamBalance(pieces);
+  const seamBalanceRows = (seamBalance || []).map((s) => `<tr>
+    <td>${escXML(lang === 'ar' ? (s.labelAr || s.labelEn || s.id) : (s.labelEn || s.labelAr || s.id))}</td>
+    <td>${Number(s.lenA || 0).toFixed(1)} cm</td>
+    <td>${Number(s.lenB || 0).toFixed(1)} cm</td>
+    <td>${(Number(s.diffCm) || 0) >= 0 ? '+' : ''}${Number(s.diffCm || 0).toFixed(1)} cm</td>
+    <td><b>${s.status === 'ok' ? 'Matched' : (s.status === 'ease' ? 'Tailored Ease' : 'Check Fit')}</b></td>
+  </tr>`).join('\n');
+
+  // Multi-size Graded POM Spec Matrix (XS .. XXL)
+  const gradeSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+  const baseMeas = meta.measurements && Object.keys(meta.measurements).length
+    ? meta.measurements
+    : { chest: 92, waist: 74, hips: 98, shoulder: 40, backLen: 40, sleeve: 58, inseam: 76, neck: 37, bicep: 30, thigh: 55 };
+  const measAtSize = (sz) => {
+    const step = stepForSize(sz, null);
+    return {
+      ...baseMeas,
+      chest: +(baseMeas.chest + step * 5).toFixed(1),
+      waist: +(baseMeas.waist + step * 5).toFixed(1),
+      hips: +(baseMeas.hips + step * 5).toFixed(1),
+      shoulder: +((baseMeas.shoulder || 40) + step * 1.2).toFixed(1),
+      backLen: +((baseMeas.backLen || 40) + step * 0.7).toFixed(1),
+      sleeve: +((baseMeas.sleeve || 58) + step * 0.9).toFixed(1),
+      inseam: +((baseMeas.inseam || 76) + step * 0.6).toFixed(1),
+    };
+  };
+  const primarySpecPieces = pieces.slice(0, 6);
+  const gradedRows = primarySpecPieces.map((p) => {
+    const cells = gradeSizes.map((sz) => {
+      const gp = gradePieceAnatomically(p, baseMeas, measAtSize(sz), null, stepForSize(sz, null));
+      const gst = pieceStats(gp);
+      return `<td>${gst.w} × ${gst.h}</td>`;
+    }).join('');
+    return `<tr><td><b>${escXML(p.name?.[lang] || p.name?.en || p.key)}</b></td>${cells}</tr>`;
   }).join('\n');
 
   const measRows = meta.measurements && typeof meta.measurements === 'object'
@@ -1201,13 +1297,19 @@ export function buildTechPackHTML(pieces, meta = {}) {
   </div>
   <h2>1. Technical Pattern Layout (1:1 Proportions)</h2>
   <div class="diagram-box">${svgDiagram}</div>
-  <h2>2. Pattern Cut List &amp; Geometry Schedule</h2>
+  <h2>2. Pattern Cut List &amp; Seam Allowance Schedule</h2>
   <table>
-    <thead><tr><th>#</th><th>Piece Name</th><th>Role</th><th>Cut Qty</th><th>Fold</th><th>Dimensions</th><th>Net Area</th><th>Details</th></tr></thead>
+    <thead><tr><th>#</th><th>Piece Name</th><th>Role</th><th>Cut Qty</th><th>Fold</th><th>Dimensions</th><th>Net Area</th><th>Seam Allowance &amp; Marks</th></tr></thead>
     <tbody>${pieceRows}</tbody>
   </table>
-  ${measRows ? `<h2>3. Target Body Measurements</h2><table><thead><tr><th>Measurement</th><th>Metric (cm)</th><th>Imperial (in)</th></tr></thead><tbody>${measRows}</tbody></table>` : ''}
-  <h2>${measRows ? '4' : '3'}. Atelier Construction &amp; Sewing Sequence</h2>
+  <h2>3. Graded Size Specification Matrix (W × L cm · XS–XXL)</h2>
+  <table>
+    <thead><tr><th>Pattern Piece</th>${gradeSizes.map((s) => `<th>${s}</th>`).join('')}</tr></thead>
+    <tbody>${gradedRows}</tbody>
+  </table>
+  ${seamBalanceRows ? `<h2>4. Seam Balance QA Audit</h2><table><thead><tr><th>Seam Pair</th><th>Edge A</th><th>Edge B</th><th>Diff / Ease</th><th>Status</th></tr></thead><tbody>${seamBalanceRows}</tbody></table>` : ''}
+  ${measRows ? `<h2>${seamBalanceRows ? '5' : '4'}. Target Body Measurements</h2><table><thead><tr><th>Measurement</th><th>Metric (cm)</th><th>Imperial (in)</th></tr></thead><tbody>${measRows}</tbody></table>` : ''}
+  <h2>${(seamBalanceRows ? 4 : 3) + (measRows ? 2 : 1)}. Atelier Construction &amp; Sewing Sequence</h2>
   <ol>${steps.map((s) => `<li>${escXML(s)}</li>`).join('')}</ol>
 </body>
 </html>`;

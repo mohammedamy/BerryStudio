@@ -215,6 +215,37 @@ export const AIGen = (() => {
           const topDomeW = atF(0.04);
           const hasHoodDome = topDomeW > shoulderW * 0.26 && topDomeW < shoulderW * 0.56 && firstGapFrac == null;
 
+          // Detect tailored collar / center placket luminance fold cues in top 26% and vertical centerline
+          let collarWingContrast = 0;
+          let placketLineScore = 0;
+          const lumaAt = (x, y) => {
+            const p = at(clamp(x, 0, W - 1), clamp(y, 0, H - 1));
+            return 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2];
+          };
+          for (const cf of [0.06, 0.10, 0.14]) {
+            const rRow = runAtF(cf);
+            if (!rRow) continue;
+            const cx = Math.round(rRow.cx);
+            const cy = clamp(Math.round(minY + gh * cf), 0, H - 1);
+            const spanX = Math.max(4, Math.round(rRow.w * 0.14));
+            const lCenter = lumaAt(cx, cy);
+            const lLeft = lumaAt(cx - spanX, cy);
+            const lRight = lumaAt(cx + spanX, cy);
+            const wingDiff = Math.abs(lLeft - lCenter) + Math.abs(lRight - lCenter);
+            if (wingDiff > 24 && Math.abs(lLeft - lRight) < 26) collarWingContrast++;
+          }
+          for (const pf of [0.22, 0.30, 0.38, 0.46]) {
+            const rRow = runAtF(pf);
+            if (!rRow) continue;
+            const cx = Math.round(rRow.cx);
+            const cy = clamp(Math.round(minY + gh * pf), 0, H - 1);
+            const grad = Math.abs(lumaAt(cx - 2, cy) - lumaAt(cx + 2, cy)) + Math.abs(lumaAt(cx, cy) - lumaAt(cx - 5, cy));
+            if (grad > 14) placketLineScore++;
+          }
+          const hasCollarV = !hasHoodDome && collarWingContrast >= 2 && topGrowth > 0.35 && topGrowth < 0.88;
+          const hasCenterPlacket = placketLineScore >= 3;
+          if (hasCollarV && neckline === "round") neckline = "collar";
+
           // colour: sample small patches at the torso centre and near the hem
           const patch=(fy)=>{ const row=runAtF(fy); if(!row) return null;
             const cx=Math.round(row.cx), cy=clamp(Math.round(minY+gh*fy),0,H-1);
@@ -238,6 +269,8 @@ export const AIGen = (() => {
             sleeveFactor: +(Math.max(0,(shoulderW-chestW)/chestW).toFixed(2)),
             hasLegSplit,
             hasHoodDome,
+            hasCollarV,
+            hasCenterPlacket,
             neckline, hemShape, color, colorHem,
             twoTone: !!(color && colorHem && colorDist(color,colorHem) > 60),
             segmented,
@@ -303,9 +336,13 @@ export const AIGen = (() => {
         s.type = hf > 0.72 ? "jumpsuit" : hf < 0.45 ? "shorts" : "trousers";
       } else if (metrics.hasHoodDome) {
         s.type = "hoodie";
+      } else if (metrics.hasCollarV && metrics.hasCenterPlacket && hf >= 0.42 && hf <= 0.78) {
+        s.type = "shirt";
+        s.button = true;
       } else {
         s.type = hf < 0.5 ? "top" : hf > 0.82 ? "robe" : "dress";
       }
+      if (metrics.hasCenterPlacket) s.button = true;
     }
     if(!s.type){
       const byCat = { women:["dress","top","skirt"], men:["shirt","trousers","robe"], girls:["dress","skirt","top"], boys:["shirt","trousers"] };

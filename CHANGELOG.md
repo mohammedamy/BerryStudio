@@ -1,10 +1,11 @@
 # Changelog
 
-## Atelier 2D Pattern CAD, Print-Ready Tiled/A0/Nested PDF & Universal Live Grading (`berrystudio-v115`)
+## Couture Photo Digitizer, Photorealistic Runway Models, Tailored Seam Finishing & Enterprise Tech Pack (`berrystudio-v117`)
 
-- **Atelier Drafting Paper Mode & Industrial Symbols ([`canvas.js`](js/canvas.js), [`geometry.js`](js/geometry.js), [`index.html`](index.html)):** Added true cubic Bézier path tracing (`tracePiecePath`), **Atelier Drafting Paper View** toggle (`#atelierModeBtn`: solid outer cutting line + dashed inner stitching line), **variable per-edge seam allowances** (`resolvePieceSeamAllowances` / `offsetPieceOutline`: automatic `0 cm` Cut-on-Fold edges, `3.0 cm` hem allowances, `1.0 cm` tight neckline/collar seams), inward **perpendicular V-notches** (`edgeNormalAtPoint`), **Cut-on-Fold bracket arrows**, dart center fold lines + circular apex drill holes, non-overlapping `GRAIN` arrows, collision-free interior **Piece Spec Stamps** (`findVisualLabelAnchor`, `inferPieceCutInstruction` with bilingual Cut Qty / Fold / Pair / Interfacing notes), and a live **Multi-Size Nested Overlay** toggle (`#nestOverlayBtn`) on the 2D board.
-- **Complete Print-Ready PDF (A4/Letter Tiled, A0 Copyshop, Multi-Size Nested) & Upgraded 1:1 SVG ([`pattern-export.js`](js/pattern-export.js), [`pattern-import.js`](js/pattern-import.js)):** Fixed tiled PDF pages (`tileContentStream`) to include full outer variable seam allowances (`0 cm` fold, `3 cm` hem), inner dashed Bézier stitching lines, grainlines, darts with diamond apex punch marks, perpendicular V-notches, Cut-on-Fold brackets, corner diamond registration crosshairs, neighbor tile join markers, and scaled assembly-map piece silhouettes with dual `10×10 cm` metric + `2×2 in` imperial calibration squares; added **A0 / A1 / A3 Copyshop 1:1 sheets**, **Multi-Size Nested PDF exports (`S–XL`)** with color/dash legends, and matching SVG upgrades with full SVG import round-trip compatibility.
-- **Universal Lossless Anatomical Grading & Interactive Seam Balance Inspector ([`grading.js`](js/grading.js), [`app.js`](js/app.js), [`css/styles.css`](css/styles.css), [`i18n.js`](js/i18n.js), [`phase1-atelier-cad.test.js`](test/phase1-atelier-cad.test.js)):** Added zone-aware `gradePiecesAnatomically` with immutable `baseGradeSnapshot` state so AI-generated, Quick-Drafted, SVG/DXF-imported, and saved custom patterns resize cleanly and reversibly (`S ↔ M ↔ L ↔ XL`) with locked fold edges and preserved collar/band heights, alongside an upgraded **Seam Balance & Walking Inspector** (`analyzeSeamBalance`) displaying measured lengths and tailoring ease across declared and structural seams (shoulder, side seam, armhole-vs-sleeve-cap).
+- **Phase 2 — Offline Photo Digitizer, Single-Part Extractor & Flat Pattern Sheet Tracing ([`photo-digitizer.js`](js/photo-digitizer.js), [`ai.js`](js/ai.js), [`app.js`](js/app.js), [`i18n.js`](js/i18n.js), [`css/styles.css`](css/styles.css)):** Added `segmentForegroundMask`, Moore-Neighbor `traceComponentContour`, Ramer-Douglas-Peucker simplification, Catmull-Rom `fitCubicBeziersToPolygon`, single garment-part extraction (`extractGarmentPartPattern` across `collar`, `sleeve`, `bodice`, `skirt`, `trousers`, `pocket`, `cuff`, `hood`) calibrated to active body measurements and immediately gradable `XXS–6XL`, multi-piece flat paper pattern sheet digitization (`digitizeFlatPatternSheet`), enhanced collar/placket vision cues in [`ai.js`](js/ai.js), and 3-mode Photo Extraction controls in the AI Studio panel.
+- **Phase 3 — Photorealistic Matte Skin, Crown-Smooth Hair & Runway Fashion Poses ([`human-mannequin.js`](js/human-mannequin.js), [`Scene.jsx`](cloth-lab/src/scene/Scene.jsx), [`three-view.js`](js/three-view.js), [`index.html`](index.html)):** Replaced plastic skin specular highlights with dermal micro-pore `roughnessMap`/`bumpMap` (`roughness: 0.68`, `clearcoat: 0.0`), eliminated hair washout and top-crown pole pinching via Sobel strand normal maps + crown apex convergence (`crownCalm`), added `editorial` and `showcase` fashion model poses (`FASHION_POSES`) with live breathing pose-hold (`applyNaturalHumanMotion`) and `#v3dPoseSelect` in the 3D toolbar, and balanced Cloth Lab 3-point + HDRI studio lighting with an architectural turntable stage.
+- **Phase 4 — Welded Tailored Shoulders, Sculpted Collar & Seam Finishing Shading, Zenodo 3D Metrics ([`three-view.js`](js/three-view.js), [`pattern-3d-metrics.js`](js/pattern-3d-metrics.js), [`fabric-textures.js`](js/fabric-textures.js)):** Fixed upper sleeve-cap capsule push attenuation (`armPushFade`) and acromion shoulder overlap so skin never pokes through shoulders during walk animation, baked pressed-seam, armscye, hem-fold, collar-roll, and under-collar AO shading cleanly preserved across `Fit Map` toggles, sharpened cotton/twill micro-weave relief, and extended `isBackPieceName` for Zenodo `lback`/`rback` panels.
+- **Phase 5 — Zone Fit Ease HUD, 1:1 Marker SVG & Graded Couture Tech Pack ([`three-view.js`](js/three-view.js), [`pattern-export.js`](js/pattern-export.js), [`app.js`](js/app.js), [`index.html`](index.html)):** Added live Bust / Waist / Hip cm ease pills to `#v3dTensionHud`, added `115/140/150/160 cm` bolt width presets, utilization `%` readout in fast & full nesting, and `buildNestedMarkerSVG` 1:1 marker export in `openMarkerModal()`, and upgraded `buildTechPackHTML` with variable Seam Allowance & Interfacing badges, a `XS–XXL` Graded Size Spec matrix, and a Seam Balance QA audit table (`test/master-plan-phases2to5.test.js`).
 
 ## Sculpted 3D Shirt Collars, Welded Shoulder Seams & Walk Cuff Tracking (`berrystudio-v114`)
 
@@ -302,6 +303,7 @@ into Fabric / Body / Look / Export tabs, while standalone BodyForm (`body.html`)
 keeps Measurement, Avatar and Export stacked together with no extra tab click.
 
 Host integration and 3D garment assembly fixes:
+
 - Hides 2D stage overlays (`.zoombar`, `#emptyState`, `#pieceInfo`) when viewing
   3D Cloth Lab so the primary action bar is never covered, and sizes the
   embedded 3D `<Canvas>` to fill the full preview pane from frame zero.
@@ -1031,7 +1033,6 @@ reference photos. The repair preserves current catalog and collar work.
 - mf11 collar drafting remains open; see `docs/plan-v3-2-progress.md` for the
   front-panel topology and coarse-mesh limitations found during investigation.
 
-
 All notable changes to this project are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions.
 Started as part of `BerryStudio-Upgrade-Plan.md`'s WP-16 (docs & changelog),
@@ -1286,20 +1287,22 @@ Cloth Lab layout and Quick Look remain unverified. No push or deployment.
 See [the integration report](docs/cloth-lab-fix-integration.md) for exact results,
 public-site asset failures and the acceptance checks remaining before merge.
 
-
 ## WP-44 (part 5): notch coverage for `data.js`'s six hand-authored patterns — and one asymmetric-front exclusion left correctly unforced
 
 `js/data.js` holds the six original, hand-authored patterns (`womens_dress`, `abaya`, `mens_shirt`, `thobe`, `girls_dress`, `boys_trousers`) that predate `js/library.js`'s shared builders. All of them already had `chestEdgeIndices` on their bodice front/back panels from WP-24; this pass closes the one remaining gap on those same panels — notches.
 
 ### Added
+
 - `girls_dress`: `bodice_front`/`bodice_back` — both share the literal same outline, so a notch at the same already-declared chest vertex (`[cF,1]`, the same vertex `chestEdgeIndices` already points at) matches exactly by construction (confirmed 0.0% perimeter difference).
 - `thobe`: `front`/`back` — a notch at each panel's own underarm-level vertex; the two outlines are the same shape with each other's X values uniformly offset by ~1cm, so the same relative vertex matches closely (confirmed 0.2%).
 - `mens_shirt`: `back` gets a notch at the same height as `front`'s existing one (front already had a notch from WP-24; back didn't). Back's outline has no literal vertex at that height — this is a point on the underarm→hem edge rather than an existing corner, placed there by the nearest-point-projection convention this codebase already establishes for notches (confirmed 0.1%).
 
 ### Deliberately NOT added: a notch on `abaya`'s front
+
 `abaya`'s front panel is a genuinely open, un-folded panel (already excluded from `chestEdgeIndices` since WP-24, for the same reason) — it has no vertex that corresponds to anything on the back the way a folded pair's do. Adding a notch only to the back would produce a real, correctly-reported "different notch count" mismatch for no informational gain, so both stay notch-free, matching how the two already handle `chestEdgeIndices`.
 
 ### Verification
+
 - `/tmp/wp44_failcheck.mjs` (full 308-pattern sweep): 0 fails.
 - Confirmed each new pair reports `checkNotchAlignment` as `pass` (not `warn`), at 0.0%–0.2% perimeter difference — not just "no fail," genuinely matching.
 - `library.js` (+`data.js`) group: notch coverage 68.2%→69.5% (259→264/380).
@@ -1307,7 +1310,6 @@ public-site asset failures and the acceptance checks remaining before merge.
 - `node --test "test/**/*.test.js"`: 315/315, no regressions.
 - `cloth-lab` `npx vitest run`: 835/835, unchanged.
 - `npm run lint`: zero new warnings, zero errors.
-
 
 ## WP-44 (part 4): notch coverage for `underwear-library.js`'s briefs — and an honest architectural non-fit for `chestEdgeIndices` there, documented rather than forced
 
@@ -1317,6 +1319,7 @@ already fixed for cross-piece pairing (0%→92.3%) but hadn't touched for
 notches or ease.
 
 ### Added
+
 - `briefPanel()`/`briefPieces()`: front and back panels (24 brief/trunk
   patterns, 48 pieces) now declare a notch at `[cornerX, cornerY]` — the
   far end of the panel's own already-declared `briefSide` seam edge (WP-58's
@@ -1328,6 +1331,7 @@ notches or ease.
   comment on this function).
 
 ### Deliberately NOT added: `chestEdgeIndices` on any brief piece
+
 A brief has no chest dimension at all — it's a waist/hip garment — so
 `checkEase`'s implied-full-chest math has nothing honest to measure on
 these pieces. Every brief piece correctly reports ease as "not
@@ -1337,6 +1341,7 @@ princess-seamed/asymmetric-wrap exclusions `checkEase`'s own module
 comment already lists — not a coverage gap left to close later.
 
 ### Bra pieces (cup/bridge/band/strap, sport bra) left untouched, on purpose
+
 Investigated but not changed this slice: a bra's cup/band/bridge pieces
 don't map onto the existing `chestEdgeIndices` convention as cleanly as a
 bodice or jacket panel does (none of them is a simple half-torso panel
@@ -1347,6 +1352,7 @@ new false positives rather than real coverage. Left as a real, named gap
 for a future slice rather than papered over.
 
 ### Verification
+
 - `/tmp/wp44_failcheck.mjs` (full 308-pattern sweep): 0 fails.
 - `underwear-library.js` alone: notch coverage 0%→21.9% (48/219),
   `chestEdgeIndices` unchanged at 0% (by design, see above).
@@ -1359,7 +1365,6 @@ for a future slice rather than papered over.
 - `cloth-lab` `npx vitest run`: 835/835, unchanged.
 - `npm run lint`: zero new warnings, zero errors.
 
-
 ## WP-44 (part 3): notch/ease coverage for `fancy-patterns.js`'s princess bodices and jacket fronts/backs — and a second real `checkNotchAlignment` false-positive family, fixed by correcting the metadata, not the checker
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-44's third slice: `js/fancy-patterns.js`
@@ -1369,6 +1374,7 @@ near-zero notch coverage on its two most chest-relevant shared builders —
 `jacketFrontBack()` (blazers/coats/sherwanis) — before this pass.
 
 ### Added
+
 - `princessBodice(m, o)`: `frontSide`/`backSide` (the pieces that actually
   carry the full bust/waist width, per `checkEase`'s own module comment
   excluding princess-seamed *center* pieces) now declare `notches` at the
@@ -1393,6 +1399,7 @@ near-zero notch coverage on its two most chest-relevant shared builders —
   not a `meta` wrapper.
 
 ### A second real `checkNotchAlignment` false positive — found, then traced to bad metadata, not a checker bug
+
 Giving `princessBodice()`'s `frontCenter`/`backCenter` the same bust/waist
 notches (by literal coordinate, mirroring `frontSide`/`backSide`) at first
 looked like the obvious symmetric choice — until the full-library sweep
@@ -1411,6 +1418,7 @@ center panel and passed cleanly), with a code comment recording why —
 an honest limitation of this construction, not a workaround.
 
 ### Verification
+
 - `/tmp/wp44_failcheck.mjs` (full 308-pattern sweep, all four collections):
   0 fails, confirming the corrected metadata resolves all 14 false
   positives without weakening the check.
@@ -1431,7 +1439,6 @@ an honest limitation of this construction, not a workaround.
 - `cloth-lab` `npx vitest run`: 835/835, unchanged.
 - `npm run lint`: zero new warnings, zero errors.
 
-
 ## WP-44 (part 2): `underwear-library.js`'s cross-piece pairing goes from 0% to 92.3% verified — one missing `ROLE_PAIR` entry, not a construction gap
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-44's own reconnaissance (part 1's
@@ -1442,6 +1449,7 @@ its own honest, separate gap rather than folding an un-investigated
 number into part 1's already-distinct scope. Investigated here.
 
 ### Root cause, confirmed by direct inspection, not assumed
+
 `js/underwear-library.js`'s own module comment already explains why:
 `briefPieces()` (all 24 brief/trunk patterns) deliberately declares
 `role: "brief-front"`/`role: "brief-back"` — NOT `"front-panel"`/
@@ -1456,12 +1464,14 @@ heuristic for every single one of these 24 patterns' most important
 seam relationship.
 
 ### Fixed
+
 - `js/validate.js`: added `'brief-front': 'brief-back'` to `ROLE_PAIR`.
   One entry — the pairing relationship was already real and already
   declared at construction time; it only needed a place in this map to
   be recognized as "Verified" rather than "Heuristic."
 
 ### Verification
+
 - `underwear-library.js` alone: 0 → 24 of its 26 real front/back-style
   pairs now verified (92.3%). The remaining 2 (`wb09`/`gb07`'s racerback
   bra "Front Panel"/"Racerback Panel" pairing) are a genuinely different,
@@ -1482,7 +1492,6 @@ seam relationship.
   only a validator-side role-mapping addition.
 - `npx oxlint js`: zero new warnings.
 
-
 ## WP-44 (part 1): notch/ease authoring-scale gate closure begins with the single highest-leverage collection — Girls' Gymnastics Leotards — and finds and fixes a real false positive in `checkNotchAlignment` along the way
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-44 — notch coverage ≥80%/ease-deferred
@@ -1502,6 +1511,7 @@ proved out elsewhere — declaring real metadata there reaches all 100
 patterns at once, not 100 individual edits.
 
 ### Added
+
 - `js/validate.js`: `checkEase()` now takes a `stretchFabric: true` hint.
   `js/ai.js`'s own `fit = 0.90` negative-ease constant already says
   leotards are drafted in real 4-way stretch performance fabric —
@@ -1524,6 +1534,7 @@ patterns at once, not 100 individual edits.
   pieces.
 
 ### Fixed — a real false positive, found by the sweep this WP's own notches triggered (not hypothesized)
+
 - Adding those two notches immediately turned up 10 real `fail`s across
   the library (a leotard front's own neckline and a `lowscoop`/`racerback`-
   style back's own "top" curve genuinely differ in length by design —
@@ -1546,6 +1557,7 @@ patterns at once, not 100 individual edits.
   below).
 
 ### Verification
+
 - New tests: `test/validate.test.js` — 4 for the `stretchFabric` ease
   branch (pass/warn/fail/deferred) and 6 for `checkNotchAlignment`
   (`checkNotchAlignment` had NO dedicated test anywhere in this suite
@@ -1576,12 +1588,12 @@ patterns at once, not 100 individual edits.
 - `npx oxlint js`: zero new warnings on any touched file.
 
 ### Honest limitation, stated rather than assumed away
+
 `underwear-library.js` reported 0% cross-piece pairing VERIFIED in the
 same reconnaissance sweep that scoped this WP — a real, separate anomaly
 (not a notch/ease gap) worth its own dedicated look, flagged here for a
 future installment rather than folded into this one's already-distinct
 scope.
-
 
 ## WP-43 continued: `shawlCollar()`/`lapelFacing()`/`collarStand()` redrafted so their own neck edge matches `jacketFrontBack()`'s real neckline arc by construction
 
@@ -1595,6 +1607,7 @@ circumference), a value with no real relationship to the curve they
 actually seam to. This closes that gap.
 
 ### Changed
+
 - `js/fancy-patterns.js`:
   - `jacketFrontBack()` now returns `frontNeckLen`/`backNeckLen` —
     the real, measured arc length of each declared neckline edge
@@ -1634,6 +1647,7 @@ actually seam to. This closes that gap.
     future work, not assumed away.
 
 ### Verification
+
 - New tests in `test/jacket-neckline.test.js` (4 new, alongside the 2
   the prior installment added): `shawlCollar()`/`lapelFacing()`/
   `collarStand()` each proven, directly against the real function (not
@@ -1670,6 +1684,7 @@ this project has had to state the "revert the bypass before committing"
 rule explicitly more than once, a real, avoidable failure mode.
 
 ### Added
+
 - `.claude/skills/close-out-wp/SKILL.md`: the checklist as a Claude Code
   skill — grep the whole tree for `TEMP-LOCAL-TEST-BYPASS` (not just the
   one known location, in case a different local-test shortcut got added
@@ -1682,6 +1697,7 @@ rule explicitly more than once, a real, avoidable failure mode.
   matching how this project documents its other conventions.
 
 ### Honest limitation, stated rather than assumed away
+
 This skill was authored mid-session, so it was never in *this* session's
 own skill listing (fixed at session start) — it could be written and
 reviewed for content, but not actually *invoked* to confirm the end
@@ -1689,7 +1705,6 @@ state matches doing the checklist by hand. That's a real gap against the
 acceptance bar this WP set for itself ("verified by actually using it
 once, not just written and assumed to work") — needs a fresh session,
 where the skill is discoverable, to close for real.
-
 
 ## WP-70: give the male torso the same real front/back asymmetry, subtler
 
@@ -1701,6 +1716,7 @@ identically. A real male chest/lower-back has its own, subtler asymmetry
 too: modest pectoral fullness, a real if less pronounced lumbar curve.
 
 ### Changed
+
 - `cloth-lab/src/body/torsoSculpt.js`: new `maleTorsoSculpt()`/
   `maleTorsoZBump()`/`maleTorsoExtraRadius()`, reusing `bumpWindow()`'s
   own math verbatim. One key shape difference from the female sculpt, not
@@ -1718,6 +1734,7 @@ too: modest pectoral fullness, a real if less pronounced lumbar curve.
   already used. The female path is byte-for-byte unchanged.
 
 ### Verification
+
 - New tests in `cloth-lab/src/body/torsoSculpt.test.js` (5 tests): single-
   lobe front bump confirmed (no valley, unlike female), back curve pulls
   waist in/pushes hip out on the true back only, male amplitude confirmed
@@ -1734,13 +1751,13 @@ too: modest pectoral fullness, a real if less pronounced lumbar curve.
   Live-verified in the root app's 3D Preview in a real Chrome tab (Men
   category): renders cleanly, zero console errors.
 
-
 ## WP-45: verification sweep — closes 4 of 5 items, and finds a real bug along the way
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-45's five-item checklist, none of
 which had ever been run as a real, permanent, automated pass before this.
 
 ### Fixed
+
 - **A real, previously-invisible defect, found by the sweep this WP added
   (not hypothesized):** `js/underwear-library.js`'s `briefPanel()` declares
   its own `briefSide` seam edge (WP-58) — but never the matching
@@ -1755,6 +1772,7 @@ which had ever been run as a real, permanent, automated pass before this.
   call site's own options) fixes it at the source.
 
 ### Added
+
 - `cloth-lab/src/pattern/importFromApp.underwear.test.js` and
   `importFromApp.dataPatterns.test.js`: the same convert→seed→finalize→
   triangulate→assemble pipeline "Simulate This Garment" runs, applied for
@@ -1777,6 +1795,7 @@ which had ever been run as a real, permanent, automated pass before this.
   weaker check.
 
 ### Verified, not changed (already closed, confirmed by actually running them)
+
 - `window.BerryStudio`'s 5 documented methods (`generate`/`grade`/`nest`/
   `export`/`validate`) already have real e2e coverage — confirmed
   passing, no gaps found.
@@ -1792,6 +1811,7 @@ which had ever been run as a real, permanent, automated pass before this.
   before): under 50ms cold for the full library; met with real margin.
 
 ### Honest gaps this pass leaves open (documented, not silently skipped)
+
 - **DOM-mount/paint cost of the actual library grid** — the in-app
   Library panel is now behind the WP-42 entitlement gate; this pass had
   no real account to measure it live with. Thumbnail generation itself
@@ -1809,12 +1829,12 @@ which had ever been run as a real, permanent, automated pass before this.
   and Safari are not available in this session's toolset at all.
 
 ### Verification
+
 - `cloth-lab` `npx vitest run`: 830/830 (823 prior + 7 new).
 - `node --test "test/**/*.test.js"`: 301/301, no regressions.
 - `npx playwright test`: 17/19 (2 pre-existing flaky, confirmed
   independently passing on isolated re-run).
 - `npx oxlint`: zero new warnings on any touched file.
-
 
 ## WP-43 continued: `jacketFrontBack()` gets a real neckline curve — the necessary first step before a collar can seam to it
 
@@ -1832,6 +1852,7 @@ jacket panel — proof there was no comparable curve to point a seamId at,
 not a length mismatch to tune away.
 
 ### Changed
+
 - `js/fancy-patterns.js`'s `jacketFrontBack()`: both `front` and `back`
   now draft a real, size-scaled neckline curve ahead of the existing
   (byte-for-byte unchanged) shoulder+armhole curve, declared as real
@@ -1847,6 +1868,7 @@ not a length mismatch to tune away.
   now in place.
 
 ### Fixed (found and resolved within this same pass, not shipped broken)
+
 - Starting the new curve exactly at the piece's own true center point
   (X=0) initially broke `checkFoldSymmetry` on every back panel (and a
   couple of near-symmetric fronts) — 49 failures. That check flags any
@@ -1874,6 +1896,7 @@ not a length mismatch to tune away.
   the sample count again.
 
 ### Added
+
 - `test/jacket-neckline.test.js`: every pattern declaring a
   `jacketFrontNeck`/`jacketBackNeck` edge has a real, non-degenerate
   curve on both sides (36 patterns, 44 call sites — a few patterns call
@@ -1885,6 +1908,7 @@ not a length mismatch to tune away.
   own fix, now that this function's index math has been touched again.
 
 ### Verification
+
 - `node --test test/fancy-patterns-curves.test.js`: every claimed curve
   (including the two new ones) reproduces the real flattened outline
   points.
@@ -1902,7 +1926,6 @@ not a length mismatch to tune away.
   thumbnail) to confirm the new neckline reads as a real, smooth curve —
   not a jagged or degenerate shape.
 
-
 ## WP-68: add a lint step to CI — every "zero new oxlint warnings" claim in this project's history had been manual, never enforced
 
 `BerryStudio-Upgrade-Plan-v5.md` WP-68. `.github/workflows/deploy-pages.yml`
@@ -1913,6 +1936,7 @@ that mentions "zero new oxlint warnings" (nearly all of them) was a manual
 backing it up.
 
 ### Changed
+
 - Added `oxlint` (`^1.71.0`, matching `cloth-lab/package.json`'s own pinned
   version — kept the two independent, not merged into one shared
   dependency, matching how root and `cloth-lab` already have entirely
@@ -1939,6 +1963,7 @@ backing it up.
   exactly this kind of scoping decision.
 
 ### Verification
+
 - `npm run lint` (root): exit 0, 92 pre-existing warnings printed, zero
   errors.
 - `npm run lint` (cloth-lab): exit 0, 9 pre-existing warnings printed,
@@ -1964,6 +1989,7 @@ bad notch, a dropped role, a self-intersecting curve) would have passed
 `npm test` and CI cleanly.
 
 ### Fixed
+
 - `test/validate-library.test.js`: added `import '../js/underwear-library.js'`
   alongside the other three collection imports — both tests in this file
   share the same `Object.keys(PATTERNS)` sweep, so this one import line
@@ -1985,6 +2011,7 @@ bad notch, a dropped role, a self-intersecting curve) would have passed
   verified, confirmed by this WP's own test run.
 
 ### Verification
+
 - `node --test test/validate-library.test.js`: sweeps all 308 patterns now
   (was 264) — `Sweeping 308 patterns...`, `crossPiece pairs: 313 verified,
   105 heuristic, 81 unmatched`, 0 fails on every fail-capable check, both
@@ -2040,6 +2067,7 @@ with the same care every other category in this phase has gotten,
 not a rushed pass across 35 call sites late in a long session.
 
 ### Verification
+
 - Direct reproduction: confirmed the 30-vs-24 mismatch BEFORE fixing,
   confirmed 24-vs-24 exact match AFTER — not assumed from reading the
   code.
@@ -2088,6 +2116,7 @@ themselves rather than a computed mirror.
   piece is cutOnFold — one half, doubled).
 
 ### Verification
+
 - Direct reproduction caught the `foldMirrorEdge` fold-point bug BEFORE
   it shipped on 44 patterns (first attempt would have produced an
   invalid, out-of-bounds edge index) and confirmed all 4 waistband
@@ -2130,6 +2159,7 @@ topology on `js/ai.js`'s leotard Front/Back Body:
   the same "don't guess" standard this whole pass has held to.
 
 ### Verification
+
 - Direct reproduction: all 4 gusset seams form correctly (front-R,
   front-L, back-R, back-L), confirmed by inspecting the actual
   `seamInstructions` before trusting it.
@@ -2186,6 +2216,7 @@ the END instead).
   "Neckline Binding," each half seamed to the matching real curve.
 
 ### Verification
+
 - Direct reproduction caught the `sideEndIdx` gap BEFORE claiming the
   fix worked (first attempt: 0 seams on either bilateral copy) and
   confirmed the fix after (both copies: exactly 2 real seams each,
@@ -2265,6 +2296,7 @@ claim. Real fix, not a workaround:
   depending on style — not a flat assumption either way).
 
 ### Verification
+
 - `npm test`: 299/299.
 - `cloth-lab` vitest: **534/534** (was 347 — 187 new from the leotard
   test file alone, plus regression coverage across every existing
@@ -2325,6 +2357,7 @@ same "imports and simulates with zero exceptions" guarantee the Fancy
 Collection has had since WP-6.
 
 ### Verification
+
 - `npm test`: 299/299 (was failing before the pattern-flat.js fix —
   `test/library-thumbnails.test.js`'s regression check caught the real
   side effect described above).
@@ -2391,6 +2424,7 @@ the "user has to fix the seam" failure this pass targets.
 `classifyLegacy()`'s own comment has said "trousers/leg pieces aren't
 supported in 3D yet" since before this role vocabulary existed; no
 longer true:
+
 - New roles `trouser-front`/`trouser-back` (role vocabulary now 53
   values), `bilateral: true` — a trouser panel drafts ONE leg (cut 2,
   mirrored), same convention `placeSleeve`'s single arm shape already
@@ -2411,6 +2445,7 @@ longer true:
   regenerated ajv validator updated for the 2 new roles.
 
 ### Verification
+
 - `npm test`: 299/299. `cloth-lab` vitest: 227/227 (was 215 — 12 new,
   including a dedicated regression: every trouser leg gets exactly 2
   real seams — its outseam AND its inseam — not a placed-but-unseamed
@@ -2527,6 +2562,7 @@ approximate), verified by direct arc-length measurement before relying
 on the validator, then confirmed against the full suite.
 
 ### Verification
+
 - `npm test`: 299/299. `cloth-lab` (vitest): 215/215.
 - Full 308-pattern / 2,170-piece sweep: **`closedOutline`,
   `selfIntersection`, `grainline`, `seamAllowance`, `foldSymmetry`, AND
@@ -2584,6 +2620,7 @@ now shows **`closedOutline`, `selfIntersection`, `grainline`,
 rebuild ships.
 
 ### What's still open, honestly
+
 - **`seamLengthParity`: 93 fails**, all "bounding-box proxy — no
   declared seam edge." Spot-checked several categories, not all 93
   individually:
@@ -2638,6 +2675,7 @@ fixes for gaps this size. Per the plan's own working rule: "A
 documented deferral is acceptable; a silent guess is not."
 
 ### Verification
+
 - `npm test`: 299/299, no regressions.
 - Targeted sweep confirming all 48 `foldSymmetry` fails and all 6
   `grainline` fails resolved with zero new fails introduced (24
@@ -2680,6 +2718,7 @@ needing the same kind of construction-specific judgment call, not a
 mechanical sweep.
 
 ### Verification
+
 - `npm test`: 299/299, including grading extremes.
 - `test/fancy-patterns-curves.test.js` (curve-honesty re-sampling) still
   green.
@@ -2717,6 +2756,7 @@ kandura/trouser constructions, no single shared function to fix at
 once) — real follow-up work, not folded into this pass.
 
 ### Verification
+
 - `npm test`: 299/299 — including grading extremes (XXS/M/6XL ×
   intl/egypt/saudi, all 7 KIDS_AGES bands), confirming the buildLeotard
   formula changes hold across the full grading range, not just size M.
@@ -2763,6 +2803,7 @@ misleading):
   invalid (`cape-sleeve`, a separate pre-existing gap, unchanged).
 
 ### Verification
+
 - `npm test`: 299/299.
 - `cd cloth-lab && npm test`: 215/215 (all 20 test files) — confirms the
   roles.js/schema changes don't regress cloth-lab's own suite.
@@ -2826,6 +2867,7 @@ Girls' Gymnastics Leotards and Underwear & Bra are next.
   test's shape again).
 
 ### Verification
+
 - `npm test`: 299/299. Library-wide validator sweep (`scripts/baseline-
   report.mjs`): every check except `seamLengthParity` (the pre-existing
   bounding-box proxy — no `edges[].seamId` declarations in this
@@ -2902,6 +2944,7 @@ still resolves. The 6 hand-crafted `js/data.js` base patterns
   a bilateral (never-folded) piece — given a guaranteed minimum offset.
 
 ### Verification
+
 - `npm test`: 299/299 pass. Every one of the 94 rebuilt patterns is
   crash-free and zero-fail at size M (batch-swept, not spot-checked).
   Adult patterns hold at XXS/M/6XL × intl/egypt/saudi and kids patterns
@@ -2940,7 +2983,9 @@ js`/`js/underwear-library.js`) — none of the existing 264/308 registered
 patterns changed.
 
 ### Correction to WP-50's shipped mechanism (caught before any pattern
+
 ### adopted it)
+
 `js/validate.js`'s seam-edge parity upgrade shipped in WP-50 with its own
 new `piece.seamEdges: { key: [fromIdx, toIdx] }` field — drafting the
 first reference pattern immediately surfaced that this duplicated the
@@ -2952,6 +2997,7 @@ own commit message notes no pattern had adopted `seamEdges` yet.
 `test/validate.test.js`'s seamEdges coverage updated to match.
 
 ### What's in it
+
 12 new patterns (`ref_w_blouse`, `ref_w_skirt`, `ref_w_shirtdress`,
 `ref_m_tee`, `ref_m_trousers`, `ref_m_shirt`, `ref_g_top`, `ref_g_skirt`,
 `ref_g_shirtdress`, `ref_b_tee`, `ref_b_shorts`, `ref_b_shirt`), each with
@@ -2969,7 +3015,9 @@ more than one of piece count / seam architecture / suppression method /
 sleeve construction / neckline construction / closure type.
 
 ### Real bugs found and fixed while building these (not fixed at the
+
 ### reporting layer)
+
 - `js/pattern-flat.js`'s `sharedSeamId`-based placement only handled a
   princess seam's center/side split; extended it to also flank a skirt's
   `skirt-side-gore-left`/`-right` panels by their DECLARED role rather
@@ -3003,6 +3051,7 @@ sleeve construction / neckline construction / closure type.
   something to loosen the check to avoid.
 
 ### Verification
+
 New `test/reference-patterns.test.js` (10 tests) asserts the REAL final
 §8 gates on these 12 (not a regression floor the way the legacy-library
 test files do): zero validator failures with real `bodyChestCm`/
@@ -3026,6 +3075,7 @@ then extending to the 100/64/100/44-pattern collections) are follow-up
 work, gated on review per the plan's own §9 phasing table.
 
 ### Phase 0 — baseline
+
 - `scripts/baseline-report.mjs`: reproduces the plan's §5 numbers with a
   real `bodyChestCm` and a real `offsetPoly` (js/geometry.js's, the same
   one `Canvas.offsetPoly` wraps) wired in — `test/validate-library.test.js`
@@ -3039,6 +3089,7 @@ work, gated on review per the plan's own §9 phasing table.
   defect for a later phase to fix at source, not a harness artifact.
 
 ### Phase 1 — infrastructure
+
 - **Seam-edge declaration** (`js/validate.js`): a piece may now declare
   `seamEdges: { <key>: [fromIdx, toIdx] }` naming a specific outline edge
   as a real seam. `checkSeamLengthParity` measures the actual paired edge
@@ -3112,6 +3163,7 @@ designs." Investigated and confirmed two separate real gaps:
    exactly the report.
 
 ### Changed
+
 - `pattern/importFromApp.js`: every piece `classifyLegacy` can place into
   a slot (`frontPanel`/`backPanel`/`hipPanelFront`/`hipPanelBack`) is now
   recognized and imported, not just the first. The pre-existing auto-seam
@@ -3136,6 +3188,7 @@ designs." Investigated and confirmed two separate real gaps:
   before.
 
 ### Verification
+
 - New `pattern/importFromApp.multiPanel.test.js` (6 tests): a single
   front+back pair still gets no placementHint (no regression); 2
   independent front panels are BOTH recognized; 3 same-slot siblings get
@@ -3171,6 +3224,7 @@ was identical to the front apart from those two spheres. This entry fixes
 that specifically.
 
 ### Changed
+
 - **The torso mesh itself is no longer radially symmetric for adult female
   bodies.** A `THREE.LatheGeometry` is a surface of revolution — one
   profile, revolved uniformly — so it structurally cannot express a front
@@ -3197,6 +3251,7 @@ that specifically.
   from, matching this whole redesign's existing convention for it.
 
 ### Fixed (a risk introduced by this same change, caught before it shipped)
+
 - **Cloth Lab's collision rig assumed a radially-symmetric torso.**
   `collisionRig.js`'s own header already states its job as "don't let
   cloth clip through what the user sees" — once the visible mesh could
@@ -3220,6 +3275,7 @@ that specifically.
   ease before picking numbers, not after.
 
 ### Verification
+
 - New `cloth-lab/src/body/torsoSculpt.test.js` (10 tests): the breast
   bump's phi=0 valley is exactly 0, its two lobes are mirror-symmetric,
   every feature is exactly 0 outside its own Y/phi window, the lower-back
@@ -3259,6 +3315,7 @@ both the root app's 3D Preview and Cloth Lab) to look "much more human"
 with "more body features." This entry covers that redesign only.
 
 ### Changed
+
 - **Torso silhouette**: `torsoProfile()` (`cloth-lab/src/body/computeBodyDims.js`)
   grew from 7 to 9 lathe points, adding a hip→waist and a waist→chest
   smoothing point — turns three straight lerped segments into a real
@@ -3311,6 +3368,7 @@ with "more body features." This entry covers that redesign only.
   seams entirely.
 
 ### Fixed
+
 - **A real, pre-existing bug**: `js/three-view.js`'s `addHair()` set
   `sheen`/`sheenColor` on a `THREE.MeshStandardMaterial`, which silently
   no-ops those fields with a console warning
@@ -3323,6 +3381,7 @@ with "more body features." This entry covers that redesign only.
   ported from — same warning, same fix, before it ever shipped.)
 
 ### Verification
+
 - `npx vitest run` in `cloth-lab/`: 195/195 pass (12 in
   `computeBodyDims.test.js`, including a new regression test pinning the
   three cross-file anchor values so a future edit that drifts them fails
@@ -3355,6 +3414,7 @@ below for why the first three passes' live checks were less meaningful
 than they looked.
 
 ### Fixed
+
 - **Discovered mid-investigation: this Browser pane's `document.hidden`
   pauses `requestAnimationFrame` entirely, not just throttles it** — a
   direct read confirmed particle positions were bit-identical across a
@@ -3419,6 +3479,7 @@ constraint this whole opt-in tier exists for never got to actually do
 anything before the garment settled.
 
 ### Fixed
+
 - **Both previous fixes clamped `stiffness` — the wrong knob.** Stiffness
   only matters for how FAST a hinge closes its angle error; the
   instability was never really about speed, it was about how FAR a
@@ -3463,6 +3524,7 @@ wrinkling/ballooning on the garment that kept growing worse, not
 settling, even at the 0.5 clamp.
 
 ### Fixed
+
 - **The previous fix's 0.5 clamp was real (a single isolated hinge does
   converge to rest in exactly one correction at that value, no
   overshoot) but incomplete** — it only modeled one hinge in isolation.
@@ -3497,6 +3559,7 @@ User report: "in cloth lab whenever i clicked high[dihederal bend] crazy
 things happen."
 
 ### Fixed
+
 - **`ClothSimulation.js` fed the High-quality tier's dihedral bend
   constraint `fabric.dihedralStiff ?? fabric.bendStiff`, UNCLAMPED.** No
   fabric preset defines `dihedralStiff` (WP-35 shipped without one — see
@@ -3538,6 +3601,7 @@ User report: "in 3d view and Cloth Lab, the zoom panel and fit button are
 not working."
 
 ### Fixed
+
 - **The page's zoombar (`#zin`/`#zout`/`#zfit`, always visible bottom-end
   of the canvas area) was wired ONLY to `Canvas.zoom()`/`Canvas.fit()` —
   the 2D pattern canvas — no matter which tab was actually open.**
@@ -3588,6 +3652,7 @@ performance fix was real and stays, but it turned out not to be what the
 user was hitting — this is the actual crash.
 
 ### Fixed
+
 - **`SeamEditorPanel.jsx`'s `pieceLabel()` returned a piece's raw `label`
   field and it was rendered directly as a JSX child** — fine for the
   built-in skirt demo (`pattern/library/skirt.js`, a plain string label),
@@ -3628,6 +3693,7 @@ both the usability gap and the underlying performance issue it was
 entangled with.
 
 ### Fixed
+
 - **`cloth-lab/src/seam/SeamEditorScene.jsx` rendered one individual,
   non-instanced `<mesh>` (its own `sphereGeometry` + `meshBasicMaterial` +
   3 event handlers) PER OUTLINE VERTEX**, to make each point clickable.
@@ -3675,6 +3741,7 @@ and fixed here — worth calling out plainly: they undermined the PR's own
 core claim ("explicit always wins over role," "link firmly to all views").
 
 ### Fixed
+
 - **Cloth Lab silently ignored an explicit `bodyZone` override for any
   piece with a declared role** — `convertAppPattern()`'s metadata path
   (`cloth-lab/src/pattern/importFromApp.js`) only ever read `p.bodyZone`
@@ -3728,6 +3795,7 @@ core claim ("explicit always wins over role," "link firmly to all views").
   as a small caption — it existed but was dead/unreachable.
 
 ### Verified
+
 - `npm test` (root) — 275/275.
 - `cloth-lab`: `npx vitest run` — 184/184.
 
@@ -3746,6 +3814,7 @@ so it fell back to the name-only guesser, which defaulted them to
 simulated as the torso.
 
 ### Added
+
 - `cloth-lab/src/pattern/roles.js`: every panel-shaped `SCHEMA_ROLE_INFO`
   entry (front-panel, back-panel, hip-panel-front/back, bodice-*,
   skirt-*-gore, sleeve variants) now carries a `zone: 'upper'|'lower'`.
@@ -3790,6 +3859,7 @@ simulated as the torso.
   `cloth-lab/src/pattern/importFromApp.bodyZone.test.js` — 7 tests.
 
 ### Changed
+
 - `js/app.js`: `classifyPart()` (used by both `partsFabric()` for 3D
   material assignment and the new `pieceVisMap()` for 3D visibility) now
   consults `inferBodyZone()` before its own pre-existing name regex —
@@ -3806,6 +3876,7 @@ simulated as the torso.
   `pieceVisMap()` sends instead.
 
 ### Verified
+
 - `npm test` (root) — 261/261 (253 pre-existing + 8 new).
 - `cloth-lab`: `npx vitest run` — 172/172 (158 pre-existing + 14 new).
 - Live in the browser: loaded the Underwear & Bra Library's "Classic
@@ -3854,6 +3925,7 @@ Stage B entry, since these are real security-relevant gaps a reviewer
 should be able to see were caught and closed, not just claimed fixed.
 
 ### Fixed
+
 - **`window.BerryStudio` (`js/berry-studio-api.js`) completely bypassed
   entitlement gating** — the most serious finding. `generate()`/`export()`
   called `AIGen.generate`/`Canvas.export*` directly; any signed-out or
@@ -3934,6 +4006,7 @@ should be able to see were caught and closed, not just claimed fixed.
   and the missing message in one change.
 
 ### Verified
+
 - `npm test` — 265/265 (unchanged from Stage A's landing count).
 - Playwright e2e (`npm run test:e2e`): the two tests touching gated
   behavior — the automation API's export/generate, and the embedded
@@ -3959,6 +4032,7 @@ account" clause, i.e. an anonymous (never-signed-in) user sees the same
 gate as an expired trial, not free access, since no trial has started yet.
 
 ### Added
+
 - `js/entitlement.js` — pure `computeEntitlement(profile, now)` /
   `isAllowed()`: derives `trial | active | expired` from a `profiles` row's
   `subscriptionStatus` (`'trial'|'active'`, never `'expired'` — see its own
@@ -4025,6 +4099,7 @@ gate as an expired trial, not free access, since no trial has started yet.
 - `en`/`ar` strings for all of the above in `js/i18n.js`.
 
 ### Fixed
+
 - **A real bug, caught live during this WP's own follow-up browser pass,
   not merely theorized**: `cloth-lab/src/main.jsx` originally wrapped
   `<App/>` with a static `import App from './App.jsx'` at the top of the
@@ -4056,11 +4131,13 @@ gate as an expired trial, not free access, since no trial has started yet.
   Cloth Lab tab, gate card text updates immediately, no stale text).
 
 ### Changed
+
 - `js/i18n.js`'s `accountStageANotice` → `accountNotice`, reworded: the old
   copy ("everything stays free with no account") is no longer true as of
   this WP. `tt_account`'s tooltip updated the same way.
 
 ### Explicitly not in this WP (see plan v3.2 §6 for the staged reasoning)
+
 - Stage C: real PayPal billing. Granting a subscription today is the
   manual SQL Editor stopgap in `server/supabase/README.md`.
 - Automatic trial expiry enforcement in the database — nothing ever
@@ -4071,6 +4148,7 @@ gate as an expired trial, not free access, since no trial has started yet.
   below.
 
 ### Verified
+
 - `npm test` (root) — 265/265 passing (253 pre-existing + 12 new
   `entitlement.test.js` cases).
 - `cloth-lab`: `npx vitest run` — 165/165 passing (158 pre-existing + 7
@@ -4129,6 +4207,7 @@ spatial hash — but only on the opt-in "High (dihedral bend)" quality tier;
 the default tier's compiled shader is untouched.
 
 ### Added
+
 - `cloth-lab/src/cloth/spatialHash.js` — CPU reference: a fixed, margined
   grid built from the garment's rest pose; a bitonic sort written as the
   exact GATHER-based compare-exchange network the GPU port uses (not
@@ -4161,6 +4240,7 @@ the default tier's compiled shader is untouched.
   same `DEFAULT_SCAN_CAP` the CPU reference validated).
 
 ### Fixed
+
 - **A real, separate bug surfaced while landing this, not caused by it
   alone but not shippable without fixing**: the existing dihedral-bend
   hinge data already used 6 texture samplers; adding one more for the sort
@@ -4182,6 +4262,7 @@ the default tier's compiled shader is untouched.
   tier's shader completely unaffected either way.
 
 ### Changed
+
 - `spatialHash.js`'s `buildGrid` margin default (`cellSize*4`, sized for
   that module's own small unit-test point clouds) is NOT what
   `ClothSimulation.js` actually uses — the constructor passes an explicit
@@ -4191,6 +4272,7 @@ the default tier's compiled shader is untouched.
   alone).
 
 ### Verified
+
 - All 158 `cloth-lab` vitest tests green (134 pre-existing + 24 new), all
   253 root `node --test` tests green (unaffected).
 - Live in the browser (not just unit-tested): a readback of the sorted
@@ -4217,6 +4299,7 @@ feature gating. Every existing feature keeps working with no account,
 unchanged by this WP.
 
 ### Added
+
 - `js/auth.js` — thin wrapper around Supabase Auth's JS SDK, loaded on
   demand via a dynamic `import()` of a direct esm.sh URL (not the bare
   `@supabase/supabase-js` specifier the import map also defines — see
@@ -4239,6 +4322,7 @@ unchanged by this WP.
 - `en`/`ar` strings for all of the above in `js/i18n.js`.
 
 ### Fixed
+
 - **A real bug, caught during browser verification, not merely
   theorized**: `js/auth.js`'s dynamic `import('@supabase/supabase-js')`
   (a bare specifier meant to resolve through `index.html`'s import map,
@@ -4263,12 +4347,14 @@ unchanged by this WP.
   of the tab's lifetime. Fixed to clear and retry on the next call.
 
 ### Explicitly not in this WP (see plan v3.2 §6 for the staged reasoning)
+
 - No feature gating — AI, Library, Auto Pattern, Export, and Cloth Lab
   (the five surfaces named for Stage B) all stay fully free and usable
   with no account, exactly as before.
 - No PayPal/billing (Stage C).
 
 ### Verified
+
 - `npm test` — 253/253 passing, unaffected.
 - Browser-verified against a real Supabase project (email/password +
   Google + Facebook providers configured): an invalid-credentials
@@ -4294,6 +4380,7 @@ shortcut text no longer matched what Shift actually does, and the docs
 site's own pattern-library counts were stale by more than 2×.
 
 ### Fixed — in-app Help modal (`js/app.js`, `js/i18n.js`)
+
 - `openHelp()`'s tool table was a hand-maintained list of 15 ids that had
   fallen 9 tools behind the real toolbar (`TOOLS`, the same array
   `buildToolRail()` renders from) — missing Lasso, Filled Shape, Point,
@@ -4318,6 +4405,7 @@ site's own pattern-library counts were stale by more than 2×.
 - All of the above in both English and Arabic.
 
 ### Fixed — docs site (`docs/index.html`, `docs/tools.html`, `docs/shortcuts.html`, `docs/faq.html`)
+
 - **Pattern counts**: "124 pre-designed patterns" / "24-design Fancy
   Collection" (both stale) corrected to the real current figures — 308
   patterns (57 Women / 47 Men / 157 Girls / 47 Boys, including a
@@ -4344,6 +4432,7 @@ site's own pattern-library counts were stale by more than 2×.
 - All of the above in both English and Arabic.
 
 ### Unchanged
+
 `docs/3d-troubleshooting.html` and the rest of `docs/faq.html` were
 reviewed and found still accurate — no 3D-system or general-FAQ content
 was affected by WP-43 through WP-46.
@@ -4360,6 +4449,7 @@ one new modal, and all three feed the Sewing Guide with real, generated
 instructions plus a plain-language legend explaining the convention.
 
 ### Added
+
 - `js/canvas.js`: `p.closingEdges` (array of edge indices) and
   `p.pointNames` ({idx: name}) — new optional per-piece fields alongside
   the existing `outline`. `toggleClosingEdge(pieceIdx, edgeIdx)` /
@@ -4403,6 +4493,7 @@ instructions plus a plain-language legend explaining the convention.
 ## WP-45: Shift-constrain the Line/Construction Line tools to 0/45/90/…°
 
 ### Added
+
 - `js/canvas.js`: `snapAngle45(x0, y0, x1, y1)` — given a line's start point
   and its raw (unconstrained) end point, returns the point at the SAME
   distance from the start but at whichever 45°-multiple angle
@@ -4426,6 +4517,7 @@ instructions plus a plain-language legend explaining the convention.
   quadrants.
 
 ### Verified
+
 Driving a real Shift-held drag through this project's browser-automation
 tooling turned out to be a genuine dead end two different ways — modifier
 keys don't propagate through a simulated drag's intermediate pointermove
@@ -4450,6 +4542,7 @@ point on a piece's edge and delete just that point, and corner points in
 particular being hard to grab and move.
 
 ### Added
+
 - `js/canvas.js`: `removeOutlinePoint(pieceIdx, idx)` — the missing
   counterpart to the existing `insertOutlinePoint()` (Add Point tool).
   Reuses that same function's `spliceOutline()` index-bookkeeping (curves/
@@ -4466,6 +4559,7 @@ particular being hard to grab and move.
   the moment the mouse comes up.
 
 ### Fixed — corner outline points were effectively unreachable
+
 `handleHit()` checked the piece's 4 resize (scale) corner handles *before*
 its outline-vertex anchors, with the two often landing at nearly identical
 screen positions — most real pattern pieces are themselves roughly
@@ -4473,6 +4567,7 @@ rectangular, so an actual corner VERTEX usually sits right where the
 resize handle also lives. The resize handle always won, so that corner
 vertex could never be grabbed on its own to reshape or delete — exactly
 the "hard to select a corner point" report. Fixed two ways together:
+
 1. `handleGeo()` now draws/hits the 4 scale-corner handles a fixed 7px
    *outside* the piece's own bounding-rect corner (along each corner's own
    outward diagonal from the rect center) rather than exactly on top of
@@ -4483,6 +4578,7 @@ the "hard to select a corner point" report. Fixed two ways together:
    instead of the corner unconditionally winning a first-match order.
 
 ### Verified
+
 Live in-browser, via real drag/click/keyboard interaction (not just code
 review): a corner vertex can now be grabbed and dragged independently
 (only that one point's coordinates change, the other 3 stay exactly put);
@@ -4504,6 +4600,7 @@ patterns. Requested with "precise, nice curves and instructions according
 to world-class model."
 
 ### Added
+
 - `js/underwear-library.js` — two shared parametric builders
   (`briefPieces()`, `braPieces()`, plus `sportBraPieces()` for the
   structurally distinct Sport Bra/Sport Bralette) driving all 44 catalog
@@ -4540,6 +4637,7 @@ to world-class model."
   shirt/dress icon.
 
 ### Verified
+
 - All 44 patterns × every size (XXS–6XL) × every Kids age (Girls/Boys) —
   638 combinations — pass `closedOutline` and `selfIntersection` with zero
   failures (checked directly via `js/validate.js`'s `run()`, not assumed).
@@ -4564,6 +4662,7 @@ flowing into the print sheet; Split View confirmed updating live with no tab
 switch), and the full 200-test suite re-run clean after each.
 
 ### Added
+
 - **WP-40, Fit Chart** (`js/app.js`: `buildFitChartRows`/`openFitChartModal`/
   `buildFitChartHTML`/`exportFitChart`) — a per-size measurement spec sheet
   (Export pane, project menu, ⌘K) with a live-editable ± tolerance per
@@ -4627,6 +4726,7 @@ switch), and the full 200-test suite re-run clean after each.
   than replaying last session's tab.
 
 ### Fixed (code review)
+
 - `openFitChartModal()`/`exportFitChart()` had an `if(!Canvas.getPieces().length)`
   "empty2d" guard copy-pasted from the Sewing Instructions/BOM exports next to
   them — but the Fit Chart never reads `Canvas.getPieces()` at all (its columns
@@ -4644,6 +4744,7 @@ marketed feature list was already covered (in several cases more deeply);
 these two were real, closeable gaps.
 
 ### Added
+
 - `js/app.js`: `buildSewingSteps()`/`buildSewingInstructionsHTML()`/
   `exportSewingInstructions()` — a real, ordered sewing-instructions sheet
   derived from the loaded pattern's own declared piece `role`s, the same
@@ -4675,6 +4776,7 @@ these two were real, closeable gaps.
   row wraps onto two lines in the sidebar instead of overflowing.
 
 ### Not done (see `BerryStudio-Tailornova-Feature-Study.md` §4)
+
 - WP-38: a persistent synced 3-panel workspace (flat sketch + 3D + pattern
   always live side by side, Tailornova's actual signature layout) — a real
   UI architecture change, not a copy-edit; BerryStudio's 3D Preview/Cloth
@@ -4694,6 +4796,7 @@ until they opted in. Gated on real evidence it's ready, per that WP's own
 plan.
 
 ### Changed
+
 - `js/app.js`: `DEF.clothLabEngine` flipped from `"iframe"` to
   `"embedded"`. Since state is built as
   `Object.assign({}, DEF, savedRaw)`, this only changes behavior for a
@@ -4707,6 +4810,7 @@ plan.
   the default and drop the "still being rolled out" caveat.
 
 ### Verified
+
 - Established a baseline first: full Playwright e2e suite on `main`
   (pre-change) — 16 passed, 1 pre-existing unrelated flake
   (`select-anything`, already named as flaky in `playwright.config.js`'s
@@ -4734,6 +4838,7 @@ touching the existing default path at all, and investigates (but does not
 ship) a GPU spatial hash — see "Not shipped" below for why.
 
 ### Added
+
 - `cloth-lab/src/cloth/dihedralBend.js` — a plain-JS (no WebGL) reference
   implementation of a true dihedral-angle bend constraint, written and
   verified FIRST, before any GLSL: `dihedralAngle()` computes the actual
@@ -4788,11 +4893,13 @@ ship) a GPU spatial hash — see "Not shipped" below for why.
   float value.
 
 ### Changed
+
 - `README.md`'s honest-notes entry for the cloth solver's bend/self-
   collision trade-offs updated to describe the new opt-in tier and why
   self-collision specifically doesn't get an equivalent upgrade (below).
 
 ### Not shipped: GPU spatial hash for self-collision
+
 `GPUComputationRenderer` (this solver's plain-WebGL2 GPGPU approach, no
 compute shaders) has no atomics or scatter-write access, so a real
 uniform-grid spatial hash — the kind you can actually iterate per-cell —
@@ -4823,6 +4930,7 @@ had no effect on any VRM file, which always displayed an arms-down bind
 pose regardless of the requested pose.
 
 ### Added
+
 - `cloth-lab/src/body/reposeGLB.js`: `resolveVRMBoneNames(gltfResult)` —
   reads a VRM file's own `humanoid.humanBones` data (VRM 1.0:
   `extensions.VRMC_vrm.humanoid.humanBones`, an object keyed by the VRM
@@ -4839,6 +4947,7 @@ pose regardless of the requested pose.
   a given scene uses.
 
 ### Changed
+
 - `cloth-lab/src/body/GLBAvatar.jsx`: a VRM file whose `humanBones` data
   resolves a full arm rig now goes through the exact same repose /
   mesh-fit-collision-rig pipeline as any other recognized rig — pose
@@ -4851,6 +4960,7 @@ pose regardless of the requested pose.
   new retargeting support and its one remaining honest fallback case.
 
 ### Tests
+
 - `cloth-lab/src/body/reposeGLB.test.js`: unit tests for
   `resolveVRMBoneNames()` covering VRM 1.0's object-keyed humanBones, VRM
   0.x's array-of-`{bone,node}` humanBones, and missing/malformed data
@@ -4870,6 +4980,7 @@ piece for that part was assigned last won, silently dropping the other
 piece's colour/fabric.
 
 ### Added
+
 - `js/three-view.js`: a `latheHalves()` helper that builds a garment part
   as two independent `LatheGeometry` half-revolutions (front `phiStart:
   -PI/2`, back `phiStart: PI/2`, each `phiLength: PI`) instead of one full
@@ -4889,6 +5000,7 @@ piece's colour/fabric.
   whole exactly as before this change.
 
 ### Changed
+
 - `js/app.js`'s `partsFabric()` now emits a full `{color,material}`
   descriptor for a part's back pieces (previously just a fallback
   `colorBack` int, dropping the back piece's fabric type entirely), and
@@ -4914,6 +5026,7 @@ garment radius alone (1.32x/2.0x/3.0x) jumped from invisible straight to
 oversized with no stable middle ground.
 
 ### Fixed
+
 - `js/three-view.js`: `computeBodyDims()` now accepts an optional
   `landmarks` override (`{shoulderYFrac, hipYFrac, radiusScale}`), applied
   via a new `AVATAR_LANDMARK_OVERRIDES` table keyed by the bundled avatar's
@@ -4963,6 +5076,7 @@ real gap now that Automatic1111 has proven the local-image-gen adapter
 pattern out.
 
 ### Added
+
 - `js/image-providers.js`: a `comfyui` adapter matching every other image
   adapter's interface exactly — `test()`/`generate()`, no key needed, one
   optional base-URL field. `test()` hits ComfyUI's real `/system_stats`
@@ -5000,6 +5114,7 @@ pattern out.
   wall-clock time — production callers never pass either override.
 
 ### Changed
+
 - README: capability table + honest notes updated — ComfyUI is no longer
   listed as deferred; SD.next remains the one unimplemented local
   image-gen backend.
@@ -5015,6 +5130,7 @@ as deferred replacements pending Route B/C worker infrastructure, which
 WP-21/WP-22 now provide.
 
 ### Added
+
 - `js/ai.js`: `analyzeImage(dataURL, opts)` accepts an optional
   `opts.segment(imageData) -> Promise<{width,height,data}>` callback — a
   real learned foreground/background matte, used in place of the colour-
@@ -5067,6 +5183,7 @@ WP-21/WP-22 now provide.
   fallback claim for real rather than by inspection.
 
 ### Honesty note — scope actually verified this pass
+
 The plan's specific acceptance wording — "a genuinely low-contrast
 dark-garment-on-dark-background **real photo** that the threshold scan
 misreads produces a correct silhouette" — was **not** conclusively
@@ -5093,6 +5210,7 @@ test, run for real against the live app in a real browser, four separate
 load attempts across three different real Hugging Face model IDs.
 
 ### Investigated (real numbers, real errors, not estimated)
+
 - `Xenova/TinyLlama-1.1B-Chat-v1.0`: 149.7s wall time, then a real
   onnxruntime-web session-creation failure — `Failed to load external
   data file "model.onnx_data" ... Module.MountedFiles is not available`.
@@ -5139,6 +5257,7 @@ load attempts across three different real Hugging Face model IDs.
   preceded the measurement).
 
 ### Conclusion
+
 Route C's code path is real and does work end-to-end — confirmed with a
 real model, real download, real cache, real in-browser inference. It is
 NOT yet reliable across a full session: the worker-corruption bug above
@@ -5157,6 +5276,7 @@ deferred stretch goal — explicitly scoped by this plan as "a short design
 note (not code)... the seed for a real future WP," not an implementation.
 
 ### Added
+
 - `docs/draft-program-design-note.md` (new): proposes a closed, schema-
   enumerable operation vocabulary (`defineVariable`/`placePoint`/
   `lineBetween`/`arcThrough`/`circleAt`/`offsetParallel`/
@@ -5177,6 +5297,7 @@ note (not code)... the seed for a real future WP," not an implementation.
   future WP isn't blocked on anything else in this document.
 
 ### Changed
+
 - README: honest notes updated with a pointer to the design note;
   directory tree updated.
 
@@ -5191,6 +5312,7 @@ yet. That's the real gap this WP closes; GGUF stays exactly as
 unsupported as before, correctly.
 
 ### Added
+
 - `js/workers/model-file-cache.js` (new): a small IndexedDB/OPFS byte
   cache for one user-picked local model file at a time, shared unmodified
   between the main thread and the worker. Files up to ~2GB are cached
@@ -5278,6 +5400,7 @@ undecided ever since: intentional (a deeper front neckline commonly does
 shift things by a small margin) or a real defect.
 
 ### Investigated
+
 - Every one of the 61 flagged pairs across the 164-pattern library (size
   M) differs by *exactly* 5.0mm — zero variance. A real, independent
   construction defect across dozens of unrelated garments would not land
@@ -5297,6 +5420,7 @@ shift things by a small margin) or a real defect.
   don't.
 
 ### Conclusion: confirmed intentional, not a defect
+
 The 0.5cm neckline-height offset is the back-neckline-narrowing choice's
 companion parameter, not an independent oversight — narrower AND
 slightly higher/shallower at the back neck is standard patternmaking
@@ -5315,6 +5439,7 @@ zero call sites anywhere in the codebase (confirmed by a repo-wide grep) —
 only pleats had a generator hookup, in Quick Draft's skirt builder.
 
 ### Added
+
 - `js/ai.js`: `buildSkirt()`'s waist-edge width now supports Gather
   (`computeGatherWidth`) and Tuck (`computeTucks`) alongside its existing
   Pleat option, picked via a priority chain (gather → pleat → tuck, never
@@ -5339,6 +5464,7 @@ only pleats had a generator hookup, in Quick Draft's skirt builder.
   buildTop/buildRomper shared-helper parity.
 
 ### Verified
+
 Manually exercised both new controls end-to-end in the live app: Quick
 Draft → Skirt → Waist Fullness → Gather → Full visibly widens the front/
 back skirt panel's waist edge well beyond the waistband below it (a real
@@ -5357,6 +5483,7 @@ coordinates, which defeats the point of transferring around a point you
 can usually just see on the canvas.
 
 ### Added
+
 - `js/canvas.js`: `Canvas.armPick(cb)`/`Canvas.cancelPick()` — a one-shot
   "pick a point on canvas" mode independent of the active drafting tool.
   The very next `pointerdown` (regardless of `tool`) is intercepted, run
@@ -5385,6 +5512,7 @@ document disagreed: the data to answer that deterministically already
 exists at the point each piece is drafted.
 
 ### Added
+
 - `chestEdgeIndices` piece metadata (`js/data.js`, `js/ai.js`) — a
   one-element index into `outline`, populated at construction time for
   every simple cut-on-fold bodice front/back where the chest vertex is
@@ -5417,6 +5545,7 @@ exists at the point each piece is drafted.
   gone — Ease now renders as a normal per-piece chip like every other check.
 
 ### Fixed (caught while verifying in the live app, not in the unit tests)
+
 - `checkEase`'s first implementation read a hinted vertex's raw absolute
   X as its half-chest width — correct for a piece straight out of a
   generator, but `Canvas.getPieces()` (Check Pattern's real caller)
@@ -5431,6 +5560,7 @@ exists at the point each piece is drafted.
   raw absolute X; added a translation-invariance regression test.
 
 ### Found (real issues, not adjudicated here — see Honest notes)
+
 Running the new check over the full library (size M, real body
 measurements) found real things on its first pass: 93 pieces pass, 30
 warn, and **8 pieces genuinely fail** (their drafted chest is smaller
@@ -5447,6 +5577,7 @@ recommendation's WP-25, the one foundational item Phase A's remaining
 quick/mid items build on.
 
 ### Changed
+
 - `js/validate.js`'s Check Pattern **seam-length parity** and **notch
   alignment** checks paired every front/back piece by name-guessing alone,
   even for pieces that already carry a real, declared `role` from their
@@ -5473,6 +5604,7 @@ quick/mid items build on.
   round-trip regression test asserting this doesn't silently drop.
 
 ### Fixed (found while verifying this WP's cloth-lab claim against source — rule 7)
+
 - This WP's premise included "`importFromApp.js` rejects Fancy Collection
   designs on principle." Direct testing (widening
   `cloth-lab/src/pattern/importFromApp.fancyCollection.test.js`'s coverage
@@ -5501,6 +5633,7 @@ completeness) — the sequencing recommendation's WP-26, done first per its own
 "confirmed bug with zero design risk and no flag needed."
 
 ### Fixed
+
 - Check Pattern's `closedOutline` check was failing on 67 Fancy Collection
   piece instances across 30+ unique designs (`js/fancy-patterns.js`) with a
   "duplicate consecutive point" — a real, reproducible bezier-sampling
@@ -5525,6 +5658,7 @@ completeness) — the sequencing recommendation's WP-26, done first per its own
   and princess-seam edge indices still line up correctly after the fix.
 
 ### Added
+
 - `npm test` (`test/validate-library.test.js`) now hard-asserts zero
   `closedOutline` failures across the full pattern library, so this exact
   class of bug can never silently regress.
@@ -5544,6 +5678,7 @@ calls) — necklines, sleeve caps, collars, godets, capes, peplums, jacket
 fronts, gores, trouser crotch seams all stayed flattened-polyline-only.
 
 ### Added
+
 - `qBezToCubic(p0, c, p1)` — exact quadratic→cubic degree elevation (not
   an approximation): a cubic bezier with these control points traces the
   IDENTICAL curve as the quadratic, so every `qBez()`-built curve can
@@ -5564,6 +5699,7 @@ fronts, gores, trouser crotch seams all stayed flattened-polyline-only.
   first time — previously only the princess-seam edge itself had any.
 
 ### Verified (exhaustively, not spot-checked)
+
 - Every outline point across all 70 patterns (6 hand-crafted + 64 Fancy
   Collection) is confirmed byte-identical to the pre-WP-27 source —
   compared programmatically, not by eye, across 656 pieces.
@@ -5578,6 +5714,7 @@ fronts, gores, trouser crotch seams all stayed flattened-polyline-only.
   design).
 
 ### Fixed (caught by the geometric verification above, not by eye)
+
 - That same verification found a real, pre-existing bug in 3 of 4
   princess-bodice neckline variants (sweetheart/offshoulder/scoop): the
   `qBez()` call that builds the neckline samples a curve whose own
@@ -5591,6 +5728,7 @@ fronts, gores, trouser crotch seams all stayed flattened-polyline-only.
   other checks already use.
 
 ### Merged with WP-26 (real integration, not a picked side)
+
 WP-26 (above) and this WP both rewrite `godetPc`, `capePc`, `peplumPc`, and
 `princessBodice()` — not just nearby lines, the same lines, for two
 different reasons. Combined naively, WP-27's hardcoded curve `toIdx`
@@ -5598,6 +5736,7 @@ values would go stale: WP-26's `dedupeClose()`/`dedupeJoin()` can make an
 outline (or `frontNeck`/`backNeck`) one point shorter than WP-27 assumed
 when it computed those indices, leaving a `toIdx` that points one past
 the array's new end.
+
 - `dedupeCloseWithCurves(pts, curves)` — the combined form of
   `dedupeClose()` for `godetPc`/`capePc`/`peplumPc`: dedupes as before,
   and if a point actually got removed, drops any curve segment whose
@@ -5626,6 +5765,7 @@ the array's new end.
 ## Cloth Lab: simulated pieces render in their real 2D-canvas color
 
 ### Fixed
+
 - Cloth Lab's **Cloth** view (the live GPU simulation) rendered the entire
   garment in one hardcoded flat material color (`#c9cedb`) regardless of
   what colors were actually assigned to each piece in the 2D canvas's
@@ -5633,6 +5773,7 @@ the array's new end.
   lookup table, unrelated to the real piece colors either.
 
 ### Added
+
 - The 2D canvas's own per-piece `color` (Layers panel swatch/picker) now
   threads all the way through the postMessage bridge
   (`js/app.js`'s `buildClothLabPayload()`) into cloth-lab's import/seam-
@@ -5655,6 +5796,7 @@ the array's new end.
   unambiguously.
 
 ### Scope decision (not a silent gap)
+
 The **Weld** (weld-topology: interior/seam/multi-piece-corner) and **Seams**
 (seam-authoring: pending/assigned/unassigned) debug views keep their own
 existing diagnostic coloring rather than switching to real piece colors —
@@ -5667,6 +5809,7 @@ mechanism, verified unchanged) the root app's separate 3D Preview tab.
 ## Tech-pack tracing: read a technical flat-sketch image's actual measured pieces, not a style-factor guess
 
 ### Fixed
+
 - The previous "Generate Pattern Pieces From This" pipeline (sourced from
   the billboard's worn-garment **photo**) was the wrong tool for a
   **technical flat-sketch / tech-pack image** — an AI-drawn spec sheet with
@@ -5680,6 +5823,7 @@ mechanism, verified unchanged) the root app's separate 3D Preview tab.
   *read*, not guessed.
 
 ### Added
+
 - **`pieces[].outlineCm`, `pieces[].label`, `garment.referenceMeasurementsCm`**
   (`schema/pattern-spec.v1.json`) — an opt-in, schema-validated exception
   for technical flat-sketch images specifically: a vision-capable provider
@@ -5716,6 +5860,7 @@ mechanism, verified unchanged) the root app's separate 3D Preview tab.
   as such in its own hint text.
 
 ### Note
+
 This mode is only as good as the configured **Text Generation** provider's
 vision capability — it needs a real, vision-capable model actually reading
 the image's printed numbers, not the local pixel-analysis fallback (which
@@ -5726,6 +5871,7 @@ behavior with an honest toast, never a silently wrong pattern.
 ## Fashion Billboard: generate real pattern pieces from the AI photo, not just a background trace
 
 ### Added
+
 - **"Generate Pattern Pieces From This"** (AI Fashion Billboard section) —
   a new button on the generated billboard photo that runs the exact same
   prompt/image → vector-pieces pipeline the AI Pattern Generator's own
@@ -5744,6 +5890,7 @@ behavior with an honest toast, never a silently wrong pattern.
   sync.
 
 ### Fixed (diagnosis, not a code bug)
+
 - Traced a report of "the AI pattern generator always produces the same
   output regardless of prompt or image" to a **configuration** issue, not
   a drafting-engine bug: the account's **Text Generation** provider
@@ -5763,6 +5910,7 @@ behavior with an honest toast, never a silently wrong pattern.
 ## AI Pattern Generator: romper/jumpsuit garment type (real vector pieces, not an image)
 
 ### Added
+
 - **`AIGen.buildRomper()`** (`js/ai.js`) — a new garment kind covering a
   one-piece romper/jumpsuit: fitted front/back bodice joined at a waist
   seam to front/back above-knee shorts, an armhole binding strip when
@@ -5792,6 +5940,7 @@ behavior with an honest toast, never a silently wrong pattern.
   (bodice + leg measurements) and Length/Fit/Sleeve controls.
 
 ### Fixed
+
 - Clarified, via direct investigation, that a user describing a garment
   in the **AI Pattern Generator** prompt box always gets real vector
   pattern pieces (never an image) — the "I got an image back" experience
@@ -5805,6 +5954,7 @@ behavior with an honest toast, never a silently wrong pattern.
   release actually closes.
 
 ### Honest notes
+
 - Romper shorts pieces (`Romper Front/Back Shorts`) declare no
   `role` — cloth-lab's WP-6 placement vocabulary has no "shorts
   front/back" entry (only full-length trouser/skirt panels), so this
@@ -5819,6 +5969,7 @@ behavior with an honest toast, never a silently wrong pattern.
 ## Shift-drag bypasses the 1cm grid snap
 
 ### Added
+
 - **Shift+Drag free positioning** (`js/canvas.js`) — holding Shift while
   dragging now bypasses the 1cm grid snap everywhere the canvas snaps:
   outline-point handles, construction points/lines/arcs/circles, and the
@@ -5836,6 +5987,7 @@ behavior with an honest toast, never a silently wrong pattern.
 ## Pattern library expansion, colourful thumbnails, currency selector, real Bill of Materials
 
 ### Added
+
 - **40 new Fancy Collection designs** (`js/fancy-patterns.js`) — 10 per
   category (Women: `wf07`-`wf16`, Men: `mf07`-`mf16`, Girls: `gf07`-`gf16`,
   Boys: `bf07`-`bf16`), each with 10+ real pattern pieces built from the
@@ -5871,6 +6023,7 @@ behavior with an honest toast, never a silently wrong pattern.
   print-ready window style as Pattern Summary/Tech Pack.
 
 ### Fixed
+
 - **2 self-intersecting pattern pieces** (`gf10`'s bodice panels, `gf11`
   and `gf13`'s neckline facings) found by the pattern validator sweep —
   `gf10` widened `princessBodice()`'s `hipY`/`hemY` gap to match every
@@ -5880,6 +6033,7 @@ behavior with an honest toast, never a silently wrong pattern.
   curved-band shape already used elsewhere in the file.
 
 ### Honest notes
+
 - Front-button count in the Bill of Materials is a labelled *estimate*
   (back-length / 12cm), not read from real notch/placket data — no such
   data exists in the pattern format today, so this follows the project's
@@ -5892,6 +6046,7 @@ behavior with an honest toast, never a silently wrong pattern.
 ## 2D canvas: select-anything delete, Add Point tool, oriented selection box
 
 ### Added
+
 - **Select-anything + Backspace delete** (`js/canvas.js`, `js/app.js`) —
   WP-17's keyboard delete only ever worked on whole pattern pieces.
   Construction points, construction lines/arcs/circles, text annotations,
@@ -5913,6 +6068,7 @@ behavior with an honest toast, never a silently wrong pattern.
   doesn't silently desync seam data.
 
 ### Fixed
+
 - **Rotate ("swing") selection box drifting outside the piece** — the
   dashed selection box was an axis-aligned bounding box of the piece's
   outline. That always mathematically *contains* a rotated piece, but
@@ -5928,6 +6084,7 @@ behavior with an honest toast, never a silently wrong pattern.
   jumping around relative to an axis-aligned box.
 
 ### Honest notes
+
 - Darts stay modal-only (Edit Darts), not click-selectable on the canvas —
   they're edited by index in `openDartEditorModal`, not hit-tested against
   screen position; adding that would mean giving darts their own on-canvas
@@ -5940,6 +6097,7 @@ behavior with an honest toast, never a silently wrong pattern.
 ## Bundled avatar gallery — grounding, garment, and a stray-geometry fix
 
 ### Fixed
+
 - **Avatars appearing "50% under the ground"** — 3 of the 8 bundled models
   (`girl.glb`, `girl3.glb`, `boy2.glb`) have a flat circular turntable base
   baked into the same single mesh as the body (confirmed via direct glTF
@@ -5972,6 +6130,7 @@ behavior with an honest toast, never a silently wrong pattern.
   equivalent absolute shoulder position directly when no arm pivot exists.
 
 ### Honest notes
+
 - **Garment fit on a GLB avatar is approximate, not measured from the
   mesh** — the garment shell is sized from your entered measurements, not
   the loaded model's actual proportions. On a build stockier than that
@@ -5987,6 +6146,7 @@ behavior with an honest toast, never a silently wrong pattern.
   than ship a fragile fit heuristic.
 
 ### Added
+
 - **8 real GLB avatar models** (`avatars/`) selectable per category in
   Settings → 3D avatar models: 2 men (man, heavier-build variant), 1 woman,
   2 boys, 3 girls — alongside the existing custom-URL field and a new
@@ -5998,6 +6158,7 @@ behavior with an honest toast, never a silently wrong pattern.
   time).
 
 ### Honest notes
+
 - These are static, **unrigged** single-mesh exports from an AI
   image-to-3D pipeline, not sculpted/rigged characters — a perfect fit for
   3D Preview (loads and scales to height, no skeleton needed) but pose
@@ -6012,6 +6173,7 @@ behavior with an honest toast, never a silently wrong pattern.
 ## Post-Phase-4 fix — 3D Preview blank canvas (real bug, fixed in two rounds)
 
 ### Fixed
+
 - **3D Preview reported blank by a real user, across two phases** —
   previously dismissed as "some browser-automation tools fail resolving
   import-map entries in a dynamic `import()`," a tooling note rather than
@@ -6054,6 +6216,7 @@ first; WP-17 touches shared canvas/modal/theme code and needed its own
 verification pass before WP-18 (a genuinely new feature) built on top of it.
 
 ### Added
+
 - **Docs site** (WP-16) — a build-free, bilingual static site at `docs/`
   (reached from a new book-icon button in the header): a quick start,
   full tool reference, keyboard shortcuts, an AI provider setup guide with
@@ -6092,6 +6255,7 @@ verification pass before WP-18 (a genuinely new feature) built on top of it.
   never automatic background sync.
 
 ### Fixed
+
 - Two stale README "Honest notes" bullets from before WP-11/WP-12 shipped
   still claimed Create Marker "does not slide and interlock" and that
   PNG/JPEG/AI/HPGL exports "fall back to the vector output" — both were
@@ -6110,6 +6274,7 @@ verification pass before WP-18 (a genuinely new feature) built on top of it.
   `body.html`, `3d-test.html`, and `docs/` to the copy list.
 
 ### Honest notes
+
 - Keyboard canvas operation covers whole pattern pieces only — construction
   points/lines/arcs/circles and text annotations stay mouse-only.
 - Google Drive/OneDrive sync is structurally complete and verified as far
@@ -6130,6 +6295,7 @@ two; WP-15 wraps the finished state of everything before it, so it has to
 come last).
 
 ### Added
+
 - **True polygon nesting** (WP-11) — a first-party bottom-left-fill +
   simulated-annealing placement search (`js/nesting-core.js`) run in a Web
   Worker (`js/workers/nesting-worker.js`, client: `js/nesting.js`), replacing
@@ -6172,6 +6338,7 @@ come last).
   README's "Automation API" section for runnable examples.
 
 ### Fixed
+
 - **`offsetPoly()`'s seam-allowance direction was backwards** — every
   pattern piece's dashed "seam allowance" preview, and `PatternValidator`'s
   seamAllowance check, had been expanding inward instead of outward since
@@ -6196,6 +6363,7 @@ come last).
   other test in the suite passing cleanly alongside it both times.
 
 ### Honest notes
+
 See the main README's "Honest notes" section for the specific, documented
 scope calls made in this phase: a first-party nesting algorithm instead of
 a Minkowski-NFP dependency, curve metadata wired into one shared generator
@@ -6214,6 +6382,7 @@ the new standalone route) rather than the document's own WP-5-first
 numbering — see the phase's own planning doc for the full reasoning.
 
 ### Added
+
 - **Pattern metadata at the source** (WP-6) — `schema/pattern-spec.v1.json`'s
   `role` enum extended from 13 to ~44 values (princess seams, gores, godets,
   capes, tiers, two-piece sleeves, collars, hoods, yokes, peplums, and more),
@@ -6279,6 +6448,7 @@ numbering — see the phase's own planning doc for the full reasoning.
   and measurements into the main app, landing directly on the 3D Cloth Lab.
 
 ### Changed
+
 - `js/app.js`'s `buildClothLabPayload()` forwards the new WP-6 metadata
   fields (plus the already-existing-but-previously-dropped `darts`/
   `notches`/`grain`) to whichever cloth-lab engine is active.
@@ -6293,6 +6463,7 @@ numbering — see the phase's own planning doc for the full reasoning.
   and fixed while already touching this file for WP-5.6.
 
 ### Known limitations (see README's Honest notes for full detail)
+
 - **Seam sewing ramp-in was not implemented** — seams still hard-weld at
   mesh-build time via the pre-existing union-find pass; the plan's own text
   explicitly permitted deferring this if the merge-after-ramp approach
@@ -6330,6 +6501,7 @@ real multi-provider adapter layer, spec-first generation validated against
 Phase 0's schema, and vision+pixel fusion.
 
 ### Added
+
 - **Provider layer** (`js/ai-providers.js`) — 8 text/vision adapters
   (Anthropic, OpenAI, Gemini, OpenAI-compatible, Ollama, LM Studio,
   llama.cpp/vLLM, and the existing proxy), one stateless `{models, test,
@@ -6379,6 +6551,7 @@ Phase 0's schema, and vision+pixel fusion.
   users).
 
 ### Changed
+
 - `js/billboard.js`'s `generateBillboard`/`generatePattern` now dispatch
   through an injected image-generation adapter instead of talking HTTP
   directly — same public behaviour, `js/image-providers.js` owns the
@@ -6392,6 +6565,7 @@ Phase 0's schema, and vision+pixel fusion.
   configured reproduces pre-Phase-1 behaviour exactly.
 
 ### Known limitations (see README's Honest notes for full detail)
+
 - Route B (local `.onnx`/`.gguf` file picker) is not wired up — a clear
   "not supported, use a local server instead" message, not a silent
   failure.
@@ -6417,6 +6591,7 @@ plan is explicitly staged — this covers just Phase 0, the prerequisite for
 everything else.
 
 ### Added
+
 - **Pattern Spec schema** (`schema/pattern-spec.v1.json`) — a declarative
   JSON Schema for future AI-generated garments, plus `js/schema-validate.js`
   (an ajv wrapper), vendored `js/vendor/ajv6.min.js`, and example fixtures.
@@ -6438,6 +6613,7 @@ everything else.
   job gating `build`/`deploy` — previously there was no test gate at all.
 
 ### Changed
+
 - **All 9 root `js/*.js` files converted from classic-script IIFE globals to
   real ES modules** (`import`/`export`), matching `index.html`'s existing
   import-map pattern. Every exported symbol keeps a `window.X = X` compat
@@ -6452,6 +6628,7 @@ everything else.
   pass, fixed while already touching the file); cache version bumped.
 
 ### Known limitations (see README's Honest notes for full detail)
+
 - The vendored ajv build works correctly under Node but has not been wired
   to run from a plain browser `<script>` tag yet — not an issue today since
   nothing loads it from the browser, but noted for whoever wires up WP-1/3.

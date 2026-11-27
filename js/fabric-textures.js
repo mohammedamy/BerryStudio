@@ -177,19 +177,20 @@ export function sampleFabricPixel(fabricId, uRaw, vRaw) {
   const v = ((vRaw % 1) + 1) % 1;
 
   if (id === "cotton") {
-    const N = 12;
+    const N = 14;
     const wx = u * N, wy = v * N;
     const ix = Math.floor(wx), iy = Math.floor(wy);
     const lx = wx - ix - 0.5, ly = wy - iy - 0.5;
     const warpTop = ((ix + iy) & 1) === 0;
     const warpProfile = Math.cos(lx * Math.PI * 0.92);
     const weftProfile = Math.cos(ly * Math.PI * 0.92);
-    const warpArch = warpProfile * (warpTop ? 1.0 : 0.40);
-    const weftArch = weftProfile * (warpTop ? 0.40 : 1.0);
+    const warpArch = warpProfile * (warpTop ? 1.0 : 0.36);
+    const weftArch = weftProfile * (warpTop ? 0.36 : 1.0);
     const weave = Math.max(warpArch, weftArch);
-    const micro = periodicNoise(u, v, 24, 24) * 0.10;
-    const h = clamp01(0.14 + 0.76 * weave + micro);
-    const albedo = clamp01(0.24 + 0.68 * weave + micro * 0.6);
+    const twist = 0.045 * Math.sin((warpTop ? wy : wx) * TAU * 2.0);
+    const micro = periodicNoise(u, v, 28, 28) * 0.09;
+    const h = clamp01(0.14 + 0.74 * weave + twist + micro);
+    const albedo = clamp01(0.26 + 0.66 * weave + twist * 0.4 + micro * 0.5);
     const rough = clamp01(0.84 - 0.36 * weave + micro * 0.4);
     return { h, albedo, rough };
   }
@@ -205,11 +206,11 @@ export function sampleFabricPixel(fabricId, uRaw, vRaw) {
     const ridgeWave = 0.5 + 0.5 * Math.cos((ridgeCoord - 0.38) * TAU);
     const warpThread = Math.cos(lx * Math.PI * 0.88);
     const weftThread = Math.cos(ly * Math.PI * 0.88);
-    const yarnH = warpOver ? (0.50 * ridgeWave + 0.50 * warpThread) : (0.20 + 0.52 * weftThread);
+    const yarnH = warpOver ? (0.52 * ridgeWave + 0.48 * warpThread) : (0.18 + 0.54 * weftThread);
     const slub = periodicNoise(u, v, 6, 36) * 0.16;
     const h = clamp01(0.16 + 0.72 * yarnH + slub * 0.4);
-    // Ecru weft peek gives real denim subtle speckled contrast between threads
-    const weftPeek = warpOver ? 0.0 : 0.24 * weftThread;
+    // Crisp ecru weft peek gives authentic indigo/twill denim depth
+    const weftPeek = warpOver ? 0.0 : 0.28 * weftThread;
     const albedo = clamp01(0.22 + 0.54 * yarnH + weftPeek + slub * 0.5);
     const rough = clamp01(0.88 - 0.36 * yarnH + (warpOver ? -0.04 : 0.10));
     return { h, albedo, rough };

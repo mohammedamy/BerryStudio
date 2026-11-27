@@ -277,14 +277,58 @@ export function computeHumanBodyDims(category, measurementsOrDims, landmarks, mo
   };
 }
 
+let _cachedDermalMaps = null;
+function getDermalSkinMaps(THREE) {
+  if (typeof document === "undefined") return { roughnessMap: null, bumpMap: null };
+  if (_cachedDermalMaps) return _cachedDermalMaps;
+  const size = 128;
+  const roughCv = document.createElement("canvas");
+  roughCv.width = roughCv.height = size;
+  const rCtx = roughCv.getContext("2d");
+  const bumpCv = document.createElement("canvas");
+  bumpCv.width = bumpCv.height = size;
+  const bCtx = bumpCv.getContext("2d");
+  if (!rCtx || !bCtx) return { roughnessMap: null, bumpMap: null };
+
+  const rImg = rCtx.createImageData(size, size);
+  const bImg = bCtx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      // Seamless periodic micro-pore noise (soft organic variance, zero glossy hotspots)
+      const p1 = Math.sin((x / size) * Math.PI * 16 + Math.cos((y / size) * Math.PI * 14) * 1.4);
+      const p2 = Math.cos((y / size) * Math.PI * 22 - Math.sin((x / size) * Math.PI * 18) * 1.2);
+      const h = ((x * 73856093) ^ (y * 19349663)) >>> 0;
+      const fine = ((h & 255) / 255) - 0.5;
+      const pore = 0.5 + 0.25 * p1 * p2 + 0.16 * fine;
+      const rVal = Math.max(158, Math.min(226, Math.round(186 + (pore - 0.5) * 44)));
+      const bVal = Math.max(96, Math.min(164, Math.round(128 + (pore - 0.5) * 38)));
+      rImg.data[idx] = rImg.data[idx + 1] = rImg.data[idx + 2] = rVal;
+      rImg.data[idx + 3] = 255;
+      bImg.data[idx] = bImg.data[idx + 1] = bImg.data[idx + 2] = bVal;
+      bImg.data[idx + 3] = 255;
+    }
+  }
+  rCtx.putImageData(rImg, 0, 0);
+  bCtx.putImageData(bImg, 0, 0);
+  const roughnessMap = new THREE.CanvasTexture(roughCv);
+  roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping;
+  roughnessMap.repeat.set(8, 12);
+  const bumpMap = new THREE.CanvasTexture(bumpCv);
+  bumpMap.wrapS = bumpMap.wrapT = THREE.RepeatWrapping;
+  bumpMap.repeat.set(8, 12);
+  _cachedDermalMaps = { roughnessMap, bumpMap };
+  return _cachedDermalMaps;
+}
+
 export function createHumanSkinMaterial(THREE, category, customColor, lowPower = false) {
   const color = customColor != null ? customColor : (HUMAN_SKIN_PALETTE[category] || 0xdca98e);
   if (lowPower) {
     const mat = new THREE.MeshPhongMaterial({
       color,
       vertexColors: true,
-      shininess: 22,
-      specular: 0x261d18,
+      shininess: 10,
+      specular: 0x16100d,
       transparent: false,
       opacity: 1.0,
       depthWrite: true,
@@ -293,13 +337,17 @@ export function createHumanSkinMaterial(THREE, category, customColor, lowPower =
     mat.sheen = 0.0;
     return mat;
   }
+  const { roughnessMap, bumpMap } = getDermalSkinMaps(THREE);
   return new THREE.MeshPhysicalMaterial({
     color,
     vertexColors: true,
-    roughness: 0.46,
+    roughness: 0.68,
+    roughnessMap: roughnessMap || null,
+    bumpMap: bumpMap || null,
+    bumpScale: bumpMap ? 0.00042 : 0,
     metalness: 0.0,
-    clearcoat: 0.09,
-    clearcoatRoughness: 0.56,
+    clearcoat: 0.0,
+    envMapIntensity: 0.44,
     sheen: 0.0,
     transparent: false,
     opacity: 1.0,
@@ -2362,7 +2410,7 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
   }
 
   const createHairTextures = () => {
-    if (typeof document === "undefined") return { map: null, bumpMap: null };
+    if (typeof document === "undefined") return { map: null, bumpMap: null, normalMap: null };
     const size = 512;
     const albedoCanvas = document.createElement("canvas");
     albedoCanvas.width = size;
@@ -2374,33 +2422,33 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
     bumpCanvas.height = size;
     const bCtx = bumpCanvas.getContext("2d");
 
-    if (!aCtx || !bCtx) return { map: null, bumpMap: null };
+    if (!aCtx || !bCtx) return { map: null, bumpMap: null, normalMap: null };
 
-    aCtx.fillStyle = "#dcdcdc";
+    aCtx.fillStyle = "#c8c8c8";
     aCtx.fillRect(0, 0, size, size);
-    bCtx.fillStyle = "#787878";
+    bCtx.fillStyle = "#7d7d7d";
     bCtx.fillRect(0, 0, size, size);
 
     const curlShift = hairTypeSpec.curlAmp * 320;
     const waveCycles = 2 + (hairTypeSpec.curlFreq || 2) * 0.35;
-    const fiberCount = 420;
+    const fiberCount = 640;
     for (let i = 0; i < fiberCount; i++) {
       const xBase = (i / fiberCount) * size + ((i * 37) % 7) * 0.25;
-      const aTone = 148 + ((i * 53) % 107);
-      const bTone = (i % 2 === 0 ? 155 : 55) + ((i * 29) % 85);
-      const lw = 0.7 + ((i * 19) % 4) * 0.42;
+      const aTone = 148 + ((i * 53) % 88);
+      const bTone = (i % 2 === 0 ? 158 : 68) + ((i * 29) % 72);
+      const lw = 0.55 + ((i * 19) % 4) * 0.36;
 
       aCtx.strokeStyle = `rgb(${aTone},${aTone},${aTone})`;
       aCtx.lineWidth = lw;
       bCtx.strokeStyle = `rgb(${bTone},${bTone},${bTone})`;
-      bCtx.lineWidth = lw * 1.15;
+      bCtx.lineWidth = lw * 1.1;
 
       const drawStrandPath = (ctx, ampMult = 1.0) => {
         ctx.beginPath();
         for (let step = 0; step <= 24; step++) {
           const t = step / 24;
           const y = t * size;
-          const wave = Math.sin(t * Math.PI * waveCycles + i * 0.87) * (1.2 + curlShift) * ampMult;
+          const wave = Math.sin(t * Math.PI * waveCycles + i * 0.87) * (1.1 + curlShift) * ampMult;
           const x = xBase + wave;
           if (step === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
@@ -2411,56 +2459,93 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
       drawStrandPath(bCtx, 1.0);
     }
 
-    // Root depth occlusion + dual Kajiya-Kay anisotropic mid-shaft specular bands
+    // Subtle root occlusion without artificial white specular stripes
     const sheenGrad = aCtx.createLinearGradient(0, 0, 0, size);
     sheenGrad.addColorStop(0.0, "rgba(0,0,0,0.22)");
-    sheenGrad.addColorStop(0.14, "rgba(0,0,0,0.03)");
-    sheenGrad.addColorStop(0.32, "rgba(255,255,255,0.24)");
-    sheenGrad.addColorStop(0.48, "rgba(255,255,255,0.05)");
-    sheenGrad.addColorStop(0.66, "rgba(255,255,255,0.14)");
-    sheenGrad.addColorStop(1.0, "rgba(0,0,0,0.08)");
+    sheenGrad.addColorStop(0.18, "rgba(0,0,0,0.04)");
+    sheenGrad.addColorStop(0.55, "rgba(255,255,255,0.05)");
+    sheenGrad.addColorStop(1.0, "rgba(0,0,0,0.09)");
     aCtx.fillStyle = sheenGrad;
     aCtx.fillRect(0, 0, size, size);
 
+    // Derive tangent-space Sobel normalMap from bump heightfield for realistic silk-matte hair strands
+    const normCanvas = document.createElement("canvas");
+    normCanvas.width = size;
+    normCanvas.height = size;
+    const nCtx = normCanvas.getContext("2d");
+    const bImgData = bCtx.getImageData(0, 0, size, size).data;
+    const nImg = nCtx.createImageData(size, size);
+    const strength = 2.6;
+    for (let y = 0; y < size; y++) {
+      const ym = ((y - 1 + size) % size) * size;
+      const yp = ((y + 1) % size) * size;
+      const y0 = y * size;
+      for (let x = 0; x < size; x++) {
+        const xm = (x - 1 + size) % size;
+        const xp = (x + 1) % size;
+        const dx = (bImgData[(y0 + xp) * 4] - bImgData[(y0 + xm) * 4]) / 255;
+        const dy = (bImgData[(yp + x) * 4] - bImgData[(ym + x) * 4]) / 255;
+        let nx = -dx * strength, ny = -dy * strength, nz = 1.0;
+        const nl = Math.hypot(nx, ny, nz) || 1;
+        nx /= nl; ny /= nl; nz /= nl;
+        const i4 = (y0 + x) * 4;
+        nImg.data[i4] = Math.round((nx * 0.5 + 0.5) * 255);
+        nImg.data[i4 + 1] = Math.round((ny * 0.5 + 0.5) * 255);
+        nImg.data[i4 + 2] = Math.round((nz * 0.5 + 0.5) * 255);
+        nImg.data[i4 + 3] = 255;
+      }
+    }
+    nCtx.putImageData(nImg, 0, 0);
+
     const map = new THREE.CanvasTexture(albedoCanvas);
+    if (THREE.SRGBColorSpace) map.colorSpace = THREE.SRGBColorSpace;
     map.wrapS = THREE.RepeatWrapping;
     map.wrapT = THREE.ClampToEdgeWrapping;
     const bumpMap = new THREE.CanvasTexture(bumpCanvas);
     bumpMap.wrapS = THREE.RepeatWrapping;
     bumpMap.wrapT = THREE.ClampToEdgeWrapping;
-    return { map, bumpMap };
+    const normalMap = new THREE.CanvasTexture(normCanvas);
+    normalMap.wrapS = THREE.RepeatWrapping;
+    normalMap.wrapT = THREE.ClampToEdgeWrapping;
+    return { map, bumpMap, normalMap };
   };
 
   const hairBaseCol = new THREE.Color(hairColor);
+  const hairLuma = 0.2126 * hairBaseCol.r + 0.7152 * hairBaseCol.g + 0.0722 * hairBaseCol.b;
+  const effHairSheen = (hairTypeSpec.sheen ?? 0.40) * (0.35 + 0.65 * Math.min(1, hairLuma * 3.5));
+  const whiteLift = hairLuma < 0.12 ? 0.10 : 0.20;
   const hairHighlightCol = highlightSpec.hex ? new THREE.Color(highlightSpec.hex) : null;
   const hairHighlightStrength = highlightSpec.strength || 0;
   const hairSheenCol = hairHighlightCol
-    ? hairBaseCol.clone().lerp(hairHighlightCol, 0.55).lerp(new THREE.Color(0xffffff), 0.30)
-    : hairBaseCol.clone().lerp(new THREE.Color(0xffffff), 0.40);
-  const { map: hairStrandTex, bumpMap: hairBumpTex } = createHairTextures();
+    ? hairBaseCol.clone().lerp(hairHighlightCol, 0.55).lerp(new THREE.Color(0xffffff), whiteLift)
+    : hairBaseCol.clone().lerp(new THREE.Color(0xffffff), whiteLift);
+  const { map: hairStrandTex, bumpMap: hairBumpTex, normalMap: hairNormalTex } = createHairTextures();
 
   const hairVertMat = lowPower
     ? new THREE.MeshPhongMaterial({
       color: 0xffffff,
       map: hairStrandTex || null,
       vertexColors: true,
-      shininess: hairTypeSpec.shininess || 30,
-      specular: 0x423125,
+      shininess: Math.min(20, hairTypeSpec.shininess || 18),
+      specular: 0x261c15,
       side: THREE.DoubleSide,
     })
     : new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
       map: hairStrandTex || null,
+      normalMap: hairNormalTex || null,
+      normalScale: new THREE.Vector2(0.55, 0.55),
       bumpMap: hairBumpTex || hairStrandTex || null,
-      bumpScale: hairBumpTex ? headH * 0.015 : (hairStrandTex ? headH * 0.010 : 0),
+      bumpScale: hairBumpTex ? headH * 0.011 : (hairStrandTex ? headH * 0.008 : 0),
       vertexColors: true,
-      roughness: hairTypeSpec.roughness ?? 0.50,
-      metalness: 0.02,
-      sheen: hairTypeSpec.sheen ?? 0.48,
-      sheenRoughness: hairTypeSpec.sheenRoughness ?? 0.40,
+      roughness: Math.max(0.56, hairTypeSpec.roughness ?? 0.58),
+      metalness: 0.01,
+      sheen: effHairSheen,
+      sheenRoughness: Math.max(0.46, hairTypeSpec.sheenRoughness ?? 0.48),
       sheenColor: hairSheenCol,
-      clearcoat: hairTypeSpec.id === "straight" ? 0.18 : (hairTypeSpec.id === "wavy" ? 0.12 : 0.05),
-      clearcoatRoughness: 0.42,
+      clearcoat: 0.02,
+      clearcoatRoughness: 0.65,
+      envMapIntensity: 0.42,
       side: THREE.DoubleSide,
     });
 
@@ -2561,7 +2646,8 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
         const braidDisp = hairTypeSpec.braidBands > 0
           ? 0.011 * Math.cos((phi - partPhi) * hairTypeSpec.braidBands + Math.sin(v * 8.0) * 0.35)
           : 0;
-        const strandRelief = (effStrandDepth * lockWave + curlDisp + braidDisp) * smoothstep(0.04, 0.30, v) * (1 - 0.52 * smoothstep(0.75, 1.0, v));
+        const crownCalm = 1 - smoothstep(0.68, 0.96, v);
+        const strandRelief = (effStrandDepth * lockWave + curlDisp + braidDisp) * smoothstep(0.04, 0.30, v) * crownCalm;
 
         const hatSquash = lerp(1.0, crownCompression, smoothstep(0.24, 0.72, v));
         const loft = headH * (
@@ -2570,17 +2656,19 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
             crownLiftFrac * typeLoftMult * Math.max(0, uy)
             + sideLoftFrac * sideCapMult * typeLoftMult * Math.abs(ux)
             + backLoftFrac * typeLoftMult * Math.max(0, -uz)
-            - partGroove
+            - partGroove * crownCalm
             + strandRelief
           )
         );
 
         const rFinal = rSkull + Math.max(headH * 0.0038, loft);
-        positions.push(ux * rFinal, uy * rFinal, uz * rFinal);
+        // Converge crown apex ring cleanly to a shared top point to eliminate starburst pole creases
+        const isPole = iv === V_SEGS;
+        positions.push(isPole ? 0 : ux * rFinal, uy * rFinal, isPole ? -0.012 * headH : uz * rFinal);
         uvs.push(uNorm * 2.5, 1 - v);
 
-        const textureContrast = lockWave + curlDisp * 22 + braidDisp * 30;
-        const partShadow = 0.26 * (partGroove / (partDepth || 1));
+        const textureContrast = (lockWave + curlDisp * 22 + braidDisp * 30) * crownCalm;
+        const partShadow = 0.24 * (partGroove / (partDepth || 1)) * crownCalm;
         const rgb = computeHairVertexRGB(uNorm, clamp((1 - v) * 0.34, 0, 0.38), textureContrast, partShadow);
         hCols.push(rgb[0], rgb[1], rgb[2]);
       }
@@ -6150,55 +6238,196 @@ function populateHeadFeatures(THREE, headBone, headH, category, customHairColor,
   void hairMat;
 }
 
+export const FASHION_POSES = Object.freeze([
+  "standing",
+  "apose",
+  "tpose",
+  "contrapposto",
+  "editorial",
+  "showcase",
+  "seated",
+]);
+
+function computeStaticPoseTargets(pose = "standing", minArmAbduct = 0.095, breath = 0, idleSway = 0, dims = null, landmarks = null) {
+  const p = pose || "standing";
+  const armBase = Math.max(0.11, minArmAbduct);
+  const targets = {
+    pelvisX: idleSway,
+    pelvisY: dims ? dims.hipY : 0,
+    pelvisRx: 0,
+    pelvisRy: idleSway * 0.8,
+    pelvisRz: -idleSway * 1.2,
+    spineRx: -breath * 0.006,
+    spineRy: 0,
+    spineRz: idleSway * 0.8,
+    chestRx: -breath * 0.010,
+    chestRy: -idleSway * 0.6,
+    chestRz: 0,
+    neckRy: 0,
+    neckRz: 0,
+    headRx: breath * 0.005,
+    headRy: idleSway * 0.5,
+    headRz: 0,
+    arm1Rx: -0.015 + breath * 0.006,
+    arm1Ry: -0.03,
+    arm1Rz: armBase + 0.004 * (breath * 0.5 + 0.5),
+    arm_1Rx: -0.015 + breath * 0.006,
+    arm_1Ry: 0.03,
+    arm_1Rz: -(armBase + 0.004 * (breath * 0.5 + 0.5)),
+    elbow1Rx: -0.11 - breath * 0.008,
+    elbow1Rz: 0,
+    elbow_1Rx: -0.11 - breath * 0.008,
+    elbow_1Rz: 0,
+    hand1Rx: 0,
+    hand_1Rx: 0,
+    leg1Rx: 0,
+    leg1Rz: 0.006,
+    leg_1Rx: 0,
+    leg_1Rz: -0.006,
+    knee1Rx: 0.012,
+    knee_1Rx: 0.012,
+    foot1Rx: 0,
+    foot_1Rx: 0,
+  };
+
+  if (p === "standing") {
+    targets.arm1Rz = Math.max(0.175, armBase);
+    targets.arm_1Rz = -Math.max(0.175, armBase);
+  } else if (p === "apose") {
+    targets.arm1Rz = Math.max(0.45, armBase);
+    targets.arm_1Rz = -Math.max(0.45, armBase);
+    targets.elbow1Rx = -0.06;
+    targets.elbow_1Rx = -0.06;
+  } else if (p === "tpose") {
+    targets.arm1Rz = Math.PI / 2 - 0.04;
+    targets.arm_1Rz = -(Math.PI / 2 - 0.04);
+    targets.elbow1Rx = 0;
+    targets.elbow_1Rx = 0;
+  } else if (p === "contrapposto") {
+    targets.pelvisRz = -0.045;
+    targets.pelvisRy = 0.04;
+    targets.spineRz = 0.035;
+    targets.chestRz = 0.025;
+    targets.chestRy = -0.035;
+    targets.headRz = -0.015;
+    targets.arm1Rz = Math.max(0.14, armBase);
+    targets.arm_1Rz = -Math.max(0.10, armBase);
+    targets.elbow1Rx = -0.16;
+    targets.elbow_1Rx = -0.09;
+    targets.leg1Rz = 0.055;
+    targets.leg1Rx = -0.075;
+    targets.knee1Rx = 0.15;
+    targets.foot1Rx = 0.06;
+    targets.leg_1Rz = 0.025;
+  } else if (p === "editorial") {
+    // High-fashion runway lookbook stance: weight on right hip, relaxed left knee forward, poised open shoulders
+    targets.pelvisX = 0.016;
+    targets.pelvisRz = -0.055;
+    targets.pelvisRy = 0.085;
+    targets.spineRz = 0.042;
+    targets.spineRy = -0.045;
+    targets.chestRz = 0.028;
+    targets.chestRy = -0.075;
+    targets.neckRy = 0.045;
+    targets.headRy = 0.055;
+    targets.headRz = -0.020;
+    targets.headRx = -0.025;
+    targets.arm1Rx = 0.04;
+    targets.arm1Rz = Math.max(0.165, armBase);
+    targets.arm1Ry = -0.08;
+    targets.elbow1Rx = -0.24;
+    targets.arm_1Rx = -0.06;
+    targets.arm_1Rz = -Math.max(0.145, armBase);
+    targets.arm_1Ry = 0.06;
+    targets.elbow_1Rx = -0.18;
+    targets.hand1Rx = 0.06;
+    targets.hand_1Rx = 0.04;
+    targets.leg1Rx = -0.11;
+    targets.leg1Rz = 0.045;
+    targets.knee1Rx = 0.21;
+    targets.foot1Rx = 0.11;
+    targets.leg_1Rx = 0.02;
+    targets.leg_1Rz = 0.032;
+    targets.knee_1Rx = 0.02;
+  } else if (p === "showcase") {
+    // Open couture showcase stance: clears sleeves & waist silhouette cleanly
+    targets.pelvisRz = -0.022;
+    targets.pelvisRy = 0.035;
+    targets.spineRz = 0.018;
+    targets.chestRy = -0.04;
+    targets.headRy = 0.035;
+    targets.arm1Rz = Math.max(0.28, armBase + 0.12);
+    targets.arm_1Rz = -Math.max(0.28, armBase + 0.12);
+    targets.arm1Rx = -0.06;
+    targets.arm_1Rx = -0.06;
+    targets.elbow1Rx = -0.22;
+    targets.elbow_1Rx = -0.22;
+    targets.leg1Rz = 0.05;
+    targets.leg_1Rz = -0.05;
+    targets.leg1Rx = -0.04;
+    targets.knee1Rx = 0.08;
+  } else if (p === "seated") {
+    targets.arm1Rz = 0.09;
+    targets.arm_1Rz = -0.09;
+    targets.elbow1Rx = -0.22;
+    targets.elbow_1Rx = -0.22;
+    targets.leg1Rx = -Math.PI / 2;
+    targets.leg_1Rx = -Math.PI / 2;
+    targets.knee1Rx = Math.PI / 2;
+    targets.knee_1Rx = Math.PI / 2;
+  }
+
+  // Grounding Y offset for bent/tilted poses so stance sole rests exactly at y = 0
+  if (dims && p !== "seated") {
+    const lm = landmarks || {
+      thighLen: dims.hipY * 0.48,
+      calfLen: dims.hipY * 0.43,
+      ankleY: dims.H * 0.047,
+      hipPivotY: dims.hipY - dims.span * 0.04,
+      hipPivotX: dims.hipR * 0.46,
+    };
+    const footLen = clamp(dims.H * 0.145, 0.17, 0.29);
+    const evalY = (hx, kx, fx, sideSign) => {
+      const pitch = hx + kx + fx;
+      const soleDrop = lm.ankleY * Math.cos(pitch) + (pitch >= 0 ? footLen * 0.54 * Math.sin(pitch) : footLen * 0.26 * Math.sin(-pitch));
+      return lm.hipPivotY + sideSign * lm.hipPivotX * Math.sin(targets.pelvisRz)
+        - (lm.thighLen * Math.cos(hx) + lm.calfLen * Math.cos(hx + kx)) - soleDrop;
+    };
+    const minSole = Math.min(evalY(targets.leg1Rx, targets.knee1Rx, targets.foot1Rx, 1), evalY(targets.leg_1Rx, targets.knee_1Rx, targets.foot_1Rx, -1));
+    targets.pelvisY = dims.hipY + clamp(-minSole, -0.05, 0.03);
+  }
+  return targets;
+}
+
 /**
  * Applies a named static fashion/simulation pose to the skeleton.
  */
 export function applyMannequinPose(limbs, pose = "standing", dims = null) {
   if (!limbs) return;
+  const tg = computeStaticPoseTargets(pose, 0.095, 0, 0, dims, null);
   Object.values(limbs).forEach((b) => {
     if (b && b.rotation) b.rotation.set(0, 0, 0);
   });
-  if (limbs.pelvis && dims) {
-    limbs.pelvis.position.set(0, dims.hipY, 0);
+  if (limbs.pelvis) {
+    limbs.pelvis.position.set(tg.pelvisX, dims ? tg.pelvisY : 0, 0);
+    limbs.pelvis.rotation.set(tg.pelvisRx, tg.pelvisRy, tg.pelvisRz);
   }
-
-  const p = pose || "standing";
-  if (p === "standing") {
-    limbs.arm1.rotation.z = 0.175;
-    limbs["arm-1"].rotation.z = -0.175;
-    limbs.elbow1.rotation.x = -0.11;
-    limbs["elbow-1"].rotation.x = -0.11;
-  } else if (p === "apose") {
-    limbs.arm1.rotation.z = 0.45;
-    limbs["arm-1"].rotation.z = -0.45;
-    limbs.elbow1.rotation.x = -0.06;
-    limbs["elbow-1"].rotation.x = -0.06;
-  } else if (p === "tpose") {
-    limbs.arm1.rotation.z = Math.PI / 2 - 0.04;
-    limbs["arm-1"].rotation.z = -(Math.PI / 2 - 0.04);
-  } else if (p === "contrapposto") {
-    limbs.pelvis.rotation.z = -0.045;
-    limbs.spine.rotation.z = 0.035;
-    limbs.chest.rotation.z = 0.025;
-    limbs.head.rotation.z = -0.015;
-    limbs.arm1.rotation.z = 0.14;
-    limbs["arm-1"].rotation.z = -0.08;
-    limbs.elbow1.rotation.x = -0.16;
-    limbs["elbow-1"].rotation.x = -0.09;
-    limbs.leg1.rotation.z = 0.06;
-    limbs.leg1.rotation.x = -0.08;
-    limbs.knee1.rotation.x = 0.16;
-    limbs["leg-1"].rotation.z = 0.03;
-  } else if (p === "seated") {
-    limbs.arm1.rotation.z = 0.09;
-    limbs["arm-1"].rotation.z = -0.09;
-    limbs.elbow1.rotation.x = -0.22;
-    limbs["elbow-1"].rotation.x = -0.22;
-    limbs.leg1.rotation.x = -Math.PI / 2;
-    limbs["leg-1"].rotation.x = -Math.PI / 2;
-    limbs.knee1.rotation.x = Math.PI / 2;
-    limbs["knee-1"].rotation.x = Math.PI / 2;
-  }
+  if (limbs.spine) limbs.spine.rotation.set(tg.spineRx, tg.spineRy, tg.spineRz);
+  if (limbs.chest) limbs.chest.rotation.set(tg.chestRx, tg.chestRy, tg.chestRz);
+  if (limbs.neck) limbs.neck.rotation.set(0, tg.neckRy, tg.neckRz);
+  if (limbs.head) limbs.head.rotation.set(tg.headRx, tg.headRy, tg.headRz);
+  if (limbs.arm1) limbs.arm1.rotation.set(tg.arm1Rx, tg.arm1Ry, tg.arm1Rz);
+  if (limbs["arm-1"]) limbs["arm-1"].rotation.set(tg.arm_1Rx, tg.arm_1Ry, tg.arm_1Rz);
+  if (limbs.elbow1) limbs.elbow1.rotation.set(tg.elbow1Rx, 0, tg.elbow1Rz);
+  if (limbs["elbow-1"]) limbs["elbow-1"].rotation.set(tg.elbow_1Rx, 0, tg.elbow_1Rz);
+  if (limbs.hand1) limbs.hand1.rotation.x = tg.hand1Rx;
+  if (limbs["hand-1"]) limbs["hand-1"].rotation.x = tg.hand_1Rx;
+  if (limbs.leg1) limbs.leg1.rotation.set(tg.leg1Rx, 0, tg.leg1Rz);
+  if (limbs["leg-1"]) limbs["leg-1"].rotation.set(tg.leg_1Rx, 0, tg.leg_1Rz);
+  if (limbs.knee1) limbs.knee1.rotation.x = tg.knee1Rx;
+  if (limbs["knee-1"]) limbs["knee-1"].rotation.x = tg.knee_1Rx;
+  if (limbs.foot1) limbs.foot1.rotation.x = tg.foot1Rx;
+  if (limbs["foot-1"]) limbs["foot-1"].rotation.x = tg.foot_1Rx;
 }
 
 /**
@@ -6360,69 +6589,69 @@ export function applyNaturalHumanMotion(limbs, dims, landmarks, opts = {}) {
     return { phase, stride: Math.sin(phase) * strideAmp, bobY: groundedBobY, swayX };
   }
 
-  // Living idle stance: gentle respiratory breathing + subtle balance micro-sway
+  // Living idle stance & pose hold: gentle respiratory breathing around active fashion pose
   const breath = reduceMotion ? 0 : Math.sin(time * 1.45);
   const idleSway = reduceMotion ? 0 : Math.sin(time * 0.72) * 0.004;
-  const idleAbduct = Math.max(0.095, minArmAbduct) + (reduceMotion ? 0 : 0.005 * (breath * 0.5 + 0.5));
+  const tg = computeStaticPoseTargets(opts.pose || "standing", minArmAbduct, breath, idleSway, dims, lm);
   const damp = blendAlpha >= 0.99 ? 1.0 : Math.min(1.0, Math.max(0.14, blendAlpha));
 
   const dampTo = (cur, target) => cur + (target - cur) * damp;
-  limbs.leg1.rotation.x = dampTo(limbs.leg1.rotation.x, 0);
-  limbs["leg-1"].rotation.x = dampTo(limbs["leg-1"].rotation.x, 0);
-  limbs.leg1.rotation.z = dampTo(limbs.leg1.rotation.z, 0.006);
-  limbs["leg-1"].rotation.z = dampTo(limbs["leg-1"].rotation.z, -0.006);
+  limbs.leg1.rotation.x = dampTo(limbs.leg1.rotation.x, tg.leg1Rx);
+  limbs["leg-1"].rotation.x = dampTo(limbs["leg-1"].rotation.x, tg.leg_1Rx);
+  limbs.leg1.rotation.z = dampTo(limbs.leg1.rotation.z, tg.leg1Rz);
+  limbs["leg-1"].rotation.z = dampTo(limbs["leg-1"].rotation.z, tg.leg_1Rz);
   if (limbs.knee1 && limbs["knee-1"]) {
-    limbs.knee1.rotation.x = dampTo(limbs.knee1.rotation.x, 0.012);
-    limbs["knee-1"].rotation.x = dampTo(limbs["knee-1"].rotation.x, 0.012);
+    limbs.knee1.rotation.x = dampTo(limbs.knee1.rotation.x, tg.knee1Rx);
+    limbs["knee-1"].rotation.x = dampTo(limbs["knee-1"].rotation.x, tg.knee_1Rx);
   }
   if (limbs.foot1 && limbs["foot-1"]) {
-    limbs.foot1.rotation.x = dampTo(limbs.foot1.rotation.x, 0);
-    limbs["foot-1"].rotation.x = dampTo(limbs["foot-1"].rotation.x, 0);
+    limbs.foot1.rotation.x = dampTo(limbs.foot1.rotation.x, tg.foot1Rx);
+    limbs["foot-1"].rotation.x = dampTo(limbs["foot-1"].rotation.x, tg.foot_1Rx);
   }
-  limbs.arm1.rotation.x = dampTo(limbs.arm1.rotation.x, -0.015 + breath * 0.006);
-  limbs["arm-1"].rotation.x = dampTo(limbs["arm-1"].rotation.x, -0.015 + breath * 0.006);
-  limbs.arm1.rotation.z = dampTo(limbs.arm1.rotation.z, idleAbduct);
-  limbs["arm-1"].rotation.z = dampTo(limbs["arm-1"].rotation.z, -idleAbduct);
-  limbs.arm1.rotation.y = dampTo(limbs.arm1.rotation.y || 0, reduceMotion ? 0 : -0.03);
-  limbs["arm-1"].rotation.y = dampTo(limbs["arm-1"].rotation.y || 0, reduceMotion ? 0 : 0.03);
+  limbs.arm1.rotation.x = dampTo(limbs.arm1.rotation.x, tg.arm1Rx);
+  limbs["arm-1"].rotation.x = dampTo(limbs["arm-1"].rotation.x, tg.arm_1Rx);
+  limbs.arm1.rotation.z = dampTo(limbs.arm1.rotation.z, tg.arm1Rz);
+  limbs["arm-1"].rotation.z = dampTo(limbs["arm-1"].rotation.z, tg.arm_1Rz);
+  limbs.arm1.rotation.y = dampTo(limbs.arm1.rotation.y || 0, tg.arm1Ry);
+  limbs["arm-1"].rotation.y = dampTo(limbs["arm-1"].rotation.y || 0, tg.arm_1Ry);
   if (limbs.elbow1 && limbs["elbow-1"]) {
     const elbowOut = Math.max(0, minArmAbduct - 0.11) * 0.35;
-    limbs.elbow1.rotation.x = dampTo(limbs.elbow1.rotation.x, -0.11 - breath * 0.008);
-    limbs["elbow-1"].rotation.x = dampTo(limbs["elbow-1"].rotation.x, -0.11 - breath * 0.008);
+    limbs.elbow1.rotation.x = dampTo(limbs.elbow1.rotation.x, tg.elbow1Rx);
+    limbs["elbow-1"].rotation.x = dampTo(limbs["elbow-1"].rotation.x, tg.elbow_1Rx);
     limbs.elbow1.rotation.z = dampTo(limbs.elbow1.rotation.z || 0, elbowOut);
     limbs["elbow-1"].rotation.z = dampTo(limbs["elbow-1"].rotation.z || 0, -elbowOut);
   }
   if (limbs.hand1 && limbs["hand-1"]) {
-    limbs.hand1.rotation.x = dampTo(limbs.hand1.rotation.x, 0);
-    limbs["hand-1"].rotation.x = dampTo(limbs["hand-1"].rotation.x, 0);
+    limbs.hand1.rotation.x = dampTo(limbs.hand1.rotation.x, tg.hand1Rx);
+    limbs["hand-1"].rotation.x = dampTo(limbs["hand-1"].rotation.x, tg.hand_1Rx);
   }
   if (limbs.pelvis) {
-    limbs.pelvis.position.x = dampTo(limbs.pelvis.position.x, idleSway);
-    limbs.pelvis.position.y = dampTo(limbs.pelvis.position.y, dims.hipY);
-    limbs.pelvis.rotation.z = dampTo(limbs.pelvis.rotation.z, -idleSway * 1.2);
-    limbs.pelvis.rotation.y = dampTo(limbs.pelvis.rotation.y, idleSway * 0.8);
-    limbs.pelvis.rotation.x = dampTo(limbs.pelvis.rotation.x, 0);
+    limbs.pelvis.position.x = dampTo(limbs.pelvis.position.x, tg.pelvisX);
+    limbs.pelvis.position.y = dampTo(limbs.pelvis.position.y, tg.pelvisY);
+    limbs.pelvis.rotation.z = dampTo(limbs.pelvis.rotation.z, tg.pelvisRz);
+    limbs.pelvis.rotation.y = dampTo(limbs.pelvis.rotation.y, tg.pelvisRy);
+    limbs.pelvis.rotation.x = dampTo(limbs.pelvis.rotation.x, tg.pelvisRx);
   }
   if (limbs.spine) {
-    limbs.spine.rotation.z = dampTo(limbs.spine.rotation.z, idleSway * 0.8);
-    limbs.spine.rotation.y = dampTo(limbs.spine.rotation.y, 0);
-    limbs.spine.rotation.x = dampTo(limbs.spine.rotation.x, -breath * 0.006);
+    limbs.spine.rotation.z = dampTo(limbs.spine.rotation.z, tg.spineRz);
+    limbs.spine.rotation.y = dampTo(limbs.spine.rotation.y, tg.spineRy);
+    limbs.spine.rotation.x = dampTo(limbs.spine.rotation.x, tg.spineRx);
   }
   if (limbs.chest) {
-    limbs.chest.rotation.z = dampTo(limbs.chest.rotation.z, 0);
-    limbs.chest.rotation.y = dampTo(limbs.chest.rotation.y, -idleSway * 0.6);
-    limbs.chest.rotation.x = dampTo(limbs.chest.rotation.x, -breath * 0.010);
+    limbs.chest.rotation.z = dampTo(limbs.chest.rotation.z, tg.chestRz);
+    limbs.chest.rotation.y = dampTo(limbs.chest.rotation.y, tg.chestRy);
+    limbs.chest.rotation.x = dampTo(limbs.chest.rotation.x, tg.chestRx);
   }
   if (limbs.neck) {
-    limbs.neck.rotation.y = dampTo(limbs.neck.rotation.y, 0);
-    limbs.neck.rotation.z = dampTo(limbs.neck.rotation.z, 0);
+    limbs.neck.rotation.y = dampTo(limbs.neck.rotation.y, tg.neckRy);
+    limbs.neck.rotation.z = dampTo(limbs.neck.rotation.z, tg.neckRz);
   }
   if (limbs.head) {
-    limbs.head.rotation.y = dampTo(limbs.head.rotation.y, idleSway * 0.5);
-    limbs.head.rotation.z = dampTo(limbs.head.rotation.z, 0);
-    limbs.head.rotation.x = dampTo(limbs.head.rotation.x, breath * 0.005);
+    limbs.head.rotation.y = dampTo(limbs.head.rotation.y, tg.headRy);
+    limbs.head.rotation.z = dampTo(limbs.head.rotation.z, tg.headRz);
+    limbs.head.rotation.x = dampTo(limbs.head.rotation.x, tg.headRx);
   }
-  return { phase: 0, stride: 0, bobY: 0, swayX: idleSway };
+  return { phase: 0, stride: 0, bobY: tg.pelvisY - dims.hipY, swayX: tg.pelvisX };
 }
 
 /**

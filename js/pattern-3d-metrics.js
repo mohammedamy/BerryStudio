@@ -68,7 +68,7 @@ export function isBackPieceName(nameOrPiece) {
   const txt = typeof nameOrPiece === "string"
     ? nameOrPiece
     : ((nameOrPiece?.name?.en || "") + " " + (nameOrPiece?.name?.ar || "") + " " + (nameOrPiece?.key || "") + " " + (nameOrPiece?.role || ""));
-  return /\bback\b|خلفي|خلفية/.test(txt.toLowerCase());
+  return /\bback\b|\b[lr]?back(?:_\d+)?\b|خلفي|خلفية/.test(txt.toLowerCase());
 }
 
 function classifyDirectOrTrim(p, category = "women") {

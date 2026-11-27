@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import * as THREE from 'three'
 import { OrbitControls, Environment } from '@react-three/drei'
 import BodyAvatar from '../body/BodyAvatar'
 import { resolveSkinToneHex } from '../body/skinTones'
@@ -43,21 +44,25 @@ export default function Scene({ paused = false, dims, lang = 'en', debugView, fa
   return (
     <>
       <color attach="background" args={['#1b1d24']} />
-      <hemisphereLight args={['#dce6f7', '#483a32', 0.34]} />
-      <directionalLight position={[2.4, 3.6, 2.8]} intensity={1.15} color="#fff7ee" castShadow shadow-mapSize={[2048, 2048]} shadow-bias={-0.0004} />
-      <directionalLight position={[-2.8, 2.0, 1.8]} intensity={0.32} color="#d6e4ff" />
-      <directionalLight position={[-0.6, 2.9, -2.9]} intensity={0.52} color="#ffe8d6" />
+      <hemisphereLight args={['#dce6f7', '#483a32', 0.30]} />
+      <directionalLight position={[2.4, 3.6, 2.8]} intensity={0.90} color="#fff7ee" castShadow shadow-mapSize={[2048, 2048]} shadow-bias={-0.0004} />
+      <directionalLight position={[-2.8, 2.0, 1.8]} intensity={0.38} color="#d6e4ff" />
+      <directionalLight position={[-0.6, 2.9, -2.9]} intensity={0.48} color="#ffe8d6" />
       {/* Real CC0 studio-softbox HDRI (bundled locally, see public/env/README.md)
           for ambient reflection/sheen quality on fabric and skin — deliberately
           a local file rather than drei's preset= (which fetches from a
           third-party GitHub-raw proxy with no SLA) so this has zero live
           network dependency during a demo. Doesn't touch the scene background
           (set above) — reflections/lighting only. */}
-      <Environment files={`${getAssetBase()}env/studio_small_08_1k.hdr`} background={false} environmentIntensity={0.65} />
+      <Environment files={`${getAssetBase()}env/studio_small_08_1k.hdr`} background={false} environmentIntensity={0.42} />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[6, 6]} />
         <meshStandardMaterial color="#232630" roughness={0.94} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, 0]}>
+        <ringGeometry args={[0.45, 0.462, 64]} />
+        <meshBasicMaterial color="#64748b" transparent opacity={0.22} side={THREE.DoubleSide} />
       </mesh>
 
       <group ref={turntableGroupRef}>
