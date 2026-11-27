@@ -135,6 +135,7 @@
    ============================================================ */
 import { saveModelFile, loadModelFile } from './model-file-cache.js';
 import { readOnnxGraphIO, ONNX_ELEM_TYPES } from './onnx-shape-reader.js';
+import { rgbaToOnnxCHW224, PHOTO2PATTERN_INPUT_SIZE } from '../photo2pattern.js';
 
 const TRANSFORMERS_CDN_URL = 'https://esm.sh/@huggingface/transformers@3.0.0';
 // Pinned like TRANSFORMERS_CDN_URL above — verify against the current
@@ -362,6 +363,30 @@ async function runOnnxInference() {
   post({ type: 'onnxInferenceResult', ok: true, modelName: onnxModelName, inputs, outputs, latencyMs: Date.now() - t0 });
 }
 
+// Real Photo-to-Pattern forward pass over user-supplied RGBA garment pixels
+// for `berrystudio_photo2pattern_v1.onnx` (input: [1,3,224,224], output: [1,12]).
+async function runPhoto2Pattern({ pixels, width, height }) {
+  if (!onnxSession) {
+    post({ type: 'error', message: 'no ONNX model loaded — load berrystudio_photo2pattern_v1.onnx in Settings -> Local .onnx file first' });
+    return;
+  }
+  const ort = await loadOnnxRuntime();
+  const t0 = Date.now();
+  const chw = rgbaToOnnxCHW224(pixels, width, height);
+  const inputName = onnxSession.inputNames[0] || 'garment_image';
+  const feeds = { [inputName]: new ort.Tensor('float32', chw, [1, 3, PHOTO2PATTERN_INPUT_SIZE, PHOTO2PATTERN_INPUT_SIZE]) };
+  const results = await onnxSession.run(feeds);
+  const outName = onnxSession.outputNames[0] || Object.keys(results)[0];
+  const outTensor = results[outName];
+  post({
+    type: 'photo2PatternResult',
+    ok: true,
+    modelName: onnxModelName,
+    params12d: Array.from(outTensor.data),
+    latencyMs: Date.now() - t0,
+  });
+}
+
 self.onmessage = async (e) => {
   const msg = e.data || {};
   try {
@@ -381,6 +406,8 @@ self.onmessage = async (e) => {
       post({ type: 'result', ok: true, providerId: 'browser-local', text: text || null, json, raw: out, usage: { latencyMs: Date.now() - t0 } });
     } else if (msg.type === 'runOnnxInference') {
       await runOnnxInference();
+    } else if (msg.type === 'runPhoto2Pattern') {
+      await runPhoto2Pattern(msg);
     } else if (msg.type === 'runSegmentation') {
       await runSegmentation(msg);
     } else {

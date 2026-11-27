@@ -43,6 +43,7 @@ import { createConstructionEvidenceRecord } from './construction-evidence-record
 import { Billboard } from './billboard.js';
 import './library.js'; // side-effect only — populates PATTERNS/LIBRARY, exports nothing
 import './girls-leotards.js'; // side-effect only — adds the 100-pattern Girls' Gymnastics Leotards collection
+import './colab-patterns.js'; // side-effect only — adds the Zenodo / GarmentCode parametric collection
 import './underwear-library.js'; // side-effect only — adds the 44-pattern Underwear & Bra collection
 import { FancyGen } from './fancy-patterns.js';
 import './reference-patterns.js'; // side-effect only — adds the 12-pattern Phase 2 reference set (docs/plan 4.md)
@@ -50,12 +51,13 @@ import './abaya-collection.js'; // side-effect only — adds the 20-pattern Embr
 import { PatternValidator } from './validate.js';
 import { renderPatternFlat } from './pattern-flat.js';
 import { getPatternThumbnail } from './thumbnails.js';
-import { AIProviders, AI_PROVIDER_IDS, getProvider, loadLocalModelFromFile, restoreLocalModelFromCache, runOnnxTestInference, loadSegmentationModel, runSegmentationOn } from './ai-providers.js';
+import { AIProviders, AI_PROVIDER_IDS, getProvider, loadLocalModelFromFile, restoreLocalModelFromCache, runOnnxTestInference, runPhoto2PatternOn, loadSegmentationModel, runSegmentationOn } from './ai-providers.js';
 import { getModelFileMeta, clearModelFile } from './workers/model-file-cache.js';
 import { KeyStore } from './ai-keystore.js';
 import { probeCapabilities } from './capability-probe.js';
 import { generateFromSpec, provenanceMapFromSpec, generateSVGPatternFromImage } from './ai-spec-pipeline.js';
 import { fuseStyle, mergeProvenance } from './ai-fusion.js';
+import { mapOnnx12dToStyle } from './photo2pattern.js';
 import { ImageProviders, IMAGE_PROVIDER_IDS } from './image-providers.js';
 import { MEAS_KEYS, renderMeasureFields } from './measure-form.js';
 import {
@@ -2352,6 +2354,47 @@ import {
           }
           setStage("done");
         } else toast(T(classifyAIFallbackReason(specResult.fallbackReason)));
+      }
+      // Colab Photo-to-Pattern ONNX Route B hook: when the user loaded
+      // berrystudio_photo2pattern_v1.onnx via Settings -> Local .onnx file
+      // and attached a garment image, run in-browser ONNX vision inference.
+      if(!res && imageDataURL && onnxLoadedInfo && /photo2pattern/i.test(onnxLoadedInfo.name || "")){
+        try {
+          setStage("analyzing");
+          const imgEl = await new Promise((resolve, reject) => {
+            const im = new Image();
+            im.onload = () => resolve(im);
+            im.onerror = reject;
+            im.src = imageDataURL;
+          });
+          const off = document.createElement("canvas");
+          off.width = 224; off.height = 224;
+          const octx = off.getContext("2d");
+          octx.drawImage(imgEl, 0, 0, 224, 224);
+          const imgData = octx.getImageData(0, 0, 224, 224);
+          setStage("silhouette");
+          const onnxOut = await runPhoto2PatternOn(imgData);
+          if(onnxOut && onnxOut.ok && Array.isArray(onnxOut.params12d)){
+            setStage("drafting");
+            const pixelMetrics = await AIGen.analyzeImage(imageDataURL, { segment: getSegmentFn() });
+            const baseStyle = AIGen.deriveStyle({ metrics: pixelMetrics, prompt: effectivePrompt, category, imageDataURL });
+            const { style: onnxStyle, provenance } = mapOnnx12dToStyle(onnxOut.params12d, baseStyle);
+            const built = AIGen.build(onnxStyle, measurements);
+            res = {
+              ...built,
+              summary: AIGen.summary(onnxStyle, lang),
+              style: onnxStyle,
+              attributes: AIGen.attributes(onnxStyle, lang, provenance),
+              source: "fused",
+              validation: PatternValidator.run(built.pieces, {}),
+              usedImage: true,
+              imageSupplied: true,
+            };
+            setStage("done");
+          }
+        } catch (onnxErr) {
+          console.warn("[Photo2Pattern ONNX fallback]", onnxErr);
+        }
       }
       if(!res){
         if(isBriefFlow){

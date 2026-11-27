@@ -506,6 +506,17 @@ export async function runOnnxTestInference() {
   return postToWorker({ type: 'runOnnxInference' });
 }
 
+// Real forward pass over user-supplied garment photo pixels for
+// `berrystudio_photo2pattern_v1.onnx` loaded via Route B (file / cache).
+export async function runPhoto2PatternOn(imageData) {
+  return postToWorker({
+    type: 'runPhoto2Pattern',
+    pixels: imageData.data,
+    width: imageData.width,
+    height: imageData.height,
+  });
+}
+
 // ---------- Real segmentation (BerryStudio-Upgrade-Plan-v2.0 WP-39) ----------
 // Also UI-driven, not part of the AIProviders adapter map — same reasoning
 // as Route B above (js/ai.js's `opts.segment` shape doesn't fit the
