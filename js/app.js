@@ -2417,10 +2417,18 @@ import {
           setStage("done");
         } else toast(T(classifyAIFallbackReason(specResult.fallbackReason)));
       }
-      // Colab Photo-to-Pattern ONNX Route B hook: auto-load the bundled
-      // `models/berrystudio_photo2pattern_v1.onnx` when online & available,
+      // Colab Photo-to-Pattern ONNX Route B hook: verify reference image
+      // readability first (so unreadable uploads trigger an honest clarify),
+      // then auto-load `models/berrystudio_photo2pattern_v1.onnx` when online
       // or use a user-loaded Photo2Pattern `.onnx`, falling back cleanly.
+      let cachedPixelMetrics = null;
       if(!res && imageDataURL){
+        cachedPixelMetrics = await AIGen.analyzeImage(imageDataURL, { segment: getSegmentFn() });
+        if(!cachedPixelMetrics || !cachedPixelMetrics.ok){
+          res = { decision: "clarify", reason: "image-unreadable", usedImage: false, imageSupplied: true, pieces: [] };
+        }
+      }
+      if(!res && imageDataURL && cachedPixelMetrics && cachedPixelMetrics.ok){
         if(!onnxLoadedInfo && (typeof navigator === "undefined" || navigator.onLine !== false)){
           try {
             const bundled = await ensureBundledPhoto2PatternModel();
@@ -2447,7 +2455,7 @@ import {
             const onnxOut = await runPhoto2PatternOn(imgData);
             if(onnxOut && onnxOut.ok && Array.isArray(onnxOut.params12d)){
               setStage("drafting");
-              const pixelMetrics = await AIGen.analyzeImage(imageDataURL, { segment: getSegmentFn() });
+              const pixelMetrics = cachedPixelMetrics;
               const baseStyle = AIGen.deriveStyle({ metrics: pixelMetrics, prompt: effectivePrompt, category, imageDataURL });
               const { style: onnxStyle, provenance } = mapOnnx12dToStyle(onnxOut.params12d, baseStyle);
               const built = AIGen.build(onnxStyle, measurements);
@@ -2477,9 +2485,9 @@ import {
           });
         } else {
           setStage("analyzing");
-          let metrics = null;
+          let metrics = cachedPixelMetrics;
           if(imageDataURL){
-            metrics = await AIGen.analyzeImage(imageDataURL, { segment: getSegmentFn() });
+            if(!metrics) metrics = await AIGen.analyzeImage(imageDataURL, { segment: getSegmentFn() });
             if(!metrics || !metrics.ok){
               res = { decision: "clarify", reason: "image-unreadable", usedImage: false, imageSupplied: true, pieces: [] };
             }
